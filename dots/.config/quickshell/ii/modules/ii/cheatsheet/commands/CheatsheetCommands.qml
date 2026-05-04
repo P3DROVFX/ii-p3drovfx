@@ -181,8 +181,8 @@ Item {
                     implicitHeight: 44
                     implicitWidth: 44
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.importError ? Appearance.colors.colError : (root.importSuccess ? Appearance.colors.colTertiary : root.colAccent)
-                    colBackgroundHover: root.importError ? Appearance.colors.colErrorHover : (root.importSuccess ? Appearance.colors.colTertiaryHover : root.colAccentHover)
+                    colBackground: root.importError ? Appearance.colors.colError : (root.importSuccess ? Appearance.colors.colTertiary : Appearance.colors.colSecondaryContainer)
+                    colBackgroundHover: root.importError ? Appearance.colors.colErrorHover : (root.importSuccess ? Appearance.colors.colTertiaryHover : Appearance.colors.colSecondaryContainerHover)
                     onClicked: qmlFilePicker.visible = true
 
                     MaterialSymbol {
@@ -190,7 +190,7 @@ Item {
                         anchors.centerIn: parent
                         text: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
                         iconSize: Appearance.font.pixelSize.large
-                        color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : root.colOnAccent)
+                        color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
 
                         Behavior on text {
                             SequentialAnimation {
@@ -360,6 +360,7 @@ Item {
                 }
 
                 ColumnLayout {
+                    id: mainContentArea
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 4
@@ -490,9 +491,18 @@ Item {
         Toolbar {
             id: extraOptions
             z: 5
+            colBackground: Appearance.colors.colSecondaryContainer
             anchors.horizontalCenter: parent.horizontalCenter
+            anchors.horizontalCenterOffset: Config.options.cheatsheet.commandsTagsSidebar ? (tagSidebar.width / 2) : 0
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 40
+            anchors.bottomMargin: 20
+
+            Behavior on anchors.horizontalCenterOffset {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             ToolbarTextField {
                 id: filterField
@@ -500,12 +510,16 @@ Item {
                 clip: true
                 font.pixelSize: Appearance.font.pixelSize.small
                 onTextChanged: root.searchText = text
+                colBackground: Qt.alpha(Appearance.colors.colOnTertiaryContainer, 0.05)
+                color: Appearance.colors.colOnTertiaryContainer
+                placeholderTextColor: Qt.alpha(Appearance.colors.colOnTertiaryContainer, 0.6)
             }
 
             IconToolbarButton {
                 implicitWidth: height
                 onClicked: root.searchText = filterField.text = ''
                 text: "close"
+                colText: Appearance.colors.colOnTertiaryContainer
                 StyledToolTip {
                     text: qsTr("Clear filter")
                 }

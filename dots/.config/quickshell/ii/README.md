@@ -180,10 +180,26 @@ ColorPickerPopupContent 1.0 ColorPickerPopupContent.qml
     </td>
   </tr>
   <tr>
-    <td colspan="2" valign="top">
-      <h3>📅 Cheatsheet & Timetable Integration</h3>
+    <td width="50%" valign="top">
+      <h3>📅 Cheatsheet & Timetable</h3>
       <p>Create events directly from the timetable and sync with local calendars (via <code>khal</code>) for a full agenda view.</p>
-      <img src="https://github.com/user-attachments/assets/608bbf11-9819-4fe0-880c-014fe3845000" style="width:100%;" alt="Timetable" />
+      <img src="https://github.com/user-attachments/assets/608bbf11-9819-4fe0-880c-014fe3845000" alt="Timetable" />
+    </td>
+    <td width="50%" valign="top">
+      <h3>📜 Cheatsheet Commands</h3>
+      <p>Manage your personal command library with dynamic tags, search, and JSON import/export support.</p>
+      <img src="REPLACE_WITH_COMMANDS_PREVIEW_IMAGE" alt="Commands" />
+      <br><br>
+      <details>
+        <summary><b>🛠️ Implementation Guide</b></summary>
+        <p>Follow these steps to integrate the commands module:</p>
+        <ol>
+          <li>Add <code>enableCommands</code> and <code>commandsTagsSidebar</code> to <code>Config.qml</code>.</li>
+          <li>Register <code>CommandsService.qml</code> as a singleton.</li>
+          <li>Add toggles to <code>InterfaceConfig.qml</code> for user control.</li>
+          <li>Check <a href="modules/ii/cheatsheet/commands/commands.md">commands.md</a> for the full documentation.</li>
+        </ol>
+      </details>
     </td>
   </tr>
 </table>
