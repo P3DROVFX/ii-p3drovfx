@@ -357,12 +357,24 @@ Singleton {
 
                 property JsonObject sports: JsonObject {
                     property bool enable: false
-                    property string sport: "soccer"
-                    property string league: "eng.1"
+                    property bool showBRA: false
+                    property bool showBUND: false
+                    property bool showCL: true
+                    property bool showCLA: true
+                    property bool showEPL: true
+                    property bool showLIGA: false
+                    property bool showLIG1: false
+                    property bool showSERA: false
+                    property bool showUECL: false
+                    property bool showUEL: false
+                    property bool showWC: false
+                    property bool showWWC: false
                     property string teamFilter: ""
                     property int updateInterval: 60
+                    property int maxCardsPopup: 4
+                    property int showBeforeHours: 12
+                    property int showAfterMinutes: 180
                 }
-
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
 
                 property JsonObject timers: JsonObject {

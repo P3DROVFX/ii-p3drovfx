@@ -45,7 +45,8 @@ Item {
         "policies_panel_button": [policiesPanelButton, policiesPanelButton],
         "dashboard_panel_button": [dashboardPanelButton, dashboardPanelButtonVert],
         "bluetooth_devices": [bluetoothComp, bluetoothCompVert],
-        "keyboard_layout": [keyboardComp, keyboardCompVert]
+        "keyboard_layout": [keyboardComp, keyboardCompVert],
+        "sports": [sportsComp, sportsComp] // using same for vertical for now
     })
 
     property list<string> primaryBackgroundComps: ["timer", "record_indicator", "screen_share_indicator"] // components that are mostly indicators
@@ -162,4 +163,5 @@ Item {
     Component { id: bluetoothCompVert; Vertical.VerticalBluetoothDevicesWidget {} }
     Component { id: keyboardComp; KeyboardLayoutWidget { vertical: rootItem.vertical } }
     Component { id: keyboardCompVert; Vertical.VerticalKeyboardLayoutWidget {} }
+    Component { id: sportsComp; Sports {} }
 }

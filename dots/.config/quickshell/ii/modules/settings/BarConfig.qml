@@ -20,7 +20,8 @@ ContentPage {
             "workspaces": workspaces,
             "timer": indicators,
             "record_indicator": indicators,
-            "system_monitor": resourcesConfig
+            "system_monitor": resourcesConfig,
+            "sports": sportsConfig
         })
 
     function scrollTo(stringId) {
@@ -795,6 +796,154 @@ ContentPage {
             checked: Config.options.bar.resources.showPercentageText
             onCheckedChanged: {
                 Config.options.bar.resources.showPercentageText = checked;
+            }
+        }
+    }
+
+    ContentSection {
+        id: sportsConfig
+        icon: "sports_soccer"
+        title: Translation.tr("Sports")
+
+        ConfigSwitch {
+            buttonIcon: "check"
+            text: Translation.tr("Enable sports tracker")
+            checked: Config.options.bar.sports.enable
+            onCheckedChanged: {
+                Config.options.bar.sports.enable = checked;
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Supported Leagues")
+            Layout.fillWidth: true
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 8
+                
+                // Allow vertical spacing when items wrap
+                topPadding: 4
+                bottomPadding: 4
+                
+                component LeagueChip : Rectangle {
+                    property string text
+                    property bool checked: false
+                    signal toggled(bool checked)
+                    width: chipText.implicitWidth + 32
+                    height: 36
+                    radius: Appearance.rounding.full
+                    
+                    HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                    
+                    color: checked 
+                        ? (chipHover.hovered ? Qt.lighter(Appearance.colors.colPrimary, 1.15) : Appearance.colors.colPrimary) 
+                        : (chipHover.hovered ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colSurfaceContainerHighest)
+                        
+                    border.width: checked ? 0 : 1
+                    border.color: Appearance.colors.colOutlineVariant
+                    
+                    StyledText {
+                        id: chipText
+                        anchors.centerIn: parent
+                        text: parent.text
+                        color: parent.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Medium
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: parent.toggled(!parent.checked)
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                LeagueChip { text: "Brasileirão"; checked: Config.options.bar.sports.showBRA; onToggled: c => Config.options.bar.sports.showBRA = c }
+                LeagueChip { text: "Bundesliga"; checked: Config.options.bar.sports.showBUND; onToggled: c => Config.options.bar.sports.showBUND = c }
+                LeagueChip { text: "Champions L."; checked: Config.options.bar.sports.showCL; onToggled: c => Config.options.bar.sports.showCL = c }
+                LeagueChip { text: "Europa L."; checked: Config.options.bar.sports.showUEL; onToggled: c => Config.options.bar.sports.showUEL = c }
+                LeagueChip { text: "Conference L."; checked: Config.options.bar.sports.showUECL; onToggled: c => Config.options.bar.sports.showUECL = c }
+                LeagueChip { text: "Libertadores"; checked: Config.options.bar.sports.showCLA; onToggled: c => Config.options.bar.sports.showCLA = c }
+                LeagueChip { text: "Premier L."; checked: Config.options.bar.sports.showEPL; onToggled: c => Config.options.bar.sports.showEPL = c }
+                LeagueChip { text: "LaLiga"; checked: Config.options.bar.sports.showLIGA; onToggled: c => Config.options.bar.sports.showLIGA = c }
+                LeagueChip { text: "Ligue 1"; checked: Config.options.bar.sports.showLIG1; onToggled: c => Config.options.bar.sports.showLIG1 = c }
+                LeagueChip { text: "Serie A"; checked: Config.options.bar.sports.showSERA; onToggled: c => Config.options.bar.sports.showSERA = c }
+                LeagueChip { text: "World Cup"; checked: Config.options.bar.sports.showWC; onToggled: c => Config.options.bar.sports.showWC = c }
+                LeagueChip { text: "Women's WC"; checked: Config.options.bar.sports.showWWC; onToggled: c => Config.options.bar.sports.showWWC = c }
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Team Filter")
+            tooltip: Translation.tr("Comma-separated list of teams to show (e.g. Real Madrid, Arsenal)")
+            Layout.fillWidth: true
+            
+            MaterialTextField {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Filter by team name...")
+                text: Config.options.bar.sports.teamFilter
+                onTextChanged: Config.options.bar.sports.teamFilter = text
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Preferences")
+            Layout.fillWidth: true
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 10
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    icon: "av_timer"
+                    text: Translation.tr("Update Interval (s)")
+                    value: Config.options.bar.sports.updateInterval
+                    from: 10
+                    to: 600
+                    stepSize: 10
+                    onValueChanged: {
+                        Config.options.bar.sports.updateInterval = value;
+                    }
+                }
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    icon: "layers"
+                    text: Translation.tr("Max cards in popup")
+                    value: Config.options.bar.sports.maxCardsPopup
+                    from: 1
+                    to: 15
+                    stepSize: 1
+                    onValueChanged: {
+                        Config.options.bar.sports.maxCardsPopup = value;
+                    }
+                }
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    icon: "schedule"
+                    text: Translation.tr("Show matches before (hours)")
+                    value: Config.options.bar.sports.showBeforeHours
+                    from: 1
+                    to: 72
+                    stepSize: 1
+                    onValueChanged: {
+                        Config.options.bar.sports.showBeforeHours = value;
+                    }
+                }
+                ConfigSpinBox {
+                    Layout.fillWidth: true
+                    icon: "history"
+                    text: Translation.tr("Keep ended matches for (mins)")
+                    value: Config.options.bar.sports.showAfterMinutes
+                    from: 0
+                    to: 1440
+                    stepSize: 30
+                    onValueChanged: {
+                        Config.options.bar.sports.showAfterMinutes = value;
+                    }
+                }
             }
         }
     }

@@ -1,0 +1,213 @@
+import QtQuick
+import QtQuick.Layouts
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.services
+import Quickshell
+
+MouseArea {
+    id: root
+
+    // Original visibility logic
+    readonly property bool shouldBeVisible: Config.options.bar.sports.enable && SportsService.currentGame !== null
+    
+    // Stable game for animations - prevents instant data swap during transitions
+    property var displayGame: SportsService.currentGame
+    
+    // Keeps the widget "alive" during exit animation
+    property bool internalVisible: shouldBeVisible
+    visible: internalVisible || opacity > 0
+    
+    implicitWidth: shouldBeVisible ? sportsLayout.implicitWidth : 0
+    implicitHeight: Appearance.sizes.barHeight
+    hoverEnabled: true
+
+    // Vertical offset for the slide animation - using transform: Translate bypasses anchor restrictions
+    property real verticalOffset: 0
+
+    // Synchronize visibility with the bar system but wait for animations
+    onShouldBeVisibleChanged: {
+        if (shouldBeVisible) {
+            internalVisible = true;
+            if (typeof rootItem !== "undefined") rootItem.toggleVisible(true);
+            displayGame = SportsService.currentGame;
+            entranceAnim.restart();
+        } else {
+            exitAnim.restart();
+        }
+    }
+
+    Component.onCompleted: {
+        if (shouldBeVisible) {
+            if (typeof rootItem !== "undefined") rootItem.toggleVisible(true);
+            opacity = 1;
+            verticalOffset = 0;
+        } else {
+            opacity = 0;
+            verticalOffset = 10;
+        }
+    }
+
+    // Handle game switches (next game)
+    Connections {
+        target: SportsService
+        function onCurrentGameChanged() {
+            // Only trigger switch animation if we are already visible and the game actually changed
+            if (shouldBeVisible && displayGame !== SportsService.currentGame) {
+                switchAnim.restart();
+            }
+        }
+    }
+
+    // Animations
+    SequentialAnimation {
+        id: entranceAnim
+        PropertyAction { target: root; property: "verticalOffset"; value: -10 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; to: 1; duration: 250; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "verticalOffset"; to: 0; duration: 250; easing.type: Easing.OutCubic }
+        }
+    }
+
+    SequentialAnimation {
+        id: exitAnim
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; to: 0; duration: 200; easing.type: Easing.InCubic }
+            NumberAnimation { target: root; property: "verticalOffset"; to: 10; duration: 200; easing.type: Easing.InCubic }
+        }
+        ScriptAction {
+            script: {
+                internalVisible = false;
+                if (typeof rootItem !== "undefined") rootItem.toggleVisible(false);
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: switchAnim
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; to: 0; duration: 150; easing.type: Easing.InSine }
+            NumberAnimation { target: root; property: "verticalOffset"; to: 8; duration: 150; easing.type: Easing.InSine }
+        }
+        ScriptAction {
+            script: {
+                // Update data while invisible
+                if (SportsService.currentGame) {
+                    displayGame = SportsService.currentGame;
+                }
+            }
+        }
+        PropertyAction { target: root; property: "verticalOffset"; value: -8 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; to: 1; duration: 150; easing.type: Easing.OutSine }
+            NumberAnimation { target: root; property: "verticalOffset"; to: 0; duration: 150; easing.type: Easing.OutSine }
+        }
+    }
+
+    onClicked: {
+        SportsService.nextGame();
+    }
+
+    SportsPopup {
+        hoverTarget: root
+    }
+
+    Item {
+        id: contentClipper
+        anchors.fill: parent
+        clip: true
+
+        RowLayout {
+            id: sportsLayout
+            spacing: 12
+            anchors.centerIn: parent
+            
+            // Translate allows animating Y even when anchors.centerIn is active
+            transform: Translate { y: root.verticalOffset }
+
+            // Home Team Logo
+            StyledImage {
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                source: root.displayGame ? root.displayGame.home.logo : ""
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+                cache: true
+            }
+
+            // Home Team Score (Only if not pre-game)
+            Item {
+                visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: homeScoreText.implicitWidth
+                implicitHeight: homeScoreText.implicitHeight
+
+                StyledText {
+                    id: homeScoreText
+                    text: root.displayGame ? root.displayGame.home.score : ""
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnLayer1
+                    animateChange: true
+                }
+            }
+
+            // Status (Time, Period, etc)
+            Rectangle {
+                Layout.preferredHeight: 20
+                Layout.preferredWidth: statusText.implicitWidth + 12
+                Layout.alignment: Qt.AlignVCenter
+                radius: Appearance.rounding.full
+                color: root.displayGame && root.displayGame.state === "in" ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+
+                StyledText {
+                    id: statusText
+                    anchors.centerIn: parent
+                    text: root.displayGame ? root.displayGame.status : ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: root.displayGame && root.displayGame.state === "in" ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                    animateChange: true
+                }
+            }
+
+            // Away Team Score (Only if not pre-game)
+            Item {
+                visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: awayScoreText.implicitWidth
+                implicitHeight: awayScoreText.implicitHeight
+
+                StyledText {
+                    id: awayScoreText
+                    text: root.displayGame ? root.displayGame.away.score : ""
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnLayer1
+                    animateChange: true
+                }
+            }
+
+            // Away Team Logo
+            StyledImage {
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                source: root.displayGame ? root.displayGame.away.logo : ""
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+                cache: true
+            }
+        }
+    }
+
+    Behavior on implicitWidth {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+        }
+    }
+}

@@ -22,7 +22,8 @@ Singleton {
         { id: "weather", icon: "weather_mix", title: "Weather" },
         { id: "utility_buttons", icon: "build", title: "Utility buttons" },
         { id: "bluetooth_devices", icon: "bluetooth_connected", title: "Bluetooth Devices" },
-        { id: "keyboard_layout", icon: "keyboard", title: "Keyboard Layout" }
+        { id: "keyboard_layout", icon: "keyboard", title: "Keyboard Layout" },
+        { id: "sports", icon: "sports_soccer", title: "Sports" }
     ]
 
     function getComponent(id) {
