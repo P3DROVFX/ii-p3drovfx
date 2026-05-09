@@ -243,6 +243,7 @@ Item {
     }
     Row { // Keybind columns
         id: row
+        anchors.horizontalCenter: parent.horizontalCenter
         spacing: root.spacing
 
         Repeater {

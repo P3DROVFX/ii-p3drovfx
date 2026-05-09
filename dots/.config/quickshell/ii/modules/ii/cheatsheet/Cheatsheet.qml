@@ -188,6 +188,8 @@ Scope {
                         Layout.topMargin: 5
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Layout.preferredWidth: 1600
+                        Layout.preferredHeight: 750
                         spacing: 10
                         currentIndex: Persistent.states.cheatsheet.tabIndex
                         onCurrentIndexChanged: {

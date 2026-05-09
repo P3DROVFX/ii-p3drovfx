@@ -114,7 +114,8 @@ Item {
             windowsOnMonitor.sort((a, b) => a.at[0] - b.at[0]);
             root.monitorWindows = windowsOnMonitor.map(win => ({
                         icon: Quickshell.iconPath(AppSearch.guessIcon(win?.class), "image-missing"),
-                        workspace: win.workspace?.id
+                        workspace: win.workspace?.id,
+                        revision: TaskbarApps.iconThemeRevision // Add revision here for reactivity
                     }));
         }
     }
@@ -511,6 +512,9 @@ Item {
                                 source: modelData.icon
                                 implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.showNumbersByMs ? 1 / 1.5 : 1)
 
+                                // Force reload when theme changes
+                                backer.sourceSize: Qt.size(implicitSize + (modelData.revision || 0), implicitSize + (modelData.revision || 0))
+
                                 Behavior on anchors.leftMargin {
                                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                 }
@@ -519,24 +523,6 @@ Item {
                                 }
                                 Behavior on implicitSize {
                                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                                }
-                            }
-                            Loader {
-                                active: Config.options.bar.workspaces.monochromeIcons
-                                anchors.fill: mainAppIcon
-                                sourceComponent: Item {
-                                    Desaturate {
-                                        id: desaturatedIcon
-                                        visible: false
-                                        anchors.fill: parent
-                                        source: mainAppIcon
-                                        desaturation: 0.8
-                                    }
-                                    ColorOverlay {
-                                        anchors.fill: desaturatedIcon
-                                        source: desaturatedIcon
-                                        color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.9)
-                                    }
                                 }
                             }
                         }

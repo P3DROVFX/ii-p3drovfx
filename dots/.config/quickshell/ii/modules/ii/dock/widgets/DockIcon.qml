@@ -12,14 +12,14 @@ Item {
     property string appId: ""
     property bool isRunning: true
     property real iconOpacity: isRunning ? 1.0 : (Config.options.dock.dimInactiveIcons ? 0.55 : 1.0)
-    
+
     IconImage {
         id: baseIcon
         anchors.fill: parent
         source: Quickshell.iconPath(TaskbarApps.getCachedIcon(root.appId), "image-missing")
         visible: !Config.options.dock.monochromeIcons
         opacity: root.iconOpacity
-        
+
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }

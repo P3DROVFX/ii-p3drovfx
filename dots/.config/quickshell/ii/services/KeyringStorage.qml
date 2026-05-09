@@ -82,12 +82,23 @@ Singleton {
         ]
         onRunningChanged: {
             if (saveData.running) {
-                // console.log("[KeyringStorage] Saving with command: '" + saveData.command.join("' '") + "'");
-                saveData.write(JSON.stringify(root.keyringData));
+                console.log("[KeyringStorage] Saving keyring data to secret-tool...");
+                saveData.write(JSON.stringify(root.keyringData) + "\n");
                 root.dataChanged()
                 stdinEnabled = false // End input stream
             }
         }
+    }
+
+    Component.onCompleted: {
+        root.fetchKeyringData();
+    }
+
+    Timer {
+        id: retryTimer
+        interval: 3000
+        repeat: false
+        onTriggered: root.fetchKeyringData()
     }
 
     Process {
@@ -115,11 +126,13 @@ Singleton {
             if (exitCode === 1) {
                 console.error("[KeyringStorage] Entry not found, initializing.");
                 root.keyringData = {};
-                saveKeyringData()
             }
-            if (exitCode !== 2) {
-                root.loaded = true;
+            if (exitCode === 2) {
+                // Keyring is locked, retry in a few seconds
+                retryTimer.start();
+                return;
             }
+            root.loaded = true;
         }
     }
     

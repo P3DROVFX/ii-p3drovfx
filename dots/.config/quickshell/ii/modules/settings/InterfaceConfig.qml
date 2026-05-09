@@ -165,8 +165,19 @@ ContentPage {
                 }
             }
             ConfigSwitch {
+                buttonIcon: "magic_button"
+                text: Translation.tr("Automatic")
+                checked: Config.options.appearance.transparency.automatic
+                onCheckedChanged: {
+                    Config.options.appearance.transparency.automatic = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Calculate transparency automatically based on wallpaper colors")
+                }
+            }
+            ConfigSwitch {
                 buttonIcon: "opacity"
-                text: Translation.tr("Popup transparency")
+                text: Translation.tr("Popups")
                 checked: Config.options.appearance.transparency.popups
                 onCheckedChanged: {
                     Config.options.appearance.transparency.popups = checked;
@@ -177,6 +188,7 @@ ContentPage {
         ConfigSlider {
             buttonIcon: "blur_on"
             text: Translation.tr("Background transparency")
+            enabled: Config.options.appearance.transparency.enable && !Config.options.appearance.transparency.automatic
             value: Config.options.appearance.transparency.backgroundTransparency
             onValueChanged: {
                 Config.options.appearance.transparency.backgroundTransparency = value;
@@ -186,6 +198,7 @@ ContentPage {
         ConfigSlider {
             buttonIcon: "opacity"
             text: Translation.tr("Content transparency")
+            enabled: Config.options.appearance.transparency.enable && !Config.options.appearance.transparency.automatic
             value: Config.options.appearance.transparency.contentTransparency
             onValueChanged: {
                 Config.options.appearance.transparency.contentTransparency = value;
@@ -340,6 +353,72 @@ ContentPage {
                         }
                     ]
                 }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "category"
+        title: Translation.tr("Icons")
+
+        ContentSubsection {
+            title: Translation.tr("Base icon theme")
+            tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.iconTheme
+                onSelected: newValue => {
+                    Config.options.appearance.iconTheme = newValue;
+                }
+                options: IconThemes.availableThemes.map(theme => ({
+                            displayName: theme,
+                            value: theme,
+                            icon: "category"
+                        }))
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            spacing: 12
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 50
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colPrimary
+
+                RippleButton {
+                    anchors.fill: parent
+                    onClicked: IconThemes.applyTheme()
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol {
+                            text: "magic_button"
+                            color: Appearance.m3colors.m3onPrimary
+                            iconSize: 24
+                        }
+                        StyledText {
+                            text: Translation.tr("Apply Theme & Reload Shell")
+                            font.weight: Font.Bold
+                            font.pixelSize: Appearance.font.pixelSize.medium
+                            color: Appearance.m3colors.m3onPrimary
+                        }
+                    }
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            StyledText {
+                text: Translation.tr("TemaDinamico will be generated from the selected base theme.")
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.smallie
             }
         }
     }
@@ -890,15 +969,15 @@ ContentPage {
                 }
             }
             ConfigSwitch {
-            buttonIcon: "vertical_align_center"
-            enabled: Config.options.sidebar.quickSliders.enable
-            text: Translation.tr("Vertical layout")
-            checked: Config.options.sidebar.quickSliders.vertical
-            onCheckedChanged: {
-                Config.options.sidebar.quickSliders.vertical = checked;
+                buttonIcon: "vertical_align_center"
+                enabled: Config.options.sidebar.quickSliders.enable
+                text: Translation.tr("Vertical layout")
+                checked: Config.options.sidebar.quickSliders.vertical
+                onCheckedChanged: {
+                    Config.options.sidebar.quickSliders.vertical = checked;
+                }
             }
         }
-    }
 
         ContentSubsection {
             title: Translation.tr("Corner open")

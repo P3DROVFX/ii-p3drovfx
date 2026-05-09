@@ -533,7 +533,7 @@ ContentPage {
                                 StyledText {
                                     text: (modelData && modelData.name) ? modelData.name : "Unknown"
                                     font.weight: Font.DemiBold
-                                    font.pixelSize: Appearance.font.pixelSize.medium
+                                    font.pixelSize: Appearance.font.pixelSize.normal
                                     color: isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
@@ -651,7 +651,7 @@ ContentPage {
                                 StyledText {
                                     text: modelData ? btImagesSection.getDeviceName(modelData.mac) : ""
                                     font.weight: Font.DemiBold
-                                    font.pixelSize: Appearance.font.pixelSize.medium
+                                    font.pixelSize: Appearance.font.pixelSize.normal
                                     color: Appearance.colors.colOnSurface
                                     Layout.alignment: Qt.AlignHCenter
                                     horizontalAlignment: Text.AlignHCenter

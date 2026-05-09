@@ -100,7 +100,23 @@ Singleton {
 
         // Quickshell's desktop entry lookup
         const entry = DesktopEntries.byId(str);
-        if (entry) return entry.icon;
+        if (entry) {
+            let icon = entry.icon;
+            // If it's an absolute path, try to find a named version in our theme first
+            if (icon.startsWith("/")) {
+                // Try the app ID/class name
+                if (iconExists(str)) return str;
+                
+                // Try lowercased
+                const lower = str.toLowerCase();
+                if (iconExists(lower)) return lower;
+
+                // Try stripping path and extension from the absolute path
+                const base = icon.split('/').pop().split('.')[0];
+                if (iconExists(base)) return base;
+            }
+            return icon;
+        }
 
         // Normal substitutions
         if (substitutions[str]) return substitutions[str];

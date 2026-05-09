@@ -21,10 +21,7 @@ MaterialShape { // App icon
     property real smallAppIconSize: implicitSize * smallAppIconScale
 
     implicitSize: 38 * scale
-    property list<var> urgentShapes: [
-        MaterialShape.Shape.VerySunny,
-        MaterialShape.Shape.SoftBurst,
-    ]
+    property list<var> urgentShapes: [MaterialShape.Shape.VerySunny, MaterialShape.Shape.SoftBurst,]
     shape: isUrgent ? urgentShapes[Math.floor(Math.random() * urgentShapes.length)] : MaterialShape.Shape.Circle
 
     color: isUrgent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSecondaryContainer
@@ -34,10 +31,9 @@ MaterialShape { // App icon
         anchors.fill: parent
         sourceComponent: MaterialSymbol {
             text: {
-                const defaultIcon = NotificationUtils.findSuitableMaterialSymbol("")
-                const guessedIcon = NotificationUtils.findSuitableMaterialSymbol(root.summary)
-                return (root.urgency == NotificationUrgency.Critical && guessedIcon === defaultIcon) ?
-                    "priority_high" : guessedIcon
+                const defaultIcon = NotificationUtils.findSuitableMaterialSymbol("");
+                const guessedIcon = NotificationUtils.findSuitableMaterialSymbol(root.summary);
+                return (root.urgency == NotificationUrgency.Critical && guessedIcon === defaultIcon) ? "priority_high" : guessedIcon;
             }
             anchors.fill: parent
             color: isUrgent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer

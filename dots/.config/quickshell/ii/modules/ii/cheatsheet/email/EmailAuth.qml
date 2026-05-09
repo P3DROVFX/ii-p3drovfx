@@ -22,7 +22,7 @@ Item {
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 32
-        visible: root.configured
+        visible: root.configured && !EmailService.loading && !EmailService.checkingCredentials
 
         MaterialShape {
             id: mainShape
@@ -143,7 +143,7 @@ Item {
     Flickable {
         anchors.fill: parent
         anchors.margins: 40
-        visible: !root.configured
+        visible: !root.configured && !EmailService.loading && !EmailService.checkingCredentials
         contentHeight: setupCol.implicitHeight
         clip: true
 
@@ -316,6 +316,27 @@ Item {
                     lineHeight: 1.2
                 }
             }
+        }
+    }
+
+    // --- Loading State ---
+    ColumnLayout {
+        anchors.centerIn: parent
+        spacing: 24
+        visible: EmailService.loading || EmailService.checkingCredentials
+
+        MaterialLoadingIndicator {
+            Layout.alignment: Qt.AlignHCenter
+            implicitSize: 120
+            loading: parent.visible
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            text: EmailService.checkingCredentials ? Translation.tr("Checking environment...") : Translation.tr("Authenticating with Google...")
+            font.pixelSize: Appearance.font.pixelSize.huge
+            color: Appearance.colors.colOnSurface
+            opacity: 0.8
         }
     }
 }

@@ -29,7 +29,7 @@ Rectangle {
     property string title: ""
     property string subtitle: ""
     property int titleSize: compactMode ? Appearance.font.pixelSize.hugeass * 1.5 : Appearance.font.pixelSize.hugeass * 2.5
-    property int subtitleSize: compactMode ? Appearance.font.pixelSize.medium : Appearance.font.pixelSize.hugeass
+    property int subtitleSize: compactMode ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.hugeass
 
     property string pillText: ""
     property string pillIcon: ""

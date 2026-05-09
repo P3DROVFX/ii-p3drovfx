@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.services
 import QtCore
 
 Singleton {
@@ -187,6 +188,28 @@ Singleton {
         }
     }
 
+    Timer {
+        id: retryRefreshTimer
+        interval: 15000 // 15 seconds
+        repeat: false
+        onTriggered: {
+            if (!root.authenticated && root._refreshToken !== "") {
+                console.log("[Gmail] Retrying token refresh...");
+                root._refreshAndFetch();
+            }
+        }
+    }
+
+    Connections {
+        target: Network
+        function onWifiStatusChanged() {
+            if (Network.wifiStatus === "connected" && !root.authenticated && root._refreshToken !== "") {
+                console.log("[Gmail] Network connected, retrying refresh...");
+                root._refreshAndFetch();
+            }
+        }
+    }
+
     Settings {
         id: emailSettings
         category: "EmailService"
@@ -212,6 +235,7 @@ Singleton {
         property alias bodyFontSize: root.bodyFontSize
         property alias autoMarkAsRead: root.autoMarkAsRead
         property alias navOrder: root.navOrder
+        property alias credentialsConfigured: root.credentialsConfigured
 
         // Draft persistence
         property alias composeDraftTo: root.composeDraftTo
@@ -402,6 +426,9 @@ Singleton {
             if (exitCode !== 0) {
                 // Keep authenticated true if we have a refresh token, just stop loading
                 root.loading = false;
+                if (!root.authenticated) {
+                    retryRefreshTimer.start();
+                }
             }
         }
     }

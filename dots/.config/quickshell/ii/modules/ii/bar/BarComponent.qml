@@ -80,7 +80,7 @@ Item {
     }
 
     BarThemes { id: barThemes }
-    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+    property var activeTheme: barThemes.themes[Config.options.bar.expressiveColorTheme] || barThemes.themes["content"]
 
     readonly property int barGroupStyle: Config.options.bar.barGroupStyle
     readonly property int barBackgroundStyle: Config.options.bar.barBackgroundStyle
@@ -91,7 +91,17 @@ Item {
                                    "transparent"
                                   );
     
-    property color colBackgroundHighlight: Config.options.bar.expressiveColors ? activeTheme.highlight : Appearance.colors.colPrimary
+    property color colBackgroundHighlight: {
+        if (Config.options.bar.expressiveColors) return activeTheme.highlight;
+        if (modelData.id === "sports") return Appearance.colors.colPrimaryContainer;
+        return Appearance.colors.colPrimary;
+    }
+
+    property color colOnBackgroundHighlight: {
+        if (Config.options.bar.expressiveColors) return ColorUtils.getContrastingTextColor(colBackgroundHighlight);
+        if (modelData.id === "sports") return Appearance.colors.colOnPrimaryContainer;
+        return Appearance.colors.colOnPrimary;
+    }
 
     BarGroup {
         id: wrapper
@@ -110,6 +120,11 @@ Item {
             id: itemLoader
             active: true
             sourceComponent: compMap[modelData.id][vertical ? 1 : 0]
+            onLoaded: {
+                if (item && item.hasOwnProperty("onActivatedColor")) {
+                    item.onActivatedColor = Qt.binding(() => rootItem.colOnBackgroundHighlight);
+                }
+            }
         }
     }
 

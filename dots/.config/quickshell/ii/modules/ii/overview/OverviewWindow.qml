@@ -106,12 +106,11 @@ Item { // Window
         z: 0
         active: root.hyprscrollingEnabled
         anchors.fill: parent
-        sourceComponent: Rectangle { 
+        sourceComponent: Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0.1,0.1,0.1,1.0)
+            color: Qt.rgba(0.1, 0.1, 0.1, 1.0)
         }
     }
-    
 
     ScreencopyView {
         id: windowPreview
@@ -129,10 +128,7 @@ Item { // Window
             bottomLeftRadius: !hyprscrollingEnabled ? root.bottomLeftRadius : root.windowRounding
             bottomRightRadius: !hyprscrollingEnabled ? root.bottomRightRadius : root.windowRounding
 
-
-            color: pressed ? ColorUtils.transparentize(Appearance.colors.colLayer2Active, 0.5) : 
-                hovered ? ColorUtils.transparentize(Appearance.colors.colLayer2Hover, 0.7) : 
-                ColorUtils.transparentize(Appearance.colors.colLayer2)
+            color: pressed ? ColorUtils.transparentize(Appearance.colors.colLayer2Active, 0.5) : hovered ? ColorUtils.transparentize(Appearance.colors.colLayer2Hover, 0.7) : ColorUtils.transparentize(Appearance.colors.colLayer2)
         }
 
         Loader {
@@ -160,7 +156,7 @@ Item { // Window
                 source: root.iconPath
                 width: iconSize
                 height: iconSize
-                sourceSize: Qt.size(iconSize, iconSize)
+                sourceSize: Qt.size(iconSize + TaskbarApps.iconThemeRevision, iconSize + TaskbarApps.iconThemeRevision)
 
                 Behavior on width {
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
