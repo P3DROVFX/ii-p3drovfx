@@ -297,12 +297,7 @@ PanelWindow {
             Ai.handleClipboardAndAttach();
             GlobalStates.policiesPanelOpen = true
         }
-        if (root.action == RegionSelection.SnipAction.Record || root.action == RegionSelection.SnipAction.RecordWithSound) {
-            root.phase = RegionSelection.Phase.Post
-            root.selectionMode = RegionSelection.SelectionMode.RectCorners
-        } else {
-            root.dismiss();
-        }
+        root.dismiss();
     }
 
     // Dont use anything like stdout here, this is being called detached

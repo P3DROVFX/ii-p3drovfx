@@ -172,6 +172,8 @@ Singleton {
             property JsonObject screenRecord: JsonObject {
                 property bool active: false
                 property int seconds: 0
+                property bool loading: false
+                property bool paused: false
             }
 
             property JsonObject settings: JsonObject {

@@ -103,6 +103,12 @@ Item {
                 sourceComponent: isMaterial ? screenRecordM3 : legacyScreenRecord
             }
 
+            Loader {
+                active: Persistent.states.screenRecord.active
+                visible: active
+                sourceComponent: isMaterial ? pauseM3 : legacyPause
+            }
+
             Component {
                 id: legacyScreenRecord
                 Item {
@@ -110,7 +116,7 @@ Item {
                     implicitWidth: btn.implicitWidth + timerRevealer.implicitWidth
                     implicitHeight: btn.implicitHeight
 
-                    property bool isRecording: Config.options.bar.utilButtons.isRecording
+                    property bool isRecording: Persistent.states.screenRecord.active
                     property int elapsedSeconds: 0
 
                     onIsRecordingChanged: {
@@ -142,7 +148,7 @@ Item {
                         MaterialSymbol {
                             horizontalAlignment: Qt.AlignHCenter
                             fill: 1
-                            text: recordingItem.isRecording ? "stop_circle" : "screen_record"
+                            text: recordingItem.isRecording ? "stop" : "screen_record"
                             iconSize: Appearance.font.pixelSize.large
                             color: recordingItem.isRecording ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer2
                             Behavior on color { ColorAnimation { duration: 200 } }
@@ -173,9 +179,30 @@ Item {
             Component {
                 id: screenRecordM3
                 UtilButton {
-                    iconText: Config.options.bar.utilButtons.isRecording ? "stop_circle" : "screen_record"
-                    forceHovered: Config.options.bar.utilButtons.isRecording
+                    iconText: Persistent.states.screenRecord.active ? "stop" : "screen_record"
+                    forceHovered: Persistent.states.screenRecord.active
                     onClicked: Quickshell.execDetached([Directories.recordScriptPath])
+                }
+            }
+
+            Component {
+                id: pauseM3
+                UtilButton {
+                    iconText: Persistent.states.screenRecord.paused ? "play_arrow" : "pause"
+                    onClicked: Quickshell.execDetached([Directories.recordScriptPath, "--pause"])
+                }
+            }
+
+            Component {
+                id: legacyPause
+                CircleUtilButton {
+                    onClicked: Quickshell.execDetached([Directories.recordScriptPath, "--pause"])
+                    MaterialSymbol {
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: 1; text: Persistent.states.screenRecord.paused ? "play_arrow" : "pause"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer2
+                    }
                 }
             }
 

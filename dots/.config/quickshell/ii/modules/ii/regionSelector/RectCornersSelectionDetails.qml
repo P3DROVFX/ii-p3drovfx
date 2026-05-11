@@ -41,11 +41,11 @@ Item {
         anchors {
             left: parent.left
             top: parent.top
-            leftMargin: Math.round(root.regionX) - borderWidth
-            topMargin: Math.round(root.regionY) - borderWidth
+            leftMargin: Math.round(root.regionX) - borderWidth - 5
+            topMargin: Math.round(root.regionY) - borderWidth - 5
         }
-        width: Math.round(root.regionWidth) + borderWidth * 2
-        height: Math.round(root.regionHeight) + borderWidth * 2
+        width: Math.round(root.regionWidth) + (borderWidth + 5) * 2
+        height: Math.round(root.regionHeight) + (borderWidth + 5) * 2
 
         color: root.color
         dashLength: 8

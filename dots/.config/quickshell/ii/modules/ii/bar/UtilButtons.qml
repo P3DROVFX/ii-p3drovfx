@@ -55,7 +55,23 @@ Item {
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: 1
-                    text: "videocam"
+                    text: Persistent.states.screenRecord.active ? "stop" : "videocam"
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        Loader {
+            active: Persistent.states.screenRecord.active
+            visible: Persistent.states.screenRecord.active
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: Quickshell.execDetached([Directories.recordScriptPath, "--pause"])
+                MaterialSymbol {
+                    horizontalAlignment: Qt.AlignHCenter
+                    fill: 1
+                    text: Persistent.states.screenRecord.paused ? "play_arrow" : "pause"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer2
                 }

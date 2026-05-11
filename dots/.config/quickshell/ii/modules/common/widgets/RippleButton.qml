@@ -40,11 +40,7 @@ Button {
     }
 
     opacity: root.enabled ? 1 : 0.4
-    property color buttonColor: ColorUtils.transparentize(root.toggled ? 
-        (root.hovered ? colBackgroundToggledHover : 
-            colBackgroundToggled) :
-        (root.hovered ? colBackgroundHover : 
-            colBackground), root.enabled ? 0 : 0)
+    property color buttonColor: ColorUtils.transparentize(root.toggled ? (root.hovered ? colBackgroundToggledHover : colBackgroundToggled) : (root.hovered ? colBackgroundHover : colBackground), root.enabled ? 0 : 0)
     property color rippleColor: root.toggled ? colRippleToggled : colRipple
 
     Behavior on opacity {
@@ -56,9 +52,9 @@ Button {
         rippleAnim.x = x;
         rippleAnim.y = y - stateY;
 
-        const dist = (ox,oy) => ox*ox + oy*oy
-        const stateEndY = stateY + buttonBackground.height
-        rippleAnim.radius = Math.sqrt(Math.max(dist(0, stateY), dist(0, stateEndY), dist(width, stateY), dist(width, stateEndY)))
+        const dist = (ox, oy) => ox * ox + oy * oy;
+        const stateEndY = stateY + buttonBackground.height;
+        rippleAnim.radius = Math.sqrt(Math.max(dist(0, stateY), dist(0, stateEndY), dist(width, stateY), dist(width, stateEndY)));
 
         rippleFadeAnim.complete();
         rippleAnim.restart();
@@ -74,32 +70,43 @@ Button {
         anchors.fill: parent
         cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onPressed: (event) => { 
-            if(event.button === Qt.RightButton) {
-                if (root.altAction) root.altAction(event);
+        onPressed: event => {
+            if (event.button === Qt.RightButton) {
+                if (root.altAction)
+                    root.altAction(event);
                 return;
             }
-            if(event.button === Qt.MiddleButton) {
-                if (root.middleClickAction) root.middleClickAction();
+            if (event.button === Qt.MiddleButton) {
+                if (root.middleClickAction)
+                    root.middleClickAction();
                 return;
             }
-            root.down = true
-            if (root.downAction) root.downAction();
-            if (!root.rippleEnabled) return;
-            const {x,y} = event
-            startRipple(x, y)
+            root.down = true;
+            if (root.downAction)
+                root.downAction();
+            if (!root.rippleEnabled)
+                return;
+            const {
+                x,
+                y
+            } = event;
+            startRipple(x, y);
         }
-        onReleased: (event) => {
-            root.down = false
-            if (event.button != Qt.LeftButton) return;
-            if (root.releaseAction) root.releaseAction();
-            root.click() // Because the MouseArea already consumed the event
-            if (!root.rippleEnabled) return;
+        onReleased: event => {
+            root.down = false;
+            if (event.button != Qt.LeftButton)
+                return;
+            if (root.releaseAction)
+                root.releaseAction();
+            root.click(); // Because the MouseArea already consumed the event
+            if (!root.rippleEnabled)
+                return;
             rippleFadeAnim.restart();
         }
-        onCanceled: (event) => {
-            root.down = false
-            if (!root.rippleEnabled) return;
+        onCanceled: event => {
+            root.down = false;
+            if (!root.rippleEnabled)
+                return;
             rippleFadeAnim.restart();
         }
     }
@@ -189,9 +196,18 @@ Button {
             RadialGradient {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: root.rippleColor }
-                    GradientStop { position: 0.3; color: root.rippleColor }
-                    GradientStop { position: 0.5; color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0) }
+                    GradientStop {
+                        position: 0.0
+                        color: root.rippleColor
+                    }
+                    GradientStop {
+                        position: 0.3
+                        color: root.rippleColor
+                    }
+                    GradientStop {
+                        position: 0.5
+                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                    }
                 }
             }
 
