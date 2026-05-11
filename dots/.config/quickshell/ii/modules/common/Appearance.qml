@@ -228,6 +228,37 @@ Singleton {
         }
     }
 
+    property color activeBorderColor: {
+        let type = Config.options.appearance.borderColorType;
+        if (type === "secondary") return colors.colSecondary;
+        if (type === "tertiary") return colors.colTertiary;
+        if (type === "primaryContainer") return colors.colPrimaryContainer;
+        if (type === "surface") return colors.colOutlineVariant;
+        return colors.colPrimary;
+    }
+
+    onActiveBorderColorChanged: {
+        if (Config.ready) {
+            let colorStr = activeBorderColor.toString();
+            let rgb = "";
+            if (colorStr.startsWith("#")) {
+                let hex = colorStr.substring(1);
+                if (hex.length === 8) {
+                    rgb = hex.substring(2); // AARRGGBB -> RRGGBB
+                } else {
+                    rgb = hex; // RRGGBB -> RRGGBB
+                }
+            }
+            
+            if (rgb !== "") {
+                let hyprColor = "0xAA" + rgb;
+                Quickshell.execDetached(["hyprctl", "keyword", "general:col.active_border", hyprColor]);
+                Quickshell.execDetached(["hyprctl", "keyword", "group:col.border_active", hyprColor]);
+                Quickshell.execDetached(["hyprctl", "keyword", "group:groupbar:col.active", hyprColor]);
+            }
+        }
+    }
+
     property int blurSize: Config.options.appearance.blurSize ?? 8
     onBlurSizeChanged: {
         if (Config.ready) {
@@ -245,6 +276,24 @@ Singleton {
                 Quickshell.execDetached(["hyprctl", "keyword", "decoration:rounding", root.rounding.windowRounding.toString()]);
             }
             Quickshell.execDetached(["hyprctl", "keyword", "decoration:blur:size", root.blurSize.toString()]);
+            
+            let colorStr = activeBorderColor.toString();
+            let rgb = "";
+            if (colorStr.startsWith("#")) {
+                let hex = colorStr.substring(1);
+                if (hex.length === 8) {
+                    rgb = hex.substring(2);
+                } else {
+                    rgb = hex;
+                }
+            }
+            
+            if (rgb !== "") {
+                let hyprColor = "0xAA" + rgb;
+                Quickshell.execDetached(["hyprctl", "keyword", "general:col.active_border", hyprColor]);
+                Quickshell.execDetached(["hyprctl", "keyword", "group:col.border_active", hyprColor]);
+                Quickshell.execDetached(["hyprctl", "keyword", "group:groupbar:col.active", hyprColor]);
+            }
         }
     }
 

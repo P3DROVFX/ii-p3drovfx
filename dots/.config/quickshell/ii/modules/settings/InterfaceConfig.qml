@@ -224,6 +224,43 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "border_outer"
+        title: Translation.tr("Window Border")
+
+        ContentSubsection {
+            title: Translation.tr("Active border color")
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.borderColorType
+                onSelected: newValue => {
+                    Config.options.appearance.borderColorType = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Primary"),
+                        value: "primary"
+                    },
+                    {
+                        displayName: Translation.tr("Secondary"),
+                        value: "secondary"
+                    },
+                    {
+                        displayName: Translation.tr("Tertiary"),
+                        value: "tertiary"
+                    },
+                    {
+                        displayName: Translation.tr("Primary Container"),
+                        value: "primaryContainer"
+                    },
+                    {
+                        displayName: Translation.tr("Surface"),
+                        value: "surface"
+                    }
+                ]
+            }
+        }
+    }
+
+    ContentSection {
         icon: "call_to_action"
         title: Translation.tr("Dock")
 
