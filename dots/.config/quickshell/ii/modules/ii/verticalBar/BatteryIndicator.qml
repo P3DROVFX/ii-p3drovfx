@@ -17,6 +17,7 @@ MouseArea {
     readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
+    property color textColor: Appearance.colors.colOnSurface
 
     // Cor do preenchimento
     readonly property color fillColor: {
@@ -33,7 +34,7 @@ MouseArea {
             return Appearance.m3colors.m3error;
         if (root.isLow && !root.isCharging)
             return Appearance.m3colors.m3error;
-        return Appearance.colors.colOnSecondaryContainer;
+        return root.textColor;
     }
 
     implicitWidth: Appearance.sizes.baseVerticalBarWidth
@@ -113,7 +114,7 @@ MouseArea {
                     text: "bolt"
                     iconSize: 14
                     fill: 1
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.textColor
                 }
             }
         }
@@ -194,7 +195,7 @@ MouseArea {
                     text: "bolt"
                     iconSize: 12
                     fill: 1
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.textColor
                     z: 3
                 }
             }

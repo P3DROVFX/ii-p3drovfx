@@ -121,7 +121,7 @@ MouseArea {
             text: "bolt"
             iconSize: 16
             fill: 1
-            color: Appearance.colors.colOnSecondaryContainer
+            color: root.textColor
             z: 3
         }
     }
@@ -170,7 +170,7 @@ MouseArea {
                         return "#FFC917";
                     if (root.isPerformance)
                         return "#42A5F5";
-                    return Appearance.colors.colOnSecondaryContainer;
+                    return root.textColor;
                 }
             }
         }
@@ -185,7 +185,7 @@ MouseArea {
                     return Appearance.m3colors.m3error;
                 if (root.isLow && !root.effectivelyCharging)
                     return Appearance.m3colors.m3error;
-                return Appearance.colors.colOnSecondaryContainer;
+                return root.textColor;
             }
             z: 1
         }
@@ -218,7 +218,7 @@ MouseArea {
             text: "bolt"
             iconSize: 16
             fill: 1
-            color: Appearance.colors.colOnSecondaryContainer
+            color: root.textColor
             z: 3
         }
     }

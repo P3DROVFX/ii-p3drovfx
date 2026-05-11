@@ -29,6 +29,9 @@ MouseArea {
             id: batteryIcon
             anchors.centerIn: parent
             source: root.vertical ? "../verticalBar/BatteryIndicator.qml" : "BatteryIndicator.qml"
+            onLoaded: {
+                if (item) item.textColor = Appearance.colors.colPrimary
+            }
         }
     }
 
