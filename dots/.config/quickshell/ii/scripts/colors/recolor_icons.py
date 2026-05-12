@@ -71,6 +71,7 @@ def get_colors():
             with open(COLORS_JSON, 'r') as f:
                 data = json.load(f)
                 if "colors" in data:
+                    # Always prefer dark mode colors for icons as requested
                     if "dark" in data["colors"]:
                         return data["colors"]["dark"]
                     elif "light" in data["colors"]:
@@ -80,6 +81,54 @@ def get_colors():
     except Exception as e:
         print(f"Error reading colors: {e}")
     return None
+
+
+def get_icon_colors():
+    """
+    Fetch colors specifically for icons.
+    The user wants icons to ALWAYS use dark mode colors even in light mode.
+    """
+    config = get_config()
+    imgpath = config.get("background", {}).get("wallpaperPath")
+    palette_type = config.get("appearance", {}).get("palette", {}).get("type", "scheme-tonal-spot")
+    accent_color = config.get("appearance", {}).get("palette", {}).get("accentColor")
+
+    # If we can't find the source, fallback to the current colors.json
+    if not imgpath and not accent_color:
+        return get_colors()
+
+    try:
+        # We run matugen directly to get the JSON output with all modes
+        cmd = ["matugen"]
+        if accent_color and accent_color.startswith("#"):
+            cmd += ["color", "hex", accent_color]
+        elif imgpath:
+            cmd += ["image", imgpath, "--source-color-index", "0"]
+        else:
+            return get_colors()
+
+        cmd += ["-t", palette_type, "-j", "hex"]
+        
+        # Matugen might exit with error if some templates are missing, 
+        # but it usually still prints the JSON to stdout.
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.stdout:
+            try:
+                data = json.loads(result.stdout)
+                if "colors" in data:
+                    colors = {}
+                    for key, val in data["colors"].items():
+                        # Extract the dark mode color for every key
+                        if "dark" in val:
+                            colors[key] = val["dark"].get("color", val["dark"].get("hex"))
+                    if colors:
+                        return colors
+            except:
+                pass
+    except Exception as e:
+        print(f"Error fetching dark colors via matugen: {e}")
+    
+    return get_colors()
 
 
 # ── SVG Recoloring (Phase 1) ────────────────────────────────────────────────
@@ -97,30 +146,19 @@ def get_brightness(hex_color):
 
 
 def recolor_svg(content, colors):
-    # Sort theme colors by brightness to ensure consistent mapping
-    # that preserves the original icon's luminosity order.
-    # This prevents "inverted" looks in light mode.
-    palette = [
-        colors.get('primary', '#ffffff'),
-        colors.get('primary_container', '#444444'),
-        colors.get('on_primary_container', '#ffffff')
-    ]
-    palette.sort(key=get_brightness)
-    
-    # Map: darkest theme color to original darks, lightest to original lights
-    c_dark = palette[0]
-    c_mid = palette[1]
-    c_light = palette[2]
+    primary = colors.get('primary', '#ffffff')
+    primary_container = colors.get('primary_container', '#444444')
+    on_primary_container = colors.get('on_primary_container', '#ffffff')
 
     def color_replacer(match):
         hex_color = match.group(0)
         brightness = get_brightness(hex_color)
         if brightness < 60:
-            return c_dark
+            return primary
         elif brightness < 180:
-            return c_mid
+            return primary_container
         else:
-            return c_light
+            return on_primary_container
 
     hex_pattern = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
     new_content = hex_pattern.sub(color_replacer, content)
@@ -405,7 +443,7 @@ def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
 def generate():
     global TARGET_THEME_PATH
     config = get_config()
-    colors = get_colors()
+    colors = get_icon_colors()
 
     if not colors:
         print("No colors found. Please check ~/.local/state/quickshell/user/generated/colors.json")

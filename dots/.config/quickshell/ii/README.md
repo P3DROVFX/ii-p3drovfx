@@ -259,6 +259,22 @@ ColorPickerPopupContent 1.0 ColorPickerPopupContent.qml
 - **🎥 OBS Integration**: Start/stop recordings directly from the bar with real-time status.
 - **✅ TickTick Sync**: Full cloud integration for task management synced across devices.
 - **✨ Micro-animations**: Refined transitions across the entire system.
+- <details>
+  <summary>📱 <b>Paged Android Quick Toggles</b>: Multi-page horizontally swipeable quick toggles.</summary>
+
+  This implementation optimizes dashboard space by introducing horizontal pagination for quick toggles, mirroring the Android experience.
+  
+  **Key Features:**
+  - **Horizontal Paging**: Smooth flicking and snapping between multiple toggle pages.
+  - **Intelligent Height**: The panel height adapts to the current page's toggle count.
+  - **Enhanced Edit Mode**: New UI for adding/deleting pages and reordering toggles with full visual feedback.
+  - **Layout Sync**: Bottom widgets automatically contract when editing to maximize space.
+
+  **Implementation Details:**
+  - `modules/common/Config.qml`: Refactored `toggles` schema to a nested `pages` array.
+  - `modules/ii/sidebarDashboard/quickToggles/AndroidQuickPanel.qml`: Core paging and layout logic.
+  - `modules/ii/sidebarDashboard/BottomWidgetGroup.qml`: Added contextual `forceCollapsed` state.
+  </details>
 
 <div align="center">
     <h2>• warning •</h2>
