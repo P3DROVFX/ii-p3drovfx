@@ -27,14 +27,35 @@ Singleton {
 	property bool __reverse: false;
 
 	property var activeTrack;
+	property string _artUrlFallback: "";
+	readonly property string artUrl: {
+		const url = activePlayer?.trackArtUrl;
+		if (url && url !== "") {
+			_artUrlFallback = url;
+			return url;
+		}
+		return _artUrlFallback;
+	}
 
 	onAllPlayersChanged: {
-		const nextPlayer = allPlayers.find(player => player.desktopEntry === root.priorityPlayer);
-		if (nextPlayer) {
-			activePlayer = nextPlayer;
-			return;
-		} else {
-			activePlayer = players[0];
+		if (root.trackedPlayer) {
+			const stillExists = Mpris.players.values.indexOf(root.trackedPlayer) !== -1;
+			if (!stillExists) {
+				root.trackedPlayer = null;
+			}
+		}
+		if (root.trackedPlayer == null) {
+			const priority = allPlayers.find(p => p.desktopEntry === root.priorityPlayer);
+			if (priority) {
+				root.trackedPlayer = priority;
+			} else {
+				const playing = players.find(p => p.isPlaying);
+				if (playing) {
+					root.trackedPlayer = playing;
+				} else if (players.length > 0) {
+					root.trackedPlayer = players[0];
+				}
+			}
 		}
 	}
 
@@ -75,6 +96,9 @@ Singleton {
 			}
 
 			Component.onDestruction: {
+				if (root.trackedPlayer === modelData) {
+					root.trackedPlayer = null;
+				}
 				if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying) {
 					for (const player of Mpris.players.values) {
 						if (player.playbackState.isPlaying) {
@@ -83,8 +107,8 @@ Singleton {
 						}
 					}
 
-					if (trackedPlayer == null && Mpris.players.values.length != 0) {
-						trackedPlayer = Mpris.players.values[0];
+					if (root.trackedPlayer == null && Mpris.players.values.length != 0) {
+						root.trackedPlayer = Mpris.players.values[0];
 					}
 				}
 			}
@@ -99,32 +123,30 @@ Singleton {
 		target: activePlayer
 
 		function onPostTrackChanged() {
-			root.updateTrack();
+			if (root.activePlayer?.trackArtUrl) {
+				root.updateTrack();
+			}
 		}
 
 		function onTrackArtUrlChanged() {
-			// console.log("arturl:", activePlayer.trackArtUrl)
-			// root.updateTrack();
-			if (root.activePlayer.uniqueId == root.activeTrack.uniqueId && root.activePlayer.trackArtUrl != root.activeTrack.artUrl) {
-				// cantata likes to send cover updates *BEFORE* updating the track info.
-				// as such, art url changes shouldn't be able to break the reverse animation
-				const r = root.__reverse;
-				root.updateTrack();
-				root.__reverse = r;
-
-			}
+			if (root.activeTrack.artUrl === root.activePlayer?.trackArtUrl) return;
+			const r = root.__reverse;
+			root.updateTrack();
+			root.__reverse = r;
 		}
 	}
 
 	onActivePlayerChanged: {
-		this.updateTrack();
+		if (root.activePlayer?.trackArtUrl) {
+			root.updateTrack();
+		}
 	}
 
 	function updateTrack() {
 		//console.log(`update: ${this.activePlayer?.trackTitle ?? ""} : ${this.activePlayer?.trackArtists}`)
 		this.activeTrack = {
 			uniqueId: this.activePlayer?.uniqueId ?? 0,
-			artUrl: this.activePlayer?.trackArtUrl ?? "",
+			artUrl: this.artUrl,
 			title: this.activePlayer?.trackTitle || Translation.tr("Unknown Title"),
 			artist: this.activePlayer?.trackArtist || Translation.tr("Unknown Artist"),
 			album: this.activePlayer?.trackAlbum || Translation.tr("Unknown Album"),

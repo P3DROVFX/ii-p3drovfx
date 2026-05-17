@@ -44,7 +44,7 @@ Item {
         LyricsService.initiliazeLyrics();
     }
 
-    readonly property string artSource: activePlayer?.trackArtUrl && activePlayer.trackArtUrl !== "" ? activePlayer.trackArtUrl : ""
+    readonly property string artSource: MprisController.artUrl
 
     Item {
         id: artworkItem

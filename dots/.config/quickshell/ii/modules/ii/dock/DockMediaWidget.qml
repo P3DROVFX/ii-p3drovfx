@@ -41,7 +41,7 @@ Item {
 
     readonly property string finalTitle: StringUtils.cleanMusicTitle(currentPlayer?.trackTitle) || Translation.tr("Unknown Title")
     readonly property string finalArtist: currentPlayer?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string finalArtUrl: currentPlayer?.trackArtUrl || ""
+    readonly property string finalArtUrl: MprisController.artUrl
 
     property bool mediaHovered: false
 

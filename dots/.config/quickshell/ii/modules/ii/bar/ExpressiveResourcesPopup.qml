@@ -134,7 +134,7 @@ StyledPopup {
                 Layout.fillWidth: true
                 implicitHeight: 165
                 radius: Appearance.rounding.large
-                color: Appearance.colors.colLayer1
+                color: Appearance.colors.colSurfaceContainerHigh
                 
                 ColumnLayout {
                     anchors.fill: parent
@@ -203,7 +203,7 @@ StyledPopup {
                 Layout.fillWidth: true
                 implicitHeight: 165
                 radius: Appearance.rounding.large
-                color: Appearance.colors.colLayer1
+                color: Appearance.colors.colSurfaceContainerHigh
                 
                 ColumnLayout {
                     anchors.fill: parent
@@ -273,7 +273,7 @@ StyledPopup {
             implicitWidth: 380
             implicitHeight: 64
             radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer1
+            color: Appearance.colors.colSecondaryContainer
             
             RowLayout {
                 anchors.fill: parent
@@ -283,13 +283,13 @@ StyledPopup {
                 MaterialShape {
                     shapeString: "Circle"
                     implicitSize: 40
-                    color: Appearance.colors.colLayer2
+                    color: Appearance.colors.colLayer0
                     
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "memory"
                         iconSize: 22
-                        color: Appearance.colors.colOnLayer2
+                        color: Appearance.colors.colOnLayer0
                     }
                 }
                 
@@ -299,13 +299,13 @@ StyledPopup {
                         text: "RAM"
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Bold
-                        color: Appearance.colors.colPrimary
+                        color: Appearance.colors.colOnSecondaryContainer
                     }
                     StyledText {
                         text: (ResourceUsage.memoryUsed / (1024*1024)).toFixed(1) + " GB / " + (ResourceUsage.memoryTotal / (1024*1024)).toFixed(0) + " GB"
                         font.pixelSize: Appearance.font.pixelSize.normal
                         font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnLayer1
+                        color: Appearance.colors.colOnSecondaryContainer
                     }
                 }
                 
@@ -315,7 +315,7 @@ StyledPopup {
                     text: Math.round(ResourceUsage.memoryUsedPercentage * 100) + "%"
                     font.pixelSize: 24
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnLayer1
+                    color: Appearance.colors.colOnSecondaryContainer
                     Layout.rightMargin: 12
                 }
             }
@@ -326,7 +326,7 @@ StyledPopup {
             implicitWidth: 380
             implicitHeight: 64
             radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer1
+            color: Appearance.colors.colSecondaryContainer
             
             RowLayout {
                 anchors.fill: parent
@@ -336,13 +336,13 @@ StyledPopup {
                 MaterialShape {
                     shapeString: "Circle"
                     implicitSize: 40
-                    color: Appearance.colors.colLayer2
+                    color: Appearance.colors.colLayer4
                     
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "hard_drive"
                         iconSize: 22
-                        color: Appearance.colors.colOnLayer2
+                        color: Appearance.colors.colOnLayer4
                     }
                 }
                 
@@ -352,13 +352,13 @@ StyledPopup {
                         text: "DISK"
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Bold
-                        color: Appearance.colors.colPrimary
+                        color: Appearance.colors.colOnSecondaryContainer
                     }
                     StyledText {
                         text: (ResourceUsage.diskUsed / (1024*1024*1024)).toFixed(1) + " GB / " + (ResourceUsage.diskTotal / (1024*1024*1024)).toFixed(0) + " GB"
                         font.pixelSize: Appearance.font.pixelSize.normal
                         font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnLayer1
+                        color: Appearance.colors.colOnSecondaryContainer
                     }
                 }
                 
@@ -368,7 +368,7 @@ StyledPopup {
                     text: Math.round(ResourceUsage.diskUsedPercentage * 100) + "%"
                     font.pixelSize: 24
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnLayer1
+                    color: Appearance.colors.colOnSecondaryContainer
                     Layout.rightMargin: 12
                 }
             }

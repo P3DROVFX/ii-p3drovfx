@@ -74,6 +74,10 @@ Singleton {
                 property int tabIndex: 0
             }
 
+            property JsonObject clipboard: JsonObject {
+                property list<string> pinnedEntries: []
+            }
+
             property JsonObject sidebar: JsonObject {
                 property JsonObject policies: JsonObject {
                     property int tab: 0

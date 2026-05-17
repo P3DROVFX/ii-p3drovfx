@@ -24,7 +24,7 @@ Item {
     property bool useFixedSize: Config.options.bar.mediaPlayer.useFixedSize
 
     // DockMedia-like properties
-    property var artUrl: activePlayer?.trackArtUrl ?? ""
+    property var artUrl: MprisController.artUrl
     property string trackTitle: activePlayer?.trackTitle ?? ""
     property string trackArtist: activePlayer?.trackArtist ?? ""
     property bool isPlaying: activePlayer?.isPlaying ?? false
@@ -144,23 +144,22 @@ Item {
         anchors.centerIn: parent
         sourceComponent: Rectangle {
             id: cardVert
-            color: Appearance.colors.colSecondaryContainer
-            radius: Appearance.rounding.full
-            implicitWidth: 34
+            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
             
             ColumnLayout {
                 id: innerCol
-                anchors.fill: parent
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
+                anchors.centerIn: parent
+                width: parent.width - 8
+                height: parent.height - 8
                 spacing: 4
 
                 // Art
                 Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: 28
-                    implicitHeight: 28
+                    implicitWidth: innerCol.width - 4
+                    implicitHeight: innerCol.width - 4
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
                     clip: true
@@ -171,8 +170,8 @@ Item {
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                         antialiasing: true
-                        sourceSize.width: 28
-                        sourceSize.height: 28
+                        sourceSize.width: parent.width
+                        sourceSize.height: parent.height
                         visible: root.displayedArtFilePath !== ""
                     }
 
@@ -201,7 +200,7 @@ Item {
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         text: root.isPlaying ? "pause" : "play_arrow"
-                        iconSize: 20
+                        iconSize: parent.width * 0.6
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -214,9 +213,9 @@ Item {
                 // Next
                 RippleButton {
                     Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: 28
-                    implicitHeight: 28
-                    buttonRadius: 14
+                    implicitWidth: innerCol.width - 4
+                    implicitHeight: innerCol.width - 4
+                    buttonRadius: height / 2
                     colBackground: Appearance.colors.colTertiaryContainer
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                     colRipple: Appearance.colors.colPrimaryContainerActive
@@ -288,8 +287,8 @@ Item {
         sourceComponent: Rectangle {
             id: card
             color: Appearance.colors.colSecondaryContainer
-            radius: Appearance.rounding.full
-            implicitHeight: 30
+            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            implicitHeight: Appearance.sizes.barHeight - 8
             height: implicitHeight
             implicitWidth: innerRow.implicitWidth + 8
             width: parent.width
@@ -297,6 +296,7 @@ Item {
             RowLayout {
                 id: innerRow
                 anchors.fill: parent
+                height: parent.height
                 anchors.leftMargin: 4
                 anchors.rightMargin: 4
                 spacing: 6
@@ -304,11 +304,11 @@ Item {
                 // Art
                 Rectangle {
                     id: artRect
-                    implicitWidth: 26
-                    implicitHeight: 26
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: card.height - 6
+                    implicitHeight: card.height - 6
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
-                    Layout.alignment: Qt.AlignVCenter
 
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -342,6 +342,7 @@ Item {
 
                 // Title + Artist
                 ColumnLayout {
+                    id: titleArtistCol
                     spacing: -4
                     Layout.alignment: Qt.AlignVCenter
                     Layout.topMargin: 2
@@ -415,9 +416,10 @@ Item {
 
                 // Play/Pause
                 RippleButton {
-                    implicitWidth: 40
-                    implicitHeight: 23
-                    buttonRadius: root.isPlaying ? Appearance.rounding.normal : 13
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: card.height + 8
+                    implicitHeight: card.height - 6
+                    buttonRadius: root.isPlaying ? Appearance.rounding.normal : height / 2
                     colBackground: root.isPlaying ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
                     colBackgroundHover: root.isPlaying ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryContainerHover
                     colRipple: root.isPlaying ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryContainerActive
@@ -434,10 +436,11 @@ Item {
 
                 // Next
                 RippleButton {
-                    implicitWidth: 26
-                    implicitHeight: 26
-                    Layout.leftMargin: -4
-                    buttonRadius: 13
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: card.height - 6
+                    implicitHeight: card.height - 6
+                    Layout.leftMargin: -2
+                    buttonRadius: height / 2
                     colBackground: Appearance.colors.colTertiaryContainer
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                     colRipple: Appearance.colors.colPrimaryContainerActive

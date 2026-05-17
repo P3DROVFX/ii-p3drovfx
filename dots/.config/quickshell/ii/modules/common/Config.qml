@@ -13,40 +13,11 @@ Singleton {
     property bool ready: false
     property int readWriteDelay: 75 // milliseconds
     property bool blockWrites: false
-
-    function setNestedValue(nestedKey, value) {
-        let keys = nestedKey.split(".");
-        let obj = root.options;
-        let parents = [obj];
-
-        // Traverse and collect parent objects
-        for (let i = 0; i < keys.length - 1; ++i) {
-            if (!obj[keys[i]] || typeof obj[keys[i]] !== "object") {
-                obj[keys[i]] = {};
-            }
-            obj = obj[keys[i]];
-            parents.push(obj);
-        }
-
-        // Convert value to correct type using JSON.parse when safe
-        let convertedValue = value;
-        if (typeof value === "string") {
-            let trimmed = value.trim();
-            if (trimmed === "true" || trimmed === "false" || !isNaN(Number(trimmed))) {
-                try {
-                    convertedValue = JSON.parse(trimmed);
-                } catch (e) {
-                    convertedValue = value;
-                }
-            }
-        }
-
-        obj[keys[keys.length - 1]] = convertedValue;
-    }
+    property bool _ignoreFileChanges: false
 
     Timer {
         id: fileReloadTimer
-        interval: root.readWriteDelay
+        interval: 500
         repeat: false
         onTriggered: {
             configFileView.reload();
@@ -55,11 +26,20 @@ Singleton {
 
     Timer {
         id: fileWriteTimer
-        interval: root.readWriteDelay
+        interval: 500
         repeat: false
         onTriggered: {
+            root._ignoreFileChanges = true;
+            fileChangeCooldown.restart();
             configFileView.writeAdapter();
         }
+    }
+
+    Timer {
+        id: fileChangeCooldown
+        interval: 300
+        repeat: false
+        onTriggered: root._ignoreFileChanges = false
     }
 
     FileView {
@@ -67,12 +47,18 @@ Singleton {
         path: root.filePath
         watchChanges: true
         blockWrites: root.blockWrites
-        onFileChanged: fileReloadTimer.restart()
-        onAdapterUpdated: fileWriteTimer.restart()
+        onFileChanged: {
+            if (!root.ready || root._ignoreFileChanges) return;
+            fileReloadTimer.restart();
+        }
+        onAdapterUpdated: {
+            if (!root.ready) return;
+            fileWriteTimer.restart();
+        }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             if (error == FileViewError.FileNotFound) {
-                writeAdapter();
+                root.ready = true;
             }
         }
 
@@ -85,7 +71,7 @@ Singleton {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local
                 property int weeb: 0 // 0: No | 1: Open | 2: Closet
                 property int wallpapers: 1 // 0: No | 1: Yes
-                property int translator: 0 // 0: No | 1: Yes
+                property int translator: 0 // 0: No | 1: Default (illogical-impulse) | 2: Expressive (reworked)
             }
 
             property JsonObject ai: JsonObject {
@@ -194,7 +180,9 @@ Singleton {
                 property string update: "kitty -1 --hold=yes fish -i -c 'pkexec pacman -Syu'"
                 property string volumeMixer: `~/.config/hypr/hyprland/scripts/launch_first_available.sh "pavucontrol-qt" "pavucontrol"`
 
-                property var bluetoothDeviceImages: [
+            }
+
+            property var bluetoothDeviceImages: [
                     {
                         "mac": "E8:EE:CC:96:31:3A",
                         "image": "anker_q30_.png"
@@ -208,7 +196,6 @@ Singleton {
                         "image": "samsung_s23.png"
                     }
                 ]
-            }
 
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
@@ -749,7 +736,7 @@ Singleton {
                 property string engineBaseUrl: "https://www.google.com/search?q="
                 property list<string> excludedSites: ["quora.com", "facebook.com"]
                 property bool sloppy: false // DEPRECATED: use levenshtein instead
-                property bool levenshtein: sloppy // Use Levenshtein distance (typo-tolerant) instead of fuzzy matching
+                property bool levenshtein: false // Use Levenshtein distance (typo-tolerant) instead of fuzzy matching
                 property bool frecency: false // Rank results by app launch frequency
                 property string fileSearchDirectory: "/home"
                 property bool blurFileSearchResultPreviews: false
@@ -773,7 +760,7 @@ Singleton {
             property JsonObject sidebar: JsonObject {
                 property JsonObject dashboardHeader: JsonObject {
                     property string profileImageType: "custom" // "custom", "distro", "none"
-                    property string profileImagePath: "file://" + Directories.home + "/.config/quickshell/ii/assets/profile.png"
+                    property string profileImagePath: Directories.home + "/.config/quickshell/ii/assets/profile.png"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }

@@ -48,7 +48,7 @@ Singleton {
     function pickColor(hex) {
         if (hex && hex.startsWith("#")) {
             root.colorPickerPopupColor = hex;
-            if (Config.options.bar.tooltips.enableColorPickerPopup) {
+            if (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.enableColorPickerPopup) {
                 root.colorPickerPopupOpen = false;
                 Qt.callLater(() => {
                     root.colorPickerPopupOpen = true;

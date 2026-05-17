@@ -20,6 +20,7 @@ DelegateChooser {
     signal openBluetoothDialog
     signal openNightLightDialog
     signal openWifiDialog
+    signal openDarkModeDialog
 
     role: "type"
 
@@ -131,6 +132,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            onOpenMenu: {
+                root.openDarkModeDialog();
+            }
         }
     }
 

@@ -14,8 +14,8 @@ MouseArea {
     readonly property bool hasMultipleLayouts: HyprlandXkb.layoutCodes.length > 1
     visible: HyprlandXkb.layoutCodes.length >= 1
 
-    implicitWidth: vertical ? 34 : (rowLoader.item?.implicitWidth ?? 0) + 12
-    implicitHeight: vertical ? (colLoader.item?.implicitHeight ?? 0) + 12 : 30
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : (rowLoader.item?.implicitWidth ?? 0) + 28
+    implicitHeight: vertical ? (colLoader.item?.implicitHeight ?? 0) + 12 : Appearance.sizes.barHeight - 8
     
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
@@ -39,8 +39,10 @@ MouseArea {
 
     Rectangle {
         anchors.fill: parent
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colSecondaryContainer
+        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        color: "transparent"
+        border.width: 1
+        border.color: Appearance.colors.colSecondary
 
         Loader {
             id: rowLoader
@@ -59,6 +61,7 @@ MouseArea {
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
                     color: Appearance.colors.colOnSecondaryContainer
+                    animateChange: true
                 }
             }
         }
@@ -74,7 +77,7 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     shapeString: "Cookie12Sided"
                     color: Appearance.colors.colPrimary
-                    implicitSize: 28
+                    implicitSize: Appearance.sizes.verticalBarWidth - 8
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "keyboard"
@@ -88,6 +91,7 @@ MouseArea {
                     font.pixelSize: 10
                     font.weight: Font.Black
                     color: Appearance.colors.colOnSecondaryContainer
+                    animateChange: true
                 }
             }
         }

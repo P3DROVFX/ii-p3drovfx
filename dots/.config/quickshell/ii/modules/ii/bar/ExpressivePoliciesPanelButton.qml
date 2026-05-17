@@ -45,6 +45,8 @@ Item {
     Component {
         id: fabStyle
         Fab {
+            baseSize: Appearance.sizes.barHeight - 8
+            buttonRadius: Appearance.rounding.full
             colBackground: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colPrimaryContainer
             onClicked: {
                 GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
@@ -52,8 +54,8 @@ Item {
 
             CustomIcon {
                 anchors.centerIn: parent
-                width: 19.5
-                height: 19.5
+                width: parent.baseSize - 12
+                height: parent.baseSize - 12
                 source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
                 colorize: true
                 color: Appearance.colors.colOnPrimaryContainer

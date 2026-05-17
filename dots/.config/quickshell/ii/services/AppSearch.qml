@@ -22,7 +22,7 @@ Singleton {
         "wpsoffice": "wps-office2019-kprometheus",
         "footclient": "foot",
         "jetbrains-studio": "android-studio",
-        "zen": "zen",
+        "zen": "zen-browser",
     })
     property var regexSubstitutions: [
         {
@@ -75,33 +75,39 @@ Singleton {
               .map(item => item.entry);
         }
 
-        // Combine fuzzy score with usage frequency
-        const results = list.map(obj => {
-            const fuzzyResult = Fuzzy.single(search, obj.name);
-            const fuzzyScore = fuzzyResult?.score ?? -1000;
-            const usageScore = AppUsage.getScore(obj.id);
+        // Use Fuzzy.go to get matches with scores
+        const fuzzyResults = Fuzzy.go(search, preppedNames, {
+            all: false,
+            key: "name"
+        });
+
+        if (fuzzyResults.length === 0) return [];
+
+        // Find max score for normalization (Fuzzy.go scores are >= 0 usually, but let's be safe)
+        let maxFuzzy = 0;
+        for (let i = 0; i < fuzzyResults.length; i++) {
+            if (fuzzyResults[i].score > maxFuzzy) maxFuzzy = fuzzyResults[i].score;
+        }
+
+        const results = fuzzyResults.map(r => {
+            const entry = r.obj.entry;
+            const fuzzyScore = r.score;
+            // Normalize fuzzy score to 0-1 range
+            const normalizedFuzzy = maxFuzzy > 0 ? fuzzyScore / maxFuzzy : 1;
+            const usageScore = AppUsage.getScore(entry.id);
+            
             return {
-                entry: obj,
-                fuzzyScore: fuzzyScore,
-                usageScore: usageScore,
-                // Normalize fuzzy score to 0-1 range and combine with usage
-                combinedScore: (fuzzyScore > -1000 ? 1 : 0) * 0.7 + usageScore * 0.3
+                entry: entry,
+                // Combine scores: 60% fuzzy match quality, 40% usage/recency
+                combinedScore: normalizedFuzzy * 0.6 + usageScore * 0.4
             };
-        }).filter(item => item.fuzzyScore > -1000 || item.usageScore > 0)
-          .sort((a, b) => {
-              // First sort by whether there's a fuzzy match
-              if ((a.fuzzyScore > -1000) !== (b.fuzzyScore > -1000)) {
-                  return (b.fuzzyScore > -1000 ? 1 : 0) - (a.fuzzyScore > -1000 ? 1 : 0);
-              }
-              // Then by combined score
-              return b.combinedScore - a.combinedScore;
-          })
+        }).sort((a, b) => b.combinedScore - a.combinedScore)
           .map(item => item.entry);
 
         return results;
     }
 
-    function fuzzyQuery(search: string): var { // Idk why list<DesktopEntry> doesn't work
+    function fuzzyQuery(search) { // Idk why list<DesktopEntry> doesn't work
         // Frecency mode: combine fuzzy with usage frequency
         if (root.frecencySearch) {
             return frecencyQuery(search);
@@ -151,6 +157,10 @@ Singleton {
         // Try common substitutions first
         if (substitutions[str]) return substitutions[str];
         if (substitutions[str.toLowerCase()]) return substitutions[str.toLowerCase()];
+        
+        // Handle common variations for user's requested apps
+        if (str.includes("android-studio")) return "android-studio";
+        if (str.includes("zen-browser") || str.includes("zen")) return "zen";
 
         // Try to see if there's a themed icon matching the name (for absolute path icons)
         // This is important for apps like Zen Browser where the .desktop has an absolute path

@@ -9,8 +9,8 @@ MouseArea {
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
 
-    implicitWidth: vertical ? 34 : (rowLoader.item?.implicitWidth ?? 0) + 10
-    implicitHeight: vertical ? (colLoader.item?.implicitHeight ?? 0) + 12 : Appearance.sizes.barHeight - 6
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : (rowLoader.item?.implicitWidth ?? 0) + 10
+    implicitHeight: vertical ? (colLoader.item?.implicitHeight ?? 0) + 12 : Appearance.sizes.barHeight - 8
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
     Behavior on implicitHeight {
@@ -20,7 +20,7 @@ MouseArea {
     Rectangle {
         anchors.fill: parent
         color: Appearance.colors.colTertiaryContainer
-        radius: Appearance.rounding.full
+        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
 
         Loader {
             id: rowLoader

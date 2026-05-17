@@ -30,6 +30,7 @@ ShellRoot {
         Cliphist.refresh();
         Wallpapers.load();
         Updates.load();
+        DarkModeService.automatic;
     }
 
     // Panel families

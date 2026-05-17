@@ -132,4 +132,35 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "margin"
+        title: Translation.tr("Gaps")
+
+        ConfigSlider {
+            buttonIcon: "padding"
+            text: Translation.tr("Gaps In")
+            usePercentTooltip: false
+            from: 0
+            to: 60
+            stepSize: 1
+            value: Config.options.appearance.gapsIn
+            onValueChanged: {
+                Config.options.appearance.gapsIn = Math.round(value);
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "fullscreen"
+            text: Translation.tr("Gaps Out")
+            usePercentTooltip: false
+            from: 0
+            to: 60
+            stepSize: 1
+            value: Config.options.appearance.gapsOut
+            onValueChanged: {
+                Config.options.appearance.gapsOut = Math.round(value);
+            }
+        }
+    }
 }

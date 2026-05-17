@@ -12,8 +12,8 @@ Singleton {
     enum MonitorSource { Monitor, Input }
 
     property var monitorSource: SongRec.MonitorSource.Monitor
-    property int timeoutInterval: Config.options.musicRecognition.interval
-    property int timeoutDuration: Config.options.musicRecognition.timeout
+    property int timeoutInterval: (Config.options && Config.options.musicRecognition && Config.options.musicRecognition.interval) ? Config.options.musicRecognition.interval : 10
+    property int timeoutDuration: (Config.options && Config.options.musicRecognition && Config.options.musicRecognition.timeout) ? Config.options.musicRecognition.timeout : 30
     readonly property bool running: recognizeMusicProc.running
 
     function toggleRunning(running) {
@@ -45,8 +45,16 @@ Singleton {
     property bool manuallyStopped: false
 
     function handleRecognition(jsonText) {
+        if (!jsonText || jsonText.trim() === "") {
+            Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("No match found. Try again or check your audio output."), "-a", "Shell"])
+            return
+        }
         try {
             var obj = JSON.parse(jsonText)
+            if (!obj.track || !obj.track.title) {
+                Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Could not identify this song. Try a different audio source."), "-a", "Shell"])
+                return
+            }
             root.recognizedTrack = {
                 title: obj.track.title,
                 subtitle: obj.track.subtitle,
@@ -54,7 +62,7 @@ Singleton {
             }
             musicReconizedProc.running = true
         } catch(e) {
-            Quickshell.execDetached(["notify-send", Translation.tr("Couldn't recognize music"), Translation.tr("Perhaps what you're listening to is too niche"), "-a", "Shell"])
+            Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Recognition failed. Try again."), "-a", "Shell"])
         }
     }
 
@@ -71,9 +79,14 @@ Singleton {
                 handleRecognition(this.text)
             }
         }
+        onRunningChanged: {
+            if (running) {
+                Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Listening..."), "-t", "3000", "-a", "Shell"])
+            }
+        }
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 1) {
-                Quickshell.execDetached(["notify-send", Translation.tr("Couldn't recognize music"), Translation.tr("Make sure you have songrec installed"), "-a", "Shell"])
+                Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Make sure you have songrec installed"), "-a", "Shell"])
             }
         }
     }

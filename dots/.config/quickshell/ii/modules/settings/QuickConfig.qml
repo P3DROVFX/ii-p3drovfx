@@ -13,7 +13,6 @@ ContentPage {
     readonly property int index: 0
     property bool register: parent.register ?? false
     forceWidth: true
-    interactive: false
 
     property bool allowHeavyLoad: false
     Component.onCompleted: Qt.callLater(() => page.allowHeavyLoad = true)
@@ -86,7 +85,7 @@ ContentPage {
                     sourceSize.width: parent.implicitWidth
                     sourceSize.height: parent.implicitHeight
                     fillMode: Image.PreserveAspectCrop
-                    source: Config.options.background.wallpaperPath
+                    source: Config.options.background.wallpaperPath !== "" ? Config.options.background.wallpaperPath : `${Directories.assetsPath}/images/default_wallpaper.png`
                     cache: false
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -96,14 +95,15 @@ ContentPage {
                             radius: Appearance.rounding.normal
                         }
                     }
-                    RippleButton {
-                        anchors.fill: parent
-                        colBackground: "transparent"
-                        colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
-                        colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
-                        onClicked: {
-                            Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
-                        }
+                }
+
+                RippleButton {
+                    anchors.fill: parent
+                    colBackground: "transparent"
+                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
+                    colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
+                    onClicked: {
+                        Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
                     }
                 }
 
@@ -130,8 +130,13 @@ ContentPage {
                     StyledText {
                         id: text
                         anchors.centerIn: parent
-                        property string fileName: Config.options.background.wallpaperPath.split("/")[Config.options.background.wallpaperPath.split("/").length - 1]
-                        text: fileName.length > 30 ? fileName.slice(27) + "..." : fileName
+                        property string fileName: {
+                            const path = Config.options.background.wallpaperPath;
+                            if (path === "") return "Click to select wallpaper";
+                            const parts = path.split("/");
+                            return parts[parts.length - 1];
+                        }
+                        text: fileName.length > 30 ? fileName.slice(0, 27) + "..." : fileName
                         color: Appearance.colors.colOnPrimary
                         font.pixelSize: Appearance.font.pixelSize.smaller
                     }
@@ -151,12 +156,10 @@ ContentPage {
                     SmallLightDarkPreferenceButton {
                         Layout.preferredHeight: 60
                         dark: false
-                        enabled: Config.options.appearance.palette.type.startsWith("scheme")
                     }
                     SmallLightDarkPreferenceButton {
                         Layout.preferredHeight: 60
                         dark: true
-                        enabled: Config.options.appearance.palette.type.startsWith("scheme")
                     }
                 }
 

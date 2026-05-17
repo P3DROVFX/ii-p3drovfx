@@ -304,6 +304,7 @@ AbstractQuickPanel {
                                                 onOpenBluetoothDialog: root.openBluetoothDialog()
                                                 onOpenNightLightDialog: root.openNightLightDialog()
                                                 onOpenWifiDialog: root.openWifiDialog()
+                                                onOpenDarkModeDialog: root.openDarkModeDialog()
                                             }
                                         }
                                     }

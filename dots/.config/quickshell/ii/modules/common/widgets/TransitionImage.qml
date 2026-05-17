@@ -9,6 +9,8 @@ Item {
 
     required property string imageSource
 
+    readonly property int status: imgAIsBack ? imgA.status : imgB.status
+
     property int animationDuration: 1000
     property var fillMode: Image.PreserveAspectCrop
     property bool animated: true
@@ -30,6 +32,14 @@ Item {
 
         if (newSrc === back.source)
             return;
+
+        // No previous wallpaper loaded — load directly onto the back image
+        // instead of crossfading, which would swap an empty image on top.
+        if (back.source === "" || back.status === Image.Null) {
+            back.source = newSrc;
+            return;
+        }
+
         front.source = newSrc;
         front.z = 1;
         back.z = 0;

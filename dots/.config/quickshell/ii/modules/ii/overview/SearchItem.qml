@@ -21,13 +21,13 @@ RippleButton {
     property var iconType: entry?.iconType
     property string iconName: entry?.iconName ?? ""
     property var itemExecute: entry?.execute
-    property var fontType: switch (entry?.fontType) {
-    case LauncherSearchResult.FontType.Monospace:
-        return "monospace";
-    case LauncherSearchResult.FontType.Normal:
-        return "main";
-    default:
-        return "main";
+    property var fontType: switch(entry?.fontType) {
+        case LauncherSearchResult.FontType.Monospace:
+            return "monospace"
+        case LauncherSearchResult.FontType.Normal:
+            return "main"
+        default:
+            return "main"
     }
     property string itemClickActionName: entry?.verb ?? "Open"
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
@@ -35,7 +35,7 @@ RippleButton {
     property string cliphistRawString: entry?.rawValue ?? ""
     property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
     property bool blurImage: entry?.blurImage ?? false
-
+    
     visible: root.entryShown
     property int horizontalMargin: 10
     property int buttonHorizontalPadding: 10
@@ -46,7 +46,9 @@ RippleButton {
     implicitHeight: rowLayout.implicitHeight + root.buttonVerticalPadding * 2
     implicitWidth: rowLayout.implicitWidth + root.buttonHorizontalPadding * 2
     buttonRadius: Appearance.rounding.normal
-    colBackground: (root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive : (selected ? Appearance.colors.colPrimaryContainer : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 1))
+    colBackground: (root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive : 
+        (selected ? Appearance.colors.colPrimaryContainer : 
+        ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 1))
     colBackgroundHover: Appearance.colors.colPrimaryContainer
     colRipple: Appearance.colors.colPrimaryContainerActive
     property color colForeground: selected ? Appearance.colors.colOnPrimaryContainer : Appearance.m3colors.m3onSurface
@@ -86,14 +88,14 @@ RippleButton {
     property string displayContent: highlightContent(root.itemName, root.query)
 
     property list<string> urls: {
-        if (!root.itemName)
-            return [];
+        if (!root.itemName) return [];
         // Regular expression to match URLs
         const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
-        const matches = root.itemName?.match(urlRegex)?.filter(url => !url.includes("…")); // Elided = invalid
+        const matches = root.itemName?.match(urlRegex)
+            ?.filter(url => !url.includes("…")) // Elided = invalid
         return matches ? matches : [];
     }
-
+    
     PointingHandInteraction {}
 
     background {
@@ -103,25 +105,25 @@ RippleButton {
     }
 
     onClicked: {
-        GlobalStates.overviewOpen = false;
-        root.itemExecute();
+        GlobalStates.overviewOpen = false
+        root.itemExecute()
     }
-    Keys.onPressed: event => {
+    Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Delete && event.modifiers === Qt.ShiftModifier) {
             const deleteAction = root.entry.actions.find(action => action.name == Translation.tr("Delete"));
 
             if (deleteAction) {
-                deleteAction.execute();
+                deleteAction.execute()
             }
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.keyboardDown = true;
-            root.clicked();
+            root.keyboardDown = true
+            root.clicked()
             event.accepted = true;
         }
     }
-    Keys.onReleased: event => {
+    Keys.onReleased: (event) => {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.keyboardDown = false;
+            root.keyboardDown = false
             event.accepted = true;
         }
     }
@@ -137,36 +139,26 @@ RippleButton {
         Loader {
             id: iconLoader
             active: true
-            sourceComponent: switch (root.iconType) {
-            case LauncherSearchResult.IconType.Material:
-                return materialSymbolComponent;
-            case LauncherSearchResult.IconType.Text:
-                return bigTextComponent;
-            case LauncherSearchResult.IconType.System:
-                return iconImageComponent;
-            case LauncherSearchResult.IconType.None:
-                return null;
-            default:
-                return null;
+            sourceComponent: switch(root.iconType) {
+                case LauncherSearchResult.IconType.Material:
+                    return materialSymbolComponent
+                case LauncherSearchResult.IconType.Text:
+                    return bigTextComponent
+                case LauncherSearchResult.IconType.System:
+                    return iconImageComponent
+                case LauncherSearchResult.IconType.None:
+                    return null
+                default:
+                    return null
             }
         }
 
         Component {
             id: iconImageComponent
             IconImage {
-                source: {
-                    const _ = TaskbarApps.iconThemeRevision;
-                    const searchStr = root.entry?.id || root.itemName || root.iconName;
-                    const guessed = AppSearch.guessIcon(searchStr);
-                    return Quickshell.iconPath(guessed, "image-missing");
-                }
+                source: Quickshell.iconPath(root.iconName, "image-missing")
                 width: 35
                 height: 35
-                // Force reload when icon theme regenerates
-                backer.sourceSize: Qt.size(
-                    35 + TaskbarApps.iconThemeRevision,
-                    35 + TaskbarApps.iconThemeRevision
-                )
             }
         }
 
@@ -227,8 +219,8 @@ RippleButton {
                     }
                 }
                 StyledText { // Item name/content
-                    id: nameText
                     Layout.fillWidth: true
+                    id: nameText
                     textFormat: Text.StyledText // RichText also works, but StyledText ensures elide work
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.family: Appearance.font.family[root.fontType]
@@ -263,9 +255,9 @@ RippleButton {
 
         // Action text
         StyledText {
-            id: clickAction
             Layout.fillWidth: false
             visible: root.selected
+            id: clickAction
             font.pixelSize: Appearance.font.pixelSize.normal
             color: Appearance.colors.colOnPrimaryContainer
             horizontalAlignment: Text.AlignRight
@@ -320,5 +312,6 @@ RippleButton {
                 }
             }
         }
+
     }
 }

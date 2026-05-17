@@ -12,6 +12,7 @@ QuickToggleModel {
 
     toggled: Appearance.m3colors.darkmode
     icon: "contrast"
+    hasMenu: true
     
     mainAction: () => {
         if (Appearance.m3colors.darkmode) {

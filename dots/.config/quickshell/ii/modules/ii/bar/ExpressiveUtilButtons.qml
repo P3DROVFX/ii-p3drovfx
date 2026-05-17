@@ -24,9 +24,9 @@ Item {
         id: pill
         anchors.centerIn: parent
         color: isMaterial ? Appearance.colors.colPrimaryContainer : "transparent"
-        radius: Appearance.rounding.full
-        implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 10 : flow.implicitWidth + 4
-        implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? 30 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.barHeight
+        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 4
+        implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? Appearance.sizes.barHeight - 8 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.barHeight
 
         Behavior on implicitWidth {
             NumberAnimation {
@@ -67,7 +67,7 @@ Item {
                         horizontalAlignment: Qt.AlignHCenter
                         fill: 1; text: "screenshot_region"
                         iconSize: Appearance.font.pixelSize.large
-                        color: Appearance.colors.colOnLayer2
+                        color: Appearance.colors.colOnPrimaryContainer
                     }
                 }
             }

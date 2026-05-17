@@ -40,7 +40,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colPrimary
-                implicitSize: 34
+                implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.normal
@@ -55,7 +55,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colSecondaryContainer
-                implicitSize: 34
+                implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.normal
@@ -70,7 +70,7 @@ Item {
                 visible: root.showDate && DateTime.dayNameShort !== ""
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: 2
-                implicitWidth: 34
+                implicitWidth: Appearance.sizes.verticalBarWidth - 8
                 implicitHeight: 20
                 color: Appearance.colors.colTertiaryContainer
                 radius: Appearance.rounding.small
@@ -88,7 +88,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colTertiaryContainer
-                implicitSize: 28
+                implicitSize: Appearance.sizes.verticalBarWidth - 12
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest
@@ -120,7 +120,7 @@ Item {
             MaterialShape {
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colPrimary
-                implicitSize: 28
+                implicitSize: Appearance.sizes.barHeight - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.small
@@ -142,7 +142,7 @@ Item {
             MaterialShape {
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colSecondaryContainer
-                implicitSize: 28
+                implicitSize: Appearance.sizes.barHeight - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.small
@@ -157,7 +157,7 @@ Item {
                 visible: layoutHoriz.showAMPM
                 shapeString: "Cookie12Sided"
                 color: Appearance.colors.colTertiaryContainer
-                implicitSize: 24
+                implicitSize: Appearance.sizes.barHeight - 16
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest

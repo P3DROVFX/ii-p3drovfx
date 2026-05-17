@@ -58,7 +58,7 @@ post_process() {
     handle_kde_material_you_colors &
     "$SCRIPT_DIR/code/material-code-set-color.sh" &
     
-    # Generate YouTube Music theme
+    # Generate YouTube Music theme via matugen native template
     "$SCRIPT_DIR/../ytmusic/generate-ytmusic-theme.sh" > /dev/null 2>&1 &
 }
 
@@ -146,6 +146,10 @@ EOF
 
 set_wallpaper_path() {
     local path="$1"
+    if [ ! -f "$SHELL_CONFIG_FILE" ]; then
+        mkdir -p "$(dirname "$SHELL_CONFIG_FILE")"
+        echo '{}' > "$SHELL_CONFIG_FILE"
+    fi
     if [ -f "$SHELL_CONFIG_FILE" ]; then
         jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
     fi
@@ -313,6 +317,11 @@ switch() {
     fi
 
     matugen "${matugen_args[@]}"
+
+    # Generate dynamic Material You icon theme
+    # Using gowall and python helper to recolor a base SVG theme
+    echo "Generating dynamic icons..."
+    python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
     source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
     python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
         > "$STATE_DIR"/user/generated/material_colors.scss
@@ -403,8 +412,8 @@ main() {
         type_flag="$(get_type_from_config)"
     fi
 
-    # Validate type_flag (allow 'auto' as well)
-    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot auto)
+    # Validate type_flag (allow 'auto' and 'scheme-auto' as well)
+    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot auto scheme-auto)
     valid_type=0
     for t in "${allowed_types[@]}"; do
         if [[ "$type_flag" == "$t" ]]; then
@@ -416,6 +425,8 @@ main() {
         echo "[switchwall.sh] Warning: Invalid type '$type_flag', defaulting to 'auto'" >&2
         type_flag="auto"
     fi
+    # Normalize scheme-auto → auto for detection
+    [[ "$type_flag" == "scheme-auto" ]] && type_flag="auto"
 
     # Only prompt for wallpaper if not using --color and not using --noswitch and no imgpath set
     if [[ -z "$imgpath" && -z "$color_flag" && -z "$noswitch_flag" ]]; then
@@ -423,13 +434,9 @@ main() {
         imgpath="$(kdialog --getopenfilename . --title 'Choose wallpaper')"
     fi
 
-    if [[ -n "$imgpath" && -z "$noswitch_flag" ]]; then
-        set_accent_color ""
-        color_flag=""
-        color=""
-    fi
-
-    if [[ -n "$imgpath" && -z "$noswitch_flag" ]]; then
+    # Only clear accent color if a NEW image is provided and noswitch is NOT set
+    current_wallpaper=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+    if [[ -n "$imgpath" && -z "$noswitch_flag" && "$imgpath" != "$current_wallpaper" ]]; then
         set_accent_color ""
         color_flag=""
         color=""

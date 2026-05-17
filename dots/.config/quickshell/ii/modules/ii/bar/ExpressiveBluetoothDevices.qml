@@ -15,9 +15,9 @@ MouseArea {
     property int deviceIndex: 0
     readonly property var primaryDevice: activeDevices.length > 0 ? activeDevices[deviceIndex % activeDevices.length] : null
     readonly property bool hasDevices: activeDevices.length > 0
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8
 
-    implicitWidth: vertical ? 40 : layout.implicitWidth + 8
-    implicitHeight: vertical ? layout.implicitHeight + 8 : Appearance.sizes.barHeight
+    implicitHeight: vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.barHeight
     width: implicitWidth
     height: implicitHeight
     visible: hasDevices
@@ -52,7 +52,7 @@ MouseArea {
         MaterialShape {
             shapeString: "Cookie7Sided"
             color: Appearance.colors.colPrimary
-            implicitSize: 30
+            implicitSize: Appearance.sizes.barHeight - 8
             MaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: Appearance.font.pixelSize.normal
@@ -63,9 +63,9 @@ MouseArea {
 
         Rectangle {
             color: Appearance.colors.colSecondaryContainer
-            radius: Appearance.rounding.full
+            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: content.implicitWidth + 24
-            implicitHeight: 32
+            implicitHeight: Appearance.sizes.barHeight - 8
             
             RowLayout {
                 id: content
@@ -114,7 +114,7 @@ MouseArea {
             Layout.alignment: Qt.AlignHCenter
             shapeString: "Cookie7Sided"
             color: Appearance.colors.colPrimary
-            implicitSize: 30
+            implicitSize: Appearance.sizes.verticalBarWidth - 8
             MaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: Appearance.font.pixelSize.normal
@@ -127,7 +127,7 @@ MouseArea {
             Layout.alignment: Qt.AlignHCenter
             color: Appearance.colors.colSecondaryContainer
             radius: Appearance.rounding.small
-            implicitWidth: 34
+            implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: contentVert.implicitHeight + 14
             
             ColumnLayout {

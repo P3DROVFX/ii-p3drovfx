@@ -19,32 +19,38 @@ Singleton {
     }
 
     function applyColors(fileContent) {
-        const json = JSON.parse(fileContent)
-        for (const key in json) {
-            if (json.hasOwnProperty(key)) {
-                // Convert snake_case to CamelCase
-                const camelCaseKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase())
-                const m3Key = `m3${camelCaseKey}`
-                Appearance.m3colors[m3Key] = json[key]
+        try {
+            if (!fileContent || fileContent.trim() === "") return;
+            const json = JSON.parse(fileContent)
+            for (const key in json) {
+                if (json.hasOwnProperty(key)) {
+                    // Convert snake_case to CamelCase
+                    const camelCaseKey = key.replace(/_([a-z])/g, (g) => g[1].toUpperCase())
+                    const m3Key = `m3${camelCaseKey}`
+                    Appearance.m3colors[m3Key] = json[key]
+                }
             }
+            
+            Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
+        } catch(e) {
+            console.log("[MaterialThemeLoader] Error parsing colors.json:", e)
         }
-        
-        Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
+    }
+
+    Timer {
+        id: resetFilePathTimer
+        interval: 200
+        repeat: false
+        running: false
+        onTriggered: {
+            root.filePath = ""
+            root.filePath = Directories.generatedMaterialThemePath
+            themeFileView.reload()
+        }
     }
 
     function resetFilePathNextTime() {
-        resetFilePathNextWallpaperChange.enabled = true
-    }
-
-    Connections {
-        id: resetFilePathNextWallpaperChange
-        enabled: false
-        target: Config.options.background
-        function onWallpaperPathChanged() {
-            root.filePath = ""
-            root.filePath = Directories.generatedMaterialThemePath
-            resetFilePathNextWallpaperChange.enabled = false
-        }
+        resetFilePathTimer.start()
     }
 
     Timer {

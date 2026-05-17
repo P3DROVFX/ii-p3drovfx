@@ -13,8 +13,9 @@ Item {
     property bool isActive: false
     property bool forceHovered: false
 
-    implicitWidth: vertical ? 26 : (hovered ? 54 : 26)
-    implicitHeight: vertical ? (hovered ? 54 : 26) : 26
+    readonly property real baseSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight) - 14
+    implicitWidth: vertical ? baseSize : (hovered ? baseSize + 28 : baseSize)
+    implicitHeight: vertical ? (hovered ? baseSize + 28 : baseSize) : baseSize
 
     property bool hovered: mouseArea.containsMouse || forceHovered
 

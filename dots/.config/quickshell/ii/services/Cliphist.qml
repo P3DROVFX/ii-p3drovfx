@@ -111,6 +111,32 @@ Singleton {
         wipeProc.running = true;
     }
 
+    readonly property var pinnedEntries: Persistent.states.clipboard.pinnedEntries
+
+    function pin(entry) {
+        if (!isPinned(entry)) {
+            let current = Array.from(root.pinnedEntries);
+            current.push(entry);
+            Persistent.states.clipboard.pinnedEntries = current;
+        }
+    }
+
+    function unpin(entry) {
+        let current = Array.from(root.pinnedEntries);
+        let index = current.indexOf(entry);
+        if (index !== -1) {
+            current.splice(index, 1);
+            Persistent.states.clipboard.pinnedEntries = current;
+        }
+    }
+
+    function isPinned(entry) {
+        for (let i = 0; i < root.pinnedEntries.length; i++) {
+            if (root.pinnedEntries[i] === entry) return true;
+        }
+        return false;
+    }
+
     Connections {
         target: Quickshell
         function onClipboardTextChanged() {

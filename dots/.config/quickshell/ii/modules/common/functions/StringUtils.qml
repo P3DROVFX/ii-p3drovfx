@@ -239,7 +239,7 @@ Singleton {
      * @param { string } str
      * @returns { string }
      */
-    function cleanCliphistEntry(str: string): string {
+    function cleanCliphistEntry(str) {
         return str.replace(/^\d+\t/, "");
     }
 

@@ -37,7 +37,7 @@ Item {
                 anchors.centerIn: parent
                 width: resourceCircProg.implicitSize
                 height: resourceCircProg.implicitSize
-                
+
                 MaterialSymbol {
                     anchors.centerIn: parent
                     font.weight: Font.DemiBold
@@ -70,7 +70,7 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 text: `${Math.round(percentage * 100).toString()}%`
             }
-            
+
             Behavior on implicitWidth {
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration

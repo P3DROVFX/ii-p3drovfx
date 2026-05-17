@@ -54,7 +54,7 @@ AbstractBackgroundWidget {
 
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string artSource: player?.trackArtUrl || ""
+    readonly property string artSource: MprisController.artUrl
 
     implicitWidth: cardPadding * 2 + albumContainerSize + cardSpacing + 350
     implicitHeight: 240

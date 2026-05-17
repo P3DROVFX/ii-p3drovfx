@@ -99,6 +99,7 @@ def get_icon_colors():
 
     try:
         # We run matugen directly to get the JSON output with all modes
+        # We use --dry-run to avoid errors with missing templates and force dark mode for icons
         cmd = ["matugen"]
         if accent_color and accent_color.startswith("#"):
             cmd += ["color", "hex", accent_color]
@@ -107,22 +108,27 @@ def get_icon_colors():
         else:
             return get_colors()
 
-        cmd += ["-t", palette_type, "-j", "hex"]
+        cmd += ["-t", palette_type, "-j", "hex", "--dry-run", "--mode", "dark"]
         
-        # Matugen might exit with error if some templates are missing, 
-        # but it usually still prints the JSON to stdout.
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.stdout:
             try:
-                data = json.loads(result.stdout)
-                if "colors" in data:
-                    colors = {}
-                    for key, val in data["colors"].items():
-                        # Extract the dark mode color for every key
-                        if "dark" in val:
-                            colors[key] = val["dark"].get("color", val["dark"].get("hex"))
-                    if colors:
-                        return colors
+                # Extract JSON part from stdout in case of warnings/errors
+                json_str = result.stdout
+                start = json_str.find('{')
+                end = json_str.rfind('}')
+                if start != -1 and end != -1:
+                    data = json.loads(json_str[start:end+1])
+                    if "colors" in data:
+                        colors = {}
+                        for key, val in data["colors"].items():
+                            # Extract the dark mode color for every key
+                            if "dark" in val:
+                                colors[key] = val["dark"].get("color", val["dark"].get("hex"))
+                            elif "default" in val:
+                                colors[key] = val["default"].get("color", val["default"].get("hex"))
+                        if colors:
+                            return colors
             except:
                 pass
     except Exception as e:
@@ -146,19 +152,35 @@ def get_brightness(hex_color):
 
 
 def recolor_svg(content, colors):
-    primary = colors.get('primary', '#ffffff')
-    primary_container = colors.get('primary_container', '#444444')
-    on_primary_container = colors.get('on_primary_container', '#ffffff')
+    # Collect available tones and sort them by brightness
+    # We use a mix of primary, secondary and their containers to get a rich scale
+    candidates = [
+        colors.get('primary'),
+        colors.get('primary_container'),
+        colors.get('secondary'),
+        colors.get('secondary_container'),
+        colors.get('on_primary'),
+        colors.get('on_secondary')
+    ]
+    palette = []
+    seen = set()
+    for c in candidates:
+        if c and c.lower() not in seen:
+            palette.append(c.lower())
+            seen.add(c.lower())
+            
+    palette.sort(key=get_brightness)
+    
+    # Ensure we don't use pure black if it's the only dark tone and we have others
+    if len(palette) > 3 and get_brightness(palette[0]) < 10:
+        palette.pop(0)
 
     def color_replacer(match):
         hex_color = match.group(0)
         brightness = get_brightness(hex_color)
-        if brightness < 60:
-            return primary
-        elif brightness < 180:
-            return primary_container
-        else:
-            return on_primary_container
+        # Map brightness to palette index
+        idx = int((brightness / 256.0) * len(palette))
+        return palette[min(idx, len(palette)-1)]
 
     hex_pattern = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
     new_content = hex_pattern.sub(color_replacer, content)
@@ -335,11 +357,14 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
         return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
     # Build a multi-stop gradient palette for deep, rich recoloring
+    # Including 'on' colors to ensure we have a full range from dark to light
     raw_palette = [
         hex_to_rgb(colors.get('on_primary', '#000000')),
+        hex_to_rgb(colors.get('on_secondary', '#111111')),
+        hex_to_rgb(colors.get('secondary_container', '#222222')),
         hex_to_rgb(colors.get('primary_container', '#444444')),
-        hex_to_rgb(colors.get('primary', '#aaaaaa')),
-        hex_to_rgb(colors.get('on_primary_container', '#ffffff'))
+        hex_to_rgb(colors.get('secondary', '#888888')),
+        hex_to_rgb(colors.get('primary', '#ffffff'))
     ]
     raw_palette.sort(key=get_luminance)
 

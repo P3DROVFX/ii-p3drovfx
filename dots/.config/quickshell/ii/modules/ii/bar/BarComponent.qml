@@ -94,6 +94,8 @@ Item {
     property list<string> primaryBackgroundComps: ["timer", "record_indicator", "screen_share_indicator"] // components that are mostly indicators
 
     property real startRadius: {
+        if (barGroupStyle === 1)
+            return Appearance.rounding.windowRounding;
         if (barSection === 0) {
             if (originalIndex == 0)
                 return Appearance.rounding.full;
@@ -110,6 +112,8 @@ Item {
     }
 
     property real endRadius: {
+        if (barGroupStyle === 1)
+            return Appearance.rounding.windowRounding;
         if (barSection === 2) {
             if (originalIndex == list.length - 1)
                 return Appearance.rounding.full;
@@ -154,18 +158,18 @@ Item {
         id: wrapper
         vertical: rootItem.vertical
         anchors {
-            verticalCenter: root.vertical ? rootItem.verticalCenter : undefined
-            horizontalCenter: root.vertical ? undefined : rootItem.horizontalCenter
+            verticalCenter: rootItem.vertical ? rootItem.verticalCenter : undefined
+            horizontalCenter: rootItem.vertical ? undefined : rootItem.horizontalCenter
         }
 
-        padding: (modelData.id === "dashboard_panel_button" || modelData.id === "policies_panel_button") ? 0 : 5
+        padding: (rootItem.isExpressive || modelData.id === "dashboard_panel_button" || modelData.id === "policies_panel_button") ? 0 : 5
         leftPadding: rootItem.isExpressive ? 0 : padding
         rightPadding: rootItem.isExpressive ? 0 : padding
         topPadding: rootItem.isExpressive ? 0 : padding
         bottomPadding: rootItem.isExpressive ? 0 : padding
         startRadius: rootItem.startRadius
         endRadius: rootItem.endRadius
-        colBackground: (itemLoader.item?.activated || primaryBackgroundComps.includes(modelData.id)) ? rootItem.colBackgroundHighlight : rootItem.colBackground
+        colBackground: (barGroupStyle === 1 && isExpressive) ? "transparent" : ((itemLoader.item?.activated || primaryBackgroundComps.includes(modelData.id)) ? rootItem.colBackgroundHighlight : rootItem.colBackground)
 
         Loader {
             id: itemLoader

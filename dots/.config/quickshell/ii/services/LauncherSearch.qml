@@ -215,7 +215,17 @@ Singleton {
         if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
             // Clipboard
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.clipboard);
-            return Cliphist.fuzzyQuery(searchString).map((entry, index, array) => {
+            
+            const pinnedMatches = Cliphist.pinnedEntries.filter(e => {
+                if (searchString === "") return true;
+                return e.toLowerCase().includes(searchString.toLowerCase());
+            });
+
+            const fuzzyResults = Cliphist.fuzzyQuery(searchString).filter(e => !Cliphist.isPinned(e));
+            const allResults = pinnedMatches.concat(fuzzyResults);
+
+            return allResults.map((entry, index, array) => {
+                const isPinned = index < pinnedMatches.length;
                 const mightBlurImage = Cliphist.entryIsImage(entry) && root.clipboardWorkSafetyActive;
                 let shouldBlurImage = mightBlurImage;
                 if (mightBlurImage) {
@@ -227,24 +237,37 @@ Singleton {
                     name: StringUtils.cleanCliphistEntry(entry),
                     verb: "",
                     type: type,
+                    pinned: isPinned,
                     execute: () => {
                         Cliphist.copy(entry);
                     },
-                    actions: [resultComp.createObject(null, {
+                    actions: [
+                        resultComp.createObject(null, {
                             name: Translation.tr("Copy"),
                             iconName: "content_copy",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Cliphist.copy(entry);
                             }
-                        }), resultComp.createObject(null, {
+                        }),
+                        resultComp.createObject(null, {
+                            name: isPinned ? Translation.tr("Unpin") : Translation.tr("Pin"),
+                            iconName: isPinned ? "keep_off" : "keep",
+                            iconType: LauncherSearchResult.IconType.Material,
+                            execute: () => {
+                                if (isPinned) Cliphist.unpin(entry);
+                                else Cliphist.pin(entry);
+                            }
+                        }),
+                        resultComp.createObject(null, {
                             name: Translation.tr("Delete"),
                             iconName: "delete",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Cliphist.deleteEntry(entry);
                             }
-                        })],
+                        })
+                    ],
                     blurImage: shouldBlurImage
                 });
             }).filter(Boolean);

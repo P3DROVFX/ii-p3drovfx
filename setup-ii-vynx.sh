@@ -61,6 +61,8 @@ FULL_INSTALL=false
 NO_CONFIRM=false
 USE_II_VYNX=false
 UPDATE_ONLY=false
+SKIP_HYPRLAND=true
+PRESERVE_CONFIG=false
 
 UPSTREAM_REPO="https://github.com/vaguesyntax/ii-vynx"
 UPSTREAM_DIR="$HOME/.local/share/ii-vynx-upstream"
@@ -86,6 +88,8 @@ for arg in "$@"; do
         --no-confirm)     NO_CONFIRM=true; FORCE_INSTALL=true ;;
         --ii-vynx)        USE_II_VYNX=true ;;
         --update-only)    UPDATE_ONLY=true; DO_PULL=true ;;
+        --include-hyprland) SKIP_HYPRLAND=false ;;
+        --preserve-config)  PRESERVE_CONFIG=true ;;
         *)
             echo -e "${RED}Unknown flag: $arg${NC}"
             echo "Usage: $0 [OPTIONS]"
@@ -97,8 +101,10 @@ for arg in "$@"; do
             echo "  --full-install     Install original dots first, then ii-vynx"
             echo "  --no-confirm       Skip all confirmations"
             echo "  --ii-vynx          Switch to official vaguesyntax/ii-vynx quickshell"
-            echo "  --update-only      Pull latest changes for current source, no switch"
-            echo "  -v, --verbose      Enable verbose output"
+             echo "  --update-only      Pull latest changes for current source, no switch"
+             echo "  --include-hyprland  Include hyprland config setup (default: skip)"
+             echo "  --preserve-config   Keep existing config.json (use with --no-confirm for update buttons)"
+             echo "  -v, --verbose      Enable verbose output"
             exit 1
             ;;
     esac
@@ -268,8 +274,8 @@ setup_hyprland_source() {
     fi
 }
 
-install_original_dots() {
-    echo -e "${RED}Original dots are not installed! Do you want to install them? (y/n): ${NC}"
+run_bundled_setup() {
+    echo -e "${RED}This fork's base dotfiles are not installed yet. Install them now? (y/n): ${NC}"
     read -r setup_response
     [[ ! "$setup_response" =~ ^[Yy]$ ]] && echo -e "${RED}✗ Setup cancelled.${NC}" && exit 1
 
@@ -314,6 +320,22 @@ if [ "$SCRIPT_DIR" != "$STANDARD_SCRIPT_DIR" ]; then
         chmod +x "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
         echo -e "${GREEN}✓ Script installed to $STANDARD_SCRIPT_DIR${NC}"
     fi
+fi
+
+UPDATE_SCRIPT_SRC="$SCRIPT_DIR/update-with-customs.sh"
+UPDATE_SCRIPT_DST="$STANDARD_SCRIPT_DIR/update-with-customs.sh"
+if [ -f "$UPDATE_SCRIPT_SRC" ]; then
+    cp "$UPDATE_SCRIPT_SRC" "$UPDATE_SCRIPT_DST"
+    chmod +x "$UPDATE_SCRIPT_DST"
+    log_verbose "Update script installed to $UPDATE_SCRIPT_DST"
+fi
+
+UPDATE_FORK_SRC="$SCRIPT_DIR/update-fork.sh"
+UPDATE_FORK_DST="$STANDARD_SCRIPT_DIR/update-fork.sh"
+if [ -f "$UPDATE_FORK_SRC" ]; then
+    cp "$UPDATE_FORK_SRC" "$UPDATE_FORK_DST"
+    chmod +x "$UPDATE_FORK_DST"
+    log_verbose "Fork update wrapper installed to $UPDATE_FORK_DST"
 fi
 
 # If ii-vynx-fork doesn't exist yet, bootstrap it from SCRIPT_DIR
@@ -415,7 +437,7 @@ fi
 # ── Check illogical-impulse ──────────────────────────────────────────────────
 if [ "$FORCE_INSTALL" = false ] && [ "$FULL_INSTALL" = false ]; then
     if [ ! -d "$CHECK_DIR" ]; then
-        install_original_dots
+        run_bundled_setup
     fi
 fi
 
@@ -448,6 +470,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Ensure all scripts are executable
+find "$TARGET_DIR/scripts" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) -exec chmod +x {} + 2>/dev/null
+
 # Step 4: Restore protected files (overwrite what was just copied)
 restore_protected_files "$TARGET_DIR"
 
@@ -455,15 +480,15 @@ echo -e "${GREEN}✓ Quickshell source switched successfully${NC}"
 
 # ── Config Reset ─────────────────────────────────────────────────────────────
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
-if [ "$UPDATE_ONLY" = false ] && [ -f "$CONFIG_FILE" ]; then
-    echo -e "${YELLOW}• Configuração existente detectada em: $CONFIG_FILE${NC}"
-    echo -e "${YELLOW}⚠ O seu fork utiliza uma estrutura diferente (pages vs toggles) e manter o arquivo antigo causará crashes.${NC}"
+if [ "$UPDATE_ONLY" = false ] && [ "$PRESERVE_CONFIG" = false ] && [ -f "$CONFIG_FILE" ]; then
+    echo -e "${YELLOW}• Existing config detected at: $CONFIG_FILE${NC}"
+    echo -e "${YELLOW}⚠ This fork uses a different config structure (pages vs toggles). Keeping the old file may cause crashes.${NC}"
     
     do_reset=false
     if [ "$NO_CONFIRM" = true ]; then
         do_reset=true
     else
-        echo -ne "${CYAN}Deseja resetar o config.json agora? (O arquivo será renomeado como backup) (y/n): ${NC}"
+        echo -ne "${CYAN}Reset config.json now? (The file will be renamed as backup) (y/n): ${NC}"
         read -r response
         [[ "$response" =~ ^[Yy]$ ]] && do_reset=true
     fi
@@ -471,16 +496,20 @@ if [ "$UPDATE_ONLY" = false ] && [ -f "$CONFIG_FILE" ]; then
     if [ "$do_reset" = true ]; then
         BACKUP_CFG="${CONFIG_FILE}_backup_$(date +%Y%m%d_%H%M%S)"
         mv "$CONFIG_FILE" "$BACKUP_CFG"
-        echo -e "${GREEN}✓ Config resetado com sucesso (Backup: $(basename "$BACKUP_CFG"))${NC}"
+        echo -e "${GREEN}✓ Config reset complete (Backup: $(basename "$BACKUP_CFG"))${NC}"
     else
-        echo -e "${RED}⚠ Aviso: Você optou por NÃO resetar. Se o Quickshell crashar, delete o config.json manualmente.${NC}"
+        echo -e "${RED}⚠ Warning: You chose NOT to reset. If Quickshell crashes, delete config.json manually.${NC}"
     fi
 fi
 
 # ── Hyprland config ──────────────────────────────────────────────────────────
-sleep 0.5
-setup_hyprland_rules
-setup_hyprland_source
+if [ "$SKIP_HYPRLAND" = false ]; then
+    sleep 0.5
+    setup_hyprland_rules
+    setup_hyprland_source
+else
+    echo -e "${YELLOW}• Skipping hyprland config setup (--skip-hyprland)${NC}"
+fi
 
 # ── Restart ──────────────────────────────────────────────────────────────────
 echo ""
@@ -489,7 +518,7 @@ pkill -x qs
 sleep 0.5
 hyprctl reload
 sleep 0.5
-nohup qs -c ii >/dev/null 2>&1 &
+nohup qs --path "$HOME/.config/quickshell/ii" >/dev/null 2>&1 &
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

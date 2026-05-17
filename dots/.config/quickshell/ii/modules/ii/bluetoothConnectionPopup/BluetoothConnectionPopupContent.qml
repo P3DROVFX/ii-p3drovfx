@@ -46,7 +46,7 @@ Item {
 
     function getDeviceImageSource(device) {
         if (!device) return "";
-        let custom = Config.options.apps.bluetoothDeviceImages.find(d => d.mac === device.address);
+        let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
         if (custom) {
             return Qt.resolvedUrl("../../../assets/images/devices/" + custom.image);
         }

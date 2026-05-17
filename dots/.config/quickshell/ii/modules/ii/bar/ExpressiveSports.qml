@@ -18,7 +18,7 @@ MouseArea {
     property bool internalVisible: shouldBeVisible
     visible: internalVisible || opacity > 0
     
-    implicitWidth: shouldBeVisible ? (vertical ? 40 : layout.implicitWidth + 8) : 0
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
     implicitHeight: shouldBeVisible ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.barHeight) : 0
     hoverEnabled: true
 
@@ -137,20 +137,22 @@ MouseArea {
         transform: Translate { x: root.horizontalOffset; y: root.verticalOffset }
 
         MaterialShape {
+            Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
             color: Appearance.colors.colSecondaryContainer
-            implicitSize: 30
+            implicitSize: Appearance.sizes.barHeight - 8
             StyledImage {
                 anchors.centerIn: parent
-                width: 18
-                height: 18
+                width: parent.implicitSize - 14
+                height: parent.implicitSize - 14
                 source: root.displayGame ? root.displayGame.home.logo : ""
             }
         }
 
         Rectangle {
             id: statusPill
-            Layout.preferredHeight: 22
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredHeight: Appearance.sizes.barHeight - 14
             Layout.preferredWidth: Math.max(statusText.implicitWidth + 16, 30)
             radius: Appearance.rounding.full
             color: Appearance.colors.colPrimary
@@ -168,13 +170,14 @@ MouseArea {
         }
 
         MaterialShape {
+            Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
             color: Appearance.colors.colSecondaryContainer
-            implicitSize: 30
+            implicitSize: Appearance.sizes.barHeight - 8
             StyledImage {
                 anchors.centerIn: parent
-                width: 18
-                height: 18
+                width: parent.implicitSize - 14
+                height: parent.implicitSize - 14
                 source: root.displayGame ? root.displayGame.away.logo : ""
             }
         }
@@ -196,11 +199,11 @@ MouseArea {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
                 color: Appearance.colors.colSecondaryContainer
-                implicitSize: 32
+                implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent
-                    width: 20
-                    height: 20
+                    width: parent.implicitSize - 12
+                    height: parent.implicitSize - 12
                     source: root.displayGame ? root.displayGame.home.logo : ""
                 }
             }
@@ -218,8 +221,8 @@ MouseArea {
         // Status
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            implicitWidth: 32
-            implicitHeight: 20
+            implicitWidth: Appearance.sizes.verticalBarWidth - 8
+            implicitHeight: 20 // Fixed height is probably okay here for vertical flow
             radius: Appearance.rounding.full
             color: Appearance.colors.colPrimary
             StyledText {
@@ -240,11 +243,11 @@ MouseArea {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
                 color: Appearance.colors.colSecondaryContainer
-                implicitSize: 32
+                implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent
-                    width: 20
-                    height: 20
+                    width: parent.implicitSize - 12
+                    height: parent.implicitSize - 12
                     source: root.displayGame ? root.displayGame.away.logo : ""
                 }
             }

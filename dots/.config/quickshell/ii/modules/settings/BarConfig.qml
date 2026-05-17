@@ -771,6 +771,15 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "colorize"
+            text: Translation.tr("Tint System Tray icons")
+            checked: Config.options.tray.monochromeIcons
+            onCheckedChanged: {
+                Config.options.tray.monochromeIcons = checked;
+            }
+        }
+
 
     }
 

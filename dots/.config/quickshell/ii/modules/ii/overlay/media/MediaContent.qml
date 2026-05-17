@@ -26,7 +26,7 @@ StyledOverlayWidget {
     property bool downloaded: false
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
-    property var artUrl: currentPlayer?.trackArtUrl
+    property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`

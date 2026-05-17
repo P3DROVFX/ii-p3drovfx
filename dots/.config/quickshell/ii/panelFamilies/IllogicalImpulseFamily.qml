@@ -39,35 +39,89 @@ Scope {
     onBarVertChanged: updateBarExtraCondition()
 
     function updateBarExtraCondition() {
-        if (!usingWrappedFrame) return
-
-        barExtraCondition = false
-        Qt.callLater(() => barExtraCondition = true)
+        if (!usingWrappedFrame)
+            return;
+        barExtraCondition = false;
+        Qt.callLater(() => barExtraCondition = true);
     }
 
-    PanelLoader { extraCondition: !Config.options.bar.vertical && barExtraCondition; component: Bar {} }
-    PanelLoader { extraCondition: Config.options.background.enable; component: Background {} }
-    PanelLoader { component: Cheatsheet {} }
-    PanelLoader { extraCondition: Config.options.dock.enable; component: Dock {} }
-    PanelLoader { component: Lock {} }
-    PanelLoader { component: MediaControls {} }
-    PanelLoader { component: BluetoothConnectionPopup {} }
-    PanelLoader { component: NotificationPopup {} }
-    PanelLoader { component: OnScreenDisplay {} }
-    PanelLoader { component: OnScreenKeyboard {} }
-    PanelLoader { component: Overlay {} }
-    PanelLoader { component: Overview {} }
-    PanelLoader { component: Polkit {} }
-    PanelLoader { component: RegionSelector {} }
-    PanelLoader { component: ScreenCorners {} }
-    PanelLoader { component: ScreenTranslator {} }
-    PanelLoader { component: ColorPickerPopup {} }
-    PanelLoader { component: SessionScreen {} }
-    PanelLoader { component: SidebarPolicies {} }
-    PanelLoader { component: SidebarDashboard {} }
-    PanelLoader { extraCondition: Config.options.bar.vertical && barExtraCondition; component: VerticalBar {} }
-    PanelLoader { component: WallpaperSelector {} }
-    PanelLoader { component: WrappedFrame {} }
-    PanelLoader { component: VideoEditorPopup {} }
-    PanelLoader { component: VideoEditor {} }
+    PanelLoader {
+        extraCondition: !Config.options.bar.vertical && barExtraCondition
+        component: Bar {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.background.enable
+        component: Background {}
+    }
+    PanelLoader {
+        component: Cheatsheet {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.dock.enable
+        component: Dock {}
+    }
+    PanelLoader {
+        component: Lock {}
+    }
+    PanelLoader {
+        component: MediaControls {}
+    }
+    PanelLoader {
+        component: BluetoothConnectionPopup {}
+    }
+    PanelLoader {
+        component: NotificationPopup {}
+    }
+    PanelLoader {
+        component: OnScreenDisplay {}
+    }
+    PanelLoader {
+        component: OnScreenKeyboard {}
+    }
+    PanelLoader {
+        component: Overlay {}
+    }
+    PanelLoader {
+        component: Overview {}
+    }
+    PanelLoader {
+        component: Polkit {}
+    }
+    PanelLoader {
+        component: RegionSelector {}
+    }
+    PanelLoader {
+        component: ScreenCorners {}
+    }
+    PanelLoader {
+        component: ScreenTranslator {}
+    }
+    PanelLoader {
+        component: ColorPickerPopup {}
+    }
+    PanelLoader {
+        component: SessionScreen {}
+    }
+    PanelLoader {
+        component: SidebarPolicies {}
+    }
+    PanelLoader {
+        component: SidebarDashboard {}
+    }
+    PanelLoader {
+        extraCondition: Config.options.bar.vertical && barExtraCondition
+        component: VerticalBar {}
+    }
+    PanelLoader {
+        component: WallpaperSelector {}
+    }
+    PanelLoader {
+        component: WrappedFrame {}
+    }
+    PanelLoader {
+        component: VideoEditorPopup {}
+    }
+    PanelLoader {
+        component: VideoEditor {}
+    }
 }

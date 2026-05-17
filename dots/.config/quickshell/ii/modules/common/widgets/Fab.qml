@@ -8,6 +8,8 @@ Item {
     signal clicked(event: var)
     property alias iconText: fabWidget.iconText
     default property alias fabData: fabWidget.data
+    property alias baseSize: fabWidget.baseSize
+    property alias buttonRadius: fabWidget.buttonRadius
     property bool enableShadow: true
 
     property color colBackground: Appearance.colors.colPrimaryContainer
@@ -31,7 +33,7 @@ Item {
     FloatingActionButton {
         id: fabWidget
         onClicked: e => root.clicked(e)
-        baseSize: 30 
+        // baseSize: 30 // Removed fixed baseSize to allow parent control
         colBackground: root.colBackground
         colBackgroundHover: root.colBackgroundHover
         colRipple: root.colRipple

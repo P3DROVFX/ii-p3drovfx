@@ -33,9 +33,9 @@ Item {
         visible: root.isMaterial
         anchors.centerIn: parent
         color: GlobalStates.sidebarRightOpen ? Appearance.colors.colPrimaryActive : (mouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary)
-        radius: Appearance.rounding.full
-        implicitWidth: root.vertical ? 36 : flow.implicitWidth + 16
-        implicitHeight: root.vertical ? flow.implicitHeight + 16 : 30
+        radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+        implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 16
+        implicitHeight: root.vertical ? flow.implicitHeight + 16 : Appearance.sizes.barHeight - 8
 
         Behavior on color {
             ColorAnimation { duration: 150 }
@@ -66,7 +66,11 @@ Item {
         }
         Loader {
             source: "HyprlandXkbIndicator.qml"
-            onLoaded: item.color = root.isMaterial ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+            Binding {
+                target: item
+                property: "color"
+                value: root.isMaterial ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+            }
         }
         MaterialSymbol {
             text: Network.materialSymbol

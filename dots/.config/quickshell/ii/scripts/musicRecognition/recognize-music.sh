@@ -47,6 +47,9 @@ SONGREC_PID=$!
 
 while IFS= read -r line; do
     if echo "$line" | grep -q '"matches": \['; then
+        if echo "$line" | grep -q '"matches": \[\]'; then
+            continue
+        fi
         echo "$line"
         exit 0
     fi

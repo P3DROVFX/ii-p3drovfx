@@ -22,7 +22,7 @@ Item {
 
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / root.workspacesShown)
-    property int workspaceButtonWidth: 32
+    property int workspaceButtonWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : Appearance.sizes.barHeight - 8
 
     property bool showNumbers: false
     Timer {
@@ -47,7 +47,7 @@ Item {
         }
     }
 
-    implicitWidth: vertical ? 40 : (contentLayout.implicitWidth)
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (contentLayout.implicitWidth)
     implicitHeight: vertical ? (contentLayout.implicitHeight) : Appearance.sizes.barHeight
 
     WheelHandler {

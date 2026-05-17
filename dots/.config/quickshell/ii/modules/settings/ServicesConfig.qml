@@ -413,7 +413,7 @@ ContentPage {
         readonly property string manageScript: Quickshell.shellPath("scripts/services/manage_device_image.sh")
 
         function getDeviceImages() {
-            let images = (Config.options.apps && Config.options.apps.bluetoothDeviceImages) ? Config.options.apps.bluetoothDeviceImages : [];
+            let images = (Config.options.apps && Config.options.bluetoothDeviceImages) ? Config.options.bluetoothDeviceImages : [];
             // Convert to real JS array if it isn't already (though it should be now)
             return Array.from(images);
         }
@@ -478,7 +478,7 @@ ContentPage {
                         } else {
                             list.push({ "mac": btImagesSection.pendingMac, "image": filename });
                         }
-                        Config.options.apps.bluetoothDeviceImages = list;
+                        Config.options.bluetoothDeviceImages = list;
                         btImagesSection.pendingMac = ""; 
                     }
                 }
@@ -691,7 +691,7 @@ ContentPage {
                                     onClicked: {
                                         let list = btImagesSection.getDeviceImages();
                                         list.splice(index, 1);
-                                        Config.options.apps.bluetoothDeviceImages = list;
+                                        Config.options.bluetoothDeviceImages = list;
                                     }
                                 }
                             }

@@ -17,10 +17,10 @@ Singleton {
 
     readonly property real gammaLowerLimit: 25
 
-    property string from: Config.options?.light?.night?.from ?? "19:00" 
-    property string to: Config.options?.light?.night?.to ?? "06:30"
-    property bool automatic: Config.options?.light?.night?.automatic && (Config?.ready ?? true)
-    property int colorTemperature: Config.options?.light?.night?.colorTemperature ?? 5000
+    property string from: (Config.options && Config.options.light && Config.options.light.night && Config.options.light.night.from) ? Config.options.light.night.from : "19:00" 
+    property string to: (Config.options && Config.options.light && Config.options.light.night && Config.options.light.night.to) ? Config.options.light.night.to : "06:30"
+    property bool automatic: (Config.options && Config.options.light && Config.options.light.night && Config.options.light.night.automatic) && (Config ? Config.ready : true)
+    property int colorTemperature: (Config.options && Config.options.light && Config.options.light.night && Config.options.light.night.colorTemperature) ? Config.options.light.night.colorTemperature : 5000
     property int gamma: 100
     property bool shouldBeOn
     property bool firstEvaluation: true
@@ -162,7 +162,7 @@ Singleton {
 
     // Change temp
     Connections {
-        target: Config.options.light.night
+        target: (Config.options && Config.options.light && Config.options.light.night) ? Config.options.light.night : null
         function onColorTemperatureChanged() {
             if (!root.temperatureActive) return;
             Hyprland.dispatch(`hyprctl hyprsunset temperature ${Config.options.light.night.colorTemperature}`);

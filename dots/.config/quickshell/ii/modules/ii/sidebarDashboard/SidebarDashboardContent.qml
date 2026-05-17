@@ -17,6 +17,7 @@ import qs.modules.ii.sidebarDashboard.bluetoothDevices
 import qs.modules.ii.sidebarDashboard.nightLight
 import qs.modules.ii.sidebarDashboard.volumeMixer
 import qs.modules.ii.sidebarDashboard.wifiNetworks
+import qs.modules.ii.sidebarDashboard.darkMode
 
 Item {
     id: root
@@ -28,6 +29,7 @@ Item {
     property bool showBluetoothDialog: false
     property bool showNightLightDialog: false
     property bool showWifiDialog: false
+    property bool showDarkModeDialog: false
     property bool editMode: false
 
     Connections {
@@ -38,6 +40,7 @@ Item {
                 root.showBluetoothDialog = false;
                 root.showAudioOutputDialog = false;
                 root.showAudioInputDialog = false;
+                root.showDarkModeDialog = false;
             }
         }
     }
@@ -158,6 +161,11 @@ Item {
         }
     }
 
+    ToggleDialog {
+        shownPropertyString: "showDarkModeDialog"
+        dialog: DarkModeDialog {}
+    }
+
     component ToggleDialog: Loader {
         id: toggleDialogLoader
         required property string shownPropertyString
@@ -210,6 +218,9 @@ Item {
             }
             function onOpenWifiDialog() {
                 root.showWifiDialog = true;
+            }
+            function onOpenDarkModeDialog() {
+                root.showDarkModeDialog = true;
             }
         }
     }

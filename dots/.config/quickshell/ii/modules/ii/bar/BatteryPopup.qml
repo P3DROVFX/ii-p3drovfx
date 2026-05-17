@@ -162,7 +162,7 @@ StyledPopup {
                         height: parent.height / 3
                         anchors.centerIn: parent
                         radius: 1
-                        color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.5)
+                        color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.9)
                         z: 1  // to stay above the fill
                     }
                 }

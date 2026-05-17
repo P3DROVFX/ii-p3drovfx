@@ -16,7 +16,7 @@ Item { // MediaMode instance
     id: root
 
     property MprisPlayer player: MprisController.activePlayer
-    property var artUrl: player?.trackArtUrl
+    property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`

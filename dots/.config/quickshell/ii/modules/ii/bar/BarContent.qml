@@ -120,8 +120,8 @@ Item { // Bar content region
             margins: Config.options.bar.cornerStyle === 1 ? (Appearance.sizes.hyprlandGapsOut) : 0 // idk why but +1 is needed
         }
 
-        readonly property int islandSectionSpacing: 32
-        width: root.isDynamicIsland ? (Math.max(islandSections.implicitWidth + 24, 200)) : parent.width
+        readonly property int islandSectionSpacing: 48 //spacing between the three modules
+        width: root.isDynamicIsland ? (Math.max(islandSections.implicitWidth + 12, 200)) : parent.width
         height: parent.height
 
         color: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
@@ -243,7 +243,7 @@ Item { // Bar content region
             top: parent.top
             bottom: parent.bottom
             left: parent.left
-            leftMargin: Math.ceil(Appearance.rounding.screenRounding / 2)
+            leftMargin: 4
         }
         width: 1
     }
@@ -382,7 +382,7 @@ Item { // Bar content region
             top: parent.top
             bottom: parent.bottom
             right: rightStopper.left
-            rightMargin: Math.ceil(Appearance.rounding.screenRounding / 2)
+            rightMargin: 4
         }
         spacing: 4
 

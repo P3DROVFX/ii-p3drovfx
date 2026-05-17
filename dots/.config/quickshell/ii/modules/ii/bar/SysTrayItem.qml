@@ -20,7 +20,7 @@ MouseArea {
         height: parent.height + 12
         visible: root.containsMouse || root.pressed
         color: Appearance.colors.colLayer1Hover
-        radius: Config.options.bar.barGroupStyle === 0 ? Appearance.rounding.full : Appearance.rounding.small
+        radius: Config.options.bar.barGroupStyle === 0 ? Appearance.rounding.full : (Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.small)
         z: -1
     }
 
