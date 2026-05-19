@@ -68,7 +68,7 @@ StyledPopup {
             return Translation.tr("Tomorrow");
         const date = new Date(dateStr);
         const days = [Translation.tr("Sun"), Translation.tr("Mon"), Translation.tr("Tue"), Translation.tr("Wed"), Translation.tr("Thu"), Translation.tr("Fri"), Translation.tr("Sat")];
-        return days[date.getDay()];
+        return days[date.getUTCDay()];
     }
 
     function formatHour(timeStr) {

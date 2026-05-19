@@ -24,12 +24,17 @@ Item {
 
     function toggleVisible(visibility) {
         visible = visibility;
+        let item = null;
         if (barSection == 0)
-            Config.options.bar.layouts.left[originalIndex].visible = visibility;
+            item = Config.options.bar.layouts.left[originalIndex];
         else if (barSection == 1)
-            Config.options.bar.layouts.center[originalIndex].visible = visibility;
+            item = Config.options.bar.layouts.center[originalIndex];
         else if (barSection == 2)
-            Config.options.bar.layouts.right[originalIndex].visible = visibility;
+            item = Config.options.bar.layouts.right[originalIndex];
+
+        if (item !== undefined && item !== null) {
+            item.visible = visibility;
+        }
     }
 
     function toggleHighlight(highlight) {

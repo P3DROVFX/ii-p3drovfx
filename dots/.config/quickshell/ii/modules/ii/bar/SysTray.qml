@@ -8,7 +8,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 Item {
-    id: root
+    id: sysTrayRoot
     implicitWidth: gridLayout.implicitWidth
     implicitHeight: gridLayout.implicitHeight
     property bool vertical: false
@@ -28,7 +28,7 @@ Item {
         rootItem.toggleVisible(hasAnyItems);
 
         if (unpinnedItems.length === 0) {
-            root.closeOverflowMenu();
+            sysTrayRoot.closeOverflowMenu();
         }
     }
 
@@ -37,13 +37,13 @@ Item {
     }
 
     function setExtraWindowAndGrabFocus(window) {
-        if (root.activeMenu && root.activeMenu !== window) {
-            if (typeof root.activeMenu.close === "function")
-                root.activeMenu.close();
-            root.activeMenu = null;
+        if (sysTrayRoot.activeMenu && sysTrayRoot.activeMenu !== window) {
+            if (typeof sysTrayRoot.activeMenu.close === "function")
+                sysTrayRoot.activeMenu.close();
+            sysTrayRoot.activeMenu = null;
         }
-        root.activeMenu = window;
-        root.grabFocus();
+        sysTrayRoot.activeMenu = window;
+        sysTrayRoot.grabFocus();
     }
 
     function releaseFocus() {
@@ -55,41 +55,41 @@ Item {
     }
 
     onTrayOverflowOpenChanged: {
-        if (root.trayOverflowOpen) {
-            root.grabFocus();
+        if (sysTrayRoot.trayOverflowOpen) {
+            sysTrayRoot.grabFocus();
         }
     }
 
     HyprlandFocusGrab {
         id: focusGrab
         active: false
-        windows: [trayOverflowLayout.QsWindow?.window, root.activeMenu]
+        windows: [trayOverflowLayout.QsWindow?.window, sysTrayRoot.activeMenu]
         onCleared: {
-            root.trayOverflowOpen = false;
-            if (root.activeMenu) {
-                root.activeMenu.close();
-                root.activeMenu = null;
+            sysTrayRoot.trayOverflowOpen = false;
+            if (sysTrayRoot.activeMenu) {
+                sysTrayRoot.activeMenu.close();
+                sysTrayRoot.activeMenu = null;
             }
         }
     }
 
     GridLayout {
         id: gridLayout
-        columns: root.vertical ? 1 : -1
+        columns: sysTrayRoot.vertical ? 1 : -1
         anchors.fill: parent
         rowSpacing: 8
         columnSpacing: 15
 
         RippleButton {
             id: trayOverflowButton
-            visible: root.showOverflowMenu && root.unpinnedItems.length > 0
-            toggled: root.trayOverflowOpen
+            visible: sysTrayRoot.showOverflowMenu && sysTrayRoot.unpinnedItems.length > 0
+            toggled: sysTrayRoot.trayOverflowOpen
             property bool containsMouse: hovered
 
-            downAction: () => root.trayOverflowOpen = !root.trayOverflowOpen
+            downAction: () => sysTrayRoot.trayOverflowOpen = !sysTrayRoot.trayOverflowOpen
 
-            Layout.fillHeight: !root.vertical
-            Layout.fillWidth: root.vertical
+            Layout.fillHeight: !sysTrayRoot.vertical
+            Layout.fillWidth: sysTrayRoot.vertical
             background.implicitWidth: 24
             background.implicitHeight: 24
             background.anchors.centerIn: this
@@ -102,8 +102,8 @@ Item {
                 iconSize: Appearance.font.pixelSize.larger
                 text: "expand_more"
                 horizontalAlignment: Text.AlignHCenter
-                color: root.trayOverflowOpen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
-                rotation: (root.trayOverflowOpen ? 180 : 0) - (90 * root.vertical) + (180 * root.invertSide)
+                color: sysTrayRoot.trayOverflowOpen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
+                rotation: (sysTrayRoot.trayOverflowOpen ? 180 : 0) - (90 * sysTrayRoot.vertical) + (180 * sysTrayRoot.invertSide)
                 Behavior on rotation {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
@@ -112,25 +112,25 @@ Item {
             StyledPopup {
                 id: overflowPopup
                 hoverTarget: trayOverflowButton
-                active: root.trayOverflowOpen && root.unpinnedItems.length > 0
+                active: sysTrayRoot.trayOverflowOpen && sysTrayRoot.unpinnedItems.length > 0
 
                 GridLayout {
                     id: trayOverflowLayout
                     anchors.centerIn: parent
-                    columns: Math.ceil(Math.sqrt(root.unpinnedItems.length))
+                    columns: Math.ceil(Math.sqrt(sysTrayRoot.unpinnedItems.length))
                     columnSpacing: 10
                     rowSpacing: 10
 
                     Repeater {
-                        model: root.unpinnedItems
+                        model: sysTrayRoot.unpinnedItems
 
                         delegate: SysTrayItem {
                             required property SystemTrayItem modelData
                             item: modelData
-                            Layout.fillHeight: !root.vertical
-                            Layout.fillWidth: root.vertical
-                            onMenuClosed: root.releaseFocus()
-                            onMenuOpened: qsWindow => root.setExtraWindowAndGrabFocus(qsWindow)
+                            Layout.fillHeight: !sysTrayRoot.vertical
+                            Layout.fillWidth: sysTrayRoot.vertical
+                            onMenuClosed: sysTrayRoot.releaseFocus()
+                            onMenuOpened: qsWindow => sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow)
                         }
                     }
                 }
@@ -139,17 +139,17 @@ Item {
 
         Repeater {
             model: ScriptModel {
-                values: root.pinnedItems
+                values: sysTrayRoot.pinnedItems
             }
 
             delegate: SysTrayItem {
                 required property SystemTrayItem modelData
                 item: modelData
-                Layout.fillHeight: !root.vertical
-                Layout.fillWidth: root.vertical
-                onMenuClosed: root.releaseFocus()
+                Layout.fillHeight: !sysTrayRoot.vertical
+                Layout.fillWidth: sysTrayRoot.vertical
+                onMenuClosed: sysTrayRoot.releaseFocus()
                 onMenuOpened: qsWindow => {
-                    root.setExtraWindowAndGrabFocus(qsWindow);
+                    sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow);
                 }
             }
         }

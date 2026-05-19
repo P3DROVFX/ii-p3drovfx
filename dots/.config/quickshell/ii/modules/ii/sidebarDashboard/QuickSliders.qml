@@ -63,40 +63,44 @@ Rectangle {
                 {
                     show: showBrightness,
                     icon: "brightness_6",
-                    getVal: () => root.brightnessMonitor.brightness,
-                    setVal: v => root.brightnessMonitor.setBrightness(v)
+                    getVal: () => root.brightnessMonitor?.brightness ?? 0,
+                    setVal: v => root.brightnessMonitor?.setBrightness(v)
                 },
                 {
                     show: showVolume,
                     icon: "volume_up",
-                    getVal: () => Audio.sink.audio.volume,
+                    getVal: () => Audio.sink?.audio?.volume ?? 0,
                     setVal: v => {
-                        Audio.sink.audio.volume = v;
+                        if (Audio.sink?.audio) {
+                            Audio.sink.audio.volume = v;
+                        }
                     }
                 },
                 {
                     show: showMic,
                     icon: "mic",
-                    getVal: () => Audio.source.audio.volume,
+                    getVal: () => Audio.source?.audio?.volume ?? 0,
                     setVal: v => {
-                        Audio.source.audio.volume = v;
+                        if (Audio.source?.audio) {
+                            Audio.source.audio.volume = v;
+                        }
                     }
                 },
                 {
                     show: showGamma,
                     icon: "light_mode",
                     secondaryIcon: "wb_twilight",
-                    getVal: () => Hyprsunset.gamma === 100 ? 0.3 + root.brightnessMonitor?.brightness * 0.7 : (Hyprsunset.gamma - Hyprsunset.gammaLowerLimit) / (100 - Hyprsunset.gammaLowerLimit) * 0.3,
+                    getVal: () => Hyprsunset.gamma === 100 ? 0.3 + (root.brightnessMonitor?.brightness ?? 0) * 0.7 : (Hyprsunset.gamma - Hyprsunset.gammaLowerLimit) / (100 - Hyprsunset.gammaLowerLimit) * 0.3,
                     setVal: v => {
                         if (v >= 0.3) {
                             // 0.3 - 1.0 brightness
-                            root.brightnessMonitor.setBrightness((v - 0.3) / 0.7);
+                            root.brightnessMonitor?.setBrightness((v - 0.3) / 0.7);
                             if (Hyprsunset.gamma !== 100) {
                                 Hyprsunset.setGamma(100);
                             }
                         } else {
                             // 0 - 0.3 gamma
-                            if (root.brightnessMonitor.brightness !== 0) {
+                            if (root.brightnessMonitor && root.brightnessMonitor.brightness !== 0) {
                                 root.brightnessMonitor.setBrightness(0);
                             }
                             Hyprsunset.setGamma((v / 0.3 * (100 - Hyprsunset.gammaLowerLimit) + Hyprsunset.gammaLowerLimit));
