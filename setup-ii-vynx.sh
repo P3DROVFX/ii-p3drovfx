@@ -69,9 +69,12 @@ UPSTREAM_DIR="$HOME/.local/share/ii-vynx-upstream"
 STANDARD_SCRIPT_DIR="$HOME/.local/share/ii-vynx"
 
 # Auto-detect fork directory:
-# 1. If ~/.local/share/ii-vynx-fork exists (dedicated install), use it
-# 2. Otherwise use SCRIPT_DIR itself (user running from their clone directly)
-if [ -d "$HOME/.local/share/ii-vynx-fork/.git" ]; then
+# 1. If running from a local clone directly (SCRIPT_DIR has .git), prioritize it!
+# 2. Otherwise, if ~/.local/share/ii-vynx-fork exists (dedicated install), use it
+# 3. Otherwise use SCRIPT_DIR itself
+if [ -d "$SCRIPT_DIR/.git" ]; then
+    FORK_DIR="$SCRIPT_DIR"
+elif [ -d "$HOME/.local/share/ii-vynx-fork/.git" ]; then
     FORK_DIR="$HOME/.local/share/ii-vynx-fork"
 else
     FORK_DIR="$SCRIPT_DIR"
@@ -192,8 +195,7 @@ restore_protected_files() {
 fetch_upstream() {
     if [ -d "$UPSTREAM_DIR/.git" ]; then
         echo -e "${NC}• Updating official ii-vynx repo...${NC}"
-        git -C "$UPSTREAM_DIR" pull --ff-only
-        git -C "$UPSTREAM_DIR" submodule update --init --recursive
+        git -C "$UPSTREAM_DIR" pull --ff-only && git -C "$UPSTREAM_DIR" submodule update --init --recursive
         if [ $? -ne 0 ]; then
             echo -e "${YELLOW}⚠ git update failed for upstream, using cached version.${NC}"
         else
@@ -360,6 +362,10 @@ if [ "$UPDATE_ONLY" = true ]; then
     else
         if [ -d "$FORK_DIR/.git" ]; then
             cd "$FORK_DIR" && git pull
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}✗ git pull failed. Please check for branch conflicts or network issues.${NC}"
+                exit 1
+            fi
         else
             echo -e "${RED}✗ Fork not found at $FORK_DIR${NC}"
             exit 1
@@ -399,8 +405,7 @@ else
     SOURCE_DIR="$FORK_DIR/dots/.config/quickshell/ii"
     if [ "$DO_PULL" = true ]; then
         echo -e "${NC}• Updating your fork...${NC}"
-        git -C "$FORK_DIR" pull --ff-only
-        git -C "$FORK_DIR" submodule update --init --recursive
+        git -C "$FORK_DIR" pull --ff-only && git -C "$FORK_DIR" submodule update --init --recursive
         if [ $? -ne 0 ]; then
             echo -e "${YELLOW}⚠ git update failed for fork, using local version.${NC}"
         else
