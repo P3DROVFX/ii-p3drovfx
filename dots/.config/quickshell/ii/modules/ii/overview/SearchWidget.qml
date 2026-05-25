@@ -29,17 +29,46 @@ Item {
         return isPrefixed ? 500 : 15;
     }
     readonly property bool isSearching: debounceTimer.running && searchingText !== ""
-    readonly property bool showSkeletons: isSearching && (typeof resultModel === "undefined" || !resultModel || resultModel.values.length === 0 || (resultModel.values.length === 1 && resultModel.values[0] && resultModel.values[0].key === "mpris:now-playing"))
+    readonly property bool showSkeletons: isSearching
 
     property string searchingText: LauncherSearch.query
     readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
-    property bool showResults: searchingText != "" || isClipboardMode || (searchingText === "" && LauncherSearch.results.length > 0)
+    readonly property bool isBluetoothMode: root.searchingText.startsWith(Config.options.search.prefix.bluetooth)
+    readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode
+    readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
+    property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
     property string overviewPosition: Config.options.overview.position
-    implicitWidth: (root.isClipboardMode ? (Config.options.search.clipboard.panelWidth ?? 860) : searchWidgetContent.implicitWidth) + Appearance.sizes.elevationMargin * 2
-    implicitHeight: (root.isClipboardMode ? (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 560) : searchWidgetContent.implicitHeight) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2
+    property bool isNowPlayingFocused: false
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen) {
+                if (root.alwaysListAppsMode) {
+                    Qt.callLater(() => {
+                        resultModel.values = root.processResults(LauncherSearch.results);
+                        root.focusFirstItem();
+                    });
+                }
+            } else {
+                root.isNowPlayingFocused = false;
+            }
+        }
+    }
+    implicitWidth: {
+        if (root.isBluetoothMode) return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
+        if (root.isClipboardMode) return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
+        return searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2;
+    }
+    implicitHeight: {
+        if (root.isBluetoothMode) return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + Appearance.sizes.elevationMargin * 2;
+        if (root.isClipboardMode) return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 560) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
+        return searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
+    }
 
     function focusFirstItem() {
-        if (root.isClipboardMode) {
+        if (root.isBluetoothMode) {
+        } else if (root.isClipboardMode) {
         } else {
             appResults.currentIndex = 0;
         }
@@ -76,7 +105,49 @@ Item {
         return false;
     }
 
+    function processResults(results) {
+        const q = LauncherSearch.query.trim().toLowerCase();
+        let list = Array.from(results);
+
+        if (Config.options.search.alwaysListApps) {
+            list = list.filter(item => item.key !== "mpris:now-playing");
+        }
+
+        if (q === "bluetooth" || q === "bt" || q === "blue") {
+            const btItem = {
+                key: "mock:bluetooth-manager",
+                id: "bluetooth-manager-launcher-mock",
+                name: Translation.tr("Bluetooth Manager"),
+                type: Translation.tr("Settings"),
+                iconType: LauncherSearchResult.IconType.Material,
+                iconName: "bluetooth",
+                shown: true,
+                verb: Translation.tr("Manage"),
+                fontType: LauncherSearchResult.FontType.Normal,
+                execute: () => {
+                    setSearchingText(Config.options.search.prefix.bluetooth);
+                }
+            };
+            list.unshift(btItem);
+        }
+
+        return list.slice(0, root.typingResultLimit);
+    }
+
     Keys.onPressed: event => {
+        if (event.key === Qt.Key_Left) {
+            if (root.alwaysListAppsMode && MprisController.activePlayer !== null) {
+                if (searchBar.searchInput.activeFocus && searchBar.searchInput.cursorPosition > 0) {
+                    // Let cursor move left in input
+                    return;
+                }
+                root.isNowPlayingFocused = true;
+                nowPlayingFloatingBubble.forceActiveFocus();
+                event.accepted = true;
+                return;
+            }
+        }
+
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
             if (appResults.visible) {
                 root.requestToggleActions();
@@ -141,8 +212,16 @@ Item {
         id: searchWidgetContent
         anchors.horizontalCenter: parent.horizontalCenter
         clip: true
-        implicitWidth: root.isClipboardMode ? (Config.options.search.clipboard.panelWidth ?? 860) : gridLayout.implicitWidth
-        implicitHeight: root.isClipboardMode ? (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 560) : gridLayout.implicitHeight
+        implicitWidth: {
+            if (root.isBluetoothMode) return Config.options.search.clipboard.panelWidth ?? 860;
+            if (root.isClipboardMode) return Config.options.search.clipboard.panelWidth ?? 860;
+            return gridLayout.implicitWidth;
+        }
+        implicitHeight: {
+            if (root.isBluetoothMode) return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
+            if (root.isClipboardMode) return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 560;
+            return gridLayout.implicitHeight;
+        }
         radius: searchBar.height / 2 + searchBar.verticalPadding
         color: Appearance.colors.colBackgroundSurfaceContainer
 
@@ -194,7 +273,7 @@ Item {
                     property alias source: root.searchingText
                 }
 
-                clipboardMode: root.isClipboardMode
+                clipboardMode: root.isClipboardMode || root.isBluetoothMode
                 clipboardWidth: 830
                 currentResultIndex: appResults.currentIndex
 
@@ -205,7 +284,10 @@ Item {
                 }
 
                 onNavigateUp: {
-                    if (root.isClipboardMode) {
+                    if (root.isBluetoothMode) {
+                        if (bluetoothPanelLoader.item)
+                            bluetoothPanelLoader.item.navigateUp();
+                    } else if (root.isClipboardMode) {
                         if (clipboardPanelLoader.item)
                             clipboardPanelLoader.item.navigateUp();
                     } else {
@@ -215,7 +297,10 @@ Item {
                 }
 
                 onNavigateDown: {
-                    if (root.isClipboardMode) {
+                    if (root.isBluetoothMode) {
+                        if (bluetoothPanelLoader.item)
+                            bluetoothPanelLoader.item.navigateDown();
+                    } else if (root.isClipboardMode) {
                         if (clipboardPanelLoader.item)
                             clipboardPanelLoader.item.navigateDown();
                     } else {
@@ -225,29 +310,37 @@ Item {
                 }
 
                 onNavigateLeft: {
-                    if (root.isClipboardMode && clipboardPanelLoader.item)
+                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
+                        bluetoothPanelLoader.item.navigateLeft();
+                    else if (root.isClipboardMode && clipboardPanelLoader.item)
                         clipboardPanelLoader.item.navigateLeft();
                 }
 
                 onNavigateRight: {
-                    if (root.isClipboardMode && clipboardPanelLoader.item)
+                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
+                        bluetoothPanelLoader.item.navigateRight();
+                    else if (root.isClipboardMode && clipboardPanelLoader.item)
                         clipboardPanelLoader.item.navigateRight();
                 }
 
                 onActivate: {
-                    if (root.isClipboardMode && clipboardPanelLoader.item)
+                    if (root.isBluetoothMode && bluetoothPanelLoader.item)
+                        bluetoothPanelLoader.item.activateSelected();
+                    else if (root.isClipboardMode && clipboardPanelLoader.item)
                         clipboardPanelLoader.item.activateSelected();
                 }
 
                 onDeleteSelected: {
-                    if (root.isClipboardMode && clipboardPanelLoader.item) {
+                    if (root.isBluetoothMode && bluetoothPanelLoader.item) {
+                        bluetoothPanelLoader.item.activateSelected();
+                    } else if (root.isClipboardMode && clipboardPanelLoader.item) {
                         clipboardPanelLoader.item.activateSelected();
                     }
                 }
             }
 
             Rectangle {
-                visible: root.showResults || root.isClipboardMode
+                visible: root.showResults || root.isAnySpecialMode
                 Layout.fillWidth: true
                 height: 1
                 color: Appearance.colors.colOutlineVariant
@@ -255,7 +348,7 @@ Item {
             }
 
             Item {
-                visible: root.showResults && !root.isClipboardMode
+                visible: root.showResults && !root.isAnySpecialMode
                 Layout.fillWidth: true
                 implicitHeight: root.showSkeletons ? searchSkeletons.implicitHeight + 20 : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 2
@@ -283,6 +376,16 @@ Item {
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
 
+                    add: Transition {
+                        NumberAnimation { properties: "opacity,scale"; from: 0.8; to: 1.0; duration: 200; easing.type: Easing.OutQuad }
+                    }
+                    remove: Transition {
+                        NumberAnimation { properties: "opacity,scale"; from: 1.0; to: 0.8; duration: 150; easing.type: Easing.OutQuad }
+                    }
+                    displaced: Transition {
+                        NumberAnimation { properties: "y"; duration: 200; easing.type: Easing.OutQuad }
+                    }
+
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
@@ -295,7 +398,7 @@ Item {
                         id: debounceTimer
                         interval: root.typingDebounceInterval
                         onTriggered: {
-                            resultModel.values = LauncherSearch.results.slice(0, root.typingResultLimit);
+                            resultModel.values = root.processResults(LauncherSearch.results);
                             root.focusFirstItem();
                         }
                     }
@@ -306,15 +409,13 @@ Item {
                             const newResults = LauncherSearch.results;
                             const currentValues = resultModel.values;
 
-                            // If the incoming search results are exactly identical to what is
-                            // currently displayed, do not trigger any loading state or restart timers.
                             if (!root.areResultsDifferent(newResults, currentValues)) {
                                 return;
                             }
 
                             if (LauncherSearch.query === "" || newResults.length === 0) {
                                 debounceTimer.stop();
-                                resultModel.values = newResults.slice(0, root.typingResultLimit);
+                                resultModel.values = root.processResults(newResults);
                                 root.focusFirstItem();
                             } else {
                                 debounceTimer.restart();
@@ -331,7 +432,7 @@ Item {
                             }
                         })
                         Component.onCompleted: {
-                            values = LauncherSearch.results.slice(0, root.typingResultLimit);
+                            values = root.processResults(LauncherSearch.results);
                         }
                     }
 
@@ -404,6 +505,8 @@ Item {
                     Repeater {
                         model: 4
                         Rectangle {
+                            id: skeletonRow
+                            required property int index
                             Layout.fillWidth: true
                             implicitHeight: 52
                             radius: Appearance.rounding.small
@@ -414,8 +517,8 @@ Item {
                             SequentialAnimation on opacity {
                                 loops: Animation.Infinite
                                 running: searchSkeletons.visible
-                                NumberAnimation { from: 0.25; to: 0.65; duration: 600 + index * 100; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 0.65; to: 0.25; duration: 600 + index * 100; easing.type: Easing.InOutQuad }
+                                NumberAnimation { from: 0.25; to: 0.65; duration: 600 + skeletonRow.index * 100; easing.type: Easing.InOutQuad }
+                                NumberAnimation { from: 0.65; to: 0.25; duration: 600 + skeletonRow.index * 100; easing.type: Easing.InOutQuad }
                             }
 
                             RowLayout {
@@ -464,7 +567,6 @@ Item {
                 source: "ClipboardPanel.qml"
                 Layout.row: root.overviewPosition == "bottom" ? 0 : 2
 
-                // Fade+slide in when clipboard panel loads
                 opacity: root.isClipboardMode ? 1.0 : 0.0
                 Behavior on opacity {
                     NumberAnimation {
@@ -481,6 +583,155 @@ Item {
                     when: clipboardPanelLoader.status === Loader.Ready
                 }
             }
+
+            Loader {
+                id: bluetoothPanelLoader
+                visible: root.isBluetoothMode
+                active: root.isBluetoothMode
+                Layout.fillWidth: true
+                source: "BluetoothPanel.qml"
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 2
+
+                opacity: root.isBluetoothMode ? 1.0 : 0.0
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 280
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                Binding {
+                    target: bluetoothPanelLoader.item
+                    property: "searchQuery"
+                    value: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.bluetooth])
+                    when: bluetoothPanelLoader.status === Loader.Ready
+                }
+            }
+        }
+    }
+
+    // Now Playing Floating Bubble (Expressive Spinning Vinyl)
+    Rectangle {
+        id: nowPlayingFloatingBubble
+        visible: root.alwaysListAppsMode && MprisController.activePlayer !== null
+        anchors.right: searchWidgetContent.left
+        anchors.rightMargin: 12
+        y: searchWidgetContent.y + searchBar.y + (searchBar.height - height) / 2
+        
+        width: 96
+        height: 48
+        radius: 24
+        
+        color: root.isNowPlayingFocused 
+            ? Appearance.colors.colSurfaceContainerHigh 
+            : Appearance.colors.colBackgroundSurfaceContainer
+            
+        border.width: 0
+        
+        focus: root.isNowPlayingFocused
+        activeFocusOnTab: false
+        
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(nowPlayingFloatingBubble)
+        }
+        
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            spacing: 6
+            
+            // Album art circle (Expressive Spinning Vinyl)
+            Rectangle {
+                id: artContainer
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                radius: 18
+                color: Appearance.colors.colSurfaceContainerHighest
+                
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: artContainer.width
+                        height: artContainer.height
+                        radius: artContainer.radius
+                    }
+                }
+                
+                Image {
+                    anchors.fill: parent
+                    source: MprisController.artUrl || ""
+                    fillMode: Image.PreserveAspectCrop
+                    visible: MprisController.artUrl && MprisController.artUrl !== ""
+                    
+                    // Slow premium spinning animation when music is playing!
+                    RotationAnimator on rotation {
+                        from: 0
+                        to: 360
+                        duration: 12000
+                        loops: Animation.Infinite
+                        running: MprisController.isPlaying
+                    }
+                }
+                
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "music_note"
+                    iconSize: 18
+                    color: Appearance.colors.colOnSurfaceVariant
+                    visible: !MprisController.artUrl || MprisController.artUrl === ""
+                }
+            }
+            
+            // Play/pause button inside dynamic MaterialShape
+            MaterialShape {
+                id: playPauseShape
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                shape: root.isNowPlayingFocused ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
+                color: root.isNowPlayingFocused 
+                    ? Appearance.colors.colPrimary 
+                    : Appearance.colors.colSurfaceContainerHighest
+                
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(playPauseShape)
+                }
+                
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: MprisController.isPlaying ? "pause" : "play_arrow"
+                    iconSize: 18
+                    color: root.isNowPlayingFocused 
+                        ? Appearance.colors.colOnPrimary 
+                        : Appearance.colors.colOnSurfaceVariant
+                    fill: root.isNowPlayingFocused ? 1 : 0
+                    Behavior on fill { NumberAnimation { duration: 200 } }
+                }
+            }
+        }
+        
+        PointingHandInteraction {
+            id: bubbleMouseArea
+            anchors.fill: parent
+            onClicked: {
+                root.isNowPlayingFocused = true;
+                nowPlayingFloatingBubble.forceActiveFocus();
+                MprisController.togglePlaying();
+            }
+        }
+        
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Right || event.key === Qt.Key_Escape) {
+                root.isNowPlayingFocused = false;
+                searchBar.forceFocus();
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                MprisController.togglePlaying();
+                event.accepted = true;
+            }
         }
     }
 }
+

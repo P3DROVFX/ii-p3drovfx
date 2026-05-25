@@ -802,12 +802,13 @@ Singleton {
             property JsonObject search: JsonObject {
                 property bool enableSystemControls: true
                 property bool enableMathPreview: true
-                property int nonAppResultDelay: 30 // This prevents lagging when typing
+                property bool alwaysListApps: false
+                property int nonAppResultDelay: 30
                 property string engineBaseUrl: "https://www.google.com/search?q="
                 property list<string> excludedSites: ["quora.com", "facebook.com"]
-                property bool sloppy: false // DEPRECATED: use levenshtein instead
-                property bool levenshtein: false // Use Levenshtein distance (typo-tolerant) instead of fuzzy matching
-                property bool frecency: false // Rank results by app launch frequency
+                property bool sloppy: false
+                property bool levenshtein: false
+                property bool frecency: false
                 property list<var> aliases: []
                 property string fileSearchDirectory: "/home"
                 property bool blurFileSearchResultPreviews: false
@@ -815,6 +816,7 @@ Singleton {
                     property bool showDefaultActionsWithoutPrefix: true
                     property string action: "/"
                     property string app: ">"
+                    property string bluetooth: "&"
                     property string clipboard: ";"
                     property string fileSearch: ","
                     property string emojis: ":"

@@ -323,7 +323,7 @@ Scope {
                         anchors.horizontalCenter: parent.horizontalCenter
                         active: root.visible && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
 
-                        readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode
+                        readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
 
                         // Smooth slide, fade and scale when opening/closing or typing
                         opacity: isOverviewVisible ? 1.0 : 0.0
@@ -367,7 +367,7 @@ Scope {
                         anchors.fill: parent
                         active: root.visible && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
 
-                        readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode
+                        readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
 
                         // Smooth slide, fade and scale when opening/closing or typing
                         opacity: isOverviewVisible ? 1.0 : 0.0
@@ -430,6 +430,16 @@ Scope {
         GlobalStates.overviewOpen = true;
     }
 
+    function toggleBluetooth() {
+        if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch) {
+            GlobalStates.overviewOpen = false;
+            return;
+        }
+        overviewScope.dontAutoCancelSearch = true;
+        overviewScope.setSearchingTextRequested(Config.options.search.prefix.bluetooth);
+        GlobalStates.overviewOpen = true;
+    }
+
     IpcHandler {
         target: "search"
 
@@ -450,6 +460,9 @@ Scope {
         }
         function clipboardToggle() {
             overviewScope.toggleClipboard();
+        }
+        function bluetoothToggle() {
+            overviewScope.toggleBluetooth();
         }
         function searchOnlyToggle() {
             if (GlobalStates.overviewOpen) {

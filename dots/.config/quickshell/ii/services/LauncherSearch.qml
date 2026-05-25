@@ -335,8 +335,47 @@ Singleton {
         }));
     }
 
+    function createAppResultObject(entry) {
+        return resultComp.createObject(null, {
+            key: "app:" + entry.id,
+            type: Translation.tr("App"),
+            id: entry.id,
+            name: entry.name,
+            iconName: entry.icon,
+            iconType: LauncherSearchResult.IconType.System,
+            verb: Translation.tr("Open"),
+            execute: () => {
+                AppUsage.recordLaunch(entry.id);
+                if (!entry.runInTerminal)
+                    entry.execute();
+                else {
+                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
+                }
+            },
+            comment: entry.comment,
+            runInTerminal: entry.runInTerminal,
+            genericName: entry.genericName,
+            keywords: entry.keywords,
+            actions: entry.actions.map(action => {
+                return resultComp.createObject(null, {
+                    name: action.name,
+                    iconName: action.icon,
+                    iconType: LauncherSearchResult.IconType.System,
+                    execute: () => {
+                        if (!action.runInTerminal)
+                            action.execute();
+                        else {
+                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(action.command.join(' '))}'`]);
+                        }
+                    }
+                });
+            })
+        });
+    }
+
     property list<var> results: {
         let _ = root._mprisTrigger;
+        let _apps = AppSearch.list; // Establish reactive binding to application list!
         // Search results are handled here
 
         ////////////////// MPRIS (empty query) //////////////////
@@ -374,6 +413,12 @@ Singleton {
                     ]
                 }));
             }
+
+            if (Config.options.search.alwaysListApps) {
+                const appResultObjects = AppSearch.fuzzyQuery("").map(entry => root.createAppResultObject(entry));
+                return mprisResults.concat(appResultObjects);
+            }
+
             return mprisResults;
         }
 
@@ -630,44 +675,7 @@ Singleton {
 
         // MPRIS handled above (empty query case)
 
-        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => {
-            return resultComp.createObject(null, {
-                key: "app:" + entry.id,
-                type: Translation.tr("App"),
-                id: entry.id,
-                name: entry.name,
-                iconName: entry.icon,
-                iconType: LauncherSearchResult.IconType.System,
-                verb: Translation.tr("Open"),
-                execute: () => {
-                    AppUsage.recordLaunch(entry.id);
-                    if (!entry.runInTerminal)
-                        entry.execute();
-                    else {
-                        // Probably needs more proper escaping, but this will do for now
-                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
-                    }
-                },
-                comment: entry.comment,
-                runInTerminal: entry.runInTerminal,
-                genericName: entry.genericName,
-                keywords: entry.keywords,
-                actions: entry.actions.map(action => {
-                    return resultComp.createObject(null, {
-                        name: action.name,
-                        iconName: action.icon,
-                        iconType: LauncherSearchResult.IconType.System,
-                        execute: () => {
-                            if (!action.runInTerminal)
-                                action.execute();
-                            else {
-                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(action.command.join(' '))}'`]);
-                            }
-                        }
-                    });
-                })
-            });
-        });
+        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => root.createAppResultObject(entry));
         const commandResultObject = resultComp.createObject(null, {
             key: "cmd:shell",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),

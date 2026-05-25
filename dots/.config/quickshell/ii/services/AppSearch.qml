@@ -121,6 +121,13 @@ Singleton {
     }
 
     function fuzzyQuery(search) { // Idk why list<DesktopEntry> doesn't work
+        if (search === "") {
+            if (root.frecencySearch) {
+                return frecencyQuery(search);
+            }
+            return Array.from(list).sort((a, b) => a.name.localeCompare(b.name));
+        }
+
         // Frecency mode: combine fuzzy with usage frequency
         if (root.frecencySearch) {
             return frecencyQuery(search);

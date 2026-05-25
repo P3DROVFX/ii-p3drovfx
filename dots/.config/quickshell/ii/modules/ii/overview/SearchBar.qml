@@ -34,7 +34,7 @@ RowLayout {
 
     property var searchPrefixType: {
         if (root.searchingText.startsWith(Config.options.search.prefix.action)) return SearchBar.SearchPrefixType.Action;
-        if (root.searchingText.startsWith(Config.options.search.prefix.app)) return SearchBar.SearchPrefixType.App;
+        if (root.searchingText.startsWith(Config.options.search.prefix.app) || (Config.options.search.alwaysListApps && root.searchingText === "")) return SearchBar.SearchPrefixType.App;
         if (root.searchingText.startsWith(Config.options.search.prefix.clipboard)) return SearchBar.SearchPrefixType.Clipboard;
         if (root.searchingText.startsWith(Config.options.search.prefix.emojis)) return SearchBar.SearchPrefixType.Emojis;
         if (root.searchingText.startsWith(Config.options.search.prefix.math)) return SearchBar.SearchPrefixType.Math;
@@ -153,7 +153,7 @@ RowLayout {
         placeholderText: Translation.tr("Search, calculate or run")
         implicitWidth: root.clipboardMode
             ? root.clipboardWidth
-            : (root.searchingText == "" ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
+            : ((root.searchingText === "" && !Config.options.search.alwaysListApps) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
 
         Behavior on implicitWidth {
             id: searchWidthBehavior

@@ -14,7 +14,7 @@ import Quickshell.Hyprland
 
 RippleButton {
     id: root
-    property LauncherSearchResult entry
+    property var entry
     property string query
     property bool entryShown: entry?.shown ?? true
     property string itemType: entry?.type ?? Translation.tr("App")
@@ -32,7 +32,7 @@ RippleButton {
     }
     property string itemClickActionName: entry?.verb ?? "Open"
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
-    property string materialSymbol: entry.iconType === LauncherSearchResult.IconType.Material ? entry?.iconName ?? "" : ""
+    property string materialSymbol: entry?.iconType === LauncherSearchResult.IconType.Material ? entry?.iconName ?? "" : ""
     property string cliphistRawString: entry?.rawValue ?? ""
     property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
     property bool blurImage: entry?.blurImage ?? false

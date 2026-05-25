@@ -88,6 +88,18 @@ ContentPage {
                 text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "apps"
+            text: Translation.tr("Always list apps on empty query")
+            checked: Config.options.search.alwaysListApps
+            onCheckedChanged: {
+                Config.options.search.alwaysListApps = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
+            }
+        }
     }
 
     ContentSection {
@@ -182,6 +194,14 @@ ContentPage {
                     text: Config.options.search.prefix.fileSearch
                     wrapMode: TextEdit.NoWrap
                     onTextChanged: Config.options.search.prefix.fileSearch = text;
+                }
+
+                StyledText { text: Translation.tr("Bluetooth"); color: Appearance.colors.colOnSurface }
+                MaterialTextArea {
+                    Layout.fillWidth: true
+                    text: Config.options.search.prefix.bluetooth
+                    wrapMode: TextEdit.NoWrap
+                    onTextChanged: Config.options.search.prefix.bluetooth = text;
                 }
             }
         }
