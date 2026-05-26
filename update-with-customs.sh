@@ -20,7 +20,7 @@ warn() { echo -e "\e[1;33m[WARN]\e[0m $1"; }
 err() { echo -e "\e[1;31m[ERROR]\e[0m $1"; }
 
 FORK_DIR=""
-for candidate in "$HOME/Downloads/project/ii-vynx" "$HOME/.local/share/ii-vynx-fork"; do
+for candidate in "$HOME/Downloads/project/ii-vynx" "$HOME/Downloads/ii-vynx" "$HOME/.local/share/ii-vynx-fork"; do
     if [ -d "$candidate/.git" ]; then
         FORK_DIR="$candidate"
         break
@@ -33,15 +33,14 @@ if [ -z "$FORK_DIR" ]; then
 fi
 
 log "Using fork at: $FORK_DIR"
+cd "$FORK_DIR"
+DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
 
 # ── Dry Run ────────────────────────────────────────────────────────
 if [ "$DRY_RUN" = true ]; then
-    cd "$FORK_DIR"
     git fetch origin 2>/dev/null || { warn "Cannot reach remote."; exit 1; }
 
-    DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
     BEHIND="$(git rev-list --count "HEAD..origin/$DEFAULT_BRANCH" 2>/dev/null || echo "0")"
-
     if [ "$BEHIND" -eq 0 ]; then
         echo "Already up to date."
         exit 0
@@ -67,10 +66,14 @@ fi
 
 # ── Full Update ────────────────────────────────────────────────────
 log "Pulling latest changes from your fork..."
-cd "$FORK_DIR"
 
 if ! git pull --ff-only; then
     err "Git pull failed."
+    echo ""
+    echo -e "\e[1;33m[Troubleshooting]\e[0m This error usually happens when there are local modifications or your branch has diverged."
+    echo -e "If you do NOT have any custom code changes in the fork folder that you want to keep, you can force-reset it by running:"
+    echo -e "  \e[1;36mcd \"$FORK_DIR\" && git fetch origin && git reset --hard \"origin/$DEFAULT_BRANCH\"\e[0m"
+    echo ""
     exit 1
 fi
 
