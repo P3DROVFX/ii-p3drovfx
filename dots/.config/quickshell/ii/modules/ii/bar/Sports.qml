@@ -18,12 +18,12 @@ MouseArea {
     property bool internalVisible: shouldBeVisible
     visible: internalVisible || opacity > 0
     
-    readonly property bool isVertical: Config.options.bar.vertical
+    property bool vertical: false
     property bool activated: root.displayGame && root.displayGame.state === "in"
     property color onActivatedColor: Appearance.colors.colOnPrimaryContainer
 
-    implicitWidth: shouldBeVisible ? (isVertical ? Appearance.sizes.verticalBarWidth : sportsLayout.implicitWidth) : 0
-    implicitHeight: shouldBeVisible ? (isVertical ? sportsLayout.implicitHeight : Appearance.sizes.baseBarHeight) : 0
+    implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : sportsLayoutHoriz.implicitWidth) : 0
+    implicitHeight: shouldBeVisible ? (vertical ? sportsLayoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: true
 
     // Vertical offset for the slide animation - using transform: Translate bypasses anchor restrictions
@@ -50,8 +50,8 @@ MouseArea {
             horizontalOffset = 0;
         } else {
             opacity = 0;
-            verticalOffset = isVertical ? 0 : 10;
-            horizontalOffset = isVertical ? 10 : 0;
+            verticalOffset = vertical ? 0 : 10;
+            horizontalOffset = vertical ? 10 : 0;
         }
     }
 
@@ -75,8 +75,8 @@ MouseArea {
     // Animations
     SequentialAnimation {
         id: entranceAnim
-        PropertyAction { target: root; property: "verticalOffset"; value: isVertical ? 0 : -10 }
-        PropertyAction { target: root; property: "horizontalOffset"; value: isVertical ? -10 : 0 }
+        PropertyAction { target: root; property: "verticalOffset"; value: vertical ? 0 : -10 }
+        PropertyAction { target: root; property: "horizontalOffset"; value: vertical ? -10 : 0 }
         ParallelAnimation {
             NumberAnimation { target: root; property: "opacity"; to: 1; duration: 250; easing.type: Easing.OutCubic }
             NumberAnimation { target: root; property: "verticalOffset"; to: 0; duration: 250; easing.type: Easing.OutCubic }
@@ -88,8 +88,8 @@ MouseArea {
         id: exitAnim
         ParallelAnimation {
             NumberAnimation { target: root; property: "opacity"; to: 0; duration: 200; easing.type: Easing.InCubic }
-            NumberAnimation { target: root; property: "verticalOffset"; to: isVertical ? 0 : 10; duration: 200; easing.type: Easing.InCubic }
-            NumberAnimation { target: root; property: "horizontalOffset"; to: isVertical ? 10 : 0; duration: 200; easing.type: Easing.InCubic }
+            NumberAnimation { target: root; property: "verticalOffset"; to: vertical ? 0 : 10; duration: 200; easing.type: Easing.InCubic }
+            NumberAnimation { target: root; property: "horizontalOffset"; to: vertical ? 10 : 0; duration: 200; easing.type: Easing.InCubic }
         }
         ScriptAction {
             script: {
@@ -102,8 +102,8 @@ MouseArea {
         id: switchAnim
         ParallelAnimation {
             NumberAnimation { target: root; property: "opacity"; to: 0; duration: 150; easing.type: Easing.InSine }
-            NumberAnimation { target: root; property: "verticalOffset"; to: isVertical ? 0 : 8; duration: 150; easing.type: Easing.InSine }
-            NumberAnimation { target: root; property: "horizontalOffset"; to: isVertical ? 8 : 0; duration: 150; easing.type: Easing.InSine }
+            NumberAnimation { target: root; property: "verticalOffset"; to: vertical ? 0 : 8; duration: 150; easing.type: Easing.InSine }
+            NumberAnimation { target: root; property: "horizontalOffset"; to: vertical ? 8 : 0; duration: 150; easing.type: Easing.InSine }
         }
         ScriptAction {
             script: {
@@ -113,8 +113,8 @@ MouseArea {
                 }
             }
         }
-        PropertyAction { target: root; property: "verticalOffset"; value: isVertical ? 0 : -8 }
-        PropertyAction { target: root; property: "horizontalOffset"; value: isVertical ? -8 : 0 }
+        PropertyAction { target: root; property: "verticalOffset"; value: vertical ? 0 : -8 }
+        PropertyAction { target: root; property: "horizontalOffset"; value: vertical ? -8 : 0 }
         ParallelAnimation {
             NumberAnimation { target: root; property: "opacity"; to: 1; duration: 150; easing.type: Easing.OutSine }
             NumberAnimation { target: root; property: "verticalOffset"; to: 0; duration: 150; easing.type: Easing.OutSine }
@@ -135,13 +135,11 @@ MouseArea {
         anchors.fill: parent
         clip: true
 
-        GridLayout {
-            id: sportsLayout
-            columns: isVertical ? 1 : 5
-            rows: isVertical ? 5 : 1
-            rowSpacing: isVertical ? 2 : 4
-            columnSpacing: 12
+        RowLayout {
+            id: sportsLayoutHoriz
+            visible: !root.vertical
             anchors.centerIn: parent
+            spacing: 12
             
             // Translate allows animating Y even when anchors.centerIn is active
             transform: Translate { 
@@ -151,9 +149,9 @@ MouseArea {
 
             // Home Team Logo
             StyledImage {
-                Layout.preferredWidth: isVertical ? 20 : 24
-                Layout.preferredHeight: isVertical ? 20 : 24
-                Layout.alignment: Qt.AlignCenter
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
                 source: root.displayGame ? root.displayGame.home.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
@@ -164,7 +162,7 @@ MouseArea {
             // Home Team Score (Only if not pre-game)
             Item {
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
-                Layout.alignment: Qt.AlignCenter
+                Layout.alignment: Qt.AlignVCenter
                 implicitWidth: homeScoreText.implicitWidth
                 implicitHeight: homeScoreText.implicitHeight
 
@@ -173,7 +171,7 @@ MouseArea {
                     anchors.centerIn: parent
                     text: root.displayGame ? root.displayGame.home.score : ""
                     font.weight: Font.DemiBold
-                    font.pixelSize: isVertical ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: {
                         if (!root.activated) return Appearance.colors.colOnSurface;
                         return root.onActivatedColor;
@@ -184,9 +182,9 @@ MouseArea {
 
             // Status (Time, Period, etc)
             Rectangle {
-                Layout.preferredHeight: isVertical ? 18 : 20
-                Layout.preferredWidth: statusText.implicitWidth + (isVertical ? 8 : 12)
-                Layout.alignment: Qt.AlignCenter
+                Layout.preferredHeight: 20
+                Layout.preferredWidth: statusText.implicitWidth + 12
+                Layout.alignment: Qt.AlignVCenter
                 radius: Appearance.rounding.full
                 color: {
                     if (!root.displayGame) return Appearance.colors.colLayer3;
@@ -212,7 +210,7 @@ MouseArea {
             // Away Team Score (Only if not pre-game)
             Item {
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
-                Layout.alignment: Qt.AlignCenter
+                Layout.alignment: Qt.AlignVCenter
                 implicitWidth: awayScoreText.implicitWidth
                 implicitHeight: awayScoreText.implicitHeight
 
@@ -221,7 +219,7 @@ MouseArea {
                     anchors.centerIn: parent
                     text: root.displayGame ? root.displayGame.away.score : ""
                     font.weight: Font.DemiBold
-                    font.pixelSize: isVertical ? Appearance.font.pixelSize.small : Appearance.font.pixelSize.normal
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: {
                         if (!root.activated) return Appearance.colors.colOnLayer1;
                         return root.onActivatedColor;
@@ -232,14 +230,114 @@ MouseArea {
 
             // Away Team Logo
             StyledImage {
-                Layout.preferredWidth: isVertical ? 20 : 24
-                Layout.preferredHeight: isVertical ? 20 : 24
-                Layout.alignment: Qt.AlignCenter
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
                 source: root.displayGame ? root.displayGame.away.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
                 cache: true
+            }
+        }
+
+        // Vertical Layout (Symmetrical & Compact Scoreboard for Vertical Bar)
+        ColumnLayout {
+            id: sportsLayoutVert
+            visible: root.vertical
+            anchors.centerIn: parent
+            spacing: 6
+            
+            // Translate allows animating Y even when anchors.centerIn is active
+            transform: Translate { 
+                x: root.horizontalOffset
+                y: root.verticalOffset 
+            }
+
+            // Home Team Logo & Score (Score placed under logo)
+            ColumnLayout {
+                spacing: 2
+                Layout.alignment: Qt.AlignHCenter
+                StyledImage {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 20
+                    Layout.preferredHeight: 20
+                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                    cache: true
+                }
+                StyledText {
+                    id: homeScoreTextVert
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.displayGame ? root.displayGame.home.score : ""
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: {
+                        if (!root.activated) return Appearance.colors.colOnSurface;
+                        return root.onActivatedColor;
+                    }
+                    visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                    animateChange: true
+                }
+            }
+
+            // Status (Time, Period, etc)
+            Rectangle {
+                Layout.preferredHeight: 18
+                Layout.preferredWidth: Appearance.sizes.verticalBarWidth - 8
+                Layout.alignment: Qt.AlignHCenter
+                radius: Appearance.rounding.full
+                color: {
+                    if (!root.displayGame) return Appearance.colors.colLayer3;
+                    if (root.displayGame.state === "in") return Appearance.colors.colPrimary;
+                    return Appearance.colors.colLayer3;
+                }
+
+                StyledText {
+                    id: statusTextVert
+                    anchors.centerIn: parent
+                    // Splitting status to only take the first word when not active ("in") so that date/time string fits perfectly
+                    text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: {
+                        if (!root.displayGame) return Appearance.colors.colOnLayer3;
+                        if (root.displayGame.state === "in") return Appearance.colors.colOnPrimary;
+                        return Appearance.colors.colOnLayer3;
+                    }
+                    animateChange: true
+                }
+            }
+
+            // Away Team Logo & Score (Score placed above logo for symmetry)
+            ColumnLayout {
+                spacing: 2
+                Layout.alignment: Qt.AlignHCenter
+                StyledText {
+                    id: awayScoreTextVert
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.displayGame ? root.displayGame.away.score : ""
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: {
+                        if (!root.activated) return Appearance.colors.colOnLayer1;
+                        return root.onActivatedColor;
+                    }
+                    visible: root.displayGame ? root.displayGame.state !== "pre" : false
+                    animateChange: true
+                }
+                StyledImage {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 20
+                    Layout.preferredHeight: 20
+                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                    cache: true
+                }
             }
         }
     }

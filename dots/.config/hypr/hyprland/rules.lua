@@ -129,9 +129,14 @@ hl.layer_rule({ match = { namespace = "osk[0-9]*" }, ignore_alpha = 0.6})
 
 -- Quickshell
 -- Quickshell: illogical-impulse
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur_popups = true})
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:.*" }, ignore_alpha = 0.19})
+hl.layer_rule({ match = { namespace = "quickshell.*" }, blur_popups = true})
+hl.layer_rule({ match = { namespace = "quickshell.*" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell.*" }, ignore_alpha = 0.19})
+hl.layer_rule({ match = { namespace = "quickshell.*" }, xray = false})
+hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, order = -1})
+hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, ignore_alpha = 0.0})
+hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, animation = "fade"})
 hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:actionCenter" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "slide bottom"})
@@ -145,8 +150,8 @@ hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false}) -- No weird color for bar tooltips (this in theory should suffice)
-hl.layer_rule({ match = { namespace = "quickshell:popup" }, ignore_alpha = 1}) -- No weird color for bar tooltips (but somehow this is necessary)
-hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, ignore_alpha = 1}) -- Same as above
+hl.layer_rule({ match = { namespace = "quickshell:popup" }, ignore_alpha = 0.49}) -- No weird color for bar tooltips (but somehow this is necessary)
+hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, ignore_alpha = 0.49}) -- Same as above
 hl.layer_rule({ match = { namespace = "quickshell:reloadPopup" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:regionSelector" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true})

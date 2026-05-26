@@ -41,7 +41,7 @@ Scope {
                 property string searchingText: ""
 
                 WlrLayershell.namespace: "quickshell:overview"
-                WlrLayershell.layer: WlrLayer.Top
+                WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: GlobalStates.overviewOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                 color: "transparent"
 
@@ -325,6 +325,8 @@ Scope {
 
                         readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
 
+                        visible: opacity > 0
+
                         // Smooth slide, fade and scale when opening/closing or typing
                         opacity: isOverviewVisible ? 1.0 : 0.0
                         scale: isOverviewVisible ? root.effectiveScale : root.effectiveScale * 0.92
@@ -368,6 +370,8 @@ Scope {
                         active: root.visible && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
 
                         readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
+
+                        visible: opacity > 0
 
                         // Smooth slide, fade and scale when opening/closing or typing
                         opacity: isOverviewVisible ? 1.0 : 0.0

@@ -21,7 +21,7 @@ Item {
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     Loader {
-        active: Config.options.appearance.fakeScreenRounding == 3
+        active: Config.options.appearance.fakeScreenRounding == 3 && !GlobalStates.screenLocked
         sourceComponent: Variants {
             id: wrappedFrameVariant
             property var variantModel: Quickshell.screens
@@ -34,6 +34,11 @@ Item {
                 property int index: wrappedFrameVariant.variantModel.indexOf(monitorScope.modelData)
                 property bool hasActiveWindows: false
                 property bool showBarBackground: monitorScope.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+
+                property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
+                property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && workspace.monitor.name == monitor.name)
+                property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(workspace => ((workspace.toplevels.values.filter(window => window.wayland?.fullscreen)[0] != undefined) && workspace.active))[0]
+                property bool fullscreen: activeWorkspaceWithFullscreen != undefined
 
                 Connections {
                     enabled: Config.options.bar.barBackgroundStyle === 2
@@ -53,6 +58,7 @@ Item {
                     color: "transparent"
                     mask: Region {}
                     exclusionMode: ExclusionMode.Exclusive
+                    visible: !monitorScope.fullscreen
                 }
 
                 Loader {
@@ -103,8 +109,10 @@ Item {
                         right: true
                     }
                     color: "transparent"
+                    visible: !monitorScope.fullscreen
                     
                     WlrLayershell.namespace: "quickshell:bar"
+                    WlrLayershell.layer: WlrLayer.Overlay
                     exclusionMode: ExclusionMode.Ignore
                     mask: Region {} // Ignore pointer events so normal windows are clickable
 

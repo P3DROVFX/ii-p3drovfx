@@ -350,7 +350,9 @@ Item {
     }
     Component {
         id: sportsComp
-        Sports {}
+        Sports {
+            vertical: rootItem.vertical
+        }
     }
 
     Component {

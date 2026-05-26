@@ -9,6 +9,8 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
+import Qt5Compat.GraphicalEffects
+
 Scope {
     id: root
 
@@ -24,6 +26,9 @@ Scope {
     property Component sessionLockSurface: WlSessionLockSurface {
         id: sessionLockSurface
         color: "transparent"
+
+
+
         Loader {
             active: GlobalStates.screenLocked
             anchors.fill: parent

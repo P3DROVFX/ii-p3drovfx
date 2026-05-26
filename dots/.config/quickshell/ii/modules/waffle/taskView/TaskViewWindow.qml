@@ -31,9 +31,11 @@ WMouseAreaButton {
 
     property real titleBarImplicitHeight: titleBar.implicitHeight
     property bool scaleSize: true
+    property real openProgress: 1.0
     property size openedSize: WindowLayout.scaleWindow(hyprlandClient, maxWidth, maxHeight);
     property size fullSize: Qt.size(hyprlandClient?.size[0] ?? maxWidth, hyprlandClient?.size[1] ?? maxHeight)
     property size size: scaleSize ? openedSize : fullSize
+    readonly property real finalScale: fullSize.width > 0 ? (openedSize.width / fullSize.width) : 1.0
     implicitWidth: Math.max(Math.round(contentItem.implicitWidth), 138)
     implicitHeight: Math.round(contentItem.implicitHeight)
 
@@ -52,8 +54,14 @@ WMouseAreaButton {
         }
     }
     property bool droppable: false
-    scale: (root.pressedButtons & Qt.LeftButton || root.Drag.active) ? (droppable ? 0.4 : 0.95) : 1
+    scale: {
+        if (root.pressedButtons & Qt.LeftButton || root.Drag.active) {
+            return droppable ? 0.4 : 0.95;
+        }
+        return scaleSize ? 1.0 : (1.0 + (finalScale - 1.0) * openProgress);
+    }
     Behavior on scale {
+        enabled: scaleSize
         NumberAnimation {
             id: scaleAnim
             duration: 200
@@ -91,7 +99,7 @@ WMouseAreaButton {
 
         RowLayout {
             id: titleBar
-            opacity: root.drag.active ? 0 : 1
+            opacity: root.drag.active ? 0 : root.openProgress
             spacing: 8
             WAppIcon {
                 Layout.leftMargin: 10

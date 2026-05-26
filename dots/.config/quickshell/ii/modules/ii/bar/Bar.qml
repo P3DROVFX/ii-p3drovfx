@@ -28,9 +28,14 @@ Scope {
         model: variantModel
         LazyLoader {
             id: barLoader
-            active: GlobalStates.barOpen && !GlobalStates.screenLocked
             required property ShellScreen modelData
             property int monitorIndex: barVariant.variantModel.indexOf(modelData)
+
+            readonly property HyprlandMonitor barMonitor: Hyprland.monitorFor(modelData)
+            readonly property list<HyprlandWorkspace> barWorkspacesForMonitor: Hyprland.workspaces.values.filter(ws => ws.monitor && ws.monitor.name === barMonitor.name)
+            readonly property bool barFullscreen: barWorkspacesForMonitor.some(ws => ws.active && ws.toplevels.values.some(win => win.wayland?.fullscreen))
+
+            active: GlobalStates.barOpen && !GlobalStates.screenLocked && !barFullscreen
             component: PanelWindow { // Bar window
                 id: barRoot
                 screen: barLoader.modelData
@@ -83,6 +88,7 @@ Scope {
                 exclusionMode: ExclusionMode.Ignore
                 exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 : Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                 WlrLayershell.namespace: "quickshell:bar"
+                WlrLayershell.layer: WlrLayer.Overlay
                 implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
                 mask: Region {
                     item: hoverMaskRegion

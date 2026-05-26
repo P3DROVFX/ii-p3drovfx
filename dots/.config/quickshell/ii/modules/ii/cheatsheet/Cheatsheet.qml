@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -47,13 +48,43 @@ Scope {
         return list;
     }
 
+    property bool activeState: false
+
+    Timer {
+        id: closeTimer
+        interval: 400
+        repeat: false
+        onTriggered: {
+            root.activeState = false;
+        }
+    }
+
+    function requestOpen() {
+        closeTimer.stop();
+        root.activeState = true;
+        GlobalStates.cheatsheetOpen = true;
+    }
+
+    function requestClose() {
+        GlobalStates.cheatsheetOpen = false;
+        closeTimer.start();
+    }
+
+    function requestToggle() {
+        if (GlobalStates.cheatsheetOpen) {
+            requestClose();
+        } else {
+            requestOpen();
+        }
+    }
+
     Loader {
         id: cheatsheetLoader
-        active: false
+        active: root.activeState
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
-            visible: cheatsheetLoader.active
+            visible: GlobalStates.cheatsheetOpen
 
             Connections {
                 target: root
@@ -72,29 +103,34 @@ Scope {
             }
 
             function hide() {
-                cheatsheetLoader.active = false;
+                root.requestClose();
             }
             exclusiveZone: 0
             implicitWidth: cheatsheetBackground.width + Appearance.sizes.elevationMargin * 2
             implicitHeight: cheatsheetBackground.height + Appearance.sizes.elevationMargin * 2
             WlrLayershell.namespace: "quickshell:cheatsheet"
-            WlrLayershell.keyboardFocus: {
-                // currentItem is the Loader delegate; .item is the loaded CheatsheetTimetable
-                const cur = swipeView.currentItem;
-                if (cur && cur.item && cur.item.eventPopupVisible)
-                    return WlrKeyboardFocus.OnDemand;
-                return WlrKeyboardFocus.None;
-            }
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: GlobalStates.cheatsheetOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
             color: "transparent"
 
             mask: Region {
                 item: cheatsheetBackground
             }
 
+            Timer {
+                id: registerGrabTimer
+                interval: 150
+                repeat: false
+                onTriggered: {
+                    GlobalFocusGrab.addDismissable(cheatsheetRoot);
+                }
+            }
+
             Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(cheatsheetRoot);
+                registerGrabTimer.start();
             }
             Component.onDestruction: {
+                registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
             }
             Connections {
@@ -265,13 +301,13 @@ Scope {
     IpcHandler {
         target: "cheatsheet"
         function toggle(): void {
-            cheatsheetLoader.active = !cheatsheetLoader.active;
+            root.requestToggle();
         }
         function close(): void {
-            cheatsheetLoader.active = false;
+            root.requestClose();
         }
         function open(): void {
-            cheatsheetLoader.active = true;
+            root.requestOpen();
         }
     }
 
@@ -279,7 +315,7 @@ Scope {
         name: "cheatsheetToggle"
         description: "Toggles cheatsheet on press"
         onPressed: {
-            cheatsheetLoader.active = !cheatsheetLoader.active;
+            root.requestToggle();
         }
     }
 
@@ -287,7 +323,7 @@ Scope {
         name: "cheatsheetOpen"
         description: "Opens cheatsheet on press"
         onPressed: {
-            cheatsheetLoader.active = true;
+            root.requestOpen();
         }
     }
 
@@ -295,7 +331,7 @@ Scope {
         name: "cheatsheetClose"
         description: "Closes cheatsheet on press"
         onPressed: {
-            cheatsheetLoader.active = false;
+            root.requestClose();
         }
     }
 }

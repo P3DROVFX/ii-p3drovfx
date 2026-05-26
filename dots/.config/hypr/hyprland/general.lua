@@ -212,8 +212,8 @@ hl.animation({
 hl.animation({
     leaf = "fadeLayersIn",
     enabled = true,
-    speed = 0.5,
-    bezier = "menu_decel"
+    speed = 2.7,
+    bezier = "stall"
 })
 hl.animation({
     leaf = "fadeLayersOut",
@@ -296,7 +296,8 @@ hl.config({
         zoom_factor = 1,
         zoom_rigid = false,
         zoom_disable_aa = true,
-        hotspot_padding = 1
+        hotspot_padding = 1,
+        no_hardware_cursors = true
     },
 
     xwayland = {

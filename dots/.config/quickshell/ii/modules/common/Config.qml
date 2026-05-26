@@ -302,9 +302,14 @@ Singleton {
                     }
                 }
                 property bool animateWallpaperChanges: true
+                property bool zoomOutEnabled: true  // master toggle for zoom-out animations
+                property bool cheatsheetZoomOut: true
+                property bool overviewZoomOut: true
+                property bool workspaceBlur: true
                 property string wallpaperPath: ""
                 property string thumbnailPath: ""
                 property bool hideWhenFullscreen: true
+                property int zoomOutStyle: 0 // 0: Blurred Backing | 1: Mirrored Plane
                 property JsonObject parallax: JsonObject {
                     property bool vertical: true
                     property bool autoVertical: false

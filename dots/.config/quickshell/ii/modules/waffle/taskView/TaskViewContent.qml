@@ -146,7 +146,8 @@ Rectangle {
                     TaskViewWindow {
                         id: windowItem
                         z: Drag.active ? 2 : 1
-                        opacity: openAnim.running ? root.openProgress : 1
+                        opacity: root.openProgress
+                        openProgress: root.openProgress
 
                         property int mappedX: {
                             // print("AAAWAWAAWAWWA: ", -(clientRow.x + clientGridArea.x + root.padding));
@@ -162,7 +163,7 @@ Rectangle {
                         property int openedY: 0
                         // property int openedX: Drag.active ? (dragHandler.xAxis.activeValue) : 0
                         // property int openedY: Drag.active ? (dragHandler.yAxis.activeValue) : 0
-                        scaleSize: (root.openProgress > 0 && !closeAnim.running)
+                        scaleSize: (root.openProgress === 1)
                         x: mappedX + (openedX - mappedX) * root.openProgress
                         y: mappedY + (openedY - mappedY) * root.openProgress
 
