@@ -246,19 +246,18 @@ Scope {
                     id: wallpaperPlanes
                     anchors.fill: parent
 
-                    readonly property bool barVisible: GlobalStates.barOpen && !GlobalStates.screenLocked
                     readonly property bool barVertical: Config.options.bar.vertical
                     readonly property bool barBottom: Config.options.bar.bottom
                     readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
                     readonly property int gap: Appearance.gapsOut
 
-                    readonly property int padLeft: barVisible && barVertical && !barBottom ? barSize : gap
-                    readonly property int padRight: barVisible && barVertical && barBottom ? barSize : gap
-                    readonly property int padTop: barVisible && !barVertical && !barBottom ? barSize : gap
-                    readonly property int padBottom: barVisible && !barVertical && barBottom ? barSize : gap
+                    readonly property int padLeft: barVertical && !barBottom ? barSize : gap
+                    readonly property int padRight: barVertical && barBottom ? barSize : gap
+                    readonly property int padTop: !barVertical && !barBottom ? barSize : gap
+                    readonly property int padBottom: !barVertical && barBottom ? barSize : gap
 
-                    readonly property real scaleOriginX: padLeft + (bgRoot.width - padLeft - padRight) / 2
-                    readonly property real scaleOriginY: padTop + (bgRoot.height - padTop - padBottom) / 2
+                    readonly property real scaleOriginX: padLeft + (bgRoot.screen.width - padLeft - padRight) / 2
+                    readonly property real scaleOriginY: padTop + (bgRoot.screen.height - padTop - padBottom) / 2
 
                     // Shared parallax + size properties used by all 9 tiles
                     property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
@@ -272,7 +271,8 @@ Scope {
                     readonly property real scaleProgress: {
                         let startScale = 1.0;
                         let targetScale = Math.max(0.85, bgRoot.minSafeScale * 0.85);
-                        if (startScale === targetScale) return 0.0;
+                        if (startScale === targetScale)
+                            return 0.0;
                         return Math.max(0.0, Math.min(1.0, (startScale - scaleValue) / (startScale - targetScale)));
                     }
 
@@ -295,6 +295,26 @@ Scope {
                         origin.y: wallpaperPlanes.scaleOriginY
                         xScale: wallpaperPlanes.scaleValue
                         yScale: wallpaperPlanes.scaleValue
+                    }
+
+                    // Publish zoom state so OverviewWindowTransition can sync its animation
+                    Binding {
+                        target: GlobalStates
+                        property: "overviewZoomScale"
+                        value: wallpaperPlanes.scaleValue
+                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
+                    }
+                    Binding {
+                        target: GlobalStates
+                        property: "overviewZoomOriginX"
+                        value: wallpaperPlanes.scaleOriginX
+                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
+                    }
+                    Binding {
+                        target: GlobalStates
+                        property: "overviewZoomOriginY"
+                        value: wallpaperPlanes.scaleOriginY
+                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
                     }
 
                     // Tile visibility persists while clipRadius > 0 (through close animation)
@@ -452,9 +472,6 @@ Scope {
                         opacity: wallpaperPlanes.scaleProgress
                     }
 
-                    // --- CENTRAL WALLPAPER CLIP WRAPPER ---
-                    // Style 0 (Gnome): represents the screen viewport (starts at 0, size of screen)
-                    // Style 1 (Mirrored): represents the central wallpaper (starts at parallax, size of wallpaper)
                     // Mask rectangle for rounded clip — must be a real scene Item with layer.enabled
                     Rectangle {
                         id: centralClipMask
@@ -480,6 +497,7 @@ Scope {
                         layer.effect: OpacityMask {
                             maskSource: centralClipMask
                         }
+
 
                         Behavior on x {
                             NumberAnimation {
@@ -792,7 +810,12 @@ Scope {
             WlrLayershell.namespace: "quickshell:workspaceBlurOverlay"
             color: "transparent"
 
-            anchors { top: true; bottom: true; left: true; right: true }
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
 
             readonly property bool animEnabled: Config.options.background.zoomOutEnabled
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
@@ -817,5 +840,3 @@ Scope {
         }
     }
 }
-
-

@@ -100,6 +100,18 @@ ContentPage {
                 ]
             }
         }
+        ConfigSwitch {
+            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0
+            buttonIcon: "open_with"
+            text: Translation.tr("Experimental - Scale windows with wallpaper (GNOME-like)")
+            checked: Config.options.background.windowZoomOnOverview
+            onCheckedChanged: {
+                Config.options.background.windowZoomOnOverview = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
+            }
+        }
     }
 
     ContentSection {

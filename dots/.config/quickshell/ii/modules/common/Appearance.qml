@@ -255,7 +255,7 @@ Singleton {
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
             }
         }
-    }
+    } 
     property int blurSize: Config.options.appearance.blurSize ?? 8
     onBlurSizeChanged: {
         if (Config.ready) {

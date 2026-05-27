@@ -147,6 +147,14 @@ hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animatio
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:overview" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, ignore_alpha = 0.19})
+hl.layer_rule({ match = { namespace = "quickshell:overview" }, xray = false})
+-- overviewWindowTransition: window captures that scale with the wallpaper zoom
+hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, xray = false})
+hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, blur = false})
+
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false}) -- No weird color for bar tooltips (this in theory should suffice)
