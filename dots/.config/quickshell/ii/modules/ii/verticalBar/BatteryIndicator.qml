@@ -65,27 +65,39 @@ MouseArea {
             }
 
             textMask: Item {
-                anchors.centerIn: parent
                 width: oneuiBattery.valueBarWidth
                 height: oneuiBattery.valueBarHeight
 
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 0
+                    width: parent.width
+                    spacing: 2
 
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
                         fill: 1
                         renderType: Text.QtRendering
-                        text: root.isCharging ? "bolt" : Icons.getBatteryIcon(Battery.percentage * 100)
-                        iconSize: Appearance.font.pixelSize.normal
-                        animateChange: true
+                        text: "bolt"
+                        iconSize: Appearance.font.pixelSize.smaller
+                        visible: root.isCharging || root.isPluggedIn
                     }
-                    StyledText {
+
+                    Item {
                         Layout.alignment: Qt.AlignHCenter
-                        renderType: Text.QtRendering
-                        font: oneuiBattery.font
-                        text: oneuiBattery.text
+                        width: parent.width
+                        height: percentageText.implicitWidth
+
+                        StyledText {
+                            id: percentageText
+                            anchors.centerIn: parent
+                            anchors.verticalCenterOffset: 1
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            renderType: Text.QtRendering
+                            font: oneuiBattery.font
+                            text: oneuiBattery.text
+                            rotation: -90
+                        }
                     }
                 }
             }
