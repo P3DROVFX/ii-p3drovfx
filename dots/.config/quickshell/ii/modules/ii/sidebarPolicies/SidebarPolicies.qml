@@ -95,11 +95,17 @@ Scope { // Scope
             
             property bool extend: false
             readonly property real sidebarWidth: {
-                const p = Config.options.policies;
-                const allFeatures = p.ai !== 0 && p.weeb == 1 && p.wallpapers !== 0 && p.translator !== 0;
-
                 if (panelWindow.extend) return Appearance.sizes.sidebarWidthExtended;
-                return allFeatures ? Appearance.sizes.sidebarWidthExpanded : Appearance.sizes.sidebarWidth;
+
+                const p = Config.options.policies;
+                let activeCount = 0;
+                if (p.ai !== 0) activeCount++;
+                if (p.translator !== 0) activeCount++;
+                if (p.player !== 0) activeCount++;
+                if (p.wallpapers !== 0) activeCount++;
+                if (p.weeb !== 0 && p.weeb !== 2) activeCount++;
+
+                return activeCount >= 4 ? Appearance.sizes.sidebarWidthExpanded : Appearance.sizes.sidebarWidth;
             }
             
             property var contentParent: sidebarLeftBackground
