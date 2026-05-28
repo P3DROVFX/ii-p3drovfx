@@ -23,7 +23,10 @@ Item {
     property bool compVisible: ((hasStop || sRunning) && root.showStopwatch) || ((pRunning || hasPomo) && root.showPomodoro)
 
     onCompVisibleChanged: rootItem.toggleVisible(compVisible)
-    Component.onCompleted: rootItem.toggleVisible(compVisible)
+    Component.onCompleted: {
+        rootItem.toggleHighlight(true)
+        rootItem.toggleVisible(compVisible)
+    }
 
     Behavior on implicitWidth {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -31,8 +34,13 @@ Item {
 
     function formatTime(time) {
         const sec = Math.floor(time/100)
+        const min = Math.floor(sec/60)
+        if (min > 0) {
+            return min.toString().padStart(2,'0') + ":" + (sec%60).toString().padStart(2,'0') + "\n" +
+                   (time%100).toString().padStart(2,'0')
+        }
         return (sec%60).toString().padStart(2,'0') + "\n" +
-        (time%100).toString().padStart(2,'0')
+               (time%100).toString().padStart(2,'0')
     }
 
     ColumnLayout {
@@ -52,7 +60,8 @@ Item {
                 }
 
                 StyledText {
-                    Layout.preferredWidth: 10 // we have to set a fixed size to prevent flickering
+                    Layout.alignment: Qt.AlignHCenter
+                    horizontalAlignment: Text.AlignHCenter
                     text: formatTime(TimerService.stopwatchTime)
                     color: Appearance.colors.colOnPrimary
                 }

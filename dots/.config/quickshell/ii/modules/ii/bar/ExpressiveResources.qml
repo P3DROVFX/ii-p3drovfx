@@ -36,6 +36,9 @@ MouseArea {
                     shown: Config.options.bar.resources.alwaysShowRam
                     percentage: ResourceUsage.memoryUsedPercentage
                     warningThreshold: Config.options.bar.resources.memoryWarningThreshold
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     iconName: "planner_review"
@@ -43,18 +46,27 @@ MouseArea {
                     percentage: ResourceUsage.cpuUsage
                     Layout.leftMargin: shown ? 6 : 0
                     warningThreshold: Config.options.bar.resources.cpuWarningThreshold
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     iconName: "thermostat"
                     shown: Config.options.bar.resources.alwaysShowCpuTemp
                     percentage: ResourceUsage.cpuTemp / 100
                     Layout.leftMargin: shown ? 6 : 0
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     iconName: "hard_drive"
                     shown: Config.options.bar.resources.alwaysShowDisk
                     percentage: ResourceUsage.diskUsedPercentage
                     Layout.leftMargin: shown ? 6 : 0
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     iconName: "swap_horiz"
@@ -62,6 +74,9 @@ MouseArea {
                     percentage: ResourceUsage.swapUsedPercentage
                     Layout.leftMargin: shown ? 6 : 0
                     warningThreshold: Config.options.bar.resources.swapWarningThreshold
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
             }
         }
@@ -81,6 +96,9 @@ MouseArea {
                     percentage: ResourceUsage.memoryUsedPercentage
                     warningThreshold: Config.options.bar.resources.memoryWarningThreshold
                     implicitHeight: 24
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     Layout.alignment: Qt.AlignHCenter
@@ -89,6 +107,9 @@ MouseArea {
                     percentage: ResourceUsage.cpuUsage
                     warningThreshold: Config.options.bar.resources.cpuWarningThreshold
                     implicitHeight: 24
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     Layout.alignment: Qt.AlignHCenter
@@ -96,6 +117,9 @@ MouseArea {
                     shown: Config.options.bar.resources.alwaysShowCpuTemp
                     percentage: ResourceUsage.cpuTemp / 100
                     implicitHeight: 24
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     Layout.alignment: Qt.AlignHCenter
@@ -103,6 +127,9 @@ MouseArea {
                     shown: Config.options.bar.resources.alwaysShowDisk
                     percentage: ResourceUsage.diskUsedPercentage
                     implicitHeight: 24
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
                 Resource {
                     Layout.alignment: Qt.AlignHCenter
@@ -111,6 +138,9 @@ MouseArea {
                     percentage: ResourceUsage.swapUsedPercentage
                     warningThreshold: Config.options.bar.resources.swapWarningThreshold
                     implicitHeight: 24
+                    colorActive: Appearance.colors.colOnTertiaryContainer
+                    colorIcon: Appearance.colors.colOnTertiaryContainer
+                    colorText: Appearance.colors.colOnTertiaryContainer
                 }
             }
         }

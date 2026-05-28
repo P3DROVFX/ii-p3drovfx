@@ -360,6 +360,26 @@ if [ "$UPDATE_ONLY" = true ]; then
         if [ -d "$FORK_DIR/.git" ]; then
             cd "$FORK_DIR" && git pull
             if [ $? -ne 0 ]; then
+                if [ "$NO_CONFIRM" = true ]; then
+                    echo -e "${YELLOW}⚠ git pull failed due to divergence or local changes. Attempting automatic clean and reset...${NC}"
+                    git fetch origin
+                    DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
+                    git reset --hard "origin/$DEFAULT_BRANCH"
+                    git pull
+                else
+                    echo -e "${YELLOW}⚠ git pull failed due to divergence or local changes.${NC}"
+                    echo -ne "${CYAN}Would you like to force-reset the local cache to match the remote repository? (y/n): ${NC}"
+                    read -r reset_response
+                    if [[ "$reset_response" =~ ^[Yy]$ ]]; then
+                        echo -e "${BLUE}• Force-resetting fork repository...${NC}"
+                        git fetch origin
+                        DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
+                        git reset --hard "origin/$DEFAULT_BRANCH"
+                        git pull
+                    fi
+                fi
+            fi
+            if [ $? -ne 0 ]; then
                 echo -e "${RED}✗ git pull failed. Please check for branch conflicts or network issues.${NC}"
                 exit 1
             fi

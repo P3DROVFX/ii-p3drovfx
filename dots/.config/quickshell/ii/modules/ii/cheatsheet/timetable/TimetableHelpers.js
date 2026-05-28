@@ -30,7 +30,7 @@ function minutesToKhalTimeStr(totalMinutes) {
 
 function getDateForDayIndex(dayIndex, firstDayOfWeek) {
     let d = new Date();
-    let currentConfigDayIndex = (d.getDay() - firstDayOfWeek + 7) % 7;
+    let currentConfigDayIndex = (d.getDay() - firstDayOfWeek + 6) % 7;
     d.setDate(d.getDate() - currentConfigDayIndex + dayIndex);
     return d;
 }
@@ -56,10 +56,10 @@ function isAllDayEvent(event) {
     let start = event.start || "";
     let end = event.end || "";
     // Common patterns for all-day events
-    return (start === "00:00" && end === "23:59") || 
-           (start === "00:00" && end === "00:00") || 
-           (start === "00:00" && end === "24:00") ||
-           (!event.start && !event.end);
+    return (start === "00:00" && end === "23:59") ||
+        (start === "00:00" && end === "00:00") ||
+        (start === "00:00" && end === "24:00") ||
+        (!event.start && !event.end);
 }
 
 function getAllDayEvents(events) {
@@ -91,7 +91,7 @@ function getEventColorRadial(dayIndex, startMinutes, nextEvtData, maxDist, color
 
     let dx = dayIndex - nextDay;
     let dy = (startMinutes - nextStart) / 60.0;
-    
+
     if (dx === 0 && dy === 0) return colors.colPrimary;
 
     let distance = Math.sqrt(dx * dx + dy * dy);
@@ -126,19 +126,19 @@ function computeEventLayout(events, parseFn) {
         let start = parse(e.start);
         let end = parse(e.end);
         if (start === null || end === null) return null;
-        
+
         // Handle midnight wrap
         if (end === 0 && start > 0) end = 24 * 60;
-        
-        return { 
-            event: e, 
-            start: start, 
+
+        return {
+            event: e,
+            start: start,
             end: end,
             colIndex: 0,
             totalCols: 1
         };
     }).filter(e => e !== null)
-      .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+        .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
 
     if (timedEvents.length === 0) return [];
 
@@ -162,7 +162,7 @@ function computeEventLayout(events, parseFn) {
     // 3. Assign columns within each group
     for (let group of groups) {
         let columns = []; // array of end times for each column
-        
+
         for (let ev of group) {
             let placed = false;
             for (let i = 0; i < columns.length; i++) {
@@ -178,7 +178,7 @@ function computeEventLayout(events, parseFn) {
                 columns.push(ev.end);
             }
         }
-        
+
         // 4. Set totalCols for everyone in this group
         for (let ev of group) {
             ev.totalCols = columns.length;

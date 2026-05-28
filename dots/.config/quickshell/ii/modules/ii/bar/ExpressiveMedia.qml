@@ -144,6 +144,7 @@ Item {
         anchors.centerIn: parent
         sourceComponent: Rectangle {
             id: cardVert
+            color: Appearance.colors.colSecondaryContainer
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
@@ -152,17 +153,25 @@ Item {
                 id: innerCol
                 anchors.centerIn: parent
                 width: parent.width - 8
-                height: parent.height - 8
-                spacing: 4
+                spacing: 6
 
                 // Art
                 Rectangle {
+                    id: artVertRect
                     Layout.alignment: Qt.AlignHCenter
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
-                    clip: true
+                    
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: artVertRect.width
+                            height: artVertRect.height
+                            radius: artVertRect.radius
+                        }
+                    }
 
                     StyledImage {
                         anchors.fill: parent
@@ -185,8 +194,6 @@ Item {
                     }
                 }
 
-                Item { Layout.fillHeight: true } // Spacer
-
                 // Play/Pause
                 RippleButton {
                     Layout.alignment: Qt.AlignHCenter
@@ -207,8 +214,6 @@ Item {
                         color: root.isPlaying ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
                     }
                 }
-
-                Item { Layout.fillHeight: true } // Spacer
 
                 // Next
                 RippleButton {

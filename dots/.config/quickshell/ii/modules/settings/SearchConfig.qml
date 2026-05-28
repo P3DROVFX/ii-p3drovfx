@@ -12,7 +12,7 @@ import qs.modules.waffle.looks
 
 ContentPage {
     id: page
-    readonly property int index: 9
+    readonly property int index: 5
     property bool register: parent.register ?? false
     forceWidth: true
 

@@ -374,35 +374,7 @@ Item {
                     text: Translation.tr("Settings")
                 }
             }
-            QuickToggleButton {
-                id: updateButton
-                toggled: confirm
-                property bool confirm: false
-                property string updateScript: Quickshell.env("HOME") + "/.local/share/ii-vynx/setup-ii-vynx.sh"
-                buttonIcon: confirm ? "check" : "download"
-                Timer {
-                    id: confirmTimer
-                    interval: 2000
-                    onTriggered: {
-                        confirmTimer.stop();
-                        updateButton.confirm = false;
-                    }
-                }
-                onClicked: {
-                    if (confirm) {
-                        GlobalStates.sidebarRightOpen = false;
-                        const script = updateScript;
-                        const fullCmd = `bash '${script}' --update-only`;
-                        Quickshell.execDetached([Config.options.apps.terminal, "-e", "bash", "-c", fullCmd + "; echo ''; echo 'Pressione Enter para fechar...'; read"]);
-                    } else {
-                        confirm = true;
-                        confirmTimer.start();
-                    }
-                }
-                StyledToolTip {
-                    text: Translation.tr("Update ii-vynx (preserving your customizations)")
-                }
-            }
+
             QuickToggleButton {
                 toggled: false
                 buttonIcon: "power_settings_new"

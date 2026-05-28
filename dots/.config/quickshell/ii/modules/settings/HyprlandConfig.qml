@@ -10,7 +10,7 @@ import Quickshell.Io
 
 ContentPage {
     id: page
-    readonly property int index: 4
+    readonly property int index: 7
     property bool register: parent.register ?? false
     forceWidth: true
 

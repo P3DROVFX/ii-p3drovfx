@@ -179,7 +179,7 @@ Item {
         bottomPadding: rootItem.isExpressive ? 0 : padding
         startRadius: rootItem.startRadius
         endRadius: rootItem.endRadius
-        colBackground: (barGroupStyle === 1 && isExpressive) ? "transparent" : ((itemLoader.item?.activated || rootItem.highlighted) ? rootItem.colBackgroundHighlight : rootItem.colBackground)
+        colBackground: isExpressive ? "transparent" : ((itemLoader.item?.activated || rootItem.highlighted) ? rootItem.colBackgroundHighlight : rootItem.colBackground)
 
         Loader {
             id: itemLoader
@@ -350,7 +350,9 @@ Item {
     }
     Component {
         id: sportsComp
-        Sports {}
+        Sports {
+            vertical: rootItem.vertical
+        }
     }
 
     Component {

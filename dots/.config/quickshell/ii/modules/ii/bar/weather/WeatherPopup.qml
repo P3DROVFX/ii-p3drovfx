@@ -17,10 +17,10 @@ StyledPopup {
     property bool compactMode: Config.options.bar.tooltips.compactPopups
     property int cardMargins: 14
 
-    // Forecast data model
-    property var forecastData: []
-    property var hourlyData: []
-    property bool forecastLoading: true
+    // Forecast data model bound to central Weather singleton
+    property var forecastData: Weather.forecastData
+    property var hourlyData: Weather.hourlyData
+    property bool forecastLoading: Weather.forecastLoading
     property int maxHourlyBars: 5
 
     property var filteredHourlyData: {
@@ -49,16 +49,11 @@ StyledPopup {
     readonly property string city: Config.options.bar.weather.city
     onCityChanged: {
         if (Config.options.bar.weather.city)
-            root.fetchForecast();
+            Weather.getData();
     }
 
     function fetchForecast() {
-        forecastLoading = true;
-        let city = Config.options.bar.weather.city || "auto";
-        //console.log(`[WeatherPopup] Fetching forecast for city: ${city}`);
-        city = city.trim().split(/\s+/).join('+');
-        forecastFetcher.command[2] = `curl -s "wttr.in/${city}?format=j1" | jq '{daily: [.weather[] | {date: .date, maxC: .maxtempC, minC: .mintempC, maxF: .maxtempF, minF: .mintempF, code: .hourly[4].weatherCode}], hourly: [.weather[0].hourly[], .weather[1].hourly[] | {time: .time, tempC: .tempC, tempF: .tempF, code: .weatherCode}]}'`;
-        forecastFetcher.running = true;
+        Weather.getData();
     }
 
     function getDayName(dateStr, index) {
@@ -100,28 +95,6 @@ StyledPopup {
         id: contentLayout
         anchors.centerIn: parent
         spacing: 12
-
-        Process {
-            id: forecastFetcher
-            command: ["bash", "-c", ""]
-            stdout: StdioCollector {
-                onStreamFinished: {
-                    if (text.length === 0) {
-                        root.forecastLoading = false;
-                        return;
-                    }
-                    try {
-                        const data = JSON.parse(text);
-                        root.forecastData = data.daily || [];
-                        root.hourlyData = data.hourly || [];
-                    } catch (e) {
-                        console.error(`[WeatherPopup] Forecast parse error: ${e.message}`);
-                    }
-                    root.forecastLoading = false;
-                }
-            }
-        }
-
         HeroCard {
             id: weatherHero
             Layout.minimumWidth: 320

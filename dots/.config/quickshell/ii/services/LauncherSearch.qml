@@ -951,8 +951,34 @@ Singleton {
         }
     }
 
-    Component {
-        id: resultComp
-        LauncherSearchResult {}
+    function createResult(properties) {
+        return {
+            key: properties.key || "",
+            type: properties.type || "",
+            fontType: properties.fontType !== undefined ? properties.fontType : LauncherSearchResult.FontType.Normal,
+            name: properties.name || "",
+            rawValue: properties.rawValue || "",
+            iconName: properties.iconName || "",
+            iconType: properties.iconType !== undefined ? properties.iconType : LauncherSearchResult.IconType.None,
+            verb: properties.verb || "",
+            blurImage: !!properties.blurImage,
+            pinned: !!properties.pinned,
+            execute: properties.execute || (() => { print("Not implemented"); }),
+            actions: properties.actions || [],
+            id: properties.id || "",
+            shown: properties.shown !== undefined ? properties.shown : true,
+            comment: properties.comment || "",
+            runInTerminal: !!properties.runInTerminal,
+            genericName: properties.genericName || "",
+            keywords: properties.keywords || [],
+            isMath: !!properties.isMath,
+            category: properties.category || properties.type || ""
+        };
+    }
+
+    readonly property var resultComp: {
+        "createObject": function(parent, properties) {
+            return root.createResult(properties);
+        }
     }
 }

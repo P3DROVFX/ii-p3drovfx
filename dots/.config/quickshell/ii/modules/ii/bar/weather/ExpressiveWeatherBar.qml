@@ -66,7 +66,7 @@ MouseArea {
             Layout.alignment: Qt.AlignHCenter
         }
         StyledText {
-            font.pixelSize: Appearance.font.pixelSize.small
+            font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colOnLayer1
             text: (Weather.data?.temp ?? "--°").replace(/[CF]$/, "")
             Layout.alignment: Qt.AlignHCenter
@@ -134,7 +134,7 @@ MouseArea {
             anchors.top: parent.top
             anchors.topMargin: 8
             anchors.horizontalCenter: parent.horizontalCenter
-            font.pixelSize: Appearance.font.pixelSize.small
+            font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colPrimary
             text: (Weather.data?.temp ?? "--°").replace(/[CF]$/, "")
             horizontalAlignment: Text.AlignHCenter

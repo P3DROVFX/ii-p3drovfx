@@ -89,6 +89,9 @@ Scope {
     PanelLoader {
         component: Overview {}
     }
+    // GNOME-like window scale-out during overview (OverviewWindowTransition)
+    // It's a Scope managing its own Variants/PanelWindows — instantiate directly.
+    OverviewWindowTransition {}
     PanelLoader {
         component: Polkit {}
     }

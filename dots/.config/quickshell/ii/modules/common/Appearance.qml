@@ -255,7 +255,7 @@ Singleton {
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
             }
         }
-    }
+    } 
     property int blurSize: Config.options.appearance.blurSize ?? 8
     onBlurSizeChanged: {
         if (Config.ready) {
@@ -267,6 +267,9 @@ Singleton {
     onIgnoreAlphaChanged: {
         if (Config.ready) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + ignoreAlpha + " })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })"]);
         }
     }
 
@@ -281,6 +284,9 @@ Singleton {
             }
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + root.ignoreAlpha + " })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })"]);
             
             let colorStr = activeBorderColor.toString();
             let rgb = "";

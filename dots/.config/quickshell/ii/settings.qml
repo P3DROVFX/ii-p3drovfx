@@ -57,14 +57,14 @@ ApplicationWindow {
             component: "modules/settings/InterfaceConfig.qml"
         },
         {
+            name: Translation.tr("Search"),
+            icon: "manage_search",
+            component: "modules/settings/SearchConfig.qml"
+        },
+        {
             name: Translation.tr("Services"),
             icon: "api",
             component: "modules/settings/ServicesConfig.qml"
-        },
-        {
-            name: Translation.tr("Advanced"),
-            icon: "construction",
-            component: "modules/settings/AdvancedConfig.qml"
         },
         {
             name: Translation.tr("Hyprland"),
@@ -72,9 +72,9 @@ ApplicationWindow {
             component: "modules/settings/HyprlandConfig.qml"
         },
         {
-            name: Translation.tr("Search"),
-            icon: "manage_search",
-            component: "modules/settings/SearchConfig.qml"
+            name: Translation.tr("Advanced"),
+            icon: "construction",
+            component: "modules/settings/AdvancedConfig.qml"
         },
         {
             name: Translation.tr("About"),

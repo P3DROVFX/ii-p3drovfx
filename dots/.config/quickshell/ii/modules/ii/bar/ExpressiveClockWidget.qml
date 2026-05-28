@@ -93,7 +93,7 @@ Item {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Black
-                    color: Appearance.colors.colPrimary
+                    color: Appearance.colors.colOnTertiaryContainer
                     text: layoutVert.ampm
                 }
             }
@@ -200,7 +200,7 @@ Item {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.light
-                    color: Appearance.colors.colPrimary
+                    color: Appearance.colors.colOnTertiaryContainer
                     text: layoutHoriz.ampm
                 }
             }

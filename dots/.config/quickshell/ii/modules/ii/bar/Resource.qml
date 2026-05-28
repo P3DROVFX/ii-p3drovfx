@@ -15,6 +15,10 @@ Item {
     implicitHeight: Appearance.sizes.baseBarHeight
     property bool warning: percentage * 100 >= warningThreshold
 
+    property color colorActive: Appearance.colors.colOnSecondaryContainer
+    property color colorIcon: Appearance.colors.colOnSecondaryContainer
+    property color colorText: Appearance.colors.colOnLayer1
+
     RowLayout {
         id: resourceRowLayout
         spacing: 4
@@ -29,7 +33,7 @@ Item {
             lineWidth: Appearance.rounding.unsharpen
             value: percentage
             implicitSize: 20
-            colPrimary: root.warning ? Appearance.colors.colError : Appearance.colors.colOnSecondaryContainer
+            colPrimary: root.warning ? Appearance.colors.colError : root.colorActive
             accountForLightBleeding: !root.warning
             enableAnimation: false
 
@@ -44,7 +48,7 @@ Item {
                     fill: 1
                     text: iconName
                     iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.m3colors.m3onSecondaryContainer
+                    color: root.colorIcon
                 }
             }
         }
@@ -66,7 +70,7 @@ Item {
             StyledText {
                 id: percentageText
                 anchors.centerIn: parent
-                color: Appearance.colors.colOnLayer1
+                color: root.colorText
                 font.pixelSize: Appearance.font.pixelSize.small
                 text: `${Math.round(percentage * 100).toString()}%`
             }

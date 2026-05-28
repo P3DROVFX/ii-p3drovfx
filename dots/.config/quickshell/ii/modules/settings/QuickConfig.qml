@@ -101,7 +101,11 @@ ContentPage {
                     colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
                     colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
                     onClicked: {
-                        Quickshell.execDetached(`${Directories.wallpaperSwitchScriptPath}`);
+                        if (Config.options.wallpaperSelector.useSystemFileDialog) {
+                            Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode);
+                        } else {
+                            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
+                        }
                     }
                 }
 

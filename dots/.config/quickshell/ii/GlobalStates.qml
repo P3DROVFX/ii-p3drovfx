@@ -14,6 +14,7 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    property bool cheatsheetOpen: false
     property bool crosshairOpen: false
     property bool mediaControlsOpen: false
     property bool osdBrightnessOpen: false
@@ -22,6 +23,13 @@ Singleton {
     property bool overlayOpen: false
     property bool overviewOpen: false
     property bool searchOnlyMode: false
+
+    // Published by Background.qml for the window-zoom transition layer
+    // scaleValue: animated 1.0 → ~0.85 during overview open (zoomOutStyle 0 only)
+    // originX/Y: scale transform center in screen coordinates
+    property real overviewZoomScale: 1.0
+    property real overviewZoomOriginX: 0.5
+    property real overviewZoomOriginY: 0.5
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false

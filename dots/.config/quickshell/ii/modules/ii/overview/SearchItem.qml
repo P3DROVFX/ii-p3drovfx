@@ -130,7 +130,7 @@ RippleButton {
             items.push({
                 name: action.name,
                 icon: action.iconName || "play_arrow",
-                nativeIcon: !!action.iconName,
+                nativeIcon: action.iconType === LauncherSearchResult.IconType.System,
                 execute: () => {
                     root.actionPanelOpen = false;
                     GlobalStates.overviewOpen = false;
@@ -234,10 +234,10 @@ RippleButton {
             (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small)
         bottomRightRadius: bottomLeftRadius
 
-        Behavior on topLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-        Behavior on topRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-        Behavior on bottomLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-        Behavior on bottomRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+        Behavior on topLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+        Behavior on topRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+        Behavior on bottomLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+        Behavior on bottomRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
         Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
 
         Row {
@@ -294,10 +294,10 @@ RippleButton {
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
                 }
-                Behavior on topLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                Behavior on topRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                Behavior on bottomLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                Behavior on bottomRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+                Behavior on topLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                Behavior on topRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                Behavior on bottomLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                Behavior on bottomRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
                 Behavior on color {
                     ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
                 }
@@ -617,6 +617,94 @@ RippleButton {
                         }
                     }
                 }
+
+                Loader {
+                    id: nowPlayingLoader
+                    active: root.isNowPlaying
+                    visible: root.isNowPlaying
+                    anchors.fill: parent
+                    anchors.leftMargin: root.buttonHorizontalPadding
+                    anchors.rightMargin: root.buttonHorizontalPadding
+                    anchors.topMargin: root.buttonVerticalPadding
+                    anchors.bottomMargin: root.buttonVerticalPadding
+
+                    sourceComponent: RowLayout {
+                        spacing: 14
+
+                        Item {
+                            Layout.preferredWidth: 56
+                            Layout.preferredHeight: 56
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.large
+                                color: Appearance.colors.colSurfaceContainerHighest
+                            }
+
+                            Image {
+                                anchors.fill: parent
+                                source: MprisController.artUrl || ""
+                                fillMode: Image.PreserveAspectCrop
+                                smooth: true
+                                visible: source !== ""
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: 56; height: 56
+                                        radius: Appearance.rounding.large
+                                    }
+                                }
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "music_note"
+                                iconSize: 28
+                                color: Appearance.colors.colOnSurfaceVariant
+                                visible: !MprisController.artUrl || MprisController.artUrl === ""
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            StyledText {
+                                text: MprisController.activePlayer?.trackTitle || Translation.tr("Nothing playing")
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.DemiBold
+                                font.family: Appearance.font.family.main
+                                color: root.colForeground
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            StyledText {
+                                text: MprisController.activePlayer?.trackArtist || ""
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.family: Appearance.font.family.main
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                                visible: text !== ""
+                            }
+                        }
+
+                        RippleButton {
+                            implicitWidth: 44; implicitHeight: 44
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colRipple: Appearance.colors.colPrimaryActive
+                            visible: !root.actionPanelOpen
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: MprisController.isPlaying ? "pause" : "play_arrow"
+                                iconSize: 26
+                                color: Appearance.m3colors.m3onPrimary
+                            }
+                            onClicked: MprisController.togglePlaying()
+                        }
+                    }
+                }
             }
 
             Repeater {
@@ -773,110 +861,6 @@ RippleButton {
             event.accepted = true;
         }
     }
-
-    Loader {
-        id: nowPlayingLoader
-        active: root.isNowPlaying
-        anchors.fill: parent
-        anchors.leftMargin: root.horizontalMargin + root.buttonHorizontalPadding
-        anchors.rightMargin: root.horizontalMargin + root.buttonHorizontalPadding
-        anchors.topMargin: root.buttonVerticalPadding
-        anchors.bottomMargin: root.buttonVerticalPadding
-
-        sourceComponent: RowLayout {
-            spacing: 14
-
-            Item {
-                Layout.preferredWidth: 56
-                Layout.preferredHeight: 56
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Appearance.rounding.large
-                    color: Appearance.colors.colSurfaceContainerHighest
-                }
-
-                Image {
-                    anchors.fill: parent
-                    source: MprisController.artUrl || ""
-                    fillMode: Image.PreserveAspectCrop
-                    smooth: true
-                    visible: source !== ""
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: 56; height: 56
-                            radius: Appearance.rounding.large
-                        }
-                    }
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "music_note"
-                    iconSize: 28
-                    color: Appearance.colors.colOnSurfaceVariant
-                    visible: !MprisController.artUrl || MprisController.artUrl === ""
-                }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 2
-                StyledText {
-                    text: MprisController.activePlayer?.trackTitle || Translation.tr("Nothing playing")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.DemiBold
-                    font.family: Appearance.font.family.main
-                    color: root.colForeground
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-                StyledText {
-                    text: MprisController.activePlayer?.trackArtist || ""
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.family: Appearance.font.family.main
-                    color: Appearance.colors.colSubtext
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    visible: text !== ""
-                }
-            }
-
-            RowLayout {
-                spacing: 4
-                RippleButton {
-                    implicitWidth: 36; implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                    colRipple: Appearance.colors.colPrimaryContainerActive
-                    enabled: MprisController.canGoPrevious
-                    opacity: enabled ? 1.0 : 0.3
-                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_previous"; iconSize: 22; color: root.colForeground }
-                    onClicked: MprisController.previous()
-                }
-                RippleButton {
-                    implicitWidth: 44; implicitHeight: 44
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colRipple: Appearance.colors.colPrimaryActive
-                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: MprisController.isPlaying ? "pause" : "play_arrow"; iconSize: 26; color: Appearance.m3colors.m3onPrimary }
-                    onClicked: MprisController.togglePlaying()
-                }
-                RippleButton {
-                    implicitWidth: 36; implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                    colRipple: Appearance.colors.colPrimaryContainerActive
-                    enabled: MprisController.canGoNext
-                    opacity: enabled ? 1.0 : 0.3
-                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_next"; iconSize: 22; color: root.colForeground }
-                    onClicked: MprisController.next()
-                }
-            }
-        }
-    }
 }
+
+

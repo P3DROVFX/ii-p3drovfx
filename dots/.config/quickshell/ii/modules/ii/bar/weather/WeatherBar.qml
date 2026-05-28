@@ -47,7 +47,7 @@ MouseArea {
 
         StyledText {
             visible: true
-            font.pixelSize: Appearance.font.pixelSize.small
+            font.pixelSize: root.vertical ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer1
             text: Weather.data?.temp ?? "--°"
             Layout.alignment: root.vertical ? Qt.AlignHCenter : Qt.AlignVCenter

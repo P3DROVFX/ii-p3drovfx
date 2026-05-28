@@ -402,11 +402,6 @@ main() {
         esac
     done
 
-    # Fallback to default wallpaper if empty
-    if [[ -z "$imgpath" || "$imgpath" == "null" ]]; then
-        imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
-    fi
-
     # If accentColor is set in config, use it
     config_color="$(get_accent_color_from_config)"
     if [[ "$config_color" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
@@ -438,7 +433,20 @@ main() {
     # Only prompt for wallpaper if not using --color and not using --noswitch and no imgpath set
     if [[ -z "$imgpath" && -z "$color_flag" && -z "$noswitch_flag" ]]; then
         cd "$(xdg-user-dir PICTURES)/Wallpapers/showcase" 2>/dev/null || cd "$(xdg-user-dir PICTURES)/Wallpapers" 2>/dev/null || cd "$(xdg-user-dir PICTURES)" || return 1
-        imgpath="$(kdialog --getopenfilename . --title 'Choose wallpaper')"
+        if command -v zenity >/dev/null; then
+            imgpath="$(zenity --file-selection --title="Choose wallpaper" 2>/dev/null)"
+        else
+            imgpath="$(kdialog --getopenfilename . --title 'Choose wallpaper')"
+        fi
+        if [[ -z "$imgpath" ]]; then
+            echo "Wallpaper selection cancelled."
+            exit 0
+        fi
+    fi
+
+    # Fallback to default wallpaper if empty
+    if [[ -z "$imgpath" || "$imgpath" == "null" ]]; then
+        imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
     fi
 
     # Only clear accent color if a NEW image is provided and noswitch is NOT set

@@ -77,7 +77,7 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     shapeString: "Cookie12Sided"
                     color: Appearance.colors.colPrimary
-                    implicitSize: Appearance.sizes.verticalBarWidth - 8
+                    implicitSize: Appearance.sizes.verticalBarWidth - 18
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "keyboard"

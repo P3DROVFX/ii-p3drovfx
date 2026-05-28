@@ -28,8 +28,8 @@ Item {
                            query.startsWith(Config.options.search.prefix.fileSearch);
         return isPrefixed ? 500 : 15;
     }
-    readonly property bool isSearching: debounceTimer.running && searchingText !== ""
-    readonly property bool showSkeletons: isSearching
+    readonly property bool isSearching: false
+    readonly property bool showSkeletons: false
 
     property string searchingText: LauncherSearch.query
     readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
@@ -109,7 +109,7 @@ Item {
         const q = LauncherSearch.query.trim().toLowerCase();
         let list = Array.from(results);
 
-        if (Config.options.search.alwaysListApps) {
+        if (Config.options.search.alwaysListApps || q !== "") {
             list = list.filter(item => item.key !== "mpris:now-playing");
         }
 
@@ -136,7 +136,7 @@ Item {
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Left) {
-            if (root.alwaysListAppsMode && MprisController.activePlayer !== null) {
+            if (nowPlayingFloatingBubble.bubbleActive) {
                 if (searchBar.searchInput.activeFocus && searchBar.searchInput.cursorPosition > 0) {
                     // Let cursor move left in input
                     return;
@@ -376,30 +376,13 @@ Item {
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
 
-                    add: Transition {
-                        NumberAnimation { properties: "opacity,scale"; from: 0.8; to: 1.0; duration: 200; easing.type: Easing.OutQuad }
-                    }
-                    remove: Transition {
-                        NumberAnimation { properties: "opacity,scale"; from: 1.0; to: 0.8; duration: 150; easing.type: Easing.OutQuad }
-                    }
-                    displaced: Transition {
-                        NumberAnimation { properties: "y"; duration: 200; easing.type: Easing.OutQuad }
-                    }
+
 
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
                             if (appResults.count > 0)
                                 appResults.currentIndex = 0;
-                        }
-                    }
-
-                    Timer {
-                        id: debounceTimer
-                        interval: root.typingDebounceInterval
-                        onTriggered: {
-                            resultModel.values = root.processResults(LauncherSearch.results);
-                            root.focusFirstItem();
                         }
                     }
 
@@ -413,13 +396,8 @@ Item {
                                 return;
                             }
 
-                            if (LauncherSearch.query === "" || newResults.length === 0) {
-                                debounceTimer.stop();
-                                resultModel.values = root.processResults(newResults);
-                                root.focusFirstItem();
-                            } else {
-                                debounceTimer.restart();
-                            }
+                            resultModel.values = root.processResults(newResults);
+                            root.focusFirstItem();
                         }
                     }
 
@@ -614,14 +592,18 @@ Item {
     // Now Playing Floating Bubble (Expressive Spinning Vinyl)
     Rectangle {
         id: nowPlayingFloatingBubble
-        visible: root.alwaysListAppsMode && MprisController.activePlayer !== null
+        
+        readonly property bool bubbleActive: (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
+        
         anchors.right: searchWidgetContent.left
         anchors.rightMargin: 12
         y: searchWidgetContent.y + searchBar.y + (searchBar.height - height) / 2
         
-        width: 96
+        width: bubbleActive ? 96 : 0
         height: 48
         radius: 24
+        visible: width > 0
+        clip: true
         
         color: root.isNowPlayingFocused 
             ? Appearance.colors.colSurfaceContainerHigh 
@@ -636,11 +618,20 @@ Item {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(nowPlayingFloatingBubble)
         }
         
+        Behavior on width {
+            NumberAnimation {
+                duration: 350
+                easing.type: Easing.OutQuint
+            }
+        }
+        
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 6
             anchors.rightMargin: 6
             spacing: 6
+            opacity: nowPlayingFloatingBubble.width >= 80 ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 150 } }
             
             // Album art circle (Expressive Spinning Vinyl)
             Rectangle {

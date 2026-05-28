@@ -58,11 +58,58 @@ ContentPage {
             }
         }
         ConfigSwitch {
-            buttonIcon: "masked_transitions"
+            buttonIcon: "blur_on"
             text: Translation.tr("Animate wallpaper changes")
             checked: Config.options.background.animateWallpaperChanges
             onCheckedChanged: {
                 Config.options.background.animateWallpaperChanges = checked;
+            }
+        }
+        ConfigSwitch {
+            buttonIcon: "zoom_in_map"
+            text: Translation.tr("Zoom animation when overview/cheatsheet is open")
+            checked: Config.options.background.zoomOutEnabled
+            onCheckedChanged: {
+                Config.options.background.zoomOutEnabled = checked;
+            }
+        }
+        ContentSubsection {
+            visible: Config.options.background.zoomOutEnabled
+            title: Translation.tr("Zoom background style")
+            ConfigSelectionArray {
+                currentValue: Config.options.background.zoomOutStyle
+                onSelected: newValue => {
+                    Config.options.background.zoomOutStyle = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Gnome Like"),
+                        icon: "blur_on",
+                        value: 0
+                    },
+                    {
+                        displayName: Translation.tr("Default"),
+                        icon: "grid_view",
+                        value: 1
+                    },
+                    {
+                        displayName: Translation.tr("Zoom In"),
+                        icon: "zoom_in",
+                        value: 2
+                    }
+                ]
+            }
+        }
+        ConfigSwitch {
+            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0
+            buttonIcon: "open_with"
+            text: Translation.tr("Experimental - Scale windows with wallpaper (GNOME-like)")
+            checked: Config.options.background.windowZoomOnOverview
+            onCheckedChanged: {
+                Config.options.background.windowZoomOnOverview = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
             }
         }
     }

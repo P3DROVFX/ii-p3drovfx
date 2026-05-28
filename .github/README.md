@@ -4,11 +4,12 @@ A premium Material 3 / Material You dotfiles for Hyprland, powered by Quickshell
 
 # System Preview
 
-<img width="1947" height="3231" alt="Frame 145" src="https://github.com/user-attachments/assets/61327556-d985-44b2-b31b-2dad51849984" />
+<img width="1947" height="3536" alt="Frame 145(1)" src="https://github.com/user-attachments/assets/33e9cc10-d09f-446d-b83c-f6f335f89988" />
+
 
 ## Overview
 
-This repository is a heavily customized fork of **[ii-vynx](https://github.com/vaguesyntax/ii-vynx)**, which itself is based on **[illogical-impulse](https://github.com/end-4/dots-hyprland)**. 
+This repository is a heavily customized fork of **[ii-vynx](https://github.com/vaguesyntax/ii-vynx)**, which itself is based on **[illogical-impulse](https://github.com/end-4/dots-hyprland)**. **This is my personal customization, it's not focused on performance or stability, if you are using it, expect a lot of bugs**, if you find one, please create an issue or report to me in my discord: p3drovfx. 
 
 It aims to provide a state-of-the-art Linux desktop experience by strictly adhering to **Material 3 (Material You)** design principles, featuring dynamic theming via Matugen and a highly modular architecture built on **Quickshell**.
 
@@ -60,7 +61,7 @@ Please refer to the **[wiki](https://github.com/vaguesyntax/ii-vynx/wiki)** for 
 - **[end-4](https://github.com/end-4):** Creator of illogical-impulse.
 - **[vaguesyntax](https://github.com/vaguesyntax):** Creator of ii-vynx.
 - **[pc-trade](https://github.com/pctrade):** Some design and features inspo.
-- **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Instalatin bug fixes.
+- **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Instalation bug fixes.
 - **[Quickshell](https://quickshell.org/):** Widget system.
 - **[Hyprland](https://hypr.land/):** Compositor.
 
