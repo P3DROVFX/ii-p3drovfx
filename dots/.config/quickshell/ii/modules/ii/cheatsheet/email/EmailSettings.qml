@@ -169,7 +169,10 @@ Item {
 
         ColumnLayout {
             id: contentLayout
-            width: parent.width - 24
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
             spacing: 48 // Gap between sections
 
             // 1. Account Section
@@ -209,10 +212,10 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 16
-                            anchors.rightMargin: 16
-                            anchors.topMargin: 12
-                            anchors.bottomMargin: 12
+                            anchors.leftMargin: 16 + accCard.border.width
+                            anchors.rightMargin: 16 + accCard.border.width
+                            anchors.topMargin: 12 + accCard.border.width
+                            anchors.bottomMargin: 12 + accCard.border.width
                             spacing: 12
 
                             Item {

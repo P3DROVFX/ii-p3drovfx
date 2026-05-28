@@ -675,27 +675,6 @@ Item {
                                             }
                                         }
 
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            Layout.alignment: Qt.AlignVCenter
-                                            text: model.from.split("<")[0].trim() || model.from
-                                            font.family: Appearance.font.family.main
-                                            font.pixelSize: Appearance.font.pixelSize.normal
-                                            font.weight: model.unread ? Font.Bold : Font.Normal
-                                            color: model.unread ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        StyledText {
-                                            visible: root.activeTab === "all_inboxes" && model.recipientAccount !== ""
-                                            text: model.recipientAccount
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            color: Appearance.colors.colPrimary
-                                            opacity: 0.6
-                                            Layout.alignment: Qt.AlignVCenter
-                                        }
-
                                         Rectangle {
                                             Layout.preferredWidth: 8
                                             Layout.preferredHeight: 8
@@ -708,6 +687,18 @@ Item {
                                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                             }
                                         }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            Layout.alignment: Qt.AlignVCenter
+                                            text: model.from.split("<")[0].trim() || model.from
+                                            font.family: Appearance.font.family.main
+                                            font.pixelSize: Appearance.font.pixelSize.normal
+                                            font.weight: model.unread ? Font.Bold : Font.Normal
+                                            color: model.unread ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
                                     }
                                 }
 
@@ -719,6 +710,16 @@ Item {
                                         anchors.margins: EmailService.compactMode ? 8 : 16
                                         anchors.leftMargin: EmailService.compactMode ? 12 : 24
                                         spacing: EmailService.compactMode ? 2 : 4
+
+                                        StyledText {
+                                            visible: root.activeTab === "all_inboxes" && model.recipientAccount !== "" && !EmailService.compactMode
+                                            text: model.recipientAccount
+                                            font.pixelSize: Appearance.font.pixelSize.smallest
+                                            font.weight: Font.DemiBold
+                                            color: Appearance.colors.colPrimary
+                                            opacity: 0.6
+                                            Layout.fillWidth: true
+                                        }
 
                                         RowLayout {
                                             Layout.fillWidth: true

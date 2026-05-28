@@ -29,7 +29,7 @@ Singleton {
 
     property int maxEmails: 20
     property string historyId: ""
-    property bool enableAllInboxes: true
+    property bool enableAllInboxes: false
     property bool enableUpdates: false
     property bool enablePromotions: false
     property bool enableSocials: false
@@ -355,6 +355,7 @@ Singleton {
             KeyringStorage.setNestedField(["gmail_user_email"], email);
             KeyringStorage.setNestedField(["gmail_user_avatar"], picture);
 
+            _clearAccountData();
             _updateActiveAccount();
             root._refreshAndFetch();
         }
@@ -457,16 +458,7 @@ Singleton {
         }
     }
 
-    function switchAccount(index) {
-        if (index < 0 || !root.accounts || index >= root.accounts.length)
-            return;
-        if (index === root.activeAccountIndex && root.authenticated)
-            return;
-
-        root.activeAccountIndex = index;
-        root._accessToken = "";
-
-        // Clear all models
+    function _clearAccountData() {
         inboxMessages.clear();
         allInboxesMessages.clear();
         sentMessages.clear();
@@ -478,6 +470,27 @@ Singleton {
         searchMessagesModel.clear();
         labels.clear();
 
+        root._accessToken = "";
+        root.historyId = "";
+        root._pageTokens = ({});
+        root.inboxUnreadCount = 0;
+        root.spamUnreadCount = 0;
+        root.sentUnreadCount = 0;
+        root.trashUnreadCount = 0;
+        root.starredUnreadCount = 0;
+        root.importantUnreadCount = 0;
+        root.purchasesUnreadCount = 0;
+        root.syncingLabels = ({});
+    }
+
+    function switchAccount(index) {
+        if (index < 0 || !root.accounts || index >= root.accounts.length)
+            return;
+        if (index === root.activeAccountIndex && root.authenticated)
+            return;
+
+        root.activeAccountIndex = index;
+        _clearAccountData();
         _updateActiveAccount();
         _refreshAndFetch();
     }

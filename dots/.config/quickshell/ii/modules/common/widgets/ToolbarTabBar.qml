@@ -25,13 +25,10 @@ Item {
     implicitWidth: contentItem.implicitWidth
     implicitHeight: 40
 
-    property int tabCount: tabButtonList.length
-
     property Component delegate: ToolbarTabButton {
         required property int index
         required property var modelData
         current: index == root.currentIndex
-        tabCount: root.tabCount
         text: modelData.name
         materialSymbol: modelData.icon
         onClicked: {
