@@ -11,9 +11,19 @@ Item {
     property int updateInterval: Config.options.bar.sports.updateInterval
 
     property var allGames: []
-    property var customOrder: []
+    property var customOrder: Config.options.bar.sports.customOrder
+    onCustomOrderChanged: {
+        Config.options.bar.sports.customOrder = customOrder;
+    }
     property int currentGameIndex: 0
     property var currentGame: null
+    onCurrentGameChanged: {
+        if (currentGame) {
+            Config.options.bar.sports.activeGameId = currentGame.id;
+        } else {
+            Config.options.bar.sports.activeGameId = "";
+        }
+    }
 
     property bool loading: false
     property string error: ""
@@ -324,7 +334,7 @@ Item {
         }
 
         let nextIndex = 0;
-        let currentId = currentGame ? currentGame.id : null;
+        let currentId = currentGame ? currentGame.id : Config.options.bar.sports.activeGameId;
 
         if (currentId) {
             let foundIndex = -1;

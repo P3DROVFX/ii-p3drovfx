@@ -71,18 +71,9 @@ StyledPopup {
                             let item = arr.splice(gamesColumn.draggedIndex, 1)[0];
                             arr.splice(gamesColumn.hoverIndex, 0, item);
 
-                            if (gamesColumn.hoverIndex === 0) {
-                                SportsService.currentGameIndex = 0;
-                                SportsService.currentGame = item;
-                            } else {
-                                let currentId = SportsService.currentGame ? SportsService.currentGame.id : null;
-                                if (currentId) {
-                                    let newIdx = arr.findIndex(g => g.id === currentId);
-                                    if (newIdx !== -1) {
-                                        SportsService.currentGameIndex = newIdx;
-                                    }
-                                }
-                            }
+                            // Whichever game is at the first index (index 0) becomes the active game
+                            SportsService.currentGameIndex = 0;
+                            SportsService.currentGame = arr[0];
 
                             SportsService.customOrder = arr.map(g => g.id);
 
@@ -100,7 +91,8 @@ StyledPopup {
                 function getCardY(idx, gamesList) {
                     let yPos = 0;
                     for (let i = 0; i < idx; i++) {
-                        let md = gamesList[i];
+                        let physicalIdx = gamesList.length > 0 ? (i + SportsService.currentGameIndex) % gamesList.length : i;
+                        let md = gamesList[physicalIdx];
                         let cardH = (md && md.lastPlay) ? 190 : 140;
                         yPos += cardH + 8;
                     }
@@ -134,9 +126,14 @@ StyledPopup {
                         
                         readonly property int totalCount: SportsService.allGames.length
                         readonly property int vIndex: index
+                        readonly property int visualIndex: {
+                            let len = SportsService.allGames.length;
+                            if (len === 0) return index;
+                            return (index - SportsService.currentGameIndex + len) % len;
+                        }
                         readonly property int previewIndex: {
                             if (gamesColumn.draggedIndex === -1) {
-                                return index;
+                                return visualIndex;
                             }
                             if (gamesColumn.draggedIndex === index) {
                                 return gamesColumn.hoverIndex;
@@ -167,7 +164,7 @@ StyledPopup {
 
                         y: {
                             if (gamesColumn.draggedIndex === -1) {
-                                return gamesColumn.getCardY(index, SportsService.allGames);
+                                return gamesColumn.getCardY(visualIndex, SportsService.allGames);
                             }
                             if (gamesColumn.draggedIndex === index) {
                                 return gamesColumn.dragY;
@@ -210,6 +207,17 @@ StyledPopup {
                             cursorShape: dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
                             onPressed: (mouse) => {
+                                if (SportsService.currentGameIndex > 0 && SportsService.currentGameIndex < SportsService.allGames.length) {
+                                    let arr = [...SportsService.allGames];
+                                    let rotationCount = SportsService.currentGameIndex;
+                                    for (let r = 0; r < rotationCount; r++) {
+                                        let first = arr.shift();
+                                        arr.push(first);
+                                    }
+                                    SportsService.currentGameIndex = 0;
+                                    SportsService.allGames = arr;
+                                }
+
                                 gamesColumn.draggedIndex = index;
                                 gamesColumn.hoverIndex = index;
                                 gamesColumn.dragY = gamesColumn.getCardY(index, SportsService.allGames);

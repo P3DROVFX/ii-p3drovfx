@@ -15,11 +15,12 @@ LazyLoader {
     property bool animate: true
     property bool stickyHover: false
 
+    property bool isClickedOpen: false
     property bool _popupHovered: false
     property bool _stickyActive: false
     property bool _targetHovered: hoverTarget ? hoverTarget.containsMouse : false
 
-    active: stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse)
+    active: Config.options.bar.tooltips.clickToShow ? isClickedOpen : (stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse))
 
     // I have NO FUCKING IDEA why we cant use a normal timer here
     // Because if we do, we FUCKING cannot reference the timer from anywhere
@@ -44,18 +45,47 @@ LazyLoader {
         }
     }
 
-    on_TargetHoveredChanged: _evaluateStickyState()
+    on_TargetHoveredChanged: {
+        if (Config.options.bar.tooltips.clickToShow) {
+            if (_targetHovered) {
+                isClickedOpen = !isClickedOpen;
+            }
+        } else {
+            _evaluateStickyState();
+        }
+    }
 
     onActiveChanged: {
         if (!active) {
             _popupHovered = false;
             _timers.grace.stop();
+            isClickedOpen = false;
         }
     }
 
     component: PanelWindow {
         id: popupWindow
         color: "transparent"
+
+        Component.onCompleted: {
+            if (Config.options.bar.tooltips.clickToShow) {
+                GlobalFocusGrab.addDismissable(popupWindow);
+            }
+        }
+        Component.onDestruction: {
+            if (Config.options.bar.tooltips.clickToShow) {
+                GlobalFocusGrab.removeDismissable(popupWindow);
+            }
+        }
+
+        Connections {
+            target: GlobalFocusGrab
+            function onDismissed() {
+                if (Config.options.bar.tooltips.clickToShow) {
+                    root.isClickedOpen = false;
+                }
+            }
+        }
 
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
@@ -241,7 +271,9 @@ LazyLoader {
                 id: popupHoverHandler
                 onHoveredChanged: {
                     root._popupHovered = hovered;
-                    root._evaluateStickyState();
+                    if (!Config.options.bar.tooltips.clickToShow) {
+                        root._evaluateStickyState();
+                    }
                 }
             }
 

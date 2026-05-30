@@ -20,7 +20,7 @@ MouseArea {
     
     implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
     implicitHeight: shouldBeVisible ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
-    hoverEnabled: true
+    hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
     // Animation offsets
     property real verticalOffset: 0
@@ -113,7 +113,9 @@ MouseArea {
         }
     }
 
-    onClicked: SportsService.nextGame()
+    onClicked: {
+        SportsService.nextGame();
+    }
 
     Behavior on implicitWidth {
         NumberAnimation {
