@@ -22,13 +22,13 @@ RippleButton {
     property var iconType: entry?.iconType
     property string iconName: entry?.iconName ?? ""
     property var itemExecute: entry?.execute
-    property var fontType: switch(entry?.fontType) {
-        case LauncherSearchResult.FontType.Monospace:
-            return "monospace"
-        case LauncherSearchResult.FontType.Normal:
-            return "main"
-        default:
-            return "main"
+    property var fontType: switch (entry?.fontType) {
+    case LauncherSearchResult.FontType.Monospace:
+        return "monospace";
+    case LauncherSearchResult.FontType.Normal:
+        return "main";
+    default:
+        return "main";
     }
     property string itemClickActionName: entry?.verb ?? "Open"
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
@@ -38,26 +38,31 @@ RippleButton {
     property bool blurImage: entry?.blurImage ?? false
 
     function formatMathResult(raw) {
-        if (!raw) return { expression: "", value: "" };
+        if (!raw)
+            return {
+                expression: "",
+                value: ""
+            };
         let parts = raw.split("=");
         if (parts.length >= 2) {
             let lhs = parts[0].trim();
             let rhs = parts.slice(1).join("=").trim();
-            
+
             // Clean up LHS
-            lhs = lhs.replace(/\s*\*\s*/g, " ")
-                     .replace(/\bdeg\s*\*\s*/gi, "°")
-                     .replace(/\bdeg\b/gi, "°");
-                     
+            lhs = lhs.replace(/\s*\*\s*/g, " ").replace(/\bdeg\s*\*\s*/gi, "°").replace(/\bdeg\b/gi, "°");
+
             // Clean up RHS
-            rhs = rhs.replace(/\s*\*\s*/g, " ")
-                     .replace(/\bdeg\s*\*\s*/gi, "°")
-                     .replace(/\bdeg\b/gi, "°")
-                     .replace(/\bapprox\.\s*/gi, "≈ ");
-                     
-            return { expression: lhs, value: rhs };
+            rhs = rhs.replace(/\s*\*\s*/g, " ").replace(/\bdeg\s*\*\s*/gi, "°").replace(/\bdeg\b/gi, "°").replace(/\bapprox\.\s*/gi, "≈ ");
+
+            return {
+                expression: lhs,
+                value: rhs
+            };
         }
-        return { expression: "", value: raw };
+        return {
+            expression: "",
+            value: raw
+        };
     }
 
     property bool actionPanelOpen: false
@@ -100,9 +105,7 @@ RippleButton {
                 const isSystemControl = root.entry?.key?.startsWith("sys:");
                 const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
                 const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-                const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") 
-                    || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings")
-                    || root.itemType === Translation.tr("Folder Alias");
+                const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
                 root.actionPanelOpen = false;
                 if (!isConfirming && !isModeSwitch) {
@@ -178,11 +181,7 @@ RippleButton {
 
     buttonRadius: 0
 
-    colBackground: root.isBuiltinItem ?
-        ((root.down || root.keyboardDown || isSelected) ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainer) :
-        ((root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive :
-        (isSelected ? Appearance.colors.colSecondaryContainer :
-        Appearance.colors.colSurfaceContainerHigh))
+    colBackground: root.isBuiltinItem ? ((root.down || root.keyboardDown || isSelected) ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainer) : ((root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive : (isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh))
     colBackgroundHover: root.isBuiltinItem ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colSecondaryContainerHover
     colRipple: Appearance.colors.colPrimaryContainerActive
     property color colForeground: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface)
@@ -213,10 +212,10 @@ RippleButton {
     property string displayContent: highlightContent(root.itemName, root.query)
 
     property list<string> urls: {
-        if (!root.itemName) return [];
+        if (!root.itemName)
+            return [];
         const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
-        const matches = root.itemName?.match(urlRegex)
-            ?.filter(url => !url.includes("…"))
+        const matches = root.itemName?.match(urlRegex)?.filter(url => !url.includes("…"));
         return matches ? matches : [];
     }
 
@@ -233,18 +232,40 @@ RippleButton {
         antialiasing: true
         clip: true
 
-        topLeftRadius: root.isFirst ? Appearance.rounding.large :
-            (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small)
+        topLeftRadius: root.isFirst ? Appearance.rounding.large : (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small)
         topRightRadius: topLeftRadius
-        bottomLeftRadius: root.isLast ? Appearance.rounding.large :
-            (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small)
+        bottomLeftRadius: root.isLast ? Appearance.rounding.large : (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small)
         bottomRightRadius: bottomLeftRadius
 
-        Behavior on topLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-        Behavior on topRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-        Behavior on bottomLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-        Behavior on bottomRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+        Behavior on topLeftRadius {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on topRightRadius {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on bottomLeftRadius {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on bottomRightRadius {
+            NumberAnimation {
+                duration: 100
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on color {
+            ColorAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+            }
+        }
 
         Row {
             id: slideRow
@@ -253,7 +274,8 @@ RippleButton {
             spacing: root.actionBtnSpacing
 
             x: {
-                if (!root.actionPanelOpen) return 0;
+                if (!root.actionPanelOpen)
+                    return 0;
                 let visibleW = bgRect.width;
                 let itemW = itemRect.width + root.actionBtnSpacing;
                 let btnX = itemW;
@@ -264,7 +286,8 @@ RippleButton {
                 let selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
                 let selW = selBtn ? selBtn.width : 0;
                 let selRight = btnX + selW;
-                if (selRight <= visibleW) return 0;
+                if (selRight <= visibleW)
+                    return 0;
                 return -(selRight - visibleW + 4);
             }
 
@@ -282,13 +305,9 @@ RippleButton {
                 height: slideRow.height
                 y: 0
                 topLeftRadius: bgRect.topLeftRadius
-                topRightRadius: root.actionPanelOpen
-                    ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small)
-                    : bgRect.topRightRadius
+                topRightRadius: root.actionPanelOpen ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small) : bgRect.topRightRadius
                 bottomLeftRadius: bgRect.bottomLeftRadius
-                bottomRightRadius: root.actionPanelOpen
-                    ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small)
-                    : bgRect.bottomRightRadius
+                bottomRightRadius: root.actionPanelOpen ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small) : bgRect.bottomRightRadius
                 color: root.actionPanelOpen ? (root.isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh) : root.colBackground
                 clip: true
                 antialiasing: true
@@ -300,12 +319,34 @@ RippleButton {
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
                 }
-                Behavior on topLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                Behavior on topRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                Behavior on bottomLeftRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-                Behavior on bottomRightRadius { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+                Behavior on topLeftRadius {
+                    NumberAnimation {
+                        duration: 100
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on topRightRadius {
+                    NumberAnimation {
+                        duration: 100
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on bottomLeftRadius {
+                    NumberAnimation {
+                        duration: 100
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on bottomRightRadius {
+                    NumberAnimation {
+                        duration: 100
+                        easing.type: Easing.OutQuad
+                    }
+                }
                 Behavior on color {
-                    ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                    }
                 }
 
                 MouseArea {
@@ -323,7 +364,11 @@ RippleButton {
                     anchors.rightMargin: root.buttonHorizontalPadding
                     visible: !root.isNowPlaying
 
-                    Behavior on spacing { NumberAnimation { duration: 120 } }
+                    Behavior on spacing {
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
 
                     Item {
                         id: iconContainer
@@ -332,8 +377,18 @@ RippleButton {
                         visible: iconVisible
                         readonly property bool iconVisible: root.iconType !== LauncherSearchResult.IconType.None
 
-                        Behavior on Layout.preferredWidth { NumberAnimation { duration: 150; easing.type: Easing.OutQuint } }
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 150; easing.type: Easing.OutQuint } }
+                        Behavior on Layout.preferredWidth {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutQuint
+                            }
+                        }
+                        Behavior on Layout.preferredHeight {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutQuint
+                            }
+                        }
 
                         Item {
                             anchors.fill: parent
@@ -343,18 +398,30 @@ RippleButton {
                                 id: iconShapeBg
                                 anchors.fill: parent
                                 shape: MaterialShape.Shape.Cookie7Sided
-                                color: (root.isSelected || root.actionPanelOpen)
-                                    ? Appearance.colors.colPrimary
-                                    : Appearance.colors.colSurfaceContainerHighest
-                                Behavior on color { ColorAnimation { duration: 80 } }
+                                color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 80
+                                    }
+                                }
 
                                 transform: Scale {
                                     origin.x: iconContainer.width / 2
                                     origin.y: iconContainer.height / 2
                                     xScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
                                     yScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
-                                    Behavior on xScale { NumberAnimation { duration: 80; easing.type: Easing.OutBack } }
-                                    Behavior on yScale { NumberAnimation { duration: 80; easing.type: Easing.OutBack } }
+                                    Behavior on xScale {
+                                        NumberAnimation {
+                                            duration: 80
+                                            easing.type: Easing.OutBack
+                                        }
+                                    }
+                                    Behavior on yScale {
+                                        NumberAnimation {
+                                            duration: 80
+                                            easing.type: Easing.OutBack
+                                        }
+                                    }
                                 }
                             }
 
@@ -363,7 +430,11 @@ RippleButton {
                                 anchors.centerIn: parent
                                 implicitSize: 22
                                 smooth: true
-                                Behavior on implicitSize { NumberAnimation { duration: 150 } }
+                                Behavior on implicitSize {
+                                    NumberAnimation {
+                                        duration: 150
+                                    }
+                                }
                             }
                         }
 
@@ -373,7 +444,11 @@ RippleButton {
                             text: root.materialSymbol
                             iconSize: 26
                             color: root.colForeground
-                            Behavior on iconSize { NumberAnimation { duration: 150 } }
+                            Behavior on iconSize {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
                         }
 
                         Item {
@@ -383,10 +458,12 @@ RippleButton {
                             MaterialShape {
                                 anchors.fill: parent
                                 shape: MaterialShape.Shape.Sunny
-                                color: root.isSelected
-                                    ? Appearance.colors.colTertiaryContainer
-                                    : Appearance.colors.colSurfaceContainerHighest
-                                Behavior on color { ColorAnimation { duration: 80 } }
+                                color: root.isSelected ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 80
+                                    }
+                                }
                             }
 
                             StyledText {
@@ -399,7 +476,8 @@ RippleButton {
                     }
 
                     Rectangle {
-                        width: 14; height: 14
+                        width: 14
+                        height: 14
                         radius: Appearance.rounding.full
                         color: root.itemName || "transparent"
                         border.width: 1
@@ -417,7 +495,7 @@ RippleButton {
                         RowLayout {
                             spacing: 4
                             visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) || (!!root.entry?.comment && !root.entry?.isMath)
-                            
+
                             StyledText {
                                 text: root.itemType
                                 color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
@@ -465,16 +543,25 @@ RippleButton {
                             MaterialSymbol {
                                 visible: root.contentType !== "" && root.contentType !== "hex-color" && root.contentType !== "clipboard"
                                 text: {
-                                    switch(root.contentType) {
-                                        case "url": return "link";
-                                        case "email": return "alternate_email";
-                                        case "phone": return "phone";
-                                        case "json": return "data_object";
-                                        case "filepath": return "folder_open";
-                                        case "markdown": return "markdown";
-                                        case "number": return "tag";
-                                        case "multiline": return "notes";
-                                        default: return "";
+                                    switch (root.contentType) {
+                                    case "url":
+                                        return "link";
+                                    case "email":
+                                        return "alternate_email";
+                                    case "phone":
+                                        return "phone";
+                                    case "json":
+                                        return "data_object";
+                                    case "filepath":
+                                        return "folder_open";
+                                    case "markdown":
+                                        return "markdown";
+                                    case "number":
+                                        return "tag";
+                                    case "multiline":
+                                        return "notes";
+                                    default:
+                                        return "";
                                     }
                                 }
                                 iconSize: Appearance.font.pixelSize.normal
@@ -491,8 +578,8 @@ RippleButton {
                             }
 
                             StyledText {
-                                Layout.fillWidth: true
                                 id: nameText
+                                Layout.fillWidth: true
                                 textFormat: Text.StyledText
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 font.family: (root.fontType === "monospace" || root.contentType === "json") ? Appearance.font.family.monospace : Appearance.font.family.main
@@ -593,16 +680,29 @@ RippleButton {
                         readonly property bool shouldShow: root.isSelected && !root.actionPanelOpen && root.allActionItems.length > 1
                         visible: (shouldShow || indicatorAnim.running) && !root.actionPanelOpen
                         Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: 44; implicitHeight: 16
+                        implicitWidth: 44
+                        implicitHeight: 16
                         opacity: shouldShow ? 1.0 : 0.0
                         scale: shouldShow ? 1.0 : 0.7
-                        Behavior on opacity { NumberAnimation { id: indicatorAnim; duration: 100; easing.type: Easing.OutQuad } }
-                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutBack } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                id: indicatorAnim
+                                duration: 100
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 100
+                                easing.type: Easing.OutBack
+                            }
+                        }
                         Row {
                             anchors.centerIn: parent
                             spacing: 2
                             Rectangle {
-                                width: 26; height: 16
+                                width: 26
+                                height: 16
                                 radius: 3
                                 color: Appearance.colors.colSurfaceContainerHighest
                                 border.width: 1
@@ -617,7 +717,8 @@ RippleButton {
                                 }
                             }
                             Rectangle {
-                                width: 14; height: 16
+                                width: 14
+                                height: 16
                                 radius: 3
                                 color: Appearance.colors.colSurfaceContainerHighest
                                 border.width: 1
@@ -667,7 +768,8 @@ RippleButton {
                                 layer.enabled: true
                                 layer.effect: OpacityMask {
                                     maskSource: Rectangle {
-                                        width: 56; height: 56
+                                        width: 56
+                                        height: 56
                                         radius: Appearance.rounding.large
                                     }
                                 }
@@ -706,7 +808,8 @@ RippleButton {
                         }
 
                         RippleButton {
-                            implicitWidth: 44; implicitHeight: 44
+                            implicitWidth: 44
+                            implicitHeight: 44
                             buttonRadius: Appearance.rounding.full
                             colBackground: Appearance.colors.colPrimary
                             colBackgroundHover: Appearance.colors.colPrimaryHover
@@ -744,19 +847,39 @@ RippleButton {
                     topRightRadius: hIdx === root.allActionItems.length ? root.pillRadius : (hIdx === root.activeHIndex || (hIdx + 1) === root.activeHIndex ? root.pillRadius : Appearance.rounding.small)
                     bottomRightRadius: topRightRadius
 
-                    color: isBtnActive
-                        ? Appearance.colors.colPrimaryContainer
-                        : (root.isSelected && actionBtnMa.containsMouse
-                            ? Appearance.colors.colPrimaryContainerHover
-                            : Appearance.colors.colSurfaceContainerHighest)
+                    color: isBtnActive ? Appearance.colors.colPrimaryContainer : (root.isSelected && actionBtnMa.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighest)
                     antialiasing: true
                     visible: root.actionPanelOpen
 
-                    Behavior on color { ColorAnimation { duration: 80 } }
-                    Behavior on topLeftRadius { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-                    Behavior on topRightRadius { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-                    Behavior on bottomLeftRadius { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
-                    Behavior on bottomRightRadius { NumberAnimation { duration: 140; easing.type: Easing.OutQuad } }
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 80
+                        }
+                    }
+                    Behavior on topLeftRadius {
+                        NumberAnimation {
+                            duration: 140
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on topRightRadius {
+                        NumberAnimation {
+                            duration: 140
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on bottomLeftRadius {
+                        NumberAnimation {
+                            duration: 140
+                            easing.type: Easing.OutQuad
+                        }
+                    }
+                    Behavior on bottomRightRadius {
+                        NumberAnimation {
+                            duration: 140
+                            easing.type: Easing.OutQuad
+                        }
+                    }
 
                     MouseArea {
                         id: actionBtnMa
@@ -781,10 +904,12 @@ RippleButton {
                             MaterialShape {
                                 anchors.fill: parent
                                 shape: actionBtn.isBtnActive ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
-                                color: actionBtn.isBtnActive
-                                    ? Appearance.colors.colPrimary
-                                    : Appearance.colors.colSurfaceContainerHighest
-                                Behavior on color { ColorAnimation { duration: 80 } }
+                                color: actionBtn.isBtnActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 80
+                                    }
+                                }
                             }
 
                             IconImage {
@@ -801,10 +926,12 @@ RippleButton {
                                 text: actionBtn.modelData.icon || "play_arrow"
                                 iconSize: 22
                                 fill: actionBtn.isBtnActive ? 1 : 0
-                                color: actionBtn.isBtnActive
-                                    ? Appearance.m3colors.m3onPrimary
-                                    : Appearance.colors.colOnSurfaceVariant
-                                Behavior on color { ColorAnimation { duration: 80 } }
+                                color: actionBtn.isBtnActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnSurfaceVariant
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 80
+                                    }
+                                }
                             }
                         }
 
@@ -813,12 +940,14 @@ RippleButton {
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.family: Appearance.font.family.main
                             font.weight: Font.Medium
-                            color: actionBtn.isBtnActive
-                                ? Appearance.colors.colOnPrimaryContainer
-                                : Appearance.m3colors.m3onSurface
+                            color: actionBtn.isBtnActive ? Appearance.colors.colOnPrimaryContainer : Appearance.m3colors.m3onSurface
                             elide: Text.ElideRight
                             Layout.maximumWidth: 120
-                            Behavior on color { ColorAnimation { duration: 80 } }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 80
+                                }
+                            }
                         }
                     }
                 }
@@ -835,13 +964,11 @@ RippleButton {
             MprisController.togglePlaying();
             return;
         }
-        
+
         const isSystemControl = root.entry?.key?.startsWith("sys:");
         const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
         const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-        const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings")
-            || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings")
-            || root.itemType === Translation.tr("Folder Alias");
+        const isModeSwitch = (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
         if (!isConfirming && !isModeSwitch) {
             GlobalStates.overviewOpen = false;
@@ -849,10 +976,11 @@ RippleButton {
         root.itemExecute();
     }
 
-    Keys.onPressed: (event) => {
+    Keys.onPressed: event => {
         if (event.key === Qt.Key_Delete && event.modifiers === Qt.ShiftModifier) {
             const deleteAction = root.entry.actions.find(action => action.name == Translation.tr("Delete"));
-            if (deleteAction) deleteAction.execute();
+            if (deleteAction)
+                deleteAction.execute();
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             if (root.actionPanelOpen) {
                 root.executeSelectedAction();
@@ -875,12 +1003,10 @@ RippleButton {
             event.accepted = true;
         }
     }
-    Keys.onReleased: (event) => {
+    Keys.onReleased: event => {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             root.keyboardDown = false;
             event.accepted = true;
         }
     }
 }
-
-

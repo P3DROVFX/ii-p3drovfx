@@ -459,6 +459,9 @@ Scope {
         function open() {
             GlobalStates.overviewOpen = true;
         }
+        function setQuery(text: string): void {
+            overviewScope.setSearchingTextRequested(text);
+        }
         function toggleReleaseInterrupt() {
             GlobalStates.superReleaseMightTrigger = false;
         }

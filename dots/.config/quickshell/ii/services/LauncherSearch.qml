@@ -25,40 +25,48 @@ Singleton {
 
     // Called from SearchItem to open settings - must be a QML function (not a JS closure)
     // so that GlobalStates is accessible in the correct QML context
-    signal requestOpenSettings()
+    signal requestOpenSettings
 
     function isMathQuery(expr) {
         expr = expr.trim();
-        if (expr.length === 0) return false;
-        
-        // Starts with math prefix '='
-        if (expr.startsWith(Config.options.search.prefix.math)) return true;
-        
-        // Starts with basic math functions
-        if (/^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr)) return true;
-        
-        // Verify if it contains a number
-        const hasNumber = /\d/.test(expr);
-        if (!hasNumber) return false;
-        
-        // Pure number is NOT a math query by default (e.g. searching for app ID/number)
-        // unless it's explicitly prefixed or contains operators/units
-        if (/^[-+]?\d+(\.\d+)?$/.test(expr)) return false;
-        
-        // If it starts with a number, check for common math structures:
-        // 1. Math operators: +, *, /, ^, %, ( or )
-        if (/[+\*\/^()%]/.test(expr)) return true;
-        
-        // 2. Spaces around a minus or plus sign: e.g. "12 - 3", "12 -3"
-        // But avoid matching words with hyphens like "3d-printer" or "1-password"
-        if (/\s+[-+]\s*/.test(expr) || /\d\s*[-+]\s*\d/.test(expr)) return true;
-        
-        // 3. Keywords like 'to' or 'in' for unit conversion: e.g. "12 usd to eur", "100 c to f"
-        // Avoid matching words that happen to contain "to" as substring
-        if (/\d+\s*(?:[a-zA-Z%]+)?\s+\bto\b\s+\b[a-zA-Z%]+\b/i.test(expr)) return true;
-        if (/\d+\s*\bto\b/i.test(expr)) return true;
-        
-        return false;
+        if (expr.length === 0)
+            return false;
+        const prefixMath = Config.options.search.prefix.math;
+        const hasPrefix = prefixMath && expr.startsWith(prefixMath);
+        const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
+        const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
+        const res = hasPrefix || hasDigitsAndOp || hasFunc;
+        console.log("DEBUG isMathQuery('" + expr + "') -> prefixMath=" + prefixMath + " hasPrefix=" + hasPrefix + " hasDigitsAndOp=" + hasDigitsAndOp + " hasFunc=" + hasFunc + " -> " + res);
+        return res;
+    }
+
+    // Instantly evaluate simple arithmetic using JS — no qalc needed
+    // Only allows digits, basic operators, parens, dots, spaces — safe subset
+    function jsEvalMath(expr) {
+        expr = expr.trim();
+        const prefixMath = Config.options.search.prefix.math;
+        // Strip leading math prefix if present
+        if (prefixMath && expr.startsWith(prefixMath))
+            expr = expr.slice(prefixMath.length).trim();
+        // Only allow safe chars: digits, operators, parens, dot, space
+        const isSafe = /^[\d\s\+\-\*\/\.\(\)%]+$/.test(expr);
+        const hasOp = /[\+\-\*\/\%]/.test(expr);
+        console.log("DEBUG jsEvalMath('" + expr + "') -> isSafe=" + isSafe + " hasOp=" + hasOp);
+        if (!isSafe || !hasOp)
+            return null;
+        try {
+            // eslint-disable-next-line no-eval
+            const result = eval(expr);
+            console.log("DEBUG jsEvalMath eval result: " + result);
+            if (typeof result === 'number' && isFinite(result)) {
+                // Format nicely: trim trailing zeros for floats
+                const str = String(result);
+                return str;
+            }
+        } catch(e) {
+            console.log("DEBUG jsEvalMath error: " + e);
+        }
+        return null;
     }
 
     // https://specifications.freedesktop.org/menu/latest/category-registry.html
@@ -83,9 +91,9 @@ Singleton {
                 const actionName = fileName.replace(/\.[^/.]+$/, ""); // strip extension
                 actions.push({
                     action: actionName,
-                    execute: ((path) => (args) => {
-                        Quickshell.execDetached([path, ...(args ? args.split(" ") : [])]);
-                    })(FileUtils.trimFileProtocol(filePath.toString()))
+                    execute: (path => args => {
+                                Quickshell.execDetached([path, ...(args ? args.split(" ") : [])]);
+                            })(FileUtils.trimFileProtocol(filePath.toString()))
                 });
             }
         }
@@ -148,7 +156,7 @@ Singleton {
         {
             action: "wallpaper",
             execute: () => {
-                Hyprland.dispatch(`hl.dsp.global("quickshell:wallpaperSelectorToggle")`)
+                Hyprland.dispatch(`hl.dsp.global("quickshell:wallpaperSelectorToggle")`);
             }
         },
         {
@@ -167,8 +175,7 @@ Singleton {
             action: "genius",
             execute: args => {
                 if (!args || args.trim().length === 0) {
-                    Quickshell.execDetached(["notify-send", "Genius API", 
-                        Translation.tr("Usage: /genius YOUR_API_KEY"), "-a", "Shell"]);
+                    Quickshell.execDetached(["notify-send", "Genius API", Translation.tr("Usage: /genius YOUR_API_KEY"), "-a", "Shell"]);
                     return;
                 }
                 KeyringStorage.setNestedField(["apiKeys", "genius"], args.trim());
@@ -200,11 +207,8 @@ Singleton {
         interval: Math.max(150, Config.options.search.nonAppResultDelay)
         onTriggered: {
             let expr = root.query;
-            if (!root.isMathQuery(expr)) return;
-
-            if (expr.startsWith(Config.options.search.prefix.math)) {
+            if (expr.startsWith(Config.options.search.prefix.math))
                 expr = expr.slice(Config.options.search.prefix.math.length);
-            }
             mathProc.calculateExpression(expr);
         }
     }
@@ -221,6 +225,7 @@ Singleton {
         }
     }
 
+    property string _fileBrowserDir: ""
     // File search: debounce calls to avoid Process/Disk spelling flicker
     property string _fileSearchExpr: ""
     Timer {
@@ -260,11 +265,19 @@ Singleton {
         if (!root.isMathQuery(root.query)) {
             root.mathResult = "";
         } else {
-            nonAppResultsTimer.restart();
+            // Try instant JS eval first for simple arithmetic
+            const instant = root.jsEvalMath(root.query);
+            console.log("DEBUG onQueryChanged instant eval result: " + instant);
+            if (instant !== null) {
+                root.mathResult = instant;
+            } else {
+                root.mathResult = "";
+                nonAppResultsTimer.restart();
+            }
         }
+        console.log("DEBUG mathResult=" + root.mathResult);
         root.confirmKey = "";
     }
-
 
     Process {
         id: mathProc
@@ -276,27 +289,30 @@ Singleton {
         stdout: StdioCollector {
             id: mathCollector
             onStreamFinished: {
-                root.mathResult = mathCollector.text.trim();
+                const r = mathCollector.text.trim();
+                if (r.length > 0)
+                    root.mathResult = r;
             }
         }
     }
 
     property var fileResults: []
     Process {
-        id: fileProc 
+        id: fileProc
         function searchFiles(expr) {
-            if (expr.length < 2) return
+            if (expr.length < 2)
+                return;
             fileProc.running = false;
-            fileProc.command = ["fd", expr, Config.options.search.fileSearchDirectory]; 
+            fileProc.command = ["fd", expr, Config.options.search.fileSearchDirectory];
             fileProc.running = true;
         }
         stdout: StdioCollector {
             id: fileCollector
             onStreamFinished: {
-                const rawResult = fileCollector.text
-                const result = rawResult.split('\n')
-                result.pop() // deleting the last empty line
-                root.fileResults = result
+                const rawResult = fileCollector.text;
+                const result = rawResult.split('\n');
+                result.pop(); // deleting the last empty line
+                root.fileResults = result;
             }
         }
     }
@@ -306,7 +322,8 @@ Singleton {
     Process {
         id: fileBrowserProc
         function browse(path) {
-            if (path.length < 1) return;
+            if (path.length < 1)
+                return;
             fileBrowserProc.running = false;
             // List directory contents, dirs first, with trailing slash for dirs
             fileBrowserProc.command = ["bash", "-c", `ls -1 -p "${path}" 2>/dev/null | head -50`];
@@ -325,7 +342,8 @@ Singleton {
     // ========== Window Search ==========
     function getWindowResults(searchString) {
         const windows = HyprlandData.windowList || [];
-        if (searchString === "") return windows;
+        if (searchString === "")
+            return windows;
         const lower = searchString.toLowerCase();
         return windows.filter(w => {
             const title = (w.title || "").toLowerCase();
@@ -338,15 +356,16 @@ Singleton {
     function getShellSnippetActions() {
         const snippets = Config.options?.search?.shellSnippets ?? [];
         return snippets.map(snippet => ({
-            action: snippet.alias || snippet.name || "snippet",
-            name: snippet.name || snippet.alias || "Shell Snippet",
-            command: snippet.command || "",
-            execute: (args) => {
-                let cmd = snippet.command || "";
-                if (args) cmd += " " + args;
-                Quickshell.execDetached(["bash", "-c", cmd]);
-            }
-        }));
+                    action: snippet.alias || snippet.name || "snippet",
+                    name: snippet.name || snippet.alias || "Shell Snippet",
+                    command: snippet.command || "",
+                    execute: args => {
+                        let cmd = snippet.command || "";
+                        if (args)
+                            cmd += " " + args;
+                        Quickshell.execDetached(["bash", "-c", cmd]);
+                    }
+                }));
     }
 
     function createAppResultObject(entry) {
@@ -412,20 +431,21 @@ Singleton {
                     execute: () => {
                         MprisController.togglePlaying();
                     },
-                    actions: [
-                        resultComp.createObject(null, {
+                    actions: [resultComp.createObject(null, {
                             name: Translation.tr("Previous"),
                             iconName: "skip_previous",
                             iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => { MprisController.previous(); }
-                        }),
-                        resultComp.createObject(null, {
+                            execute: () => {
+                                MprisController.previous();
+                            }
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Next"),
                             iconName: "skip_next",
                             iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => { MprisController.next(); }
-                        })
-                    ]
+                            execute: () => {
+                                MprisController.next();
+                            }
+                        })]
                 }));
             }
 
@@ -441,9 +461,10 @@ Singleton {
         if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
             // Clipboard
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.clipboard);
-            
+
             const pinnedMatches = Cliphist.pinnedEntries.filter(e => {
-                if (searchString === "") return true;
+                if (searchString === "")
+                    return true;
                 return e.toLowerCase().includes(searchString.toLowerCase());
             });
 
@@ -470,33 +491,31 @@ Singleton {
                     execute: () => {
                         Cliphist.copy(entry);
                     },
-                    actions: [
-                        resultComp.createObject(null, {
+                    actions: [resultComp.createObject(null, {
                             name: Translation.tr("Copy"),
                             iconName: "content_copy",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Cliphist.copy(entry);
                             }
-                        }),
-                        resultComp.createObject(null, {
+                        }), resultComp.createObject(null, {
                             name: isPinned ? Translation.tr("Unpin") : Translation.tr("Pin"),
                             iconName: isPinned ? "keep_off" : "keep",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
-                                if (isPinned) Cliphist.unpin(entry);
-                                else Cliphist.pin(entry);
+                                if (isPinned)
+                                    Cliphist.unpin(entry);
+                                else
+                                    Cliphist.pin(entry);
                             }
-                        }),
-                        resultComp.createObject(null, {
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Delete"),
                             iconName: "delete",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Cliphist.deleteEntry(entry);
                             }
-                        })
-                    ],
+                        })],
                     blurImage: shouldBlurImage
                 });
             }).filter(Boolean);
@@ -516,20 +535,21 @@ Singleton {
                     execute: () => {
                         Quickshell.clipboardText = emoji;
                     },
-                    actions: [
-                        resultComp.createObject(null, {
+                    actions: [resultComp.createObject(null, {
                             name: Translation.tr("Copy emoji"),
                             iconName: "content_copy",
                             iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => { Quickshell.clipboardText = emoji; }
-                        }),
-                        resultComp.createObject(null, {
+                            execute: () => {
+                                Quickshell.clipboardText = emoji;
+                            }
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Copy name"),
                             iconName: "label",
                             iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => { Quickshell.clipboardText = emojiName; }
-                        })
-                    ]
+                            execute: () => {
+                                Quickshell.clipboardText = emojiName;
+                            }
+                        })]
                 });
             }).filter(Boolean);
         } else if (root.query.startsWith(Config.options.search.prefix.windowSearch)) {
@@ -547,16 +567,14 @@ Singleton {
                     execute: () => {
                         Hyprland.dispatch(`hl.dsp.focus({window = "address:${w.address}"})`);
                     },
-                    actions: [
-                        resultComp.createObject(null, {
+                    actions: [resultComp.createObject(null, {
                             name: Translation.tr("Close"),
                             iconName: "close",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Hyprland.dispatch(`hl.dsp.window.close({window = "address:${w.address}"})`);
                             }
-                        }),
-                        resultComp.createObject(null, {
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Move here"),
                             iconName: "move_item",
                             iconType: LauncherSearchResult.IconType.Material,
@@ -568,14 +586,14 @@ Singleton {
                                     Hyprland.dispatch(`movetoworkspacesilent e+0,address:${w.address}`);
                                 }
                             }
-                        }),
-                        resultComp.createObject(null, {
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Copy title"),
                             iconName: "content_copy",
                             iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => { Quickshell.clipboardText = w.title || w.class || ""; }
-                        })
-                    ]
+                            execute: () => {
+                                Quickshell.clipboardText = w.title || w.class || "";
+                            }
+                        })]
                 });
             }).filter(Boolean);
         } else if (root.query.startsWith(Config.options.search.prefix.fileBrowser)) {
@@ -584,14 +602,15 @@ Singleton {
             const rawPath = root.query.slice(Config.options.search.prefix.fileBrowser.length);
             const homePath = FileUtils.trimFileProtocol(Directories.home);
             const expandedPath = rawPath.startsWith("/") ? rawPath : (homePath + "/" + rawPath);
-            
+
             // Find the directory part and the filter part
             const lastSlash = expandedPath.lastIndexOf("/");
             const dirPath = lastSlash >= 0 ? expandedPath.slice(0, lastSlash + 1) : expandedPath;
             const filter = lastSlash >= 0 ? expandedPath.slice(lastSlash + 1).toLowerCase() : "";
-            
+
             const filtered = root.fileBrowserResults.filter(entry => {
-                if (filter === "") return true;
+                if (filter === "")
+                    return true;
                 return entry.toLowerCase().includes(filter);
             });
 
@@ -616,46 +635,40 @@ Singleton {
                             Quickshell.execDetached(["xdg-open", fullPath]);
                         }
                     },
-                    actions: [
-                        resultComp.createObject(null, {
+                    actions: [resultComp.createObject(null, {
                             name: Translation.tr("Copy path"),
                             iconName: "content_copy",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Quickshell.clipboardText = fullPath;
                             }
-                        }),
-                        resultComp.createObject(null, {
+                        }), resultComp.createObject(null, {
                             name: Translation.tr("Open in file manager"),
                             iconName: "folder_open",
                             iconType: LauncherSearchResult.IconType.Material,
                             execute: () => {
                                 Quickshell.execDetached(["xdg-open", isDir ? fullPath : dirPath]);
                             }
-                        })
-                    ]
+                        })]
                 });
             }).filter(Boolean);
         }
 
-
-
-
         ////////////////// Init ///////////////////
         // NOTE: nonAppResultsTimer is restarted in onQueryChanged, not here
-        const mathResultObject = resultComp.createObject(null, {
-            key: "math:" + (_mathResult || "pending"),
-            name: _mathResult || Translation.tr("Evaluate math..."),
+        const mathResultObject = _mathResult ? resultComp.createObject(null, {
+            key: "math:" + _mathResult,
+            name: _mathResult,
             verb: Translation.tr("Copy"),
             type: Translation.tr("Math result"),
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'calculate',
             iconType: LauncherSearchResult.IconType.Material,
-            isMath: Config.options.search.enableMathPreview && !!_mathResult,
+            isMath: Config.options.search.enableMathPreview,
             execute: () => {
                 Quickshell.clipboardText = root.mathResult;
             }
-        });
+        }) : null;
         const fileResultsObject = root.fileResults.map(entry => {
             const isImage = Images.isValidImageByName(entry);
             return resultComp.createObject(null, {
@@ -668,14 +681,14 @@ Singleton {
                 execute: () => {
                     Quickshell.execDetached(["xdg-open", entry]);
                 },
-                actions: [
-                    resultComp.createObject(null, {
+                actions: [resultComp.createObject(null, {
                         name: Translation.tr("Copy path"),
                         iconName: "content_copy",
                         iconType: LauncherSearchResult.IconType.Material,
-                        execute: () => { Quickshell.clipboardText = entry; }
-                    }),
-                    resultComp.createObject(null, {
+                        execute: () => {
+                            Quickshell.clipboardText = entry;
+                        }
+                    }), resultComp.createObject(null, {
                         name: Translation.tr("Open folder"),
                         iconName: "folder_open",
                         iconType: LauncherSearchResult.IconType.Material,
@@ -683,10 +696,9 @@ Singleton {
                             const dir = entry.substring(0, entry.lastIndexOf("/") + 1);
                             Quickshell.execDetached(["xdg-open", dir]);
                         }
-                    })
-                ]
+                    })]
             });
-        })
+        });
 
         // MPRIS handled above (empty query case)
 
@@ -782,8 +794,10 @@ Singleton {
                             type: Translation.tr("App Alias"),
                             execute: () => {
                                 AppUsage.recordLaunch(app.id);
-                                if (!app.runInTerminal) app.execute();
-                                else Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(' '))}'`]);
+                                if (!app.runInTerminal)
+                                    app.execute();
+                                else
+                                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(' '))}'`]);
                             }
                         });
                     }
@@ -817,24 +831,30 @@ Singleton {
                     let typeName = Translation.tr("Mode");
                     let name = entry.target;
                     let execFunc = () => {};
-                    
+
                     if (entry.target === "clipboard") {
                         icon = "content_paste";
                         name = Translation.tr("Clipboard");
-                        execFunc = () => { root.query = Config.options.search.prefix.clipboard; };
+                        execFunc = () => {
+                            root.query = Config.options.search.prefix.clipboard;
+                        };
                     } else if (entry.target === "emojis") {
                         icon = "mood";
                         name = Translation.tr("Emojis");
-                        execFunc = () => { root.query = Config.options.search.prefix.emojis; };
+                        execFunc = () => {
+                            root.query = Config.options.search.prefix.emojis;
+                        };
                     } else if (entry.target === "math") {
                         icon = "calculate";
                         name = Translation.tr("Calculator");
-                        execFunc = () => { root.query = Config.options.search.prefix.math; };
+                        execFunc = () => {
+                            root.query = Config.options.search.prefix.math;
+                        };
                     } else if (entry.target === "settings") {
                         icon = "settings";
                         name = Translation.tr("Dotfiles Settings");
                         typeName = Translation.tr("Settings");
-                        execFunc = () => { 
+                        execFunc = () => {
                             GlobalStates.policiesPanelOpen = true;
                             GlobalStates.overviewOpen = false;
                         };
@@ -842,7 +862,9 @@ Singleton {
                         icon = "bluetooth";
                         name = Translation.tr("Bluetooth Manager");
                         typeName = Translation.tr("Settings");
-                        execFunc = () => { root.query = Config.options.search.prefix.bluetooth; };
+                        execFunc = () => {
+                            root.query = Config.options.search.prefix.bluetooth;
+                        };
                     }
 
                     return resultComp.createObject(null, {
@@ -876,11 +898,41 @@ Singleton {
 
         if (Config.options.search.enableSystemControls && (hasColonPrefix || queryClean.length >= 2)) {
             const sysCommands = [
-                { cmd: "lock", label: Translation.tr("Lock Screen"), execute: () => Quickshell.execDetached(["hyprlock"]), icon: "lock", desc: Translation.tr("Lock the current session") },
-                { cmd: "poweroff", label: Translation.tr("Shutdown PC"), execute: () => Quickshell.execDetached(["systemctl", "poweroff"]), icon: "power_settings_new", desc: Translation.tr("Power off the computer") },
-                { cmd: "reboot", label: Translation.tr("Reboot PC"), execute: () => Quickshell.execDetached(["systemctl", "reboot"]), icon: "restart_alt", desc: Translation.tr("Restart the computer") },
-                { cmd: "suspend", label: Translation.tr("Suspend PC"), execute: () => Quickshell.execDetached(["systemctl", "suspend"]), icon: "bedtime", desc: Translation.tr("Put the computer to sleep") },
-                { cmd: "restart", label: Translation.tr("Restart Quickshell"), execute: () => Quickshell.reload(), icon: "refresh", desc: Translation.tr("Restart Quickshell shell seamlessly") },
+                {
+                    cmd: "lock",
+                    label: Translation.tr("Lock Screen"),
+                    execute: () => Quickshell.execDetached(["hyprlock"]),
+                    icon: "lock",
+                    desc: Translation.tr("Lock the current session")
+                },
+                {
+                    cmd: "poweroff",
+                    label: Translation.tr("Shutdown PC"),
+                    execute: () => Quickshell.execDetached(["systemctl", "poweroff"]),
+                    icon: "power_settings_new",
+                    desc: Translation.tr("Power off the computer")
+                },
+                {
+                    cmd: "reboot",
+                    label: Translation.tr("Reboot PC"),
+                    execute: () => Quickshell.execDetached(["systemctl", "reboot"]),
+                    icon: "restart_alt",
+                    desc: Translation.tr("Restart the computer")
+                },
+                {
+                    cmd: "suspend",
+                    label: Translation.tr("Suspend PC"),
+                    execute: () => Quickshell.execDetached(["systemctl", "suspend"]),
+                    icon: "bedtime",
+                    desc: Translation.tr("Put the computer to sleep")
+                },
+                {
+                    cmd: "restart",
+                    label: Translation.tr("Restart Quickshell"),
+                    execute: () => Quickshell.reload(),
+                    icon: "refresh",
+                    desc: Translation.tr("Restart Quickshell shell seamlessly")
+                },
             ];
             const matches = sysCommands.filter(c => c.cmd.startsWith(queryClean));
             for (const match of matches) {
@@ -908,8 +960,8 @@ Singleton {
         if (systemControlResults.length > 0) {
             result = result.concat(systemControlResults);
         }
-        
-        if (isMath) {
+
+        if (isMath && mathResultObject) {
             result.push(mathResultObject);
         } else if (startsWithShellCommandPrefix) {
             result.push(commandResultObject);
@@ -932,22 +984,72 @@ Singleton {
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
         const moduleShortcuts = [
-            { names: ["clipboard", "clip", "paste", "copiar"], prefix: Config.options.search.prefix.clipboard, label: Translation.tr("Clipboard"), icon: "content_paste", isBuiltin: true },
-            { names: ["emoji", "emojis", "emoticon"], prefix: Config.options.search.prefix.emojis, label: Translation.tr("Emojis"), icon: "mood", isBuiltin: true },
-            { names: ["window", "windows", "janela"], prefix: Config.options.search.prefix.windowSearch, label: Translation.tr("Window Search"), icon: "select_window", isBuiltin: true },
-            { names: ["file", "files", "arquivo", "browse"], prefix: Config.options.search.prefix.fileBrowser, label: Translation.tr("File Browser"), icon: "folder_open", isBuiltin: true },
-            { names: ["math", "calc", "calculator", "calcular"], prefix: Config.options.search.prefix.math, label: Translation.tr("Calculator"), icon: "calculate", isBuiltin: true },
-            { names: ["command", "commands", "terminal", "shell"], prefix: Config.options.search.prefix.shellCommand, label: Translation.tr("Shell Command"), icon: "terminal", isBuiltin: true },
-            { names: ["settings", "configurar", "config", "dotfiles"], prefix: "__openSettings", label: Translation.tr("Dotfiles Settings"), icon: "settings", isBuiltin: true },
-            { names: ["bluetooth"], prefix: Config.options.search.prefix.bluetooth, label: Translation.tr("Bluetooth Manager"), icon: "bluetooth", isBuiltin: true },
+            {
+                names: ["clipboard", "clip", "paste", "copiar"],
+                prefix: Config.options.search.prefix.clipboard,
+                label: Translation.tr("Clipboard"),
+                icon: "content_paste",
+                isBuiltin: true
+            },
+            {
+                names: ["emoji", "emojis", "emoticon"],
+                prefix: Config.options.search.prefix.emojis,
+                label: Translation.tr("Emojis"),
+                icon: "mood",
+                isBuiltin: true
+            },
+            {
+                names: ["window", "windows", "janela"],
+                prefix: Config.options.search.prefix.windowSearch,
+                label: Translation.tr("Window Search"),
+                icon: "select_window",
+                isBuiltin: true
+            },
+            {
+                names: ["file", "files", "arquivo", "browse"],
+                prefix: Config.options.search.prefix.fileBrowser,
+                label: Translation.tr("File Browser"),
+                icon: "folder_open",
+                isBuiltin: true
+            },
+            {
+                names: ["math", "calc", "calculator", "calcular"],
+                prefix: Config.options.search.prefix.math,
+                label: Translation.tr("Calculator"),
+                icon: "calculate",
+                isBuiltin: true
+            },
+            {
+                names: ["command", "commands", "terminal", "shell"],
+                prefix: Config.options.search.prefix.shellCommand,
+                label: Translation.tr("Shell Command"),
+                icon: "terminal",
+                isBuiltin: true
+            },
+            {
+                names: ["settings", "configurar", "config", "dotfiles"],
+                prefix: "__openSettings",
+                label: Translation.tr("Dotfiles Settings"),
+                icon: "settings",
+                isBuiltin: true
+            },
+            {
+                names: ["bluetooth"],
+                prefix: Config.options.search.prefix.bluetooth,
+                label: Translation.tr("Bluetooth Manager"),
+                icon: "bluetooth",
+                isBuiltin: true
+            },
         ];
 
         const queryLower = root.query.toLowerCase();
         for (const mod of moduleShortcuts) {
             if (mod.names.some(n => n.startsWith(queryLower) && queryLower.length >= 2)) {
-                const execFn = mod.prefix === "__openSettings"
-                    ? () => { root.requestOpenSettings(); }
-                    : () => { root.query = mod.prefix; };
+                const execFn = mod.prefix === "__openSettings" ? () => {
+                    root.requestOpenSettings();
+                } : () => {
+                    root.query = mod.prefix;
+                };
                 result.push(resultComp.createObject(null, {
                     key: mod.prefix === "__openSettings" ? "shortcut:openSettings" : ("shortcut:" + mod.label),
                     name: mod.label,
@@ -965,7 +1067,7 @@ Singleton {
         if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {
             if (!startsWithShellCommandPrefix)
                 result.push(commandResultObject);
-            if (!isMath)
+            if (!isMath && mathResultObject)
                 result.push(mathResultObject);
             if (!startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
@@ -975,16 +1077,15 @@ Singleton {
         const activeAliases = (Config.options?.search?.aliases ?? []).filter(entry => entry.alias && entry.alias.toLowerCase() === root.query.toLowerCase());
         if (activeAliases.length > 0) {
             result = result.filter(item => {
-                if (!item || !item.key) return false;
+                if (!item || !item.key)
+                    return false;
                 for (const alias of activeAliases) {
                     if (alias.type === "app" && item.key === "app:" + alias.target) {
                         return false;
                     }
                     if (alias.type === "folder" && item.key.startsWith("file:")) {
                         const filePath = item.key.slice(5);
-                        const targetNormalized = alias.target.startsWith("/") ? alias.target : 
-                                                 alias.target.startsWith("~") ? alias.target.replace("~", Directories.home) :
-                                                 Directories.home + "/" + alias.target;
+                        const targetNormalized = alias.target.startsWith("/") ? alias.target : alias.target.startsWith("~") ? alias.target.replace("~", Directories.home) : Directories.home + "/" + alias.target;
                         const cleanFilePath = filePath.replace(/\/+$/, "");
                         const cleanTarget = targetNormalized.replace(/\/+$/, "");
                         if (cleanFilePath === cleanTarget) {
@@ -1027,7 +1128,9 @@ Singleton {
             verb: properties.verb || "",
             blurImage: !!properties.blurImage,
             pinned: !!properties.pinned,
-            execute: properties.execute || (() => { print("Not implemented"); }),
+            execute: properties.execute || (() => {
+                    print("Not implemented");
+                }),
             actions: properties.actions || [],
             id: properties.id || "",
             shown: properties.shown !== undefined ? properties.shown : true,
@@ -1042,8 +1145,15 @@ Singleton {
     }
 
     readonly property var resultComp: {
-        "createObject": function(parent, properties) {
+        "createObject": function (parent, properties) {
             return root.createResult(properties);
+        }
+    }
+
+    IpcHandler {
+        target: "launcherSearch"
+        function setQuery(q: string): void {
+            root.query = q;
         }
     }
 }

@@ -7,9 +7,6 @@ import qs.modules.common.widgets
 import Quickshell.Widgets
 import qs.modules.waffle.looks
 
-
-
-
 ContentPage {
     id: page
     readonly property int index: 5
@@ -79,13 +76,13 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "calculate"
-            text: Translation.tr("Enable integrated math & unit converter previews")
+            text: Translation.tr("Enable integrated calculator previews")
             checked: Config.options.search.enableMathPreview
             onCheckedChanged: {
                 Config.options.search.enableMathPreview = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Displays real-time answers for math expressions and unit conversions in the result list")
+                text: Translation.tr("Displays real-time answers for math expressions (e.g. 5+5, 24.5*2) in the result list")
             }
         }
 
@@ -116,97 +113,129 @@ ContentPage {
                 columnSpacing: 16
                 rowSpacing: 8
 
-                StyledText { text: Translation.tr("Action"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Action")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.action
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.action = text;
+                    onTextChanged: Config.options.search.prefix.action = text
                 }
 
-                StyledText { text: Translation.tr("App"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("App")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.app
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.app = text;
+                    onTextChanged: Config.options.search.prefix.app = text
                 }
 
-                StyledText { text: Translation.tr("Clipboard"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Clipboard")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.clipboard
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.clipboard = text;
+                    onTextChanged: Config.options.search.prefix.clipboard = text
                 }
 
-                StyledText { text: Translation.tr("Emojis"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Emojis")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.emojis
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.emojis = text;
+                    onTextChanged: Config.options.search.prefix.emojis = text
                 }
 
-                StyledText { text: Translation.tr("Math"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Math")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.math
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.math = text;
+                    onTextChanged: Config.options.search.prefix.math = text
                 }
 
-                StyledText { text: Translation.tr("Shell command"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Shell command")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.shellCommand
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.shellCommand = text;
+                    onTextChanged: Config.options.search.prefix.shellCommand = text
                 }
 
-                StyledText { text: Translation.tr("Web search"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Web search")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.webSearch
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.webSearch = text;
+                    onTextChanged: Config.options.search.prefix.webSearch = text
                 }
 
-                StyledText { text: Translation.tr("Window search"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Window search")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.windowSearch
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.windowSearch = text;
+                    onTextChanged: Config.options.search.prefix.windowSearch = text
                 }
 
-                StyledText { text: Translation.tr("File browser"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("File browser")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.fileBrowser
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.fileBrowser = text;
+                    onTextChanged: Config.options.search.prefix.fileBrowser = text
                 }
 
-                StyledText { text: Translation.tr("File search"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("File search")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.fileSearch
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.fileSearch = text;
+                    onTextChanged: Config.options.search.prefix.fileSearch = text
                 }
 
-                StyledText { text: Translation.tr("Bluetooth"); color: Appearance.colors.colOnSurface }
+                StyledText {
+                    text: Translation.tr("Bluetooth")
+                    color: Appearance.colors.colOnSurface
+                }
                 MaterialTextArea {
                     Layout.fillWidth: true
                     text: Config.options.search.prefix.bluetooth
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.prefix.bluetooth = text;
+                    onTextChanged: Config.options.search.prefix.bluetooth = text
                 }
             }
         }
     }
-
 
     ContentSection {
         icon: "label"
@@ -239,19 +268,13 @@ ContentPage {
                             width: 32
                             height: 32
                             radius: Appearance.rounding.verysmall
-                            color: modelData.type === "app" ? Appearance.colors.colPrimaryContainer : 
-                                   modelData.type === "folder" ? Appearance.colors.colSecondaryContainer : 
-                                   Appearance.colors.colTertiaryContainer
+                            color: modelData.type === "app" ? Appearance.colors.colPrimaryContainer : modelData.type === "folder" ? Appearance.colors.colSecondaryContainer : Appearance.colors.colTertiaryContainer
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
                                 iconSize: 18
-                                text: modelData.type === "app" ? "apps" : 
-                                      modelData.type === "folder" ? "folder" : 
-                                      modelData.type === "builtin" ? "explore" : "terminal"
-                                color: modelData.type === "app" ? Appearance.colors.colOnPrimaryContainer : 
-                                       modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : 
-                                       Appearance.colors.colOnTertiaryContainer
+                                text: modelData.type === "app" ? "apps" : modelData.type === "folder" ? "folder" : modelData.type === "builtin" ? "explore" : "terminal"
+                                color: modelData.type === "app" ? Appearance.colors.colOnPrimaryContainer : modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnTertiaryContainer
                             }
                         }
 
@@ -296,7 +319,10 @@ ContentPage {
                 }
             }
 
-            Item { height: 4; Layout.fillWidth: true } // Spacer
+            Item {
+                height: 4
+                Layout.fillWidth: true
+            } // Spacer
 
             // The Adding panel
             Rectangle {
@@ -349,12 +375,30 @@ ContentPage {
 
                             ConfigSelectionArray {
                                 currentValue: addAliasArea.selectedType
-                                onSelected: newValue => { addAliasArea.selectedType = newValue; }
+                                onSelected: newValue => {
+                                    addAliasArea.selectedType = newValue;
+                                }
                                 options: [
-                                    { displayName: Translation.tr("App"), icon: "apps", value: "app" },
-                                    { displayName: Translation.tr("Folder"), icon: "folder", value: "folder" },
-                                    { displayName: Translation.tr("Command"), icon: "terminal", value: "command" },
-                                    { displayName: Translation.tr("Built-in"), icon: "explore", value: "builtin" }
+                                    {
+                                        displayName: Translation.tr("App"),
+                                        icon: "apps",
+                                        value: "app"
+                                    },
+                                    {
+                                        displayName: Translation.tr("Folder"),
+                                        icon: "folder",
+                                        value: "folder"
+                                    },
+                                    {
+                                        displayName: Translation.tr("Command"),
+                                        icon: "terminal",
+                                        value: "command"
+                                    },
+                                    {
+                                        displayName: Translation.tr("Built-in"),
+                                        icon: "explore",
+                                        value: "builtin"
+                                    }
                                 ]
                             }
                         }
@@ -381,7 +425,8 @@ ContentPage {
                                 materialIcon: "add"
                                 colBackground: Appearance.colors.colSecondaryContainer
                                 onClicked: {
-                                    if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "") return;
+                                    if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
+                                        return;
                                     let newAliases = Array.from(Config.options.search.aliases || []);
                                     newAliases.push({
                                         alias: newAliasInput.text.trim(),
@@ -401,7 +446,10 @@ ContentPage {
                             spacing: 10
                             visible: addAliasArea.selectedType === "app"
 
-                            Item { height: 2; Layout.fillWidth: true } // spacer
+                            Item {
+                                height: 2
+                                Layout.fillWidth: true
+                            } // spacer
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -478,10 +526,14 @@ ContentPage {
                                         height: 34
 
                                         Behavior on color {
-                                            ColorAnimation { duration: 120 }
+                                            ColorAnimation {
+                                                duration: 120
+                                            }
                                         }
                                         Behavior on border.color {
-                                            ColorAnimation { duration: 120 }
+                                            ColorAnimation {
+                                                duration: 120
+                                            }
                                         }
 
                                         RowLayout {
@@ -524,7 +576,10 @@ ContentPage {
                             spacing: 10
                             visible: addAliasArea.selectedType === "builtin"
 
-                            Item { height: 2; Layout.fillWidth: true } // spacer
+                            Item {
+                                height: 2
+                                Layout.fillWidth: true
+                            } // spacer
 
                             StyledText {
                                 text: Translation.tr("Built-in System Targets")
@@ -538,11 +593,31 @@ ContentPage {
                                 spacing: 8
 
                                 property var builtins: [
-                                    { id: "clipboard", name: Translation.tr("Clipboard"), icon: "content_paste" },
-                                    { id: "emojis", name: Translation.tr("Emoji Picker"), icon: "mood" },
-                                    { id: "math", name: Translation.tr("Calculator Mode"), icon: "calculate" },
-                                    { id: "bluetooth", name: Translation.tr("Bluetooth Manager"), icon: "bluetooth" },
-                                    { id: "settings", name: Translation.tr("Settings"), icon: "settings" }
+                                    {
+                                        id: "clipboard",
+                                        name: Translation.tr("Clipboard"),
+                                        icon: "content_paste"
+                                    },
+                                    {
+                                        id: "emojis",
+                                        name: Translation.tr("Emoji Picker"),
+                                        icon: "mood"
+                                    },
+                                    {
+                                        id: "math",
+                                        name: Translation.tr("Calculator Mode"),
+                                        icon: "calculate"
+                                    },
+                                    {
+                                        id: "bluetooth",
+                                        name: Translation.tr("Bluetooth Manager"),
+                                        icon: "bluetooth"
+                                    },
+                                    {
+                                        id: "settings",
+                                        name: Translation.tr("Settings"),
+                                        icon: "settings"
+                                    }
                                 ]
 
                                 Repeater {
@@ -557,8 +632,16 @@ ContentPage {
                                         width: builtinLayout.implicitWidth + 24
                                         height: 34
 
-                                        Behavior on color { ColorAnimation { duration: 120 } }
-                                        Behavior on border.color { ColorAnimation { duration: 120 } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 120
+                                            }
+                                        }
+                                        Behavior on border.color {
+                                            ColorAnimation {
+                                                duration: 120
+                                            }
+                                        }
 
                                         RowLayout {
                                             id: builtinLayout
@@ -606,64 +689,82 @@ ContentPage {
             buttonIcon: "palette"
             text: Translation.tr("Hex color")
             checked: Config.options.search.clipboard.detectors.hexColor
-            onCheckedChanged: Config.options.search.clipboard.detectors.hexColor = checked;
-            StyledToolTip { text: Translation.tr("Detects hex colors (#fff, #rrggbb). Shows full-color preview in detail panel.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.hexColor = checked
+            StyledToolTip {
+                text: Translation.tr("Detects hex colors (#fff, #rrggbb). Shows full-color preview in detail panel.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "link"
             text: Translation.tr("URL")
             checked: Config.options.search.clipboard.detectors.url
-            onCheckedChanged: Config.options.search.clipboard.detectors.url = checked;
-            StyledToolTip { text: Translation.tr("Detects URLs. Smart action: Open Link in browser.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.url = checked
+            StyledToolTip {
+                text: Translation.tr("Detects URLs. Smart action: Open Link in browser.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "alternate_email"
             text: Translation.tr("Email")
             checked: Config.options.search.clipboard.detectors.email
-            onCheckedChanged: Config.options.search.clipboard.detectors.email = checked;
-            StyledToolTip { text: Translation.tr("Detects email addresses. Smart action: Open in mail client.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.email = checked
+            StyledToolTip {
+                text: Translation.tr("Detects email addresses. Smart action: Open in mail client.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "phone"
             text: Translation.tr("Phone")
             checked: Config.options.search.clipboard.detectors.phone
-            onCheckedChanged: Config.options.search.clipboard.detectors.phone = checked;
-            StyledToolTip { text: Translation.tr("Detects phone numbers. Smart action: Open in dialer via tel: URI.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.phone = checked
+            StyledToolTip {
+                text: Translation.tr("Detects phone numbers. Smart action: Open in dialer via tel: URI.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "data_object"
             text: Translation.tr("JSON")
             checked: Config.options.search.clipboard.detectors.json
-            onCheckedChanged: Config.options.search.clipboard.detectors.json = checked;
-            StyledToolTip { text: Translation.tr("Detects JSON objects/arrays. Smart action: Format JSON and copy to clipboard.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.json = checked
+            StyledToolTip {
+                text: Translation.tr("Detects JSON objects/arrays. Smart action: Format JSON and copy to clipboard.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "notes"
             text: Translation.tr("Multiline")
             checked: Config.options.search.clipboard.detectors.multiline
-            onCheckedChanged: Config.options.search.clipboard.detectors.multiline = checked;
-            StyledToolTip { text: Translation.tr("Detects text with 2+ lines. Shows line count badge in the list.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.multiline = checked
+            StyledToolTip {
+                text: Translation.tr("Detects text with 2+ lines. Shows line count badge in the list.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "tag"
             text: Translation.tr("Number")
             checked: Config.options.search.clipboard.detectors.number
-            onCheckedChanged: Config.options.search.clipboard.detectors.number = checked;
-            StyledToolTip { text: Translation.tr("Detects numbers (including formatted with spaces/commas). Smart action: Copy stripped of separators.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.number = checked
+            StyledToolTip {
+                text: Translation.tr("Detects numbers (including formatted with spaces/commas). Smart action: Copy stripped of separators.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "markdown"
             text: Translation.tr("Markdown")
             checked: Config.options.search.clipboard.detectors.markdown
-            onCheckedChanged: Config.options.search.clipboard.detectors.markdown = checked;
-            StyledToolTip { text: Translation.tr("Detects Markdown text. Smart action: Copy plain text with markup stripped.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.markdown = checked
+            StyledToolTip {
+                text: Translation.tr("Detects Markdown text. Smart action: Copy plain text with markup stripped.")
+            }
         }
         ConfigSwitch {
             buttonIcon: "folder_open"
             text: Translation.tr("File path")
             checked: Config.options.search.clipboard.detectors.filePath
-            onCheckedChanged: Config.options.search.clipboard.detectors.filePath = checked;
-            StyledToolTip { text: Translation.tr("Detects absolute file/folder paths. Smart action: Open with default file manager.") }
+            onCheckedChanged: Config.options.search.clipboard.detectors.filePath = checked
+            StyledToolTip {
+                text: Translation.tr("Detects absolute file/folder paths. Smart action: Open with default file manager.")
+            }
         }
     }
 
@@ -740,7 +841,7 @@ ContentPage {
                 Layout.fillWidth: true
                 text: Config.options.search.engineBaseUrl
                 wrapMode: TextEdit.NoWrap
-                onTextChanged: Config.options.search.engineBaseUrl = text;
+                onTextChanged: Config.options.search.engineBaseUrl = text
             }
         }
 
@@ -750,7 +851,7 @@ ContentPage {
                 Layout.fillWidth: true
                 text: Config.options.search.fileSearchDirectory
                 wrapMode: TextEdit.NoWrap
-                onTextChanged: Config.options.search.fileSearchDirectory = text;
+                onTextChanged: Config.options.search.fileSearchDirectory = text
             }
         }
     }

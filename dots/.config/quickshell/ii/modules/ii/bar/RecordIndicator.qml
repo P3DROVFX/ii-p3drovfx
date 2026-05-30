@@ -251,7 +251,7 @@ MouseArea {
 
                 title: indicator.isLoading ? Translation.tr("Preparing...") : indicator.formatTime(indicator.elapsedSeconds)
                 subtitle: indicator.isLoading 
-                    ? Translation.tr("Starting OBS Studio...") 
+                    ? Translation.tr("Authorize screen sharing in portal") 
                     : (indicator.isPaused ? Translation.tr("Recording Paused") : Translation.tr("Recording Screen"))
 
                 pillText: indicator.isLoading 
