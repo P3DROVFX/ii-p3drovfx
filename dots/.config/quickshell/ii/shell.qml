@@ -31,6 +31,7 @@ ShellRoot {
         Wallpapers.load();
         Updates.load();
         DarkModeService.automatic;
+        ChangelogService.load();
     }
 
     // Panel families

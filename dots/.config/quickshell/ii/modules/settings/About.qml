@@ -151,6 +151,8 @@ ContentPage {
                 onClicked: Qt.openUrlExternally("https://github.com/sponsors/end-4")
             }
         }
+
+
     }
 
     // ── Dotfiles ─────────────────────────────────────────────────────────────
@@ -202,6 +204,8 @@ ContentPage {
                 onClicked: Qt.openUrlExternally("https://github.com/vaguesyntax/ii-vynx/wiki/Known-Issues-and-Limitations")
             }
         }
+
+
     }
 
     // ── Quickshell Source ────────────────────────────────────────────────────
@@ -355,6 +359,132 @@ ContentPage {
                     }
                     StyledToolTip {
                         text: Translation.tr("Switch to official ii-vynx (local, no network)")
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Changelog ────────────────────────────────────────────────────────────
+    ContentSection {
+        icon: "history"
+        title: Translation.tr("Latest Commits")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RowLayout {
+                visible: ChangelogService.loading
+                Layout.fillWidth: true
+                spacing: 8
+                MaterialLoadingIndicator {
+                    implicitSize: 20
+                }
+                StyledText {
+                    text: Translation.tr("Fetching commits...")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+            }
+
+            StyledText {
+                visible: !ChangelogService.loading && ChangelogService.commits.count === 0
+                text: Translation.tr("No commits found or repository not available.")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colSubtext
+            }
+
+            Repeater {
+                model: ChangelogService.commits
+                delegate: Rectangle {
+                    id: entryRoot
+                    
+                    readonly property string commitHash: model.hash
+                    readonly property string commitTitle: model.title
+                    readonly property string commitDescription: model.description
+                    readonly property string commitSmartId: model.smartId
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: layout.implicitHeight + 24
+                    
+                    radius: Appearance.rounding.large
+                    color: Appearance.m3colors.m3surfaceContainer
+                    border.width: 0
+
+                    ColumnLayout {
+                        id: layout
+                        anchors {
+                            fill: parent
+                            margins: 12
+                        }
+                        spacing: 8
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            Rectangle {
+                                visible: entryRoot.commitSmartId !== ""
+                                radius: Appearance.rounding.small
+                                color: {
+                                    if (!entryRoot.commitSmartId) return Appearance.m3colors.m3surfaceContainerHighest;
+                                    let prefix = entryRoot.commitSmartId.charAt(0);
+                                    if (prefix === 'A') return Appearance.colors.colPrimaryContainer;
+                                    if (prefix === 'B') return Appearance.colors.colErrorContainer || Appearance.colors.colSecondaryContainer;
+                                    if (prefix === 'C' || prefix === 'D') return Appearance.colors.colTertiaryContainer || Appearance.colors.colSecondaryContainer;
+                                    return Appearance.m3colors.m3surfaceContainerHighest;
+                                }
+                                border.width: 0
+                                implicitWidth: idText.implicitWidth + 16
+                                implicitHeight: idText.implicitHeight + 6
+
+                                StyledText {
+                                    id: idText
+                                    anchors.centerIn: parent
+                                    text: entryRoot.commitSmartId
+                                    font.weight: Font.Bold
+                                    font.pixelSize: Appearance.font.pixelSize.smallie
+                                    color: {
+                                        if (!entryRoot.commitSmartId) return Appearance.colors.colOnSurface;
+                                        let prefix = entryRoot.commitSmartId.charAt(0);
+                                        if (prefix === 'A') return Appearance.colors.colOnPrimaryContainer;
+                                        if (prefix === 'B') return Appearance.colors.colOnErrorContainer || Appearance.colors.colOnSecondaryContainer;
+                                        if (prefix === 'C' || prefix === 'D') return Appearance.colors.colOnTertiaryContainer || Appearance.colors.colOnSecondaryContainer;
+                                        return Appearance.colors.colOnSurface;
+                                    }
+                                }
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            StyledText {
+                                text: model.date
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
+                                opacity: 0.7
+                            }
+                        }
+
+                        StyledText {
+                            text: entryRoot.commitTitle
+                            font.weight: Font.Bold
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnLayer1
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                        }
+
+                        StyledText {
+                            visible: entryRoot.commitDescription !== ""
+                            text: entryRoot.commitDescription
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                            opacity: 0.85
+                        }
                     }
                 }
             }

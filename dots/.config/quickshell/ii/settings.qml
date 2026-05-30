@@ -404,7 +404,7 @@ ApplicationWindow {
 
                     active: Config.ready
                     Component.onCompleted: {
-                        source = root.pages[0].component;
+                        source = root.pages[root.currentPage].component;
                     }
 
                     Connections {
