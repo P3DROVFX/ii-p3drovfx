@@ -363,16 +363,17 @@ if [ "$UPDATE_ONLY" = true ]; then
     echo -e "${BLUE}• Update-only mode: pulling latest changes...${NC}"
     if [ "$USE_II_VYNX" = true ]; then
         fetch_upstream
+        SOURCE_DIR="$UPSTREAM_DIR/dots/.config/quickshell/ii"
     else
         if [ -d "$FORK_DIR/.git" ]; then
-            cd "$FORK_DIR" && git pull
+            cd "$FORK_DIR" && git pull && git submodule update --init --recursive
             if [ $? -ne 0 ]; then
                 if [ "$NO_CONFIRM" = true ]; then
                     echo -e "${YELLOW}⚠ git pull failed due to divergence or local changes. Attempting automatic clean and reset...${NC}"
                     git fetch origin
                     DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
                     git reset --hard "origin/$DEFAULT_BRANCH"
-                    git pull
+                    git pull && git submodule update --init --recursive
                 else
                     echo -e "${YELLOW}⚠ git pull failed due to divergence or local changes.${NC}"
                     echo -ne "${CYAN}Would you like to force-reset the local cache to match the remote repository? (y/n): ${NC}"
@@ -382,7 +383,7 @@ if [ "$UPDATE_ONLY" = true ]; then
                         git fetch origin
                         DEFAULT_BRANCH="$(git remote show origin 2>/dev/null | sed -n '/HEAD branch/s/.*: //p' || echo "main")"
                         git reset --hard "origin/$DEFAULT_BRANCH"
-                        git pull
+                        git pull && git submodule update --init --recursive
                     fi
                 fi
             fi
@@ -390,13 +391,16 @@ if [ "$UPDATE_ONLY" = true ]; then
                 echo -e "${RED}✗ git pull failed. Please check for branch conflicts or network issues.${NC}"
                 exit 1
             fi
+            SOURCE_DIR="$FORK_DIR/dots/.config/quickshell/ii"
         else
             echo -e "${RED}✗ Fork not found at $FORK_DIR${NC}"
             exit 1
         fi
     fi
-    echo -e "${GREEN}✓ Update complete. Run without --update-only to apply.${NC}"
-    exit 0
+    
+    # Force preserving config and skipping second pull during update-only to prevent data loss and duplicate work
+    PRESERVE_CONFIG=true
+    DO_PULL=false
 fi
 
 # ── Resolve source directory ─────────────────────────────────────────────────
@@ -558,6 +562,16 @@ fi
 
 
 # ── Restart ──────────────────────────────────────────────────────────────────
+if [ "$UPDATE_ONLY" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}    Update completed successfully!   ${NC}"
+    echo -e "${YELLOW} Reload the shell (Super+Shift+R) to apply. ${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    exit 0
+fi
+
 echo ""
 echo -e "${NC}• Restarting Quickshell...${NC}"
 pkill -x qs
