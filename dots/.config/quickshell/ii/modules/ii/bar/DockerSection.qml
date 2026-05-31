@@ -367,7 +367,7 @@ Item {
                 execute: () => {
                     DockerService.openLogs(card.containerData.id);
                 }
-            })
+            });
             if (card.containerData?.ports?.length > 0) {
                 items.push({
                     icon: "open_in_new",
@@ -377,7 +377,7 @@ Item {
                     execute: () => {
                         DockerService.openInBrowser(card.containerData.ports[0].hostPort);
                     }
-                })
+                });
             }
             if (card.containerData?.isRunning) {
                 // RAM Gauge quick button (moved to the end)
@@ -544,11 +544,13 @@ Item {
                                         Rectangle {
                                             anchors.fill: parent
                                             radius: Appearance.rounding.full
-                                            color: portMouseArea.containsMouse
-                                                ? (card.containerData?.isRunning ? Qt.rgba(Appearance.m3colors.m3onPrimary.r, Appearance.m3colors.m3onPrimary.g, Appearance.m3colors.m3onPrimary.b, 0.22) : Appearance.colors.colPrimaryContainerHover)
-                                                : (card.containerData?.isRunning ? Qt.rgba(Appearance.m3colors.m3onPrimary.r, Appearance.m3colors.m3onPrimary.g, Appearance.m3colors.m3onPrimary.b, 0.12) : Appearance.colors.colPrimaryContainer)
+                                            color: portMouseArea.containsMouse ? (card.containerData?.isRunning ? Qt.rgba(Appearance.m3colors.m3onPrimary.r, Appearance.m3colors.m3onPrimary.g, Appearance.m3colors.m3onPrimary.b, 0.22) : Appearance.colors.colPrimaryContainerHover) : (card.containerData?.isRunning ? Qt.rgba(Appearance.m3colors.m3onPrimary.r, Appearance.m3colors.m3onPrimary.g, Appearance.m3colors.m3onPrimary.b, 0.12) : Appearance.colors.colPrimaryContainer)
 
-                                            Behavior on color { ColorAnimation { duration: 100 } }
+                                            Behavior on color {
+                                                ColorAnimation {
+                                                    duration: 100
+                                                }
+                                            }
 
                                             StyledText {
                                                 id: portChipText
@@ -674,9 +676,12 @@ Item {
                                                 anchors.centerIn: parent
                                                 text: {
                                                     const m = modelData.memMb || 0;
-                                                    if (m < 0.1) return Math.round(m * 1024) + "K";
-                                                    if (m < 1.0) return (m * 1024).toFixed(0) + "K";
-                                                    if (m < 10.0) return m.toFixed(1) + "M";
+                                                    if (m < 0.1)
+                                                        return Math.round(m * 1024) + "K";
+                                                    if (m < 1.0)
+                                                        return (m * 1024).toFixed(0) + "K";
+                                                    if (m < 10.0)
+                                                        return m.toFixed(1) + "M";
                                                     return Math.round(m) + "M";
                                                 }
                                                 font.pixelSize: Appearance.font.pixelSize.smaller - 2

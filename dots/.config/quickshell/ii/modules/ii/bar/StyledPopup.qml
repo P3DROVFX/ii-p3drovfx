@@ -2,6 +2,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
@@ -91,6 +92,15 @@ LazyLoader {
 
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
+
+        // Max usable popup height: screen minus bar + elevation margins + small padding
+        readonly property real maxPopupHeight: {
+            const barSize = Config.options.bar.vertical
+                ? 0
+                : Appearance.sizes.barHeight;
+            const avail = screenHeight - barSize - Appearance.sizes.elevationMargin * 2 - 16;
+            return Math.max(120, avail);
+        }
 
         anchors.left: !Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom)
         anchors.right: Config.options.bar.vertical && Config.options.bar.bottom
@@ -222,27 +232,43 @@ LazyLoader {
 
             width: targetWidth
             height: {
+                const maxH = popupWindow.maxPopupHeight + margin * 2;
+                let h;
                 if (!root.animate || !root.contentItem || !heroItem || targetHeight <= heroHeight + margin * 2)
-                    return _commitHeight;
-                return (heroHeight + margin * 2) + (_commitHeight - (heroHeight + margin * 2)) * popupWindow.animProgress;
+                    h = _commitHeight;
+                else
+                    h = (heroHeight + margin * 2) + (_commitHeight - (heroHeight + margin * 2)) * popupWindow.animProgress;
+                return Math.min(h, maxH);
             }
 
             color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
             radius: root.popupRadius
 
-            Item {
+            Flickable {
                 id: contentContainer
                 anchors.fill: parent
                 anchors.margins: popupBackground.margin
                 clip: true
 
+                contentWidth: width
+                contentHeight: root.contentItem?.implicitHeight ?? height
+                flickableDirection: Flickable.VerticalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    id: popupScrollBar
+                    policy: contentContainer.contentHeight > contentContainer.height
+                        ? ScrollBar.AlwaysOn
+                        : ScrollBar.AlwaysOff
+                    minimumSize: 0.1
+                }
+
                 Component.onCompleted: {
                     if (root.contentItem) {
-                        root.contentItem.parent = contentContainer;
+                        root.contentItem.parent = contentContainer.contentItem;
                         root.contentItem.anchors.centerIn = undefined;
-                        root.contentItem.anchors.top = contentContainer.top;
-                        root.contentItem.anchors.left = contentContainer.left;
-                        root.contentItem.anchors.right = contentContainer.right;
+                        root.contentItem.anchors.top = contentContainer.contentItem.top;
+                        root.contentItem.anchors.left = contentContainer.contentItem.left;
+                        root.contentItem.anchors.right = contentContainer.contentItem.right;
 
                         for (let i = 0; i < root.contentItem.children.length; i++) {
                             let child = root.contentItem.children[i];
