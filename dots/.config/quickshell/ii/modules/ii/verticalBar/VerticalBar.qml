@@ -37,6 +37,18 @@ Scope {
                 id: barRoot
                 screen: barLoader.modelData
 
+                // Fullscreen detection per monitor — hide bar instead of destroying it.
+                // Destroying/recreating the PanelWindow during fullscreen causes a Qt race
+                // condition: "Cannot use same item on different windows" → SEGFAULT.
+                // By keeping active:true and toggling visible, we avoid the crash.
+                property HyprlandMonitor hyprMonitor: Hyprland.monitorFor(barLoader.modelData)
+                property bool hasFullscreenOnThisMonitor: {
+                    const ws = barRoot.hyprMonitor?.activeWorkspace;
+                    if (!ws) return false;
+                    return ws.toplevels.values.some(w => w.wayland?.fullscreen === true);
+                }
+                visible: !barRoot.hasFullscreenOnThisMonitor
+
                 property var brightnessMonitor: Brightness.getMonitorForScreen(barLoader.modelData)
 
                 property int monitorIndex: barLoader.monitorIndex

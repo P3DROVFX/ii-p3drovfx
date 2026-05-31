@@ -254,9 +254,16 @@ LazyLoader {
                 contentHeight: root.contentItem?.implicitHeight ?? height
                 flickableDirection: Flickable.VerticalFlick
                 boundsBehavior: Flickable.StopAtBounds
+
+                // Disable interaction and lock scroll position during open animation
+                // to prevent trembling and scrollbar flash
+                interactive: popupWindow.animProgress >= 1.0
+                contentY: interactive ? contentY : 0
+
                 ScrollBar.vertical: ScrollBar {
                     id: popupScrollBar
-                    policy: contentContainer.contentHeight > contentContainer.height
+                    // Only show after animation completes AND content actually overflows
+                    policy: popupWindow.animProgress >= 1.0 && contentContainer.contentHeight > contentContainer.height
                         ? ScrollBar.AlwaysOn
                         : ScrollBar.AlwaysOff
                     minimumSize: 0.1
@@ -264,11 +271,14 @@ LazyLoader {
 
                 Component.onCompleted: {
                     if (root.contentItem) {
+                        // Parent to Flickable's contentItem but anchor width to
+                        // contentContainer itself (not contentItem) to avoid
+                        // circular binding with popupBackground.targetWidth
                         root.contentItem.parent = contentContainer.contentItem;
                         root.contentItem.anchors.centerIn = undefined;
                         root.contentItem.anchors.top = contentContainer.contentItem.top;
                         root.contentItem.anchors.left = contentContainer.contentItem.left;
-                        root.contentItem.anchors.right = contentContainer.contentItem.right;
+                        root.contentItem.width = Qt.binding(() => contentContainer.width);
 
                         for (let i = 0; i < root.contentItem.children.length; i++) {
                             let child = root.contentItem.children[i];

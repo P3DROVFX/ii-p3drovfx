@@ -418,7 +418,7 @@ Singleton {
                     property bool showUEL: false
                     property bool showWC: true
                     property bool showWWC: false
-                    property var monitoredLeagues: [
+                    property list<var> monitoredLeagues: [
                         {
                             "sport": "soccer",
                             "league": "bra.1",
@@ -456,7 +456,7 @@ Singleton {
                     property int showBeforeHours: 12
                     property int showAfterMinutes: 180
                     property string activeGameId: ""
-                    property var customOrder: []
+                    property list<var> customOrder: []
                 }
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
 
@@ -698,7 +698,7 @@ Singleton {
 
             property JsonObject light: JsonObject {
                 property JsonObject darkMode: JsonObject {
-                    property bool automatic: true
+                    property bool automatic: false
                 }
                 property JsonObject night: JsonObject {
                     property bool automatic: true
