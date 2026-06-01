@@ -22,6 +22,26 @@ StyledPopup {
     }
 
     function cleanGpu(model) {
+        if (!model) return "--";
+        
+        // Handle AMD GPU lspci format (e.g., Advanced Micro Devices, Inc. [AMD/ATI] Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] (rev c8))
+        if (/Advanced Micro Devices|AMD|ATI/i.test(model)) {
+            let cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
+            const bracketMatches = [...cleaned.matchAll(/\[([^\]]+)\]/g)];
+            if (bracketMatches.length > 0) {
+                let lastBracket = bracketMatches[bracketMatches.length - 1][1];
+                if (lastBracket.includes("/")) {
+                    lastBracket = lastBracket.split("/")[0].trim();
+                }
+                if (lastBracket && lastBracket.toLowerCase() !== "amd/ati") {
+                    return lastBracket.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
+                }
+            }
+            cleaned = cleaned.replace(/Advanced Micro Devices, Inc\.\s*\[AMD\/ATI\]/gi, "").trim();
+            cleaned = cleaned.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
+            return cleaned;
+        }
+
         return model.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
     }
 

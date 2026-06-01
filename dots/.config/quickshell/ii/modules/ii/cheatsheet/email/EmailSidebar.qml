@@ -149,7 +149,8 @@ Item {
                                 var count = 0;
                                 if (modelData.tab === "all_inboxes") {
                                     for (let i = 0; i < EmailService.allInboxesMessages.count; i++) {
-                                        if (EmailService.allInboxesMessages.get(i).unread) count++;
+                                        if (EmailService.allInboxesMessages.get(i).unread)
+                                            count++;
                                     }
                                 } else if (modelData.tab === "inbox")
                                     count = EmailService.inboxUnreadCount;

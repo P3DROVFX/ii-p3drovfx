@@ -181,7 +181,42 @@ Singleton {
             "cpu_freq=$(awk '/cpu MHz/ {s+=$4; n++} END {if(n>0) print int(s/n)}' /proc/cpuinfo); " +
             "cpu_temp_file=$(grep -l x86_pkg_temp /sys/class/thermal/thermal_zone*/type 2>/dev/null | head -1 | sed 's/type/temp/'); " +
             "if [ -n \"$cpu_temp_file\" ] && [ -f \"$cpu_temp_file\" ]; then cpu_temp=$(cat \"$cpu_temp_file\"); else cpu_temp=0; fi; " +
-            "gpu_stats=$(nvidia-smi --query-gpu=utilization.gpu,power.draw,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo \"0, 0, 0\"); " +
+            "gpu_stats=\"\"; " +
+            "if command -v nvidia-smi >/dev/null 2>&1; then " +
+            "gpu_stats=$(nvidia-smi --query-gpu=utilization.gpu,power.draw,temperature.gpu --format=csv,noheader,nounits 2>/dev/null); " +
+            "fi; " +
+            "if [ -z \"$gpu_stats\" ] || [ \"$gpu_stats\" = \"0, 0, 0\" ]; then " +
+            "amd_path=\"\"; " +
+            "for card in /sys/class/drm/card*/device; do " +
+            "if [ -f \"$card/gpu_busy_percent\" ]; then " +
+            "amd_path=\"$card\"; " +
+            "break; " +
+            "fi; " +
+            "done; " +
+            "if [ -n \"$amd_path\" ]; then " +
+            "amd_usage=$(cat \"$amd_path/gpu_busy_percent\" 2>/dev/null || echo 0); " +
+            "amd_temp=0; " +
+            "for hwmon in \"$amd_path\"/hwmon/hwmon*/temp1_input; do " +
+            "if [ -f \"$hwmon\" ]; then " +
+            "raw_temp=$(cat \"$hwmon\" 2>/dev/null || echo 0); " +
+            "amd_temp=$((raw_temp / 1000)); " +
+            "break; " +
+            "fi; " +
+            "done; " +
+            "amd_power=0; " +
+            "for hwmon in \"$amd_path\"/hwmon/hwmon*/power1_average \"$amd_path\"/hwmon/hwmon*/power1_input; do " +
+            "if [ -f \"$hwmon\" ]; then " +
+            "raw_power=$(cat \"$hwmon\" 2>/dev/null || echo 0); " +
+            "amd_power=$((raw_power / 1000000)); " +
+            "break; " +
+            "fi; " +
+            "done; " +
+            "gpu_stats=\"$amd_usage, $amd_power, $amd_temp\"; " +
+            "fi; " +
+            "fi; " +
+            "if [ -z \"$gpu_stats\" ]; then " +
+            "gpu_stats=\"0, 0, 0\"; " +
+            "fi; " +
             "echo \"${cpu_freq:-0} ${cpu_temp:-0} $gpu_stats\"; " + 
             "sleep 3; done"
         ]

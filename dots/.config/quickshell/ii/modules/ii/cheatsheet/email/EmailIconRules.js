@@ -16,14 +16,14 @@ const rules = [
     { i: "steam", p: [/steam/i] },
     { i: "twitch", p: [/twitch/i] },
     { i: "paypal", p: [/paypal/i] },
-    
+
     // Education
     { i: "udemy", p: [/udemy/i] },
     { i: "coursera", p: [/coursera/i] },
     { i: "duolingo", p: [/duolingo/i] },
     { i: "edx", p: [/edx/i] },
     { i: "pluralsight", p: [/pluralsight/i] },
-    
+
     // Marketplaces
     { i: "aliexpress", p: [/aliexpress/i] },
     { i: "mercadolivre", p: [/mercado livre/i, /mercadolivre/i] },
@@ -32,19 +32,19 @@ const rules = [
     { i: "etsy", p: [/etsy/i] },
     { i: "wish", p: [/wish\b/i] },
     { i: "temu", p: [/temu/i] },
-    
+
     // Social/Video
     { i: "youtube", p: [/youtube/i] },
     { i: "tiktok", p: [/tiktok/i] },
     { i: "snapchat", p: [/snapchat/i] },
     { i: "pinterest", p: [/pinterest/i] },
-    
+
     // Finance
     { i: "nubank", p: [/nubank/i] },
     { i: "inter", p: [/banco inter/i, /\binter\b/i] },
     { i: "binance", p: [/binance/i] },
     { i: "coinbase", p: [/coinbase/i] },
-    
+
     // Dev Tools
     { i: "python", p: [/python/i, /django/i, /flask/i, /pypi/i] },
     { i: "javascript", p: [/javascript/i, /node\.js/i, /\bjs\b/i] },
@@ -53,7 +53,7 @@ const rules = [
     { i: "docker", p: [/docker/i, /container/i] },
     { i: "kubernetes", p: [/kubernetes/i, /k8s/i] },
     { i: "vercel", p: [/vercel/i] },
-    
+
     // General Categories
     { i: "local_shipping", p: [/tracking/i, /rastreio/i, /entregue/i, /shipped/i, /delivery/i, /correios/i, /shipment/i] },
     { i: "receipt_long", p: [/invoice/i, /fatura/i, /compra/i, /purchase/i, /pagamento/i, /recibo/i, /nota fiscal/i, /billing/i] },
