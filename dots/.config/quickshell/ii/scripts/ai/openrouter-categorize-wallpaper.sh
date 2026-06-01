@@ -14,7 +14,7 @@ fi
 SOURCE_IMG_PATH="$1"
 MODEL="${2:-google/gemini-2.5-flash-lite}"
 WALLPAPER_NAME="$(basename "$SOURCE_IMG_PATH")"
-RESIZED_IMG_PATH="/tmp/quickshell/ai/wallpaper.jpg"
+RESIZED_IMG_PATH="/tmp/quickshell-$(whoami)/ai/wallpaper.jpg"
 
 
 PROMPT="Classify this wallpaper into exactly one of the following categories: abstract, anime, city, minimalist, landscape, plants, person, space.

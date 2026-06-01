@@ -400,7 +400,8 @@ Item {
                     source: "docker.svg"
                     width: 16
                     height: 16
-                    colorize: false
+                    colorize: true
+                    color: Appearance.colors.colOnPrimary
                 }
             }
 
@@ -438,7 +439,8 @@ Item {
                     source: "docker.svg"
                     width: 16
                     height: 16
-                    colorize: false
+                    colorize: true
+                    color: Appearance.colors.colOnPrimary
                 }
             }
 

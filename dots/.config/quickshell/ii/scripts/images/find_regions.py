@@ -6,7 +6,8 @@ import json
 import numpy as np
 import sys
 
-DEFAULT_IMAGE_PATH = '/tmp/quickshell/media/screenshot/image'
+import getpass
+DEFAULT_IMAGE_PATH = f'/tmp/quickshell-{getpass.getuser()}/media/screenshot/image'
 
 def iou(boxA, boxB):
     # Compute intersection over union for two boxes

@@ -57,10 +57,10 @@ Rectangle {
 
     Process {
         id: decodeImageProcess
-        command: ["bash", "-c", `[ -f ${imageDecodeFilePath} ] || echo '${StringUtils.shellSingleQuoteEscape(root.entry)}' | ${Cliphist.cliphistBinary} decode > '${imageDecodeFilePath}'`]
+        command: ["bash", "-c", `mkdir -p '${imageDecodePath}' && { [ -f '${imageDecodeFilePath}' ] || echo '${StringUtils.shellSingleQuoteEscape(root.entry)}' | ${Cliphist.cliphistBinary} decode > '${imageDecodeFilePath}'; }`]
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
-                root.source = imageDecodeFilePath;
+                root.source = "file://" + imageDecodeFilePath;
             } else {
                 console.error("[CliphistImage] Failed to decode image for entry:", root.entry);
                 root.source = "";
@@ -85,7 +85,7 @@ Rectangle {
         id: image
         anchors.fill: parent
 
-        source: Qt.resolvedUrl(root.source)
+        source: root.source
         fillMode: Image.PreserveAspectFit
         antialiasing: true
         asynchronous: true

@@ -402,7 +402,7 @@ Singleton {
     }
     property ApiStrategy currentApiStrategy: apiStrategies[models[currentModelId]?.api_format || "openai"]
 
-    property string requestScriptFilePath: "/tmp/quickshell/ai/request.sh"
+    property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
     property string pendingFilePath: ""
 
     Component.onCompleted: {

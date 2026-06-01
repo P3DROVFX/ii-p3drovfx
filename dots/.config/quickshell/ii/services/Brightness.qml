@@ -191,7 +191,7 @@ Singleton {
     // Anti-flashbang
     property int workspaceAnimationDelay: 500
     property int contentSwitchDelay: 30
-    property string screenshotDir: "/tmp/quickshell/brightness/antiflashbang"
+    property string screenshotDir: `/tmp/quickshell-${SystemInfo.username}/brightness/antiflashbang`
     function brightnessMultiplierForLightness(x: real): real {
         // I hand picked some values and fitted an exponential curve for this
         // 6.600135 + 216.360356 * e^(-0.0811129189x)

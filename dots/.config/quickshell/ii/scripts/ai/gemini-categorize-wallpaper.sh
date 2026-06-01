@@ -11,7 +11,7 @@ SOURCE_IMG_PATH="$1"
 MODEL="${2:-${GEMINI_WALLPAPER_MODEL:-gemini-2.5-flash-lite}}" # We use the flash-lite variant so it's fast
 WALLPAPER_NAME="$(basename "$SOURCE_IMG_PATH")"
 PROMPT="${3:-${GEMINI_WALLPAPER_PROMPT:-Categorize the wallpaper. Its file name is $WALLPAPER_NAME}}"
-RESIZED_IMG_PATH="/tmp/quickshell/ai/wallpaper.jpg"
+RESIZED_IMG_PATH="/tmp/quickshell-$(whoami)/ai/wallpaper.jpg"
 
 # Resize image for speed
 mkdir -p "$(dirname "$RESIZED_IMG_PATH")"

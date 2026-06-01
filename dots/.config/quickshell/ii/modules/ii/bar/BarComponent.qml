@@ -400,9 +400,7 @@ Item {
     }
     Component {
         id: policiesPanelButtonExpressive
-        ExpressivePoliciesPanelButton {
-            vertical: rootItem.vertical
-        }
+        ExpressivePoliciesPanelButton {}
     }
     Component {
         id: dashboardPanelButtonExpressive

@@ -56,7 +56,7 @@ Item {
         MaterialShape {
             id: shapeContainer
             anchors.centerIn: parent
-            implicitSize: 32
+            implicitSize: 24
 
             // Morph shape based on panel state
             shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie12Sided

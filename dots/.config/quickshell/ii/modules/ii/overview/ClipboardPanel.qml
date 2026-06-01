@@ -276,7 +276,7 @@ Item {
         if (selectedIsImage) {
             const match = selectedEntry.match(/^(\d+)\t/);
             const entryNumber = match ? parseInt(match[1]) : 0;
-            const path = "/tmp/quickshell/media/cliphist/" + entryNumber;
+            const path = Directories.cliphistDecode + "/" + entryNumber;
             Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'"]);
             GlobalStates.overviewOpen = false;
             return;
