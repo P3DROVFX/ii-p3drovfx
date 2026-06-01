@@ -60,6 +60,19 @@ Scope {
             readonly property bool monitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
             readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
 
+            readonly property bool barVertical: Config.options.bar.vertical
+            readonly property bool barBottom: Config.options.bar.bottom
+            readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+            readonly property int gap: Appearance.gapsOut
+
+            readonly property int padLeft: barVertical && !barBottom ? barSize : gap
+            readonly property int padRight: barVertical && barBottom ? barSize : gap
+            readonly property int padTop: !barVertical && !barBottom ? barSize : gap
+            readonly property int padBottom: !barVertical && barBottom ? barSize : gap
+
+            readonly property real scaleOriginX: padLeft + (tRoot.screen.width - padLeft - padRight) / 2
+            readonly property real scaleOriginY: padTop + (tRoot.screen.height - padTop - padBottom) / 2
+
             // ── Window freezing logic for anti-flicker reload ───────────────
             property list<var> frozenToplevels: []
 
@@ -131,11 +144,10 @@ Scope {
                 }
             }
 
-            // We only activate for the focused monitor to avoid showing
-            // captures on non-focused monitors (they'd be wrong workspace).
+            // We activate for all monitors so that each monitor displays the zoomed-out
+            // capture representation of its own active workspace windows.
             readonly property bool shouldBeActive:
                 transitionScope.featureEnabled &&
-                monitorFocused &&
                 isOverviewActive
 
             visible: shouldBeActive
@@ -265,8 +277,8 @@ Scope {
 
                     // Apply the same scale transform as the wallpaper
                     transform: Scale {
-                        origin.x: GlobalStates.overviewZoomOriginX
-                        origin.y: GlobalStates.overviewZoomOriginY
+                        origin.x: tRoot.scaleOriginX
+                        origin.y: tRoot.scaleOriginY
                         xScale: GlobalStates.overviewZoomScale
                         yScale: GlobalStates.overviewZoomScale
                     }
@@ -301,8 +313,8 @@ Scope {
 
                     // Apply the same scale transform as the wallpaper
                     transform: Scale {
-                        origin.x: GlobalStates.overviewZoomOriginX
-                        origin.y: GlobalStates.overviewZoomOriginY
+                        origin.x: tRoot.scaleOriginX
+                        origin.y: tRoot.scaleOriginY
                         xScale: GlobalStates.overviewZoomScale
                         yScale: GlobalStates.overviewZoomScale
                     }
