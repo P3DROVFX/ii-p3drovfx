@@ -56,10 +56,10 @@ Item {
         MaterialShape {
             id: shapeContainer
             anchors.centerIn: parent
-            implicitSize: 24
+            implicitSize: 22
 
             // Morph shape based on panel state
-            shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie12Sided
+            shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie9Sided
 
             // Contrast shape color with button background
             color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
@@ -73,8 +73,8 @@ Item {
             CustomIcon {
                 id: distroIcon
                 anchors.centerIn: parent
-                width: 16
-                height: 16
+                width: 14
+                height: 14
                 visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
                 source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
                 colorize: true

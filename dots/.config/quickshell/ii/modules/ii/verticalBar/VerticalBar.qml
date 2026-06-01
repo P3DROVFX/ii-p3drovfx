@@ -11,7 +11,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
-
+import qs.modules.ii.wrappedFrame
 Scope {
     id: bar
 
@@ -33,211 +33,242 @@ Scope {
 
 
             active: GlobalStates.barOpen && !GlobalStates.screenLocked
-            component: PanelWindow { // Bar window
-                id: barRoot
-                screen: barLoader.modelData
+            component: Scope {
+                id: barScope
 
-                // Fullscreen detection per monitor — hide bar instead of destroying it.
-                // Destroying/recreating the PanelWindow during fullscreen causes a Qt race
-                // condition: "Cannot use same item on different windows" → SEGFAULT.
-                // By keeping active:true and toggling visible, we avoid the crash.
                 property HyprlandMonitor hyprMonitor: Hyprland.monitorFor(barLoader.modelData)
                 property bool hasFullscreenOnThisMonitor: {
-                    const ws = barRoot.hyprMonitor?.activeWorkspace;
+                    const ws = barScope.hyprMonitor?.activeWorkspace;
                     if (!ws) return false;
                     return ws.toplevels.values.some(w => w.wayland?.fullscreen === true);
                 }
-                visible: !barRoot.hasFullscreenOnThisMonitor
 
-                property var brightnessMonitor: Brightness.getMonitorForScreen(barLoader.modelData)
-
-                property int monitorIndex: barLoader.monitorIndex
-                property bool hasActiveWindows: false
-                property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
-
-                Bar.BarThemes {
-                    id: barThemes
-                }
-                property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
-
-                Connections {
-                    enabled: Config.options.bar.barBackgroundStyle === 2
-                    target: HyprlandData
-                    function onWindowListChanged() {
-                        const monitor = HyprlandData.monitors.find(m => m.id === monitorIndex);
-                        const wsId = monitor?.activeWorkspace?.id;
-
-                        const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
-
-                        barRoot.hasActiveWindows = hasWindow;
+                PanelWindow {
+                    id: barSpaceReserver
+                    screen: barLoader.modelData
+                    anchors {
+                        left: !Config.options.bar.bottom
+                        right: Config.options.bar.bottom
+                        top: true
+                        bottom: true
                     }
+                    exclusionMode: ExclusionMode.Exclusive
+                    exclusiveZone: (Config?.options.bar.autoHide.enable && (!barRoot.mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 : Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                    implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
+                    color: "transparent"
+                    mask: Region {}
+                    visible: !barScope.hasFullscreenOnThisMonitor
                 }
 
-                Timer {
-                    id: showBarTimer
-                    interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
-                    repeat: false
-                    onTriggered: {
-                        barRoot.superShow = true;
+                PanelWindow { // Bar window (Full screen)
+                    id: barRoot
+                    screen: barLoader.modelData
+                    visible: !barScope.hasFullscreenOnThisMonitor
+
+                    property var brightnessMonitor: Brightness.getMonitorForScreen(barLoader.modelData)
+
+                    property int monitorIndex: barLoader.monitorIndex
+                    property bool hasActiveWindows: false
+                    property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+
+                    Bar.BarThemes {
+                        id: barThemes
                     }
-                }
-                Connections {
-                    target: GlobalStates
-                    function onSuperDownChanged() {
-                        if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
-                            return;
-                        if (GlobalStates.superDown)
-                            showBarTimer.restart();
-                        else {
-                            showBarTimer.stop();
-                            barRoot.superShow = false;
-                        }
-                    }
-                }
-                property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow
-                exclusionMode: ExclusionMode.Ignore
-                exclusiveZone: (Config?.options.bar.autoHide.enable && (!mustShow || !Config?.options.bar.autoHide.pushWindows)) ? 0 : Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
-                WlrLayershell.namespace: "quickshell:verticalBar"
-                // WlrLayershell.layer: WlrLayer.Overlay // TODO: enable this when bar can reliably hide when fullscreen without crashing
-                implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
-                mask: Region {
-                    item: hoverMaskRegion
-                }
-                color: "transparent"
+                    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
-                // Positioning
-                anchors {
-                    left: !Config.options.bar.bottom
-                    right: Config.options.bar.bottom
-                    top: true
-                    bottom: true
-                }
+                    Connections {
+                        enabled: Config.options.bar.barBackgroundStyle === 2
+                        target: HyprlandData
+                        function onWindowListChanged() {
+                            const monitor = HyprlandData.monitors.find(m => m.id === monitorIndex);
+                            const wsId = monitor?.activeWorkspace?.id;
 
-                // Include in focus grab
-                Component.onCompleted: {
-                    GlobalFocusGrab.addPersistent(barRoot);
-                }
-                Component.onDestruction: {
-                    GlobalFocusGrab.removePersistent(barRoot);
-                }
+                            const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
 
-                MouseArea {
-                    id: hoverRegion
-                    hoverEnabled: true
-                    anchors.fill: parent
-
-                    Item {
-                        id: hoverMaskRegion
-                        anchors {
-                            fill: barContent
-                            leftMargin: -Config.options.bar.autoHide.hoverRegionWidth
-                            rightMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                            barRoot.hasActiveWindows = hasWindow;
                         }
                     }
 
-                    VerticalBarContent {
-                        id: barContent
-                        implicitWidth: Appearance.sizes.verticalBarWidth
-                        anchors {
-                            top: parent.top
-                            bottom: parent.bottom
-                            left: parent.left
-                            right: undefined
-                            leftMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.verticalBarWidth : 0
-                            rightMargin: 0
+                    Timer {
+                        id: showBarTimer
+                        interval: (Config?.options.bar.autoHide.showWhenPressingSuper.delay ?? 100)
+                        repeat: false
+                        onTriggered: {
+                            barRoot.superShow = true;
                         }
-                        Behavior on anchors.leftMargin {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                        }
-                        Behavior on anchors.rightMargin {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                        }
-
-                        states: State {
-                            name: "right"
-                            when: Config.options.bar.bottom
-                            AnchorChanges {
-                                target: barContent
-                                anchors {
-                                    top: parent.top
-                                    bottom: parent.bottom
-                                    left: undefined
-                                    right: parent.right
-                                }
-                            }
-                            PropertyChanges {
-                                target: barContent
-                                anchors.topMargin: 0
-                                anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                    }
+                    Connections {
+                        target: GlobalStates
+                        function onSuperDownChanged() {
+                            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
+                                return;
+                            if (GlobalStates.superDown)
+                                showBarTimer.restart();
+                            else {
+                                showBarTimer.stop();
+                                barRoot.superShow = false;
                             }
                         }
                     }
+                    property bool superShow: false
+                    property bool mustShow: hoverRegion.containsMouse || superShow
+                    exclusionMode: ExclusionMode.Ignore
+                    exclusiveZone: 0
+                    WlrLayershell.namespace: "quickshell:verticalBar"
+                    // WlrLayershell.layer: WlrLayer.Overlay // TODO: enable this when bar can reliably hide when fullscreen without crashing
+                    
+                    mask: Region {
+                        item: hoverMaskRegion
+                    }
+                    color: "transparent"
 
-                    // Round decorators
+                    // Positioning FULL SCREEN
+                    anchors {
+                        left: true
+                        right: true
+                        top: true
+                        bottom: true
+                    }
+
+                    // Include in focus grab
+                    Component.onCompleted: {
+                        GlobalFocusGrab.addPersistent(barRoot);
+                    }
+                    Component.onDestruction: {
+                        GlobalFocusGrab.removePersistent(barRoot);
+                    }
+
+                    // WrappedFrame Visuals merged here so blur calculates them together!
                     Loader {
-                        id: roundDecorators
-                        anchors {
-                            top: parent.top
-                            bottom: parent.bottom
-                            left: barContent.right
-                            right: undefined
+                        active: Config.options.appearance.fakeScreenRounding == 3
+                        anchors.fill: parent
+                        sourceComponent: Component {
+                            Item {
+                                anchors.fill: parent
+                                WrappedFrameVisuals {
+                                    showBarBackground: barRoot.showBarBackground
+                                }
+                            }
                         }
-                        width: Appearance.rounding.screenRounding
-                        active: showBarBackground && Config.options.bar.cornerStyle === 0 // Hug
+                    }
 
-                        states: State {
-                            name: "right"
-                            when: Config.options.bar.bottom
-                            AnchorChanges {
-                                target: roundDecorators
-                                anchors {
-                                    top: parent.top
-                                    bottom: parent.bottom
-                                    left: undefined
-                                    right: barContent.left
+                    MouseArea {
+                        id: hoverRegion
+                        hoverEnabled: true
+                        anchors.fill: parent
+
+                        Item {
+                            id: hoverMaskRegion
+                            anchors {
+                                fill: barContent
+                                leftMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                                rightMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                            }
+                        }
+
+                        VerticalBarContent {
+                            id: barContent
+                            implicitWidth: Appearance.sizes.verticalBarWidth
+                            anchors {
+                                top: parent.top
+                                bottom: parent.bottom
+                                left: parent.left
+                                right: undefined
+                                leftMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.verticalBarWidth : 0
+                                rightMargin: 0
+                            }
+                            Behavior on anchors.leftMargin {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on anchors.rightMargin {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+
+                            states: State {
+                                name: "right"
+                                when: Config.options.bar.bottom
+                                AnchorChanges {
+                                    target: barContent
+                                    anchors {
+                                        top: parent.top
+                                        bottom: parent.bottom
+                                        left: undefined
+                                        right: parent.right
+                                    }
+                                }
+                                PropertyChanges {
+                                    target: barContent
+                                    anchors.topMargin: 0
+                                    anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
                                 }
                             }
                         }
 
-                        sourceComponent: Item {
-                            implicitHeight: Appearance.rounding.screenRounding
-                            RoundCorner {
-                                id: topCorner
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: parent.top
-                                }
+                        // Round decorators
+                        Loader {
+                            id: roundDecorators
+                            anchors {
+                                top: parent.top
+                                bottom: parent.bottom
+                                left: barContent.right
+                                right: undefined
+                            }
+                            width: Appearance.rounding.screenRounding
+                            active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 // Hug
 
-                                implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
-
-                                corner: RoundCorner.CornerEnum.TopLeft
-                                states: State {
-                                    name: "bottom"
-                                    when: Config.options.bar.bottom
-                                    PropertyChanges {
-                                        topCorner.corner: RoundCorner.CornerEnum.TopRight
+                            states: State {
+                                name: "right"
+                                when: Config.options.bar.bottom
+                                AnchorChanges {
+                                    target: roundDecorators
+                                    anchors {
+                                        top: parent.top
+                                        bottom: parent.bottom
+                                        left: undefined
+                                        right: barContent.left
                                     }
                                 }
                             }
-                            RoundCorner {
-                                id: bottomCorner
-                                anchors {
-                                    bottom: parent.bottom
-                                    left: !Config.options.bar.bottom ? parent.left : undefined
-                                    right: Config.options.bar.bottom ? parent.right : undefined
-                                }
-                                implicitSize: Appearance.rounding.screenRounding
-                                color: showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
 
-                                corner: RoundCorner.CornerEnum.BottomLeft
-                                states: State {
-                                    name: "bottom"
-                                    when: Config.options.bar.bottom
-                                    PropertyChanges {
-                                        bottomCorner.corner: RoundCorner.CornerEnum.BottomRight
+                            sourceComponent: Item {
+                                implicitHeight: Appearance.rounding.screenRounding
+                                RoundCorner {
+                                    id: topCorner
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: parent.top
+                                    }
+
+                                    implicitSize: Appearance.rounding.screenRounding
+                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+
+                                    corner: RoundCorner.CornerEnum.TopLeft
+                                    states: State {
+                                        name: "bottom"
+                                        when: Config.options.bar.bottom
+                                        PropertyChanges {
+                                            topCorner.corner: RoundCorner.CornerEnum.TopRight
+                                        }
+                                    }
+                                }
+                                RoundCorner {
+                                    id: bottomCorner
+                                    anchors {
+                                        bottom: parent.bottom
+                                        left: !Config.options.bar.bottom ? parent.left : undefined
+                                        right: Config.options.bar.bottom ? parent.right : undefined
+                                    }
+                                    implicitSize: Appearance.rounding.screenRounding
+                                    color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+
+                                    corner: RoundCorner.CornerEnum.BottomLeft
+                                    states: State {
+                                        name: "bottom"
+                                        when: Config.options.bar.bottom
+                                        PropertyChanges {
+                                            bottomCorner.corner: RoundCorner.CornerEnum.BottomRight
+                                        }
                                     }
                                 }
                             }
