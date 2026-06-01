@@ -44,11 +44,15 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
+    readonly property bool isPathValid: root.filePath !== "" && root.filePath.startsWith("/") && !root.filePath.includes("undefined")
+    property bool isReloading: false
+
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay
         repeat: false
         onTriggered: {
+            root.isReloading = true;
             configFileView.reload();
         }
     }
@@ -58,7 +62,9 @@ Singleton {
         interval: root.readWriteDelay
         repeat: false
         onTriggered: {
-            configFileView.writeAdapter();
+            if (root.isPathValid) {
+                configFileView.writeAdapter();
+            }
         }
     }
 
@@ -68,18 +74,24 @@ Singleton {
         watchChanges: true
         blockWrites: root.blockWrites
         onFileChanged: {
-            if (!root.ready)
+            if (!root.ready || !root.isPathValid)
                 return;
             fileReloadTimer.restart();
         }
         onAdapterUpdated: {
-            if (!root.ready)
+            if (!root.ready || root.isReloading || !root.isPathValid)
                 return;
             fileWriteTimer.restart();
         }
-        onLoaded: root.ready = true
+        onLoaded: {
+            root.isReloading = false;
+            if (root.isPathValid) {
+                root.ready = true;
+            }
+        }
         onLoadFailed: error => {
-            if (error == FileViewError.FileNotFound) {
+            root.isReloading = false;
+            if (error == FileViewError.FileNotFound && root.isPathValid) {
                 root.ready = true;
             }
         }

@@ -13,7 +13,9 @@ Item {
     property var allGames: []
     property var customOrder: Config.options.bar.sports.customOrder
     onCustomOrderChanged: {
-        Config.options.bar.sports.customOrder = customOrder;
+        if (JSON.stringify(Config.options.bar.sports.customOrder) !== JSON.stringify(customOrder)) {
+            Config.options.bar.sports.customOrder = customOrder;
+        }
     }
     property int currentGameIndex: 0
     property var currentGame: null

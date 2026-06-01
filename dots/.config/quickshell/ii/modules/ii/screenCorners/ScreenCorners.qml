@@ -24,12 +24,12 @@ Scope {
         property var screen: QsWindow.window?.screen
         property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
         property bool fullscreen
-        visible: (Config.options.appearance.fakeScreenRounding === 1 || (Config.options.appearance.fakeScreenRounding === 2 && !fullscreen))
+        visible: (Config.options.appearance.fakeScreenRounding === 1 || Config.options.appearance.fakeScreenRounding === 2)
         property var corner
 
         exclusionMode: ExclusionMode.Ignore
         mask: Region {
-            item: sidebarCornerOpenInteractionLoader.active ? sidebarCornerOpenInteractionLoader : null
+            item: (cornerWidget.visible && sidebarCornerOpenInteractionLoader.active) ? sidebarCornerOpenInteractionLoader : null
         }
         WlrLayershell.namespace: "quickshell:screenCorners"
         WlrLayershell.layer: WlrLayer.Overlay
@@ -52,6 +52,7 @@ Scope {
         RoundCorner {
             id: cornerWidget
             anchors.fill: parent
+            visible: (Config.options.appearance.fakeScreenRounding === 1 || (Config.options.appearance.fakeScreenRounding === 2 && !cornerPanelWindow.fullscreen))
             corner: cornerPanelWindow.corner
             rightVisualMargin: (Config.options.interactions.deadPixelWorkaround.enable && cornerPanelWindow.anchors.right) * 1
             bottomVisualMargin: (Config.options.interactions.deadPixelWorkaround.enable && cornerPanelWindow.anchors.bottom) * 1

@@ -70,6 +70,7 @@ Item {
                 target: item
                 property: "color"
                 value: root.isMaterial ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+                when: item !== null
             }
         }
         MaterialSymbol {
@@ -94,6 +95,7 @@ Item {
                 target: notifLoader.item
                 property: "color"
                 value: root.isMaterial ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+                when: notifLoader.item !== null
             }
         }
     }

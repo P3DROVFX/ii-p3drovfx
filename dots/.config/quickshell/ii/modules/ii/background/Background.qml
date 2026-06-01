@@ -46,7 +46,7 @@ Scope {
                 onTriggered: bgRoot.deferredFullscreen = bgRoot.isFullscreen
             }
             onIsFullscreenChanged: fullscreenDeferTimer.restart()
-            visible: GlobalStates.screenLocked || !deferredFullscreen || !Config?.options.background.hideWhenFullscreen
+            visible: true
 
             // Workspaces
             property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
@@ -195,9 +195,14 @@ Scope {
             }
 
             Item {
-                id: wallpaperItem
+                id: contentRoot
                 anchors.fill: parent
-                clip: true
+                visible: GlobalStates.screenLocked || !bgRoot.deferredFullscreen || !Config?.options.background.hideWhenFullscreen
+
+                Item {
+                    id: wallpaperItem
+                    anchors.fill: parent
+                    clip: true
                 scale: showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout ? zoomedRatio : defaultRatio
                 opacity: mediaModeOpen ? 0 : 1
 
@@ -813,6 +818,7 @@ Scope {
                 }
             }
         }
+    }
     }
 
     // --- Compositor-level blur overlay over active windows and wallpaper ---

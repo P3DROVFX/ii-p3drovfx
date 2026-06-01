@@ -315,10 +315,12 @@ Item {
             visible: Config.options.bar.resources.showPercentageText
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: -6
+            anchors.bottomMargin: -2
             implicitWidth: pctLabel.implicitWidth + 6
             implicitHeight: 12
             radius: Appearance.rounding.full
+            border.width: 1
+            border.color: Qt.rgba(rs.currentOnColor.r, rs.currentOnColor.g, rs.currentOnColor.b, 0.85)
             color: Qt.rgba(rs.currentColor.r, rs.currentColor.g, rs.currentColor.b, 0.85)
 
             StyledText {
