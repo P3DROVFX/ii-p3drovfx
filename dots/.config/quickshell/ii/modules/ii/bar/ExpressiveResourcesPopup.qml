@@ -22,36 +22,68 @@ StyledPopup {
     }
 
     function cleanGpu(model) {
-        if (!model)
+        if (!model || model === "--")
             return "--";
 
-        // Handle AMD GPU lspci format (e.g., Advanced Micro Devices, Inc. [AMD/ATI] Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] (rev c8))
-        if (/Advanced Micro Devices|AMD|ATI/i.test(model)) {
-            let cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
-            const bracketMatches = [...cleaned.matchAll(/\[([^\]]+)\]/g)];
-            if (bracketMatches.length > 0) {
-                let lastBracket = bracketMatches[bracketMatches.length - 1][1];
-                if (lastBracket.includes("/")) {
-                    lastBracket = lastBracket.split("/")[0].trim();
-                }
-                if (lastBracket && lastBracket.toLowerCase() !== "amd/ati") {
-                    let stripped = lastBracket.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
-                    if (stripped.length > 0)
-                        return stripped;
-                    return lastBracket;
+        // Remove revision info like (rev xx)
+        var cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
+        var baseModel = "";
+
+        // If it is an AMD GPU (contains Advanced Micro Devices, AMD, or ATI)
+        if (/Advanced Micro Devices|AMD|ATI/i.test(cleaned)) {
+            // Find all bracket matches using ES5 compatible regex iteration
+            var rx = /\[([^\]]+)\]/g;
+            var match;
+            var modelBracket = "";
+            while ((match = rx.exec(cleaned)) !== null) {
+                var content = match[1].trim();
+                if (content.toLowerCase() !== "amd/ati") {
+                    modelBracket = content;
                 }
             }
-            cleaned = cleaned.replace(/Advanced Micro Devices, Inc\.\s*\[AMD\/ATI\]/gi, "").trim();
-            let stripped = cleaned.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
-            if (stripped.length > 0)
-                return stripped;
-            return cleaned;
+
+            if (modelBracket) {
+                // If it is something like [Radeon RX Vega M GL Graphics] or [Radeon 680M]
+                if (modelBracket.indexOf("/") !== -1) {
+                    modelBracket = modelBracket.split("/")[0].trim();
+                }
+                baseModel = modelBracket;
+            } else {
+                // Fallback: If no model brackets, remove the vendor prefix
+                var modelOnly = cleaned.replace(/Advanced Micro Devices, Inc\.\s*\[AMD\/ATI\]/gi, "").trim();
+                if (modelOnly.toLowerCase() === "amd/ati" || modelOnly.length === 0) {
+                    baseModel = "Radeon Graphics";
+                } else {
+                    baseModel = modelOnly;
+                }
+            }
+        } else if (/Intel/i.test(cleaned)) {
+            baseModel = cleaned.replace(/Intel Corporation/gi, "Intel").trim();
+        } else if (/NVIDIA/i.test(cleaned)) {
+            var rxNvidia = /\[([^\]]+)\]/g;
+            var matchNvidia;
+            var lastBracket = "";
+            while ((matchNvidia = rxNvidia.exec(cleaned)) !== null) {
+                lastBracket = matchNvidia[1].trim();
+            }
+            if (lastBracket) {
+                baseModel = lastBracket;
+            } else {
+                baseModel = cleaned.replace(/NVIDIA Corporation/gi, "").trim();
+            }
+        } else {
+            baseModel = cleaned;
         }
 
-        let stripped = model.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics/gi, "").replace(/\s+/g, " ").trim();
-        if (stripped.length > 0)
-            return stripped;
-        return model;
+        // Apply formatting/stripping system to make the text beautifully short in the UI
+        var stripped = baseModel.replace(/NVIDIA|GeForce|AMD|Radeon|Laptop GPU|Graphics|Corporation/gi, "").replace(/\s+/g, " ").trim();
+        if (stripped.length > 0) {
+            stripped = stripped.replace(/^[\/\-\s]+/, "").trim();
+            if (stripped.length > 0) {
+                return stripped;
+            }
+        }
+        return baseModel;
     }
 
     contentItem: ColumnLayout {

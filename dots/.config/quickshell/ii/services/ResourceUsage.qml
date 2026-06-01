@@ -114,11 +114,7 @@ Singleton {
 
     Process {
         id: findCpuMaxFreqProc
-        environment: ({
-            LANG: "C",
-            LC_ALL: "C"
-        })
-        command: ["bash", "-c", "lscpu | grep 'CPU max MHz' | awk '{print $4}'"]
+        command: ["bash", "-c", "LANG=C LC_ALL=C lscpu | grep 'CPU max MHz' | awk '{print $4}'"]
         running: true
         stdout: StdioCollector {
             id: outputCollector
@@ -130,8 +126,7 @@ Singleton {
 
     Process {
         id: cpuModelProc
-        environment: ({ LANG: "C", LC_ALL: "C" })
-        command: ["bash", "-c", "grep -m1 'model name' /proc/cpuinfo | sed 's/model name\\s*:\\s*//'"]
+        command: ["bash", "-c", "LANG=C LC_ALL=C grep -m1 'model name' /proc/cpuinfo | sed 's/model name\\s*:\\s*//'"]
         running: true
         stdout: StdioCollector {
             id: cpuModelCollector
@@ -144,7 +139,6 @@ Singleton {
 
     Process {
         id: gpuModelProc
-        environment: ({ LANG: "C", LC_ALL: "C" })
         command: ["bash", "-c", "nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || (lspci | grep -i 'vga\\|3d\\|display' | head -1 | sed 's/.*: //')"]
         running: true
         stdout: StdioCollector {
@@ -158,8 +152,7 @@ Singleton {
 
     Process {
         id: diskSpaceProc
-        environment: ({ LANG: "C", LC_ALL: "C" })
-        command: ["bash", "-c", "while true; do df -B1 / | awk 'NR==2{print $2, $3, $4}'; sleep 5; done"]
+        command: ["bash", "-c", "while true; do LANG=C LC_ALL=C df -B1 / | awk 'NR==2{print $2, $3, $4}'; sleep 5; done"]
         running: true
         stdout: SplitParser {
             onRead: data => {
@@ -175,21 +168,10 @@ Singleton {
 
     Process {
         id: hardwareMonitorProc
-        environment: ({ LANG: "C", LC_ALL: "C" })
         command: ["bash", "-c", 
             "while true; do " + 
             "cpu_freq=$(awk '/cpu MHz/ {s+=$4; n++} END {if(n>0) print int(s/n)}' /proc/cpuinfo); " +
             "cpu_temp=0; " +
-            "for tz in /sys/class/thermal/thermal_zone*; do " +
-            "if [ -f \"$tz/type\" ] && [ -f \"$tz/temp\" ]; then " +
-            "type=$(cat \"$tz/type\" 2>/dev/null); " +
-            "if [ \"$type\" = \"x86_pkg_temp\" ] || [ \"$type\" = \"k10temp\" ] || [ \"$type\" = \"cpu-thermal\" ] || [ \"$type\" = \"cpu_thermal\" ] || [ \"$type\" = \"acpitz\" ]; then " +
-            "cpu_temp=$(cat \"$tz/temp\" 2>/dev/null); " +
-            "if [ -n \"$cpu_temp\" ] && [ \"$cpu_temp\" -gt 0 ]; then break; fi; " +
-            "fi; " +
-            "fi; " +
-            "done; " +
-            "if [ -z \"$cpu_temp\" ] || [ \"$cpu_temp\" -eq 0 ]; then " +
             "for hw in /sys/class/hwmon/hwmon*; do " +
             "if [ -f \"$hw/name\" ]; then " +
             "name=$(cat \"$hw/name\" 2>/dev/null); " +
@@ -206,12 +188,25 @@ Singleton {
             "fi; " +
             "fi; " +
             "done; " +
+            "if [ -z \"$cpu_temp\" ] || [ \"$cpu_temp\" -eq 0 ]; then " +
+            "for tz in /sys/class/thermal/thermal_zone*; do " +
+            "if [ -f \"$tz/type\" ] && [ -f \"$tz/temp\" ]; then " +
+            "type=$(cat \"$tz/type\" 2>/dev/null); " +
+            "if [ \"$type\" = \"x86_pkg_temp\" ] || [ \"$type\" = \"cpu-thermal\" ] || [ \"$type\" = \"cpu_thermal\" ] || [ \"$type\" = \"TCPU\" ] || [ \"$type\" = \"cpu\" ]; then " +
+            "temp_val=$(cat \"$tz/temp\" 2>/dev/null); " +
+            "if [ -n \"$temp_val\" ] && [ \"$temp_val\" -gt 0 ]; then " +
+            "cpu_temp=\"$temp_val\"; " +
+            "break; " +
+            "fi; " +
+            "fi; " +
+            "fi; " +
+            "done; " +
             "fi; " +
             "if [ -z \"$cpu_temp\" ] || [ \"$cpu_temp\" -eq 0 ]; then " +
             "for tz in /sys/class/thermal/thermal_zone*; do " +
             "if [ -f \"$tz/type\" ] && [ -f \"$tz/temp\" ]; then " +
             "type=$(cat \"$tz/type\" 2>/dev/null); " +
-            "if [ \"$type\" = \"TCPU\" ] || [ \"$type\" = \"cpu\" ]; then " +
+            "if [ \"$type\" = \"acpitz\" ]; then " +
             "temp_val=$(cat \"$tz/temp\" 2>/dev/null); " +
             "if [ -n \"$temp_val\" ] && [ \"$temp_val\" -gt 0 ]; then " +
             "cpu_temp=\"$temp_val\"; " +
