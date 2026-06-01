@@ -337,7 +337,7 @@ ContentPage {
                         actionProc.finished = false;
                         actionProc.exitCode = -1;
                         actionProc.mode = "fork";
-                        actionProc.command = ["bash", page.setupScript, "--force-install", "--no-pull", "--no-confirm"];
+                        actionProc.command = ["bash", page.setupScript, "--force-install", "--no-pull", "--no-confirm", "--preserve-config"];
                         actionProc.running = true;
                     }
                     StyledToolTip {
@@ -354,7 +354,7 @@ ContentPage {
                         actionProc.finished = false;
                         actionProc.exitCode = -1;
                         actionProc.mode = "upstream";
-                        actionProc.command = ["bash", page.setupScript, "--force-install", "--no-pull", "--no-confirm", "--ii-vynx"];
+                        actionProc.command = ["bash", page.setupScript, "--force-install", "--no-pull", "--no-confirm", "--ii-vynx", "--preserve-config"];
                         actionProc.running = true;
                     }
                     StyledToolTip {

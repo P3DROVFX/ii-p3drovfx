@@ -46,10 +46,11 @@ LockScreen {
                 var next = {}
                 var batch = "keyword animation workspaces,1,7,menu_decel,slidevert; "
                 for (var i = 0; i < Quickshell.screens.length; ++i) {
-                    var mon = Quickshell.screens[i].name
+                    var mon = Quickshell.screens[i] ? Quickshell.screens[i].name : null
+                    if (!mon) continue;
                     var mData = HyprlandData.monitors.find(m => m.name === mon)
                     if (mData?.activeWorkspace == undefined) {
-                        return;
+                        continue; // Skip this monitor rather than aborting all others
                     }
                     var ws = (mData?.activeWorkspace?.id ?? 1)
                     next[mon] = ws
@@ -69,9 +70,10 @@ LockScreen {
         delegate: Scope {
             required property ShellScreen modelData
             property bool shouldPush: GlobalStates.screenLocked
-            property string targetMonitorName: modelData.name
-            property int verticalMovementDistance: modelData.height
-            property int horizontalSqueeze: modelData.width * 0.2
+            // Guard against null modelData during screen reconfiguration on lock
+            property string targetMonitorName: modelData ? modelData.name : ""
+            property int verticalMovementDistance: modelData ? modelData.height : 0
+            property int horizontalSqueeze: modelData ? modelData.width * 0.2 : 0
         }
     }
 }
