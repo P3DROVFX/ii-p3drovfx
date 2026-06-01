@@ -44,8 +44,17 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
-    readonly property bool isPathValid: root.filePath !== "" && root.filePath.startsWith("/") && !root.filePath.includes("undefined")
+    readonly property bool isPathValid: root.filePath !== "" && root.filePath.startsWith("/") && !root.filePath.includes("undefined") && Directories.config !== "" && Directories.home !== ""
     property bool isReloading: false
+
+    onFilePathChanged: {
+        root.ready = false;
+    }
+
+    Component.onDestruction: {
+        root.blockWrites = true;
+        root.ready = false;
+    }
 
     Timer {
         id: fileReloadTimer
@@ -70,7 +79,7 @@ Singleton {
 
     FileView {
         id: configFileView
-        path: root.filePath
+        path: root.isPathValid ? root.filePath : ""
         watchChanges: true
         blockWrites: root.blockWrites
         onFileChanged: {
@@ -92,6 +101,9 @@ Singleton {
         onLoadFailed: error => {
             root.isReloading = false;
             if (error == FileViewError.FileNotFound && root.isPathValid) {
+                if (!root.blockWrites) {
+                    configFileView.writeAdapter();
+                }
                 root.ready = true;
             }
         }
