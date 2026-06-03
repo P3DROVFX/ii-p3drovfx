@@ -8,11 +8,11 @@ import Quickshell.Hyprland
  * Manages a HyprlandFocusGrab that's to be shared by all windows.
  * "Persistent" is for windows that should always be included but not closed on dismiss, like bar and onscreen keyboard.
  * "Dismissable" is for stuff like sidebars
- */ 
+ */
 Singleton {
     id: root
 
-    signal dismissed()
+    signal dismissed
 
     property list<var> persistent: []
     property list<var> dismissable: []
@@ -53,11 +53,7 @@ Singleton {
     }
 
     function hasActive(element) {
-        return element?.activeFocus || Array.from(
-            element?.children
-        ).some(
-            (child) => hasActive(child)
-        );
+        return element?.activeFocus || Array.from(element?.children).some(child => hasActive(child));
     }
 
     HyprlandFocusGrab {
@@ -68,5 +64,4 @@ Singleton {
             root.dismiss();
         }
     }
-
 }
