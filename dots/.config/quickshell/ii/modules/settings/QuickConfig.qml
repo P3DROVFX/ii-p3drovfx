@@ -248,6 +248,37 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "palette"
+        title: Translation.tr("Color Engine")
+        Layout.topMargin: -25
+
+        ContentSubsection {
+            title: Translation.tr("Color generation mode")
+            tooltip: Translation.tr("ii-vynx: uses the original switchwall pipeline.\n\nFork: uses the fork's color generation pipeline, use this if vynx doesn't work.")
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.colorEngine ?? "vynx"
+                onSelected: newValue => {
+                    Config.options.appearance.colorEngine = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("ii-vynx"),
+                        icon: "verified",
+                        value: "vynx"
+                    },
+                    {
+                        displayName: Translation.tr("Fork"),
+                        icon: "build",
+                        value: "fork"
+                    }
+                ]
+            }
+        }
+    }
+
+    ContentSection {
         icon: "screenshot_monitor"
         title: Translation.tr("Bar & screen")
         Layout.topMargin: -25

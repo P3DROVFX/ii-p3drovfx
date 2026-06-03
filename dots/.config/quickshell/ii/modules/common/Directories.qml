@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.services
+import qs.modules.common
 import qs.modules.common.functions
 import QtCore
 import QtQuick
@@ -57,7 +58,9 @@ Singleton {
     property string generatedWallpaperCategoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper/category.txt`)
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
     property string screenshotTemp: `/tmp/quickshell-${SystemInfo.username}/media/screenshot`
-    property string wallpaperSwitchScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/switchwall.sh`)
+    property string wallpaperSwitchScriptPath: FileUtils.trimFileProtocol(
+        `${Directories.scriptPath}/colors/${(Config.options.appearance.colorEngine ?? "vynx") === "fork" ? "switchwall" : "switchwall_vynx"}.sh`
+    )
     property string defaultAiPrompts: Quickshell.shellPath("defaults/ai/prompts")
     property string defaultThemes: Quickshell.shellPath("defaults/themes")
     property string customThemes: `${Directories.shellConfig}/themes`
