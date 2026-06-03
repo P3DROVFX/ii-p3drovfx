@@ -177,7 +177,7 @@ Scope {
                                 left: parent.left
                                 top: parent.top
                                 bottom: undefined
-                                topMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                                topMargin: (Config?.options.bar.autoHide.enable && !barRoot.mustShow) ? -Appearance.sizes.barHeight : 0
                                 rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * -1
                             }
                             Behavior on anchors.topMargin {
@@ -202,7 +202,7 @@ Scope {
                                 PropertyChanges {
                                     target: barContent
                                     anchors.topMargin: 0
-                                    anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : (Config.options.interactions.deadPixelWorkaround.enable) * -1
+                                    anchors.bottomMargin: (Config?.options.bar.autoHide.enable && !barRoot.mustShow) ? -Appearance.sizes.barHeight : (Config.options.interactions.deadPixelWorkaround.enable) * -1
                                 }
                             }
                         }

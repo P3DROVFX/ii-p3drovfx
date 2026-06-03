@@ -170,7 +170,7 @@ Scope {
                                 bottom: parent.bottom
                                 left: parent.left
                                 right: undefined
-                                leftMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.verticalBarWidth : 0
+                                leftMargin: (Config?.options.bar.autoHide.enable && !barRoot.mustShow) ? -Appearance.sizes.verticalBarWidth : 0
                                 rightMargin: 0
                             }
                             Behavior on anchors.leftMargin {
@@ -195,7 +195,7 @@ Scope {
                                 PropertyChanges {
                                     target: barContent
                                     anchors.topMargin: 0
-                                    anchors.rightMargin: (Config?.options.bar.autoHide.enable && !mustShow) ? -Appearance.sizes.barHeight : 0
+                                    anchors.rightMargin: (Config?.options.bar.autoHide.enable && !barRoot.mustShow) ? -Appearance.sizes.verticalBarWidth : 0
                                 }
                             }
                         }
