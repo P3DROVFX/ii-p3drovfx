@@ -65,7 +65,7 @@ RippleButton {
         visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
         source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
         colorize: true
-        color: colOnLayer0
+        color: leftSidebarButton.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
 
         Rectangle {
             opacity: leftSidebarButton.showPing ? 1 : 0
@@ -94,7 +94,7 @@ RippleButton {
         text: Config.options.bar.topLeftIcon
         iconSize: 16
         fill: 1
-        color: leftSidebarButton.toggled ? Appearance.colors.colOnSecondaryContainer : "white"
+        color: leftSidebarButton.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
 
         Rectangle {
             opacity: leftSidebarButton.showPing ? 1 : 0
