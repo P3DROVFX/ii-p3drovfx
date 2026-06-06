@@ -10,6 +10,7 @@ import qs.modules.ii.bar as Bar
 
 MouseArea {
     id: root
+    property bool uppercaseLayout: Config.options.bar.keyboardLayout.uppercaseLayout
 
     readonly property bool hasMultipleLayouts: HyprlandXkb.layoutCodes.length > 1
 
@@ -25,7 +26,8 @@ MouseArea {
             return "";
         // Only take the first layout if multiple exist, or just take the first 2 letters of the primary one
         const firstLayout = fullCode.split(':')[0].split('-')[0];
-        return firstLayout.slice(0, 2).toUpperCase();
+        let abbr = firstLayout.slice(0, 2);
+        return root.uppercaseLayout ? abbr.toUpperCase() : abbr.toLowerCase();
     }
 
     Process {
