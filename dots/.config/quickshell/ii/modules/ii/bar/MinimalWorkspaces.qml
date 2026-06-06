@@ -17,34 +17,14 @@ Item {
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
     
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
-    readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
+    readonly property int activeWsId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
     readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
 
-    // Workspace map props (mirrors Workspaces.qml / ExpressiveWorkspaces.qml)
+    // Pagination/Offset logic to match screens/monitor mapping
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property string monitorName: root.monitor?.name ?? ""
-    readonly property int screenIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    readonly property int workspaceOffset: useWorkspaceMap ? (workspaceMap[monitorName] ?? (screenIndex * 6)) : 0
-
-    function getMonitorMaxWsId(name, offset) {
-        if (!useWorkspaceMap) return 99999;
-        let offsets = [];
-        for (let i = 0; i < Quickshell.screens.length; i++) {
-            let scrName = Quickshell.screens[i].name;
-            let scrOffset = workspaceMap[scrName] ?? (i * 6);
-            offsets.push(scrOffset);
-        }
-        offsets.sort((a, b) => a - b);
-        let curIdx = offsets.indexOf(offset);
-        if (curIdx !== -1 && curIdx + 1 < offsets.length) {
-            return offsets[curIdx + 1];
-        }
-        return offset + workspacesShown;
-    }
-
-    readonly property int monitorMinWsId: useWorkspaceMap ? workspaceOffset + 1 : 1
-    readonly property int monitorMaxWsId: useWorkspaceMap ? getMonitorMaxWsId(monitorName, workspaceOffset) : 99999
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
+    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
+    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
 
     property var shapesList: [
         "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle",
@@ -82,7 +62,17 @@ Item {
     }
     
     // Pagination logic
-    readonly property int startWsId: Math.floor((activeWsId - 1) / workspacesShown) * workspacesShown + 1
+    readonly property int startWsId: {
+        if (dynamicWorkspaces) return workspaceOffset + 1;
+        let activeVal = activeWsId;
+        if (activeVal <= workspaceOffset) activeVal = workspaceOffset + 1;
+        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
+            let nextMonitorStart = workspaceMap[monitorIndex + 1];
+            if (activeVal > nextMonitorStart) activeVal = nextMonitorStart;
+        }
+        let page = Math.floor((activeVal - workspaceOffset - 1) / workspacesShown);
+        return Math.max(0, page) * workspacesShown + 1 + workspaceOffset;
+    }
     
     property var workspaceOccupied: ({})
     
@@ -112,7 +102,7 @@ Item {
             }
             return 0;
         }
-        return (wsId - 1) % workspacesShown;
+        return (wsId - workspaceOffset - 1) % workspacesShown;
     }
 
     readonly property var visibleWsModel: {
@@ -121,11 +111,36 @@ Item {
         }
         let list = [];
         for (let ws of Hyprland.workspaces.values) {
+            if (ws.id < 1) continue;
+            if (useWorkspaceMap) {
+                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                if (ws.id < workspaceOffset + 1 || ws.id > nextMonitorStart) {
+                    continue;
+                }
+            }
             if (!list.includes(ws.id)) list.push(ws.id);
         }
-        if (!list.includes(activeWsId)) list.push(activeWsId);
+        if (activeWsId > 0 && !list.includes(activeWsId)) {
+            if (useWorkspaceMap) {
+                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                if (activeWsId >= workspaceOffset + 1 && activeWsId <= nextMonitorStart) {
+                    list.push(activeWsId);
+                }
+            } else {
+                list.push(activeWsId);
+            }
+        }
         list.sort((a, b) => a - b);
         return list;
+    }
+
+    readonly property bool isActiveWsInRange: {
+        if (useWorkspaceMap) {
+            let start = workspaceOffset + 1;
+            let end = useWorkspaceMap && workspaceMap.length > monitorIndex + 1 ? workspaceMap[monitorIndex + 1] : (workspaceOffset + workspacesShown);
+            return activeWsId >= start && activeWsId <= end;
+        }
+        return true;
     }
 
     // The animated highlight (pill)
@@ -142,7 +157,7 @@ Item {
         
         AnimatedTabIndexPair {
             id: idxPair
-            index: root.getWsIndex(activeWsId)
+            index: Math.max(0, root.getWsIndex(activeWsId))
         }
         
         readonly property real animX1: getPosForIndex(idxPair.idx1)
@@ -154,7 +169,7 @@ Item {
         width: root.vertical ? dotSize : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize)
         height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize
 
-        opacity: root.scratchpadOpen ? 0.0 : 1.0
+        opacity: root.scratchpadOpen || !root.isActiveWsInRange ? 0.0 : 1.0
         Behavior on opacity {
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
@@ -355,26 +370,13 @@ Item {
         onWheel: (wheel) => {
             wheel.accepted = true;
             if (dynamicWorkspaces) {
-                const delta = wheel.angleDelta.y > 0 ? -1 : 1;
-                if (useWorkspaceMap) {
-                    let monitorWs = Hyprland.workspaces.values
-                        .filter(ws => ws.id >= monitorMinWsId && ws.id <= monitorMaxWsId)
-                        .map(ws => ws.id)
-                        .sort((a, b) => a - b);
-                    if (!monitorWs.includes(activeWsId)) monitorWs.push(activeWsId);
-                    monitorWs.sort((a, b) => a - b);
-                    const curIdx = monitorWs.indexOf(activeWsId);
-                    const nextIdx = curIdx + delta;
-                    if (nextIdx < 0 || nextIdx >= monitorWs.length) return;
-                    Hyprland.dispatch("hl.dsp.focus({ workspace = '" + monitorWs[nextIdx] + "' })");
-                } else {
-                    if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                    else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-                }
+                // In dynamic mode, scroll through existing workspaces (skipping empty)
+                if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
+                else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
             } else {
+                // In pagination mode, scroll through all IDs (1, 2, 3...)
                 let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
                 if (nextId < 1) return;
-                if (useWorkspaceMap && (nextId < monitorMinWsId || nextId > monitorMaxWsId)) return;
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
         }

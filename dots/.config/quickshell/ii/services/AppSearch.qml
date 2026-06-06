@@ -160,10 +160,20 @@ Singleton {
         return str.toLowerCase().replace(/_/g, "-");
     }
 
+    property var _iconCache: ({})
+
     function guessIcon(str) {
         if (!str || str.length == 0)
             return "image-missing";
+        if (_iconCache[str] !== undefined)
+            return _iconCache[str];
+        
+        let result = _guessIconImpl(str);
+        _iconCache[str] = result;
+        return result;
+    }
 
+    function _guessIconImpl(str) {
         // Try common substitutions first
         if (substitutions[str])
             return substitutions[str];

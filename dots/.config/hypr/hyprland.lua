@@ -1,17 +1,18 @@
 -- This file sources other files in `hyprland` and `custom` folders
 -- You wanna add your stuff in files in `custom`
 
--- Internal stuff --
-require("hyprland.lib")
-require("hyprland.services")
-
 local function safe_require(module_name)
+    package.loaded[module_name] = nil
     local ok, err = pcall(require, module_name)
     if not ok then
         hl.exec_cmd("notify-send 'Hyprland Lua Error' 'Failed to load " .. module_name .. ": " .. tostring(err):gsub("'", "\\'") .. "' -u critical -a 'Hyprland'")
     end
     return ok
 end
+
+-- Internal stuff --
+safe_require("hyprland.lib")
+safe_require("hyprland.services")
 
 -- Environment variables --
 safe_require("hyprland.env")
@@ -49,3 +50,6 @@ safe_require("monitors")
 
 -- Shell overrides --
 safe_require("hyprland.shellOverrides.main")
+
+-- hyprmon: managed monitor profile include
+safe_require("hyprmon")

@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import qs.modules.common
 
 /**
  * Provides access to some Hyprland data not available in Quickshell.Hyprland.
@@ -81,6 +82,12 @@ Singleton {
 
     Component.onCompleted: {
         updateAll();
+        if (Config.ready) {
+            syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
     }
 
     Connections {
@@ -162,5 +169,67 @@ Singleton {
                 root.activeWorkspace = JSON.parse(activeWorkspaceCollector.text);
             }
         }
+    }
+
+    Process {
+        id: syncWorkspaceMapProcess
+    }
+
+    function syncWorkspaceMap() {
+        if (!Config.ready || !Config.options.bar.workspaces.useWorkspaceMap) return;
+        const map = Config.options.bar.workspaces.workspaceMap;
+        if (!map || map.length === 0) return;
+        const monitorNames = root.monitors.map(m => m.name);
+        if (monitorNames.length === 0) return;
+        const shown = Config.options.bar.workspaces.shown || 10;
+        
+        syncWorkspaceMapProcess.command = [
+            "python3",
+            `${Directories.scriptPath}/hyprland/sync_workspace_map.py`,
+            JSON.stringify(map),
+            JSON.stringify(monitorNames),
+            shown.toString()
+        ];
+        syncWorkspaceMapProcess.running = true;
+    }
+
+    function syncWorkspaceGroupSize(shown) {
+        let script = `touch "$HOME/.config/hypr/custom/variables.lua" && sed -i '/workspaceGroupSize =/d' "$HOME/.config/hypr/custom/variables.lua" && echo "workspaceGroupSize = ${shown}" >> "$HOME/.config/hypr/custom/variables.lua" && hyprctl reload`;
+        Quickshell.execDetached(["bash", "-c", script]);
+    }
+
+    // Trigger sync functions on changes
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            if (Config.ready) {
+                root.syncWorkspaceMap();
+                const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+                const shown = Config.options.bar.workspaces.shown || 10;
+                root.syncWorkspaceGroupSize(useMap ? shown : 10);
+            }
+        }
+    }
+
+    Connections {
+        target: Config.ready ? Config.options.bar.workspaces : null
+        ignoreUnknownSignals: true
+        function onWorkspaceMapChanged() { root.syncWorkspaceMap(); }
+        function onUseWorkspaceMapChanged() {
+            root.syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            root.syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
+        function onShownChanged() {
+            root.syncWorkspaceMap();
+            const useMap = Config.options.bar.workspaces.useWorkspaceMap;
+            const shown = Config.options.bar.workspaces.shown || 10;
+            root.syncWorkspaceGroupSize(useMap ? shown : 10);
+        }
+    }
+
+    onMonitorsChanged: {
+        root.syncWorkspaceMap();
     }
 }

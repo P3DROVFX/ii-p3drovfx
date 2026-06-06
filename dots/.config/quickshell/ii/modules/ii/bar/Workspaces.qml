@@ -26,26 +26,18 @@ Item {
     readonly property int scratchpadWindowsCount: HyprlandData.windowList.filter(win => win.workspace && win.workspace.name && win.workspace.name.startsWith("special")).length
 
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property string monitorName: root.monitor?.name ?? ""
-    readonly property int screenIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    property int workspaceOffset: useWorkspaceMap ? (workspaceMap[monitorName] ?? (screenIndex * 6)) : 0
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
+    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
+    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
 
-    property var shapesList: [
-        "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle",
-        "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided",
-        "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst",
-        "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"
-    ]
+    property var shapesList: ["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]
     property string currentRandomShape: "Circle"
     property real randomRotation: 0
 
     readonly property real stableActivePosition: {
         let basePos = root.visibleActiveIndex * root.iconBoxWrapperSize;
         let offset = activeIndicator ? activeIndicator.offsetFor(root.workspaceIndexInGroup) : 0;
-        let inset = Config.options.bar.workspaces.useRandomShapeForActiveIndicator 
-            ? (root.iconBoxWrapperSize - root.individualIconBoxHeight) / 2
-            : (activeIndicator ? activeIndicator.visualInset : 0);
+        let inset = Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (root.iconBoxWrapperSize - root.individualIconBoxHeight) / 2 : (activeIndicator ? activeIndicator.visualInset : 0);
         return basePos + offset + inset;
     }
     property real animatedStablePosition: stableActivePosition
@@ -57,7 +49,8 @@ Item {
     }
 
     function updateRandomShape() {
-        if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator) return;
+        if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
+            return;
         let nextShape = currentRandomShape;
         let attempts = 0;
         while (nextShape === currentRandomShape && attempts < 10) {
@@ -73,34 +66,38 @@ Item {
         updateRandomShape();
     }
 
-    function getMonitorMaxWsId(name, offset) {
-        if (!useWorkspaceMap) return 99999;
-        let offsets = [];
-        for (let i = 0; i < Quickshell.screens.length; i++) {
-            let scrName = Quickshell.screens[i].name;
-            let scrOffset = workspaceMap[scrName] ?? (i * 6);
-            offsets.push(scrOffset);
+    readonly property int workspacesShown: {
+        if (useWorkspaceMap && workspaceMap.length > monitorIndex) {
+            let start = workspaceMap[monitorIndex];
+            let end = (monitorIndex + 1 < workspaceMap.length) ? workspaceMap[monitorIndex + 1] : (start + Config.options.bar.workspaces.shown);
+            return dynamicWorkspaces ? (end - start) : Config.options.bar.workspaces.shown;
         }
-        offsets.sort((a, b) => a - b);
-        let curIdx = offsets.indexOf(offset);
-        if (curIdx !== -1 && curIdx + 1 < offsets.length) {
-            return offsets[curIdx + 1];
-        }
-        return offset + Config.options.bar.workspaces.shown;
+        return Config.options.bar.workspaces.shown;
     }
-
-    readonly property int monitorMinWsId: useWorkspaceMap ? workspaceOffset + 1 : 1
-    readonly property int monitorMaxWsId: useWorkspaceMap ? getMonitorMaxWsId(monitorName, workspaceOffset) : 99999
-    readonly property int workspacesShown: Math.min(
-        Config.options.bar.workspaces.shown,
-        useWorkspaceMap ? (monitorMaxWsId - workspaceOffset) : Config.options.bar.workspaces.shown
-    )
-    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? 1
-    readonly property bool isActiveWorkspaceInRange: !useWorkspaceMap || (effectiveActiveWorkspaceId >= monitorMinWsId && effectiveActiveWorkspaceId <= monitorMaxWsId)
-    readonly property int workspaceGroup: isActiveWorkspaceInRange ? Math.max(0, Math.floor((effectiveActiveWorkspaceId - root.workspaceOffset - 1) / root.workspacesShown)) : 0
+    readonly property int workspaceGroup: {
+        let activeId = monitor?.activeWorkspace?.id;
+        if (!activeId) return 0;
+        if (activeId <= workspaceOffset) return 0;
+        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
+            let nextMonitorStart = workspaceMap[monitorIndex + 1];
+            if (activeId > nextMonitorStart) return 0;
+        }
+        let group = Math.floor((activeId - workspaceOffset - 1) / workspacesShown);
+        return Math.max(0, group);
+    }
     property list<bool> workspaceOccupied: []
-    property int workspaceIndexInGroup: isActiveWorkspaceInRange ? Math.max(0, (effectiveActiveWorkspaceId - root.workspaceOffset - 1) % root.workspacesShown) : 0
+    property int workspaceIndexInGroup: {
+        let activeId = monitor?.activeWorkspace?.id;
+        if (!activeId) return -1;
+        let startWs = workspaceOffset + workspaceGroup * workspacesShown + 1;
+        let endWs = workspaceOffset + (workspaceGroup + 1) * workspacesShown;
+        if (activeId >= startWs && activeId <= endWs) {
+            return activeId - startWs;
+        }
+        return -1;
+    }
     property var monitorWindows
+    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
 
     property int individualIconBoxHeight: 22
     property int iconBoxWrapperSize: 26
@@ -236,9 +233,14 @@ Item {
 
         function offsetFor(index) {
             let y = 0;
-            for (let i = 0; i < index; i++) {
-                const item = contentLayout.children[i];
-                y += root.vertical ? item?.height - baseHeight : item?.width - baseHeight;
+            if (contentLayout && contentLayout.children) {
+                let limit = Math.min(index, contentLayout.children.length);
+                for (let i = 0; i < limit; i++) {
+                    const item = contentLayout.children[i];
+                    if (item) {
+                        y += root.vertical ? item.height - baseHeight : item.width - baseHeight;
+                    }
+                }
             }
             return y;
         }
@@ -249,7 +251,7 @@ Item {
 
         property int index: root.workspaceIndexInGroup
         property int baseHeight: root.iconBoxWrapperSize
-        property int windowCount: getWindowCount(index + root.workspaceOffset + root.workspaceGroup * root.workspacesShown + 1)
+        property int windowCount: index < 0 ? 0 : getWindowCount(index + root.workspaceOffset + root.workspaceGroup * root.workspacesShown + 1)
 
         property bool isEmptyWorkspace: windowCount === 0
         property bool isOneWindow: windowCount === 1
@@ -270,16 +272,18 @@ Item {
 
         AnimatedTabIndexPair {
             id: idxPair
-            index: root.visibleActiveIndex
+            index: Math.max(0, root.visibleActiveIndex)
         }
 
         property real pairMin: Math.min(idxPair.idx1, idxPair.idx2)
         property real pairAbs: Math.abs(idxPair.idx1 - idxPair.idx2)
 
         property real currentItemOffset: {
+            if (root.workspaceIndexInGroup < 0 || !contentLayout || !contentLayout.children || root.workspaceIndexInGroup >= contentLayout.children.length)
+                return 0;
             const item = contentLayout.children[root.workspaceIndexInGroup];
             const itemSize = root.vertical ? item?.height : item?.width;
-            return itemSize - baseHeight;
+            return (itemSize ?? root.iconBoxWrapperSize) - baseHeight;
         }
 
         readonly property real accumulatedPreviousOffsets: offsetFor(root.workspaceIndexInGroup + 1)
@@ -295,7 +299,7 @@ Item {
         width: root.vertical ? individualIconBoxHeight : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength)
         height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength) : individualIconBoxHeight
 
-        opacity: (root.scratchpadOpen || !root.isActiveWorkspaceInRange) ? 0.0 : 1.0
+        opacity: root.scratchpadOpen || root.workspaceIndexInGroup < 0 ? 0.0 : 1.0
         Behavior on opacity {
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
@@ -452,39 +456,16 @@ Item {
         onWheel: event => {
             event.accepted = true;
             if (dynamicWorkspaces) {
-                // Build sorted list of occupied ws IDs within this monitor's range
-                const delta = event.angleDelta.y < 0 ? 1 : -1;
-                if (useWorkspaceMap) {
-                    let monitorWs = Hyprland.workspaces.values
-                        .filter(ws => ws.id >= monitorMinWsId && ws.id <= monitorMaxWsId)
-                        .map(ws => ws.id)
-                        .sort((a, b) => a - b);
-                    if (!monitorWs.includes(effectiveActiveWorkspaceId)) monitorWs.push(effectiveActiveWorkspaceId);
-                    monitorWs.sort((a, b) => a - b);
-                    const curIdx = monitorWs.indexOf(effectiveActiveWorkspaceId);
-                    const nextIdx = curIdx + delta;
-                    if (nextIdx < 0 || nextIdx >= monitorWs.length) return;
-                    Hyprland.dispatch("hl.dsp.focus({ workspace = '" + monitorWs[nextIdx] + "' })");
-                } else {
-                    if (event.angleDelta.y < 0)
-                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-                    else
-                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                }
+                if (event.angleDelta.y < 0)
+                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
+                else if (event.angleDelta.y > 0)
+                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
             } else {
-                if (!useWorkspaceMap) {
-                    if (event.angleDelta.y < 0)
-                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-                    else
-                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                    return;
-                }
                 let nextId = effectiveActiveWorkspaceId + (event.angleDelta.y < 0 ? 1 : -1);
                 const minId = workspaceOffset + workspaceGroup * workspacesShown + 1;
                 const maxId = workspaceOffset + (workspaceGroup + 1) * workspacesShown;
-                // Also clamp to absolute monitor range
-                if (nextId < monitorMinWsId || nextId > monitorMaxWsId) return;
-                if (nextId < minId || nextId > maxId) return;
+                if (nextId < minId || nextId > maxId)
+                    return;
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
         }

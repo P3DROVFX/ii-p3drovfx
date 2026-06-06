@@ -44,11 +44,6 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
-    function forceSave() {
-        fileWriteTimer.stop();
-        configFileView.writeAdapter();
-    }
-
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay
@@ -494,7 +489,7 @@ Singleton {
                     property int showNumberDelay: 300 // milliseconds
                     property list<string> numberMap: ["1", "2"] // Characters to show instead of numbers on workspace indicator
                     property bool useWorkspaceMap: false
-                    property JsonObject workspaceMap: JsonObject {}
+                    property list<var> workspaceMap: [0, 10]
                     property int maxWindowCount: 1 // Maximum windows to show in one workspace
                     property bool useNerdFont: false
                     property int activeIndicatorOpacity: 100 // 0-100
@@ -811,7 +806,7 @@ Singleton {
                 property bool showIcons: true
                 property bool centerIcons: true
                 property bool useWorkspaceMap: false
-                property JsonObject workspaceMap: JsonObject {}
+                property list<var> workspaceMap: [0, 10]
                 property bool showOpeningAnimation: true
 
                 property JsonObject scrollingStyle: JsonObject {

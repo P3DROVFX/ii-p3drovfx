@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Quickshell
 
 import QtQml.Models
 
@@ -559,10 +558,20 @@ ContentPage {
                 title: Translation.tr("Battery")
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.styles.battery
-                    onSelected: newValue => { Config.options.bar.styles.battery = newValue; }
+                    onSelected: newValue => {
+                        Config.options.bar.styles.battery = newValue;
+                    }
                     options: [
-                        { displayName: Translation.tr("Default"), icon: "battery_charging_full", value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                        {
+                            displayName: Translation.tr("Default"),
+                            icon: "battery_charging_full",
+                            value: "default"
+                        },
+                        {
+                            displayName: Translation.tr("Expressive"),
+                            icon: "fluid_med",
+                            value: "expressive"
+                        }
                     ]
                 }
             }
@@ -570,10 +579,20 @@ ContentPage {
                 title: Translation.tr("Bluetooth")
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.styles.bluetooth
-                    onSelected: newValue => { Config.options.bar.styles.bluetooth = newValue; }
+                    onSelected: newValue => {
+                        Config.options.bar.styles.bluetooth = newValue;
+                    }
                     options: [
-                        { displayName: Translation.tr("Default"), icon: "bluetooth", value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                        {
+                            displayName: Translation.tr("Default"),
+                            icon: "bluetooth",
+                            value: "default"
+                        },
+                        {
+                            displayName: Translation.tr("Expressive"),
+                            icon: "fluid_med",
+                            value: "expressive"
+                        }
                     ]
                 }
             }
@@ -585,10 +604,20 @@ ContentPage {
                 title: Translation.tr("Keyboard Layout")
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.styles.keyboard
-                    onSelected: newValue => { Config.options.bar.styles.keyboard = newValue; }
+                    onSelected: newValue => {
+                        Config.options.bar.styles.keyboard = newValue;
+                    }
                     options: [
-                        { displayName: Translation.tr("Default"), icon: "keyboard", value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                        {
+                            displayName: Translation.tr("Default"),
+                            icon: "keyboard",
+                            value: "default"
+                        },
+                        {
+                            displayName: Translation.tr("Expressive"),
+                            icon: "fluid_med",
+                            value: "expressive"
+                        }
                     ]
                 }
             }
@@ -600,14 +629,26 @@ ContentPage {
                 title: Translation.tr("Sports")
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.styles.sports
-                    onSelected: newValue => { Config.options.bar.styles.sports = newValue; }
+                    onSelected: newValue => {
+                        Config.options.bar.styles.sports = newValue;
+                    }
                     options: [
-                        { displayName: Translation.tr("Default"), icon: "sports_soccer", value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                        {
+                            displayName: Translation.tr("Default"),
+                            icon: "sports_soccer",
+                            value: "default"
+                        },
+                        {
+                            displayName: Translation.tr("Expressive"),
+                            icon: "fluid_med",
+                            value: "expressive"
+                        }
                     ]
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
     }
 
@@ -781,8 +822,6 @@ ContentPage {
                 Config.options.tray.monochromeIcons = checked;
             }
         }
-
-
     }
 
     ContentSection {
@@ -925,47 +964,80 @@ ContentPage {
                 checked: Config.options.bar.workspaces.useWorkspaceMap
                 onCheckedChanged: {
                     Config.options.bar.workspaces.useWorkspaceMap = checked;
-                    Config.forceSave();
-                    Quickshell.execDetached(["hyprctl", "reload"]);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Map specific workspace ranges to each monitor.")
+                    text: Translation.tr("For multi-monitor setups, isolates workspaces ranges for each monitor")
                 }
             }
-
             ConfigSwitch {
-                buttonIcon: "counter_1"
-                text: Translation.tr('Always show numbers')
-                checked: Config.options.bar.workspaces.alwaysShowNumbers
+                buttonIcon: "sync"
+                text: Translation.tr('Sync overview map')
+                checked: Config.options.overview.useWorkspaceMap
                 onCheckedChanged: {
-                    Config.options.bar.workspaces.alwaysShowNumbers = checked;
+                    Config.options.overview.useWorkspaceMap = checked;
+                    if (checked) {
+                        Config.options.overview.workspaceMap = JSON.parse(JSON.stringify(Config.options.bar.workspaces.workspaceMap || []));
+                    }
+                }
+                StyledToolTip {
+                    text: Translation.tr("Apply the same workspace map constraints to the Overview screen")
                 }
             }
         }
 
         ContentSubsection {
             visible: Config.options.bar.workspaces.useWorkspaceMap
-            title: Translation.tr("Monitor workspace ranges")
-            tooltip: Translation.tr("Set the first workspace ID for each monitor. Each monitor gets its own set of workspaces starting from this number.")
+            title: Translation.tr("Workspace Map Configuration")
+            tooltip: Translation.tr("Set the starting workspace offset for each connected monitor.")
+            
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 8
 
-            Repeater {
-                model: Quickshell.screens
+                NoticeBox {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 8
+                    materialIcon: "info"
+                    text: Translation.tr("To prevent overlapping workspaces, set starting workspaces based on the number of workspaces shown (e.g. if workspaces shown is 7, Monitor 1 starts at 1, Monitor 2 starts at 8).")
+                }
 
-                ConfigSpinBox {
-                    required property var modelData
-                    required property int index
-                    icon: "monitor"
-                    text: modelData.name + " — " + Translation.tr("first workspace")
-                    value: (Config.options.bar.workspaces.workspaceMap[modelData.name] ?? (index * 6)) + 1
-                    from: 1
-                    to: 100
-                    stepSize: 1
-                    onValueChanged: {
-                        var cloned = JSON.parse(JSON.stringify(Config.options.bar.workspaces.workspaceMap));
-                        cloned[modelData.name] = value - 1;
-                        Config.options.bar.workspaces.workspaceMap = cloned;
+                Repeater {
+                    model: HyprlandData.monitors
+                    delegate: ConfigSpinBox {
+                        Layout.fillWidth: true
+                        icon: "monitor"
+                        text: modelData.name ? modelData.name : (Translation.tr("Monitor ") + (index + 1))
+                        value: {
+                            let map = Config.options.bar.workspaces.workspaceMap || [];
+                            let offset = map.length > index ? map[index] : (index * (Config.options.bar.workspaces.shown || 10));
+                            return offset + 1;
+                        }
+                        from: 1
+                        to: 100
+                        stepSize: 1
+                        onValueChanged: {
+                            let map = JSON.parse(JSON.stringify(Config.options.bar.workspaces.workspaceMap || []));
+                            // Ensure array reaches this index
+                            while (map.length <= index) {
+                                map.push(map.length > 0 ? map[map.length - 1] + (Config.options.bar.workspaces.shown || 10) : 0);
+                            }
+                            map[index] = value - 1;
+                            Config.options.bar.workspaces.workspaceMap = map;
+                            if (Config.options.overview.useWorkspaceMap) {
+                                Config.options.overview.workspaceMap = map;
+                            }
+                        }
                     }
                 }
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "counter_1"
+            text: Translation.tr('Always show numbers')
+            checked: Config.options.bar.workspaces.alwaysShowNumbers
+            onCheckedChanged: {
+                Config.options.bar.workspaces.alwaysShowNumbers = checked;
             }
         }
 
@@ -1100,17 +1172,12 @@ ContentPage {
                         onSelected: newValue => {
                             Config.options.appearance.icons.shapeMask = newValue;
                         }
-                        options: ([
-                            "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle",
-                            "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided",
-                            "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst",
-                            "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"
-                        ]).map(icon => {
+                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
                             return {
                                 displayName: "",
                                 shape: icon,
                                 value: icon
-                            }
+                            };
                         })
                     }
                 }
@@ -1170,17 +1237,12 @@ ContentPage {
                         onSelected: newValue => {
                             Config.options.bar.workspaces.activeIndicatorShape = newValue;
                         }
-                        options: ([
-                            "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle",
-                            "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided",
-                            "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst",
-                            "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"
-                        ]).map(icon => {
+                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
                             return {
                                 displayName: "",
                                 shape: icon,
                                 value: icon
-                            }
+                            };
                         })
                     }
                 }
@@ -1346,12 +1408,42 @@ ContentPage {
             });
             if (enable && !hasMatch) {
                 let presets = [
-                    { sport: "soccer", league: "bra.1", name: "Brasileirão", enabled: true },
-                    { sport: "basketball", league: "nba", name: "NBA", enabled: true },
-                    { sport: "football", league: "nfl", name: "NFL", enabled: true },
-                    { sport: "racing", league: "f1", name: "Formula 1", enabled: true },
-                    { sport: "hockey", league: "nhl", name: "NHL", enabled: true },
-                    { sport: "baseball", league: "mlb", name: "MLB", enabled: true }
+                    {
+                        sport: "soccer",
+                        league: "bra.1",
+                        name: "Brasileirão",
+                        enabled: true
+                    },
+                    {
+                        sport: "basketball",
+                        league: "nba",
+                        name: "NBA",
+                        enabled: true
+                    },
+                    {
+                        sport: "football",
+                        league: "nfl",
+                        name: "NFL",
+                        enabled: true
+                    },
+                    {
+                        sport: "racing",
+                        league: "f1",
+                        name: "Formula 1",
+                        enabled: true
+                    },
+                    {
+                        sport: "hockey",
+                        league: "nhl",
+                        name: "NHL",
+                        enabled: true
+                    },
+                    {
+                        sport: "baseball",
+                        league: "mlb",
+                        name: "MLB",
+                        enabled: true
+                    }
                 ];
                 let defaultPreset = presets.find(p => p.sport === sportName);
                 if (defaultPreset) {
@@ -1409,7 +1501,7 @@ ContentPage {
             delegate: ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                
+
                 visible: {
                     let sportKey = modelData;
                     let followed = sportsConfig.isSportFollowed(sportKey);
@@ -1457,19 +1549,63 @@ ContentPage {
             Flow {
                 Layout.fillWidth: true
                 spacing: 8
-                
+
                 property var presets: [
-                    { sport: "soccer", league: "bra.1", name: "Brasileirão" },
-                    { sport: "soccer", league: "eng.1", name: "Premier League" },
-                    { sport: "soccer", league: "uefa.champions", name: "Champions League" },
-                    { sport: "soccer", league: "ger.1", name: "Bundesliga" },
-                    { sport: "soccer", league: "esp.1", name: "LaLiga" },
-                    { sport: "soccer", league: "conmebol.libertadores", name: "Libertadores" },
-                    { sport: "basketball", league: "nba", name: "NBA" },
-                    { sport: "football", league: "nfl", name: "NFL" },
-                    { sport: "racing", league: "f1", name: "Formula 1" },
-                    { sport: "hockey", league: "nhl", name: "NHL" },
-                    { sport: "baseball", league: "mlb", name: "MLB" }
+                    {
+                        sport: "soccer",
+                        league: "bra.1",
+                        name: "Brasileirão"
+                    },
+                    {
+                        sport: "soccer",
+                        league: "eng.1",
+                        name: "Premier League"
+                    },
+                    {
+                        sport: "soccer",
+                        league: "uefa.champions",
+                        name: "Champions League"
+                    },
+                    {
+                        sport: "soccer",
+                        league: "ger.1",
+                        name: "Bundesliga"
+                    },
+                    {
+                        sport: "soccer",
+                        league: "esp.1",
+                        name: "LaLiga"
+                    },
+                    {
+                        sport: "soccer",
+                        league: "conmebol.libertadores",
+                        name: "Libertadores"
+                    },
+                    {
+                        sport: "basketball",
+                        league: "nba",
+                        name: "NBA"
+                    },
+                    {
+                        sport: "football",
+                        league: "nfl",
+                        name: "NFL"
+                    },
+                    {
+                        sport: "racing",
+                        league: "f1",
+                        name: "Formula 1"
+                    },
+                    {
+                        sport: "hockey",
+                        league: "nhl",
+                        name: "NHL"
+                    },
+                    {
+                        sport: "baseball",
+                        league: "mlb",
+                        name: "MLB"
+                    }
                 ]
 
                 Repeater {
@@ -1693,16 +1829,16 @@ ContentPage {
         ContentSubsection {
             title: Translation.tr("Custom Material Symbol Icon")
             tooltip: Translation.tr("Type a Material Symbol name to use as a custom icon (e.g. policy, shield, fingerprint, home)")
-            
+
             MaterialTextField {
                 id: customMaterialSymbolField
                 Layout.fillWidth: true
                 placeholderText: Translation.tr("Type a MaterialSymbol name...")
-                
+
                 Component.onCompleted: {
                     text = Config.options.bar.useMaterialSymbolForTopLeftIcon ? Config.options.bar.topLeftIcon : "";
                 }
-                
+
                 Connections {
                     target: Config.options.bar
                     function onTopLeftIconChanged() {
@@ -1783,7 +1919,9 @@ ContentPage {
                         Config.options.bar.dashboardButton.showNotifications = checked;
                     }
                 }
-                Item { Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: true
+                }
             }
         }
     }

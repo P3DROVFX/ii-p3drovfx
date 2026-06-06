@@ -189,7 +189,7 @@ for i = 1, 6 do
     local key = { "SUPER + ALT + Page_", "SUPER + SHIFT + Page_", "CTRL + SUPER + SHIFT + " }
     local keycombos = { key[1] .. "down", key[1] .. "up", key[2] .. "down", key[2] .. "up", key[3] .. "Right", key[3] ..
     "Left" }
-    local prefix = { "+", "-", "r+", "r-", "r+", "r-" }
+    local prefix = { "+", "-", "+", "-", "+", "-" }
     hl.bind(keycombos[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" })) -- # [hidden]
 end
 
@@ -238,14 +238,14 @@ hl.bind("CTRL + SUPER + S", hl.dsp.workspace.toggle_special("special"))
 for i = 1, 10 do
     local numberkey = { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
     hl.bind("SUPER + code:" .. numberkey[i], function()
-        focus_workspace_and_monitor(workspace_in_group(i))
+        hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(i) }))
     end)
 end
 --# keypad numbers
 for i = 1, 10 do
     local numpadkey = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
     hl.bind("SUPER + code:" .. numpadkey[i], function()
-        focus_workspace_and_monitor(workspace_in_group(i))
+        hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(i) }))
     end)
 end
 
@@ -254,30 +254,30 @@ end
 for i = 1, 4 do
     local key = { "CTRL + SUPER + ", "CTRL + SUPER + ALT + " }
     local keycombos = { key[1] .. "Right", key[1] .. "Left", key[2] .. "Right", key[2] .. "Left" }
-    local prefix = { "r+", "r-", "m+", "m-" }
-    hl.bind(keycombos[i], function() focus_workspace_and_monitor(prefix[i] .. "1") end)
+    local prefix = { "+", "-", "m+", "m-" }
+    hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
 end
 --#/# bind = SUPER, Page_↑/↓,, -- Focus left/right
 for i = 1, 4 do
     local key = { "SUPER + Page_Down", "SUPER + Page_Up" }
     local keycombos = { key[1], key[2], "CTRL + " .. key[1], "CTRL + " .. key[2] }
-    local prefix = { "r+", "r-", "r+", "r-" }
-    hl.bind(keycombos[i], function() focus_workspace_and_monitor(prefix[i] .. "1") end)
+    local prefix = { "+", "-", "r+", "r-" }
+    hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
 end
 --#/# bind = SUPER, Scroll ↑/↓,, -- Focus left/right
 for i = 1, 4 do
     local key = { "SUPER + mouse_up", "SUPER + mouse_down" }
     local keycombos = { key[1], key[2], "CTRL + " .. key[1], "CTRL + " .. key[2] }
     local prefix = { "+", "-", "r+", "r-" }
-    hl.bind(keycombos[i], function() focus_workspace_and_monitor(prefix[i] .. "1") end)
+    hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
 end
 --## Special
 hl.bind("SUPER + S", hl.dsp.workspace.toggle_special("special"), { description = "Workspace: Toggle scratchpad" })
 hl.bind("SUPER + mouse:275", hl.dsp.workspace.toggle_special("special"))
 for i = 1, 4 do
     local key = { "BracketLeft", "BracketRight", "Up", "Down" }
-    local prefix = { "-1", "+1", "r-5", "r+5" }
-    hl.bind("CTRL + SUPER + " .. key[i], function() focus_workspace_and_monitor(prefix[i]) end)
+    local prefix = { "-1", "+1", "r-" .. tostring(workspaceGroupSize), "r+" .. tostring(workspaceGroupSize) }
+    hl.bind("CTRL + SUPER + " .. key[i], hl.dsp.focus({ workspace = prefix[i] }))
 end
 
 --##! Virtual machines

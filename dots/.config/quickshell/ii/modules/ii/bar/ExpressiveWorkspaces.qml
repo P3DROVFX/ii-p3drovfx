@@ -18,7 +18,7 @@ Item {
     id: root
     property bool vertical: Config.options.bar.vertical
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
-    
+
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
 
@@ -28,32 +28,21 @@ Item {
 
     // Pagination/Offset logic to match screens/monitor mapping
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property var workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property string monitorName: root.monitor?.name ?? ""
-    readonly property int screenIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    property int workspaceOffset: useWorkspaceMap ? (workspaceMap[monitorName] ?? (screenIndex * 6)) : 0
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
+    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
+    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
 
-    function getMonitorMaxWsId(name, offset) {
-        if (!useWorkspaceMap) return 99999;
-        let offsets = [];
-        for (let i = 0; i < Quickshell.screens.length; i++) {
-            let scrName = Quickshell.screens[i].name;
-            let scrOffset = workspaceMap[scrName] ?? (i * 6);
-            offsets.push(scrOffset);
+    readonly property int startWsId: {
+        if (dynamicWorkspaces) return workspaceOffset + 1;
+        let activeVal = activeWsId;
+        if (activeVal <= workspaceOffset) activeVal = workspaceOffset + 1;
+        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
+            let nextMonitorStart = workspaceMap[monitorIndex + 1];
+            if (activeVal > nextMonitorStart) activeVal = nextMonitorStart;
         }
-        offsets.sort((a, b) => a - b);
-        let curIdx = offsets.indexOf(offset);
-        if (curIdx !== -1 && curIdx + 1 < offsets.length) {
-            return offsets[curIdx + 1];
-        }
-        return offset + workspacesShown;
+        let page = Math.floor((activeVal - workspaceOffset - 1) / workspacesShown);
+        return Math.max(0, page) * workspacesShown + 1 + workspaceOffset;
     }
-
-    // Absolute workspace range for this monitor (inclusive on both ends)
-    readonly property int monitorMinWsId: useWorkspaceMap ? workspaceOffset + 1 : 1
-    readonly property int monitorMaxWsId: useWorkspaceMap ? getMonitorMaxWsId(monitorName, workspaceOffset) : 99999
-
-    readonly property int startWsId: dynamicWorkspaces ? workspaceOffset + 1 : Math.floor((activeWsId - workspaceOffset - 1) / workspacesShown) * workspacesShown + 1 + workspaceOffset
 
     // Sizing system responsive to the bar size (padding, thickness, and diameters)
     readonly property real barDimension: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight
@@ -63,7 +52,7 @@ Item {
     readonly property real pillLength: shapeDiameter * 2
 
     property var workspaceOccupied: ({})
-    
+
     function updateOccupied() {
         let occupied = {};
         for (let ws of Hyprland.workspaces.values) {
@@ -75,21 +64,28 @@ Item {
     Component.onCompleted: updateOccupied()
     Connections {
         target: Hyprland.workspaces
-        function onValuesChanged() { updateOccupied() }
+        function onValuesChanged() {
+            updateOccupied();
+        }
     }
     Connections {
         target: Hyprland
-        function onFocusedWorkspaceChanged() { updateOccupied() }
+        function onFocusedWorkspaceChanged() {
+            updateOccupied();
+        }
     }
 
     readonly property var visibleWsModel: {
         if (!dynamicWorkspaces) {
-            return Array.from({length: workspacesShown}, (_, i) => startWsId + i);
+            return Array.from({
+                length: workspacesShown
+            }, (_, i) => startWsId + i);
         }
         let list = [];
         for (let ws of Hyprland.workspaces.values) {
             // Ignore special/scratchpad workspaces with negative or 0 IDs
-            if (ws.id < 1) continue;
+            if (ws.id < 1)
+                continue;
 
             // Only show workspaces belonging to this monitor if using workspace maps
             if (useWorkspaceMap) {
@@ -98,7 +94,8 @@ Item {
                     continue;
                 }
             }
-            if (!list.includes(ws.id)) list.push(ws.id);
+            if (!list.includes(ws.id))
+                list.push(ws.id);
         }
         if (activeWsId > 0 && !list.includes(activeWsId)) {
             // Check if activeWsId falls within this monitor's range
@@ -164,31 +161,22 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.NoButton
-        onWheel: (wheel) => {
+        onWheel: wheel => {
             wheel.accepted = true;
             if (dynamicWorkspaces) {
-                const delta = wheel.angleDelta.y > 0 ? -1 : 1;
-                if (useWorkspaceMap) {
-                    let monitorWs = Hyprland.workspaces.values
-                        .filter(ws => ws.id >= monitorMinWsId && ws.id <= monitorMaxWsId)
-                        .map(ws => ws.id)
-                        .sort((a, b) => a - b);
-                    if (!monitorWs.includes(activeWsId)) monitorWs.push(activeWsId);
-                    monitorWs.sort((a, b) => a - b);
-                    const curIdx = monitorWs.indexOf(activeWsId);
-                    const nextIdx = curIdx + delta;
-                    if (nextIdx < 0 || nextIdx >= monitorWs.length) return;
-                    Hyprland.dispatch("hl.dsp.focus({ workspace = '" + monitorWs[nextIdx] + "' })");
-                } else {
-                    if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                    else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-                }
+                if (wheel.angleDelta.y > 0)
+                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
+                else
+                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
             } else {
                 let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1) return;
+                if (nextId < 1)
+                    return;
                 // Bound check if using workspace maps
                 if (useWorkspaceMap) {
-                    if (nextId < monitorMinWsId || nextId > monitorMaxWsId) return;
+                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
+                        return;
                 }
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
@@ -198,7 +186,7 @@ Item {
     Rectangle {
         id: container
         anchors.centerIn: parent
-        
+
         color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.4)
         radius: vertical ? width / 2 : height / 2
 
@@ -221,11 +209,11 @@ Item {
         ListView {
             id: listView
             anchors.centerIn: parent
-            
+
             // Align dimensions to exactly wrap the child delegates
             width: root.vertical ? shapeDiameter : contentWidth
             height: root.vertical ? contentHeight : shapeDiameter
-            
+
             orientation: root.vertical ? ListView.Vertical : ListView.Horizontal
             model: root.visibleWsModel
             spacing: 8
@@ -248,7 +236,7 @@ Item {
                     duration: 250
                 }
             }
-            
+
             // Exit transition (fade and scale out)
             remove: Transition {
                 NumberAnimation {
@@ -263,7 +251,7 @@ Item {
                     duration: 250
                 }
             }
-            
+
             // Smoothly slide remaining items when layout changes
             displaced: Transition {
                 NumberAnimation {
@@ -337,9 +325,12 @@ Item {
                     }
 
                     opacity: {
-                        if (isActive) return 1.0;
-                        if (root.scratchpadOpen) return hover.hovered ? 0.5 : 0.25;
-                        if (hover.hovered) return 0.9;
+                        if (isActive)
+                            return 1.0;
+                        if (root.scratchpadOpen)
+                            return hover.hovered ? 0.5 : 0.25;
+                        if (hover.hovered)
+                            return 0.9;
                         return isOccupied ? 0.7 : 0.4;
                     }
 
@@ -369,8 +360,16 @@ Item {
                         }
                         opacity: root.showNumbers ? 1.0 : 0.0
 
-                        Behavior on opacity { NumberAnimation { duration: 150 } }
-                        Behavior on color { ColorAnimation { duration: 200 } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 150
+                            }
+                        }
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 200
+                            }
+                        }
                     }
                 }
 
@@ -379,7 +378,7 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.LeftButton
                     onClicked: {
-                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsDelegate.wsId + "' })")
+                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsDelegate.wsId + "' })");
                     }
                 }
             }
