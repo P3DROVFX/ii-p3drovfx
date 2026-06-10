@@ -55,7 +55,7 @@ Item {
         return root.buttonData.sizeH ?? 1;
     }
 
-    property bool hovered: hoverHandler.hovered
+    property bool hovered: hoverHandler.hovered || (root.editMode && editModeInteraction.containsMouse)
 
     HoverHandler {
         id: hoverHandler
@@ -335,18 +335,24 @@ Item {
             }
         }
 
-        // Edit Border and Resize Handles
         Rectangle {
             id: editBorder
             anchors.fill: parent
             visible: root.editMode && !root.isDragging
             color: "transparent"
-            border.color: root.isUnused ? (editBorderMouseArea.containsMouse ? Appearance.colors.colPrimary : "transparent") : Appearance.colors.colPrimary
             border.width: 2
             radius: Appearance.rounding.large
             
+            border.color: {
+                if (root.isUnused) {
+                    return root.hovered ? Appearance.colors.colPrimary : "transparent";
+                } else {
+                    return root.hovered ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colPrimary, 0.7);
+                }
+            }
+            
             Behavior on border.color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(editBorder)
             }
             
             MouseArea {
