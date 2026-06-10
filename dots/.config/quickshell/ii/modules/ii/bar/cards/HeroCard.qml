@@ -27,6 +27,14 @@ Rectangle {
     property string icon: ""
 
     property string title: ""
+    property var parsedTitle: {
+        var t = title || "";
+        var match = t.match(/^(.*?)\s*([ap]m|[AP]M)$/);
+        if (match) {
+            return { main: match[1], ampm: match[2] };
+        }
+        return { main: t, ampm: "" };
+    }
     property string subtitle: ""
     property int titleSize: compactMode ? Appearance.font.pixelSize.hugeass * 1.5 : Appearance.font.pixelSize.hugeass * 2.5
     property int subtitleSize: compactMode ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.hugeass
@@ -110,27 +118,48 @@ Rectangle {
     }
 
     StyledText {
-        text: heroCardRoot.title
+        id: ampmText
+        text: heroCardRoot.parsedTitle.ampm
+        visible: text !== ""
+        font.pixelSize: heroCardRoot.titleSize * 0.45
+        font.family: Appearance.font.family.title
+        font.weight: Font.Black
+        color: heroCardRoot.textColor
+        anchors {
+            right: parent.right
+            rightMargin: heroCardRoot.margins
+            baseline: mainText.baseline
+        }
+    }
+
+    StyledText {
+        id: mainText
+        text: heroCardRoot.parsedTitle.main
         font.pixelSize: heroCardRoot.titleSize
         font.family: Appearance.font.family.title
         font.weight: Font.Black
         color: heroCardRoot.textColor
-        horizontalAlignment: Text.AlignRight
         anchors {
+            right: ampmText.visible ? ampmText.left : parent.right
+            rightMargin: ampmText.visible ? 4 : heroCardRoot.margins
             verticalCenter: parent.verticalCenter
             verticalCenterOffset: 4
-            right: parent.right
-            margins: heroCardRoot.margins
+            left: parent.left
+            leftMargin: heroCardRoot.iconSize + heroCardRoot.margins * 2 + 16
         }
-        width: 200
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
     }
 
     StyledText {
         text: heroCardRoot.subtitle
         anchors {
             right: parent.right
+            left: parent.left
+            leftMargin: heroCardRoot.iconSize + heroCardRoot.margins * 2 + 16
+            rightMargin: heroCardRoot.margins
             bottom: parent.bottom
-            margins: heroCardRoot.margins
+            bottomMargin: heroCardRoot.margins
         }
         font {
             pixelSize: heroCardRoot.subtitleSize
@@ -140,6 +169,5 @@ Rectangle {
         color: heroCardRoot.textColor
         horizontalAlignment: Text.AlignRight
         elide: Text.ElideRight
-        width: 200
     }
 }

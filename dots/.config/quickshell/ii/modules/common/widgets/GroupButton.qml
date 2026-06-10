@@ -83,6 +83,7 @@ Button {
     MouseArea {
         id: buttonMouseArea
         anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: (event) => { 

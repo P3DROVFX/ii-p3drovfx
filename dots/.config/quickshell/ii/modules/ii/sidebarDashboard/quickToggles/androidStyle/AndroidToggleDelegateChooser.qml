@@ -14,7 +14,10 @@ DelegateChooser {
     required property real baseCellHeight
     required property real spacing
     property int pageIndex: 0
+    property int gridColumns: 4
     property bool isUnused: false
+    property var panel: null
+    property var gridRef: null
     signal openAudioOutputDialog
     signal openAudioInputDialog
     signal openBluetoothDialog
@@ -39,6 +42,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openNightLightDialog();
             }
@@ -59,6 +65,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openAudioOutputDialog();
             }
@@ -79,6 +88,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openBluetoothDialog();
             }
@@ -99,6 +111,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -116,6 +131,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -133,6 +151,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openDarkModeDialog();
             }
@@ -153,6 +174,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -170,6 +194,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -187,6 +214,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -204,6 +234,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openAudioInputDialog();
             }
@@ -224,6 +257,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -241,6 +277,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openWifiDialog();
             }
@@ -261,6 +300,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openNightLightDialog();
             }
@@ -281,6 +323,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -298,6 +343,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -315,6 +363,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -332,6 +383,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -349,6 +403,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -366,6 +423,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openLocalSendDialog();
             }
@@ -386,6 +446,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
     DelegateChoice {
@@ -402,6 +465,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openAudioOutputDialog();
             }
@@ -422,6 +488,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
             onOpenMenu: {
                 root.openAudioInputDialog();
             }
@@ -442,6 +511,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 
@@ -459,6 +531,9 @@ DelegateChooser {
             cellSpacing: root.spacing
             cellSize: modelData.size
             pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
         }
     }
 }

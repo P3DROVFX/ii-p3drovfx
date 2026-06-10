@@ -75,7 +75,7 @@ Item {
     // VERTICAL FRAMES
     Rectangle {
         id: leftFrame
-        visible: true
+        visible: !leftSidebarOffset
         anchors {
             top: parent.top
             bottom: parent.bottom
@@ -90,7 +90,7 @@ Item {
 
     Rectangle {
         id: rightFrame
-        visible: true
+        visible: !rightSidebarOffset
         anchors {
             top: parent.top
             bottom: parent.bottom

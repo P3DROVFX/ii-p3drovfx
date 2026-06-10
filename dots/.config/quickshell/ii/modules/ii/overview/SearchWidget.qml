@@ -31,6 +31,27 @@ Item {
     readonly property bool isSearching: false
     readonly property bool showSkeletons: false
 
+    property int loadedResultsCount: 50
+
+    function getFilteredResultsCount() {
+        const results = LauncherSearch.results;
+        const q = LauncherSearch.query.trim().toLowerCase();
+        let list = Array.from(results);
+
+        if (Config.options.search.alwaysListApps || q !== "") {
+            list = list.filter(item => item && item.key !== "mpris:now-playing");
+        }
+        return list.length;
+    }
+
+    function loadMoreResults() {
+        const total = root.getFilteredResultsCount();
+        if (loadedResultsCount < total) {
+            loadedResultsCount = Math.min(total, loadedResultsCount + 50);
+            resultModel.values = root.processResults(LauncherSearch.results);
+        }
+    }
+
     property string searchingText: LauncherSearch.query
     readonly property bool isClipboardMode: root.searchingText.startsWith(Config.options.search.prefix.clipboard)
     readonly property bool isBluetoothMode: root.searchingText.startsWith(Config.options.search.prefix.bluetooth)
@@ -45,6 +66,7 @@ Item {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
+                root.loadedResultsCount = 50;
                 if (root.alwaysListAppsMode) {
                     Qt.callLater(() => {
                         resultModel.values = root.processResults(LauncherSearch.results);
@@ -129,7 +151,7 @@ Item {
             list = list.filter(item => item && item.key !== "mpris:now-playing");
         }
 
-        return list.slice(0, root.typingResultLimit);
+        return list.slice(0, root.loadedResultsCount);
     }
 
     Keys.onPressed: event => {
@@ -391,11 +413,22 @@ Item {
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
 
+                    onContentYChanged: {
+                        if (contentHeight > 0 && contentY + height > contentHeight - 150) {
+                            root.loadMoreResults();
+                        }
+                    }
 
+                    onCurrentIndexChanged: {
+                        if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
+                            root.loadMoreResults();
+                        }
+                    }
 
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
+                            root.loadedResultsCount = 50;
                             if (appResults.count > 0)
                                 appResults.currentIndex = 0;
                         }
@@ -411,6 +444,7 @@ Item {
                                 return;
                             }
 
+                            root.loadedResultsCount = 50;
                             resultModel.values = root.processResults(newResults);
                             root.focusFirstItem();
                         }
@@ -419,11 +453,6 @@ Item {
                     model: ScriptModel {
                         id: resultModel
                         objectProp: "key"
-                        onValuesChanged: Qt.callLater(() => {
-                            if (appResults.count > 0) {
-                                appResults.currentIndex = 0;
-                            }
-                        })
                         Component.onCompleted: {
                             values = root.processResults(LauncherSearch.results);
                         }

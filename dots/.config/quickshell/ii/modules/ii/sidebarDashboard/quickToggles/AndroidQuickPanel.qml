@@ -150,6 +150,80 @@ AbstractQuickPanel {
         Config.options.sidebar.quickToggles.android.pages = cloned;
     }
 
+    function resolveLayoutConflicts(pageIndex, gridColumns) {
+        mutatePages(function(pages) {
+            if (pageIndex < 0 || pageIndex >= pages.length) return;
+            var page = pages[pageIndex];
+            if (!page || page.length === 0) return;
+            
+            // Sort by current position to maintain order
+            var sorted = [];
+            for (var i = 0; i < page.length; i++) {
+                sorted.push({
+                    idx: i,
+                    type: page[i].type,
+                    sizeW: page[i].sizeW ?? page[i].size ?? 1,
+                    sizeH: page[i].sizeH ?? 1
+                });
+            }
+            
+            // Simple grid placement simulation
+            var grid = [];
+            var newOrder = [];
+            
+            for (var j = 0; j < sorted.length; j++) {
+                var item = sorted[j];
+                var placed = false;
+                
+                for (var row = 0; row < 20 && !placed; row++) {
+                    for (var col = 0; col < gridColumns && !placed; col++) {
+                        var fits = true;
+                        
+                        for (var h = 0; h < item.sizeH && fits; h++) {
+                            for (var w = 0; w < item.sizeW && fits; w++) {
+                                var cell = (row + h) * gridColumns + (col + w);
+                                if (grid.indexOf(cell) !== -1) {
+                                    fits = false;
+                                }
+                            }
+                        }
+                        
+                        if (fits) {
+                            for (var h2 = 0; h2 < item.sizeH; h2++) {
+                                for (var w2 = 0; w2 < item.sizeW; w2++) {
+                                    var cell2 = (row + h2) * gridColumns + (col + w2);
+                                    grid.push(cell2);
+                                }
+                            }
+                            newOrder.push(item);
+                            placed = true;
+                        }
+                    }
+                }
+                
+                if (!placed) {
+                    // Fallback: place at next available single cell
+                    newOrder.push({
+                        type: item.type,
+                        sizeW: 1,
+                        sizeH: 1
+                    });
+                }
+            }
+            
+            // Rebuild page array
+            page.length = 0;
+            for (var k = 0; k < newOrder.length; k++) {
+                page.push({
+                    type: newOrder[k].type,
+                    sizeW: newOrder[k].sizeW,
+                    sizeH: newOrder[k].sizeH,
+                    size: newOrder[k].sizeW
+                });
+            }
+        });
+    }
+
     // Page management functions
     function addPage() {
         var targetPage;
@@ -178,6 +252,86 @@ AbstractQuickPanel {
         if (pageIndex < 0 || pageIndex >= pages.length)
             return;
         currentPage = pageIndex;
+    }
+
+    // Drag-scroll: called by toggle buttons during drag to auto-scroll pages
+    // absX: x coordinate mapped to panel root
+    // dragButton: the toggle button being dragged
+    property real dragScrollEdgeThreshold: 40
+    property int dragScrollPendingPage: -1
+
+    Timer {
+        id: dragScrollTimer
+        interval: 500
+        repeat: false
+        onTriggered: {
+            if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.pages.length) {
+                root.currentPage = root.dragScrollPendingPage;
+                // Notify all dragging buttons about the new target page
+                root.dragScrollPageChanged(root.dragScrollPendingPage);
+            }
+            root.dragScrollPendingPage = -1;
+        }
+    }
+
+    signal dragScrollPageChanged(int newPage)
+
+    function cancelDragScroll() {
+        dragScrollTimer.stop();
+        dragScrollPendingPage = -1;
+    }
+
+    function handleDragScrollRequest(absX, dragButton) {
+        var newPage = -1;
+        if (absX < dragScrollEdgeThreshold && currentPage > 0) {
+            newPage = currentPage - 1;
+        } else if (absX > root.width - dragScrollEdgeThreshold && currentPage < pages.length - 1) {
+            newPage = currentPage + 1;
+        }
+
+        if (newPage >= 0 && newPage !== dragScrollPendingPage) {
+            dragScrollPendingPage = newPage;
+            dragScrollTimer.restart();
+            // Update dragTargetPage on the button immediately for visual feedback
+            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
+                dragButton.dragTargetPage = newPage;
+            }
+        } else if (newPage < 0) {
+            // Back in safe zone — reset pending
+            dragScrollPendingPage = -1;
+            dragScrollTimer.stop();
+            if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
+                dragButton.dragTargetPage = dragButton.pageIndex;
+            }
+        }
+    }
+
+    // Move a toggle from one page to another at the drop position
+    function moveToggleToPage(buttonType, fromPage, toPage, dropAbsX, dropAbsY) {
+        if (fromPage === toPage) return;
+        if (toPage < 0 || toPage >= pages.length) return;
+
+        mutatePages(function(pages) {
+            if (fromPage < 0 || fromPage >= pages.length) return;
+            var sourcePage = pages[fromPage];
+            if (!sourcePage) return;
+
+            // Find and remove the toggle from the source page
+            var toggleData = null;
+            for (var i = 0; i < sourcePage.length; i++) {
+                if (sourcePage[i].type === buttonType) {
+                    toggleData = JSON.parse(JSON.stringify(sourcePage[i]));
+                    sourcePage.splice(i, 1);
+                    break;
+                }
+            }
+            if (!toggleData) return;
+
+            // Append to the target page (position at end, layout engine will sort)
+            var targetPage = pages[toPage];
+            if (!targetPage) pages[toPage] = [];
+            pages[toPage].push(toggleData);
+        });
     }
 
     Column {
@@ -218,6 +372,9 @@ AbstractQuickPanel {
                     spacing: root.spacing
                     isUnused: false
                     pageIndex: -1
+                    gridColumns: root.columns
+                    panel: root
+                    gridRef: pageContentGrid
                     
                     onOpenAudioOutputDialog: root.openAudioOutputDialog()
                     onOpenAudioInputDialog: root.openAudioInputDialog()
@@ -337,6 +494,9 @@ AbstractQuickPanel {
                                         spacing: root.spacing
                                         isUnused: false
                                         pageIndex: pageContainer.index
+                                        gridColumns: root.columns
+                                        panel: root
+                                        gridRef: pageContentGrid
 
                                         onOpenAudioOutputDialog: root.openAudioOutputDialog()
                                         onOpenAudioInputDialog: root.openAudioInputDialog()
@@ -552,6 +712,9 @@ AbstractQuickPanel {
                         spacing: root.spacing
                         isUnused: true
                         pageIndex: root.currentPage
+                        gridColumns: root.columns
+                        panel: root
+                        gridRef: unusedRows
                     }
                 }
             }

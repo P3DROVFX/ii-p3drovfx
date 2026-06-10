@@ -256,6 +256,7 @@ Item {
                 root.disconnectingDevices = temp;
                 selectedDevice.disconnect();
             } else {
+                root.stopScan();
                 let temp = Object.assign({}, root.connectingDevices);
                 temp[selectedDevice.address] = true;
                 root.connectingDevices = temp;
@@ -1117,6 +1118,7 @@ Item {
                                         root.disconnectingDevices = temp;
                                         root.selectedDevice.disconnect();
                                     } else {
+                                        root.stopScan();
                                         let temp = Object.assign({}, root.connectingDevices);
                                         temp[root.selectedDevice.address] = true;
                                         root.connectingDevices = temp;

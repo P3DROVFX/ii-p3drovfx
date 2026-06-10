@@ -17,9 +17,32 @@ Item {
     required property real cellSpacing
     required property int cellSize
 
-    readonly property bool isWide: Layout.columnSpan > 1
-    readonly property bool isTall: Layout.rowSpan > 1
+    // Effective sizes for live preview during resize
+    readonly property int effectiveSizeW: {
+        if (root.editMode && visualButton.editingRight) {
+            var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
+            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? 1) + delta;
+            return Math.max(1, Math.min(8, w));
+        }
+        return root.buttonData.sizeW ?? root.buttonData.size ?? 1;
+    }
+    readonly property int effectiveSizeH: {
+        if (root.editMode && visualButton.editingBottom) {
+            var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
+            var h = (root.buttonData.sizeH ?? 1) + delta;
+            return Math.max(1, Math.min(8, h));
+        }
+        return root.buttonData.sizeH ?? 1;
+    }
+
+    readonly property bool isWide: effectiveSizeW > 1
+    readonly property bool isTall: effectiveSizeH > 1
     readonly property bool expandedSize: isWide
+
+    // visualButton is reparented — use its native hovered (Button.hovered) so the
+    // tooltip fires from the actual rendered widget, not the invisible grid placeholder
+    property bool hovered: (visualButton.hovered || visualButton.mouseArea.containsMouse)
+                           || (root.editMode && editModeInteraction.containsMouse)
 
     // Signals
     signal openMenu
@@ -42,17 +65,23 @@ Item {
     property real dragAbsX: 0
     property real dragAbsY: 0
     property int pageIndex: 0
+    property int gridColumns: 4
+    property var panel: null
+    property var gridRef: null
 
-    // Sizing shenanigans
-    Layout.columnSpan: root.buttonData.sizeW ?? root.buttonData.size ?? 1
-    Layout.rowSpan: root.buttonData.sizeH ?? 1
+    // Cross-page drag: tracks which page the drag is currently hovering over
+    property int dragTargetPage: root.pageIndex
+
+    // Sizing shenanigans - use effective sizes for live resize preview
+    Layout.columnSpan: root.effectiveSizeW
+    Layout.rowSpan: root.effectiveSizeH
     Layout.preferredWidth: root.implicitWidth
     Layout.preferredHeight: root.implicitHeight
     Layout.fillWidth: false
     Layout.fillHeight: false
 
-    property real baseWidth: root.baseCellWidth * Layout.columnSpan + cellSpacing * (Layout.columnSpan - 1)
-    property real baseHeight: root.baseCellHeight * Layout.rowSpan + cellSpacing * (Layout.rowSpan - 1)
+    property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
+    property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 
     implicitWidth: baseWidth
     implicitHeight: baseHeight
@@ -85,6 +114,13 @@ Item {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         
+        Behavior on width {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
+        }
+        Behavior on height {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
+        }
+        
         width: root.width
         height: root.height
 
@@ -112,14 +148,15 @@ Item {
         horizontalPadding: padding
         verticalPadding: padding
 
+        property bool useLayer2Bg: (root.altAction && root.expandedSize) || (root.isTall && !root.isWide)
         colBackground: Appearance.colors.colLayer2
-        colBackgroundToggled: (root.altAction && root.expandedSize) ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary
-        colBackgroundToggledHover: (root.altAction && root.expandedSize) ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover
-        colBackgroundToggledActive: (root.altAction && root.expandedSize) ? Appearance.colors.colLayer2Active : Appearance.colors.colPrimaryActive
+        colBackgroundToggled: useLayer2Bg ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary
+        colBackgroundToggledHover: useLayer2Bg ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover
+        colBackgroundToggledActive: useLayer2Bg ? Appearance.colors.colLayer2Active : Appearance.colors.colPrimaryActive
         readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
         buttonRadius: (root.toggled || root.isTall) ? Appearance.rounding.large : fullRadius
         buttonRadiusPressed: Appearance.rounding.normal
-        property color colText: (root.toggled && !(root.altAction && root.expandedSize) && enabled) ? Appearance.colors.colOnPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)
+        property color colText: (root.toggled && !useLayer2Bg && enabled) ? Appearance.colors.colOnPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)
         property color colIcon: root.expandedSize ? ((root.toggled) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3) : colText
 
         toggled: root.toggled
@@ -135,8 +172,83 @@ Item {
         contentItem: Loader {
             id: contentItemLoader
             anchors.fill: parent
-            sourceComponent: (root.isWide && root.isTall) ? ios2x2Layout : standardLayout
+            sourceComponent: (root.isWide && root.isTall) ? ios2x2Layout
+                           : (root.isTall && !root.isWide) ? tallLayout
+                           : standardLayout
         }
+
+    Component {
+        id: tallLayout
+        Item {
+            anchors.fill: parent
+            anchors.margins: 4
+
+            Rectangle {
+                id: tallIconBg
+                width: 54
+                height: 54
+                anchors.top: parent.top
+                anchors.topMargin: 4
+                anchors.horizontalCenter: parent.horizontalCenter
+                radius: width / 2
+                color: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tallIconBg)
+                }
+
+                Item {
+                    width: parent.width
+                    height: parent.width // 54x54, matching the top circle of the pill
+                    anchors.top: parent.top
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        fill: root.toggled ? 1 : 0
+                        iconSize: 26
+                        color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
+                        text: root.buttonIcon
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
+                    }
+                }
+            }
+
+            Column {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottomMargin: 8
+                anchors.leftMargin: 4
+                anchors.rightMargin: 4
+                spacing: 0
+
+                StyledText {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    font.pixelSize: Appearance.font.pixelSize.smallie
+                    font.weight: 600
+                    color: visualButton.colText
+                    elide: Text.ElideRight
+                    text: root.name
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                StyledText {
+                    visible: root.statusText !== ""
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: 100
+                    color: ColorUtils.transparentize(visualButton.colText, 0.3)
+                    elide: Text.ElideRight
+                    text: root.statusText
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+        }
+    }
 
     Component {
         id: ios2x2Layout
@@ -369,7 +481,7 @@ Item {
             id: editModeInteraction
             visible: root.editMode
             anchors.fill: parent
-            cursorShape: root.isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            cursorShape: root.isDragging ? Qt.ClosedHandCursor : (root.isUnused ? Qt.PointingHandCursor : Qt.OpenHandCursor)
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton
             
@@ -378,11 +490,20 @@ Item {
             property real initialVisualX: 0
             property real initialVisualY: 0
 
-            // list<var> returns a copy — MUST deep-clone, mutate, reassign
             function mutatePages(mutatorFn) {
-                var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-                mutatorFn(cloned);
-                Config.options.sidebar.quickToggles.android.pages = cloned;
+                if (root.panel && root.panel.mutatePages) {
+                    root.panel.mutatePages(mutatorFn);
+                } else {
+                    var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
+                    mutatorFn(cloned);
+                    Config.options.sidebar.quickToggles.android.pages = cloned;
+                }
+            }
+            
+            function resolveLayoutConflicts() {
+                if (root.panel && root.panel.resolveLayoutConflicts) {
+                    root.panel.resolveLayoutConflicts(root.pageIndex, root.gridColumns);
+                }
             }
 
             function toggleEnabled() {
@@ -467,6 +588,7 @@ Item {
                 initialVisualX = visualButton.x;
                 initialVisualY = visualButton.y;
                 root.isDragging = false;
+                root.dragTargetPage = root.pageIndex;
             }
             
             onPositionChanged: event => {
@@ -488,12 +610,31 @@ Item {
                         
                         var gridPos = root.parent.mapFromItem(visualButton.parent, centerX, centerY);
                         checkForSwap(gridPos.x, gridPos.y);
+
+                        // Cross-page drag: ask panel to scroll if near horizontal edges
+                        if (root.panel && root.panel.handleDragScrollRequest) {
+                            var panelPos = root.panel.mapFromItem(visualButton.parent, centerX, centerY);
+                            root.panel.handleDragScrollRequest(panelPos.x, root);
+                        }
                     }
                 }
             }
 
             onReleased: event => {
                 if (root.isDragging) {
+                    // Use panel's CURRENT page at release time — correct regardless of edge state
+                    var targetPage = (root.panel && root.panel.currentPage !== undefined)
+                                     ? root.panel.currentPage : root.pageIndex;
+                    if (root.panel && targetPage !== root.pageIndex) {
+                        root.panel.moveToggleToPage(
+                            root.buttonData.type,
+                            root.pageIndex,
+                            targetPage
+                        );
+                    }
+                    // Stop any pending drag-scroll timer
+                    if (root.panel && root.panel.cancelDragScroll)
+                        root.panel.cancelDragScroll();
                     root.isDragging = false;
                 } else {
                     if (!visualButton.editingRight && !visualButton.editingBottom)
@@ -505,13 +646,23 @@ Item {
         Rectangle {
             id: editBorder
             anchors.fill: parent
-            anchors.rightMargin: visualButton.editingRight ? -visualButton.editDragX : 0
-            anchors.bottomMargin: visualButton.editingBottom ? -visualButton.editDragY : 0
-            visible: root.editMode && !root.isUnused && !root.isDragging
+            visible: root.editMode && !root.isDragging
             color: "transparent"
-            border.color: Appearance.colors.colPrimary
+            border.color: root.isUnused ? (editBorderMouseArea.containsMouse ? Appearance.colors.colPrimary : "transparent") : Appearance.colors.colPrimary
             border.width: 2
             radius: visualButton.radius
+            
+            Behavior on border.color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+            
+            MouseArea {
+                id: editBorderMouseArea
+                anchors.fill: parent
+                visible: root.isUnused
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton // don't swallow clicks — let them reach editModeInteraction
+            }
 
             Rectangle {
                 id: rightDragHandle
@@ -522,10 +673,11 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: -width / 2
+                visible: !root.isUnused
 
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -10
+                    anchors.margins: -12
                     cursorShape: Qt.SizeHorCursor
                     preventStealing: true
                     property real pressAbsX: 0
@@ -551,6 +703,7 @@ Item {
                         visualButton.editDragX = 0;
                         if (newSizeW !== (root.buttonData.sizeW ?? root.buttonData.size ?? 1)) {
                             editModeInteraction.setSize(newSizeW, root.buttonData.sizeH ?? 1);
+                            editModeInteraction.resolveLayoutConflicts();
                         }
                     }
                 }
@@ -565,10 +718,11 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: -height / 2
+                visible: !root.isUnused
 
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -10
+                    anchors.margins: -12
                     cursorShape: Qt.SizeVerCursor
                     preventStealing: true
                     property real pressAbsY: 0
@@ -594,30 +748,39 @@ Item {
                         visualButton.editDragY = 0;
                         if (newSizeH !== (root.buttonData.sizeH ?? 1)) {
                             editModeInteraction.setSize(root.buttonData.sizeW ?? root.buttonData.size ?? 1, newSizeH);
+                            editModeInteraction.resolveLayoutConflicts();
                         }
                     }
                 }
             }
         }
+    }
 
-        Rectangle {
-            id: unusedHoverOverlay
-            anchors.fill: parent
-            radius: visualButton.radius
-            color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.2)
-            visible: root.isUnused && editModeInteraction.containsMouse
-            
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "add"
-                iconSize: 28
-                color: Appearance.colors.colOnLayer0
-            }
+    // addBadge is reparented to the same parent as visualButton so it renders above it
+    Rectangle {
+        id: addBadge
+        parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
+        width: 20
+        height: 20
+        radius: 10
+        color: Appearance.m3colors.m3success
+        // Position aligned to top-right corner of visualButton
+        x: visualButton.x + visualButton.width - width + 6
+        y: visualButton.y - height + 6
+        visible: root.isUnused
+        z: visualButton.z + 10
+        
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: "add"
+            iconSize: 14
+            color: Appearance.m3colors.m3onSuccess
         }
+    }
 
-        StyledToolTip {
-            extraVisibleCondition: root.tooltipText !== ""
-            text: root.tooltipText
-        }
+    StyledToolTip {
+        parent: root
+        extraVisibleCondition: root.tooltipText !== "" && (root.hovered || (root.editMode && editModeInteraction.containsMouse))
+        text: root.tooltipText
     }
 }

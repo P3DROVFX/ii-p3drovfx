@@ -23,6 +23,9 @@ Item {
     property real dragAbsX: 0
     property real dragAbsY: 0
     property int pageIndex: 0
+    property int gridColumns: 4
+    property var panel: null
+    property var gridRef: null
 
     property string tooltipText: ""
 
@@ -34,15 +37,39 @@ Item {
     // For specific toggles to handle right-click actions if they want
     signal openMenu
 
-    Layout.columnSpan: root.buttonData.sizeW ?? root.buttonData.size ?? 4
-    Layout.rowSpan: root.buttonData.sizeH ?? 1
+    // Effective sizes for live preview during resize
+    readonly property int effectiveSizeW: {
+        if (root.editMode && visualButton.editingRight) {
+            var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
+            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? 4) + delta;
+            return Math.max(1, Math.min(8, w));
+        }
+        return root.buttonData.sizeW ?? root.buttonData.size ?? 4;
+    }
+    readonly property int effectiveSizeH: {
+        if (root.editMode && visualButton.editingBottom) {
+            var delta = root.baseCellHeight > 0 ? Math.round(visualButton.editDragY / root.baseCellHeight) : 0;
+            var h = (root.buttonData.sizeH ?? 1) + delta;
+            return Math.max(1, Math.min(8, h));
+        }
+        return root.buttonData.sizeH ?? 1;
+    }
+
+    property bool hovered: hoverHandler.hovered
+
+    HoverHandler {
+        id: hoverHandler
+    }
+
+    Layout.columnSpan: root.effectiveSizeW
+    Layout.rowSpan: root.effectiveSizeH
     Layout.preferredWidth: root.implicitWidth
     Layout.preferredHeight: root.implicitHeight
     Layout.fillWidth: false
     Layout.fillHeight: false
 
-    property real baseWidth: root.baseCellWidth * Layout.columnSpan + cellSpacing * (Layout.columnSpan - 1)
-    property real baseHeight: root.baseCellHeight * Layout.rowSpan + cellSpacing * (Layout.rowSpan - 1)
+    property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
+    property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 
     implicitWidth: baseWidth
     implicitHeight: baseHeight
@@ -59,7 +86,6 @@ Item {
 
     Item {
         id: visualButton
-        property bool hovered: editModeInteraction.containsMouse
         
         parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
         
@@ -72,6 +98,13 @@ Item {
         }
         Behavior on y {
             enabled: !root.isDragging
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
+        }
+        
+        Behavior on width {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
+        }
+        Behavior on height {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         
@@ -162,7 +195,7 @@ Item {
             id: editModeInteraction
             visible: root.editMode
             anchors.fill: parent
-            cursorShape: root.isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            cursorShape: root.isDragging ? Qt.ClosedHandCursor : (root.isUnused ? Qt.PointingHandCursor : Qt.OpenHandCursor)
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton
             
@@ -172,9 +205,13 @@ Item {
             property real initialVisualY: 0
 
             function mutatePages(mutatorFn) {
-                var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-                mutatorFn(cloned);
-                Config.options.sidebar.quickToggles.android.pages = cloned;
+                if (root.panel && root.panel.mutatePages) {
+                    root.panel.mutatePages(mutatorFn);
+                } else {
+                    var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
+                    mutatorFn(cloned);
+                    Config.options.sidebar.quickToggles.android.pages = cloned;
+                }
             }
 
             function toggleEnabled() {
@@ -211,6 +248,12 @@ Item {
                         }
                     }
                 });
+            }
+            
+            function resolveLayoutConflicts() {
+                if (root.panel && root.panel.resolveLayoutConflicts) {
+                    root.panel.resolveLayoutConflicts(root.pageIndex, root.gridColumns);
+                }
             }
             
             function checkForSwap(gridX, gridY) {
@@ -296,13 +339,23 @@ Item {
         Rectangle {
             id: editBorder
             anchors.fill: parent
-            anchors.rightMargin: visualButton.editingRight ? -visualButton.editDragX : 0
-            anchors.bottomMargin: visualButton.editingBottom ? -visualButton.editDragY : 0
-            visible: root.editMode && !root.isUnused && !root.isDragging
+            visible: root.editMode && !root.isDragging
             color: "transparent"
-            border.color: Appearance.colors.colPrimary
+            border.color: root.isUnused ? (editBorderMouseArea.containsMouse ? Appearance.colors.colPrimary : "transparent") : Appearance.colors.colPrimary
             border.width: 2
             radius: Appearance.rounding.large
+            
+            Behavior on border.color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+            
+            MouseArea {
+                id: editBorderMouseArea
+                anchors.fill: parent
+                visible: root.isUnused
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+            }
 
             Rectangle {
                 id: rightDragHandle
@@ -313,10 +366,11 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: -width / 2
+                visible: !root.isUnused
 
                 MouseArea {
                     anchors.fill: parent
-                    anchors.margins: -10
+                    anchors.margins: -12
                     cursorShape: Qt.SizeHorCursor
                     preventStealing: true
                     property real pressAbsX: 0
@@ -343,6 +397,7 @@ Item {
                         if (newSizeW !== currentW) {
                             var currentH = root.buttonData.sizeH ?? 1;
                             editModeInteraction.setSize(newSizeW, currentH);
+                            editModeInteraction.resolveLayoutConflicts();
                         }
                     }
                 }
@@ -350,25 +405,32 @@ Item {
             
             // Sliders typically only support height 1, so no bottomDragHandle for now
         }
+    }
 
-        Rectangle {
-            id: unusedHoverOverlay
-            anchors.fill: parent
-            radius: Appearance.rounding.large
-            color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.5)
-            visible: root.isUnused && editModeInteraction.containsMouse
-            
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "add"
-                iconSize: 28
-                color: Appearance.colors.colOnLayer0
-            }
+    Rectangle {
+        id: addBadge
+        width: 20
+        height: 20
+        radius: 10
+        color: Appearance.m3colors.m3success
+        anchors.top: parent.top
+        anchors.topMargin: -6
+        anchors.right: parent.right
+        anchors.rightMargin: -6
+        visible: root.isUnused
+        z: 10
+        
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: "add"
+            iconSize: 14
+            color: Appearance.m3colors.m3onSuccess
         }
+    }
 
-        StyledToolTip {
-            extraVisibleCondition: root.editMode && root.tooltipText !== ""
-            text: root.tooltipText
-        }
+    StyledToolTip {
+        parent: root
+        extraVisibleCondition: root.tooltipText !== "" && root.hovered
+        text: root.tooltipText
     }
 }
