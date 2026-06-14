@@ -24,6 +24,7 @@ StyledFlickable {
     }
     contentHeight: contentColumn.implicitHeight + root.bottomContentPadding // Add some padding at the bottom
     implicitWidth: contentColumn.implicitWidth
+    flickableDirection: Flickable.VerticalFlick
     
     ColumnLayout {
         id: contentColumn

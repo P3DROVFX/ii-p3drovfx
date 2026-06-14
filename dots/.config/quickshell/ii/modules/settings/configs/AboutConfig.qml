@@ -335,10 +335,13 @@ ContentPage {
                               (actionProc.exitCode === 0 ? Appearance.colors.colPrimary : Appearance.colors.colError)
                 border.width: 1
 
-                ScrollView {
+                StyledFlickable {
                     anchors.fill: parent
                     anchors.margins: 8
                     clip: true
+                    contentHeight: logText.implicitHeight
+                    contentWidth: width
+                    flickableDirection: Flickable.VerticalFlick
 
                     Text {
                         id: logText

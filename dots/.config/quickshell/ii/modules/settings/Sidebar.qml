@@ -61,23 +61,22 @@ Item {
             color: Appearance.colors.colLayer0
             radius: Appearance.rounding.windowRounding
 
-            ScrollView {
+            StyledFlickable {
                 id: pagesScrollView
                 anchors.fill: parent
                 clip: true
-                contentHeight: groupsColumn.implicitHeight
-                contentWidth: availableWidth
-                ScrollBar.vertical.policy: ScrollBar.AsNeeded
-                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                contentHeight: groupsColumn.implicitHeight + topMargin + bottomMargin
+                contentWidth: width
+                flickableDirection: Flickable.VerticalFlick
 
-                topPadding: 10
-                bottomPadding: 10
-                leftPadding: 10
-                rightPadding: 10
+                topMargin: 10
+                bottomMargin: 10
+                leftMargin: 10
+                rightMargin: 10
 
                 ColumnLayout {
                     id: groupsColumn
-                    width: pagesScrollView.availableWidth
+                    width: pagesScrollView.width - pagesScrollView.leftMargin - pagesScrollView.rightMargin
                     spacing: 12   // gap between groups
 
                     Repeater {
