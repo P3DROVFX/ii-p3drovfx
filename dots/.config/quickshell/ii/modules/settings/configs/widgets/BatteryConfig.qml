@@ -9,7 +9,7 @@ ContentPage {
 
     forceWidth: false
 
-    signal goBack()
+    signal goBack
 
     // ── Back button row ───────────────────────────────────────────────────
     RowLayout {
@@ -77,6 +77,42 @@ ContentPage {
                 }
                 onActivated: index => {
                     Config.options.battery.style = model[index].value;
+                }
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Show Percentage")
+            enabled: Config.options.battery.style === "windows11"
+            icon: "percent"
+            Layout.fillWidth: true
+
+            StyledComboBox {
+                buttonIcon: "percent"
+                textRole: "displayName"
+                model: [
+                    {
+                        displayName: Translation.tr("Off"),
+                        value: "off"
+                    },
+                    {
+                        displayName: Translation.tr("Left"),
+                        value: "left"
+                    },
+                    {
+                        displayName: Translation.tr("Right"),
+                        value: "right"
+                    }
+                ]
+
+                currentIndex: {
+                    const val = Config.options.battery.showPercentage || "off";
+                    const index = model.findIndex(item => item.value === val);
+                    return index !== -1 ? index : 0;
+                }
+
+                onActivated: index => {
+                    Config.options.battery.showPercentage = model[index].value;
                 }
             }
         }

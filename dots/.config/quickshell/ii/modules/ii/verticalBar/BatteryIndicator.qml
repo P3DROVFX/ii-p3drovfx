@@ -184,100 +184,138 @@ MouseArea {
         }
 
         // 3. Classic / Default Style
-        Item {
+        Column {
             id: batteryContainerOuter
             visible: Config.options.battery.style !== "android16" && Config.options.battery.style !== "oneui"
             Layout.alignment: Qt.AlignHCenter
-            height: 30
-            width: 14
+            spacing: 7
 
             Item {
-                anchors.centerIn: parent
-                width: 30
-                height: 14
-                rotation: -90
-                antialiasing: true
+                visible: (Config.options.battery.showPercentage === "left")
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: percentageTextLeft.implicitHeight
+                height: percentageTextLeft.implicitWidth
+
+                StyledText {
+                    id: percentageTextLeft
+                    anchors.centerIn: parent
+                    text: Math.round(root.percentage * 100) + "%"
+                    color: root.textColor
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    rotation: -90
+                }
+            }
+
+            Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                height: 30
+                width: 14
 
                 Item {
-                    id: batteryContainer
-                    anchors.fill: parent
+                    anchors.centerIn: parent
+                    width: 30
+                    height: 14
+                    rotation: -90
+                    antialiasing: true
 
                     Item {
-                        id: fillClipping
-                        clip: true
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                        anchors.leftMargin: batteryContainer.width * (1.5 / 28)
+                        id: batteryContainer
+                        anchors.fill: parent
 
-                        readonly property real clampedPct: Math.max(0, Math.min(1, root.percentage))
-                        width: (batteryContainer.width * (22 / 28)) * clampedPct
-                        z: 0
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
+                        Item {
+                            id: fillClipping
+                            clip: true
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
                             anchors.left: parent.left
+                            anchors.leftMargin: 3
 
-                            height: batteryContainer.height * (10 / 13)
-                            width: batteryContainer.width * (22 / 28)
+                            readonly property real clampedPct: Math.max(0, Math.min(1, root.percentage))
+                            width: (batteryContainer.width - 9) * clampedPct
+                            z: 0
 
-                            radius: batteryContainer.height * (2 / 13)
+                            Rectangle {
+                                y: 3
+                                anchors.left: parent.left
 
-                            color: {
-                                if (root.isCritical && !root.effectivelyCharging)
-                                    return "#E53935";
-                                if (root.isLow && !root.effectivelyCharging)
-                                    return "#FB8C00";
-                                if (root.effectivelyCharging)
-                                    return "#43A047";
-                                if (root.isPowerSaving)
-                                    return "#FFC917";
-                                if (root.isPerformance)
-                                    return "#42A5F5";
-                                return root.textColor;
+                                height: 8
+                                width: batteryContainer.width - 9
+                                radius: 2
+
+                                color: {
+                                    if (root.isCritical && !root.effectivelyCharging)
+                                        return "#E53935";
+                                    if (root.isLow && !root.effectivelyCharging)
+                                        return "#FB8C00";
+                                    if (root.effectivelyCharging)
+                                        return "#43A047";
+                                    if (root.isPowerSaving)
+                                        return "#FFC917";
+                                    if (root.isPerformance)
+                                        return "#42A5F5";
+                                    return root.textColor;
+                                }
                             }
                         }
-                    }
 
-                    CustomIcon {
-                        anchors.fill: parent
-                        source: "Battery.svg"
-                        colorize: true
-                        color: {
-                            if (root.isCritical && !root.effectivelyCharging)
-                                return Appearance.m3colors.m3error;
-                            if (root.isLow && !root.effectivelyCharging)
-                                return Appearance.m3colors.m3error;
-                            return root.textColor;
+                        CustomIcon {
+                            anchors.fill: parent
+                            source: "Battery.svg"
+                            colorize: true
+                            color: {
+                                if (root.isCritical && !root.effectivelyCharging)
+                                    return Appearance.m3colors.m3error;
+                                if (root.isLow && !root.effectivelyCharging)
+                                    return Appearance.m3colors.m3error;
+                                return root.textColor;
+                            }
+                            z: 1
                         }
-                        z: 1
-                    }
 
-                    MaterialSymbol {
-                        visible: root.effectivelyCharging
-                        anchors.top: parent.top
-                        anchors.topMargin: -5
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
-                        text: "bolt"
-                        iconSize: 17
-                        fill: 1
-                        color: Appearance.colors.colLayer0
-                        z: 2
-                    }
+                        MaterialSymbol {
+                            visible: root.effectivelyCharging
+                            anchors.top: parent.top
+                            anchors.topMargin: -5
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
+                            text: "bolt"
+                            iconSize: 17
+                            fill: 1
+                            color: Appearance.colors.colLayer0
+                            z: 2
+                        }
 
-                    MaterialSymbol {
-                        visible: root.effectivelyCharging
-                        anchors.top: parent.top
-                        anchors.topMargin: -6
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
-                        text: "bolt"
-                        iconSize: 16
-                        fill: 1
-                        color: root.textColor
-                        z: 3
+                        MaterialSymbol {
+                            visible: root.effectivelyCharging
+                            anchors.top: parent.top
+                            anchors.topMargin: -6
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
+                            text: "bolt"
+                            iconSize: 16
+                            fill: 1
+                            color: root.textColor
+                            z: 3
+                        }
                     }
+                }
+            }
+
+            Item {
+                visible: (Config.options.battery.showPercentage === "right")
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: percentageTextRight.implicitHeight
+                height: percentageTextRight.implicitWidth
+
+                StyledText {
+                    id: percentageTextRight
+                    anchors.centerIn: parent
+                    text: Math.round(root.percentage * 100) + "%"
+                    color: root.textColor
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    rotation: -90
                 }
             }
         }
