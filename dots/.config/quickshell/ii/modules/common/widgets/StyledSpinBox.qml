@@ -56,13 +56,13 @@ SpinBox {
         topRightRadius: root.innerRadius
         bottomRightRadius: root.innerRadius
 
-        color: downMouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive : (downMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh)
+        color: root.down.pressed ? Appearance.colors.colSurfaceContainerHighestActive : (root.down.hovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh)
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(downIndicatorRect)
         }
 
-        scale: downMouse.pressed ? 0.9 : 1.0
+        scale: root.down.pressed ? 0.9 : 1.0
         Behavior on scale {
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(downIndicatorRect)
         }
@@ -74,12 +74,8 @@ SpinBox {
             color: Appearance.colors.colOnSurface
         }
 
-        MouseArea {
-            id: downMouse
-            anchors.fill: parent
-            hoverEnabled: true
+        HoverHandler {
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.decrease()
         }
     }
 
@@ -96,13 +92,13 @@ SpinBox {
         topLeftRadius: root.innerRadius
         bottomLeftRadius: root.innerRadius
 
-        color: upMouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive : (upMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh)
+        color: root.up.pressed ? Appearance.colors.colSurfaceContainerHighestActive : (root.up.hovered ? Appearance.colors.colSurfaceContainerHighestHover : Appearance.colors.colSurfaceContainerHigh)
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(upIndicatorRect)
         }
 
-        scale: upMouse.pressed ? 0.9 : 1.0
+        scale: root.up.pressed ? 0.9 : 1.0
         Behavior on scale {
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(upIndicatorRect)
         }
@@ -114,12 +110,8 @@ SpinBox {
             color: Appearance.colors.colOnSurface
         }
 
-        MouseArea {
-            id: upMouse
-            anchors.fill: parent
-            hoverEnabled: true
+        HoverHandler {
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.increase()
         }
     }
 }

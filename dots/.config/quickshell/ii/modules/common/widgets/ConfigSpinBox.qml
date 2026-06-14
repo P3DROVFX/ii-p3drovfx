@@ -12,7 +12,7 @@ Rectangle {
     property alias stepSize: spinBoxWidget.stepSize
     property alias from: spinBoxWidget.from
     property alias to: spinBoxWidget.to
-    
+
     Layout.fillWidth: true
     implicitHeight: rowLayout.implicitHeight + 32
 
@@ -25,21 +25,26 @@ Rectangle {
 
     readonly property int itemIndex: {
         var p = parent;
-        if (!p) return 0;
+        if (!p)
+            return 0;
         var idx = 0;
         for (var i = 0; i < p.children.length; ++i) {
-            if (p.children[i] === root) return idx;
-            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined") idx++;
+            if (p.children[i] === root)
+                return idx;
+            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined")
+                idx++;
         }
         return 0;
     }
 
     readonly property int totalItems: {
         var p = parent;
-        if (!p) return 1;
+        if (!p)
+            return 1;
         var count = 0;
         for (var i = 0; i < p.children.length; ++i) {
-            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined") count++;
+            if (p.children[i].visible && typeof p.children[i].topLeftRadius !== "undefined")
+                count++;
         }
         return count;
     }
@@ -69,7 +74,7 @@ Rectangle {
             visible: active
             Layout.alignment: Qt.AlignVCenter
             opacity: root.enabled ? 1 : 0.4
-            
+
             sourceComponent: MaterialShapeWrappedMaterialSymbol {
                 text: root.icon
                 readonly property bool isActive: spinBoxWidget.activeFocus || spinBoxWidget.up.pressed || spinBoxWidget.down.pressed
@@ -79,8 +84,18 @@ Rectangle {
                 color: isActive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer3
                 colSymbol: isActive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer3
 
-                Behavior on color { ColorAnimation { duration: 250; easing.type: Easing.OutQuart } }
-                Behavior on colSymbol { ColorAnimation { duration: 250; easing.type: Easing.OutQuart } }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: 250
+                        easing.type: Easing.OutQuart
+                    }
+                }
+                Behavior on colSymbol {
+                    ColorAnimation {
+                        duration: 250
+                        easing.type: Easing.OutQuart
+                    }
+                }
             }
         }
 
@@ -95,7 +110,6 @@ Rectangle {
         StyledSpinBox {
             id: spinBoxWidget
             Layout.fillWidth: false
-            value: root.value
         }
     }
 }

@@ -18,13 +18,6 @@ Item {
         opacity: subPageOverlay.width > 0 ? (subPageOverlay.x / subPageOverlay.width) : 1
         visible: opacity > 0
 
-        KeyboardShortcutBox {
-            Layout.fillWidth: true
-            Layout.bottomMargin: 8
-            text: Translation.tr("Toggle Media Overlay")
-            keys: ["Super", "M"]
-        }
-
         ContentSection {
             title: Translation.tr("Game Overlays")
             icon: "sports_esports"

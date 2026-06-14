@@ -112,14 +112,14 @@ Scope {
             // ── Visibility / readiness ──────────────────────────────────────
             // Must be visible while overview is open OR while exit animation runs.
             property bool exitAnimating: false
-            property bool isOverviewActive: GlobalStates.overviewOpen
+            property bool isOverviewActive: false
 
             // Delay applying window opacity rule to let ScreencopyView render its first frame (prevents 1-frame wallpaper pop on open)
             Timer {
                 id: openDelayTimer
                 interval: 60
                 onTriggered: {
-                    if (tRoot.monitorFocused) {
+                    if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
                         Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })"]);
                     }
                 }
@@ -130,7 +130,7 @@ Scope {
                 id: restoreWindowsTimer
                 interval: 300
                 onTriggered: {
-                    if (tRoot.monitorFocused) {
+                    if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
                         Quickshell.execDetached(["hyprctl", "reload"]);
                     }
                 }
@@ -247,7 +247,7 @@ Scope {
                 function onFeatureEnabledChanged() {
                     if (!transitionScope.featureEnabled) {
                         openDelayTimer.stop()
-                        if (GlobalStates.overviewOpen && tRoot.monitorFocused) {
+                        if (GlobalStates.overviewOpen && (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])) {
                             Quickshell.execDetached(["hyprctl", "reload"]);
                         }
                     }
@@ -352,7 +352,31 @@ Scope {
         required property int screenHeight
 
         readonly property string address: `0x${toplevel.HyprlandToplevel?.address}`
-        readonly property var windowData: HyprlandData.windowByAddress[address]
+        property var windowData: null
+
+        function updateWindowData() {
+            if (!tRoot.exitAnimating) {
+                windowData = HyprlandData.windowByAddress[address] || null;
+            }
+        }
+
+        onAddressChanged: updateWindowData()
+
+        Connections {
+            target: HyprlandData
+            ignoreUnknownSignals: true
+            function onWindowByAddressChanged() {
+                tile.updateWindowData();
+            }
+        }
+
+        Connections {
+            target: tRoot
+            ignoreUnknownSignals: true
+            function onExitAnimatingChanged() {
+                tile.updateWindowData();
+            }
+        }
 
         // Position and size from hyprland window data (screen-relative coordinates)
         readonly property int monitorOffsetX: monitorData?.x ?? 0

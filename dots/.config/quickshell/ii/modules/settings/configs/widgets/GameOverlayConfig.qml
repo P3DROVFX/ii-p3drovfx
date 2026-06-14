@@ -43,6 +43,13 @@ ContentPage {
         }
     }
 
+    KeyboardShortcutBox {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 8
+        text: Translation.tr("Toggle Game Overlay")
+        keys: ["Super", "G"]
+    }
+
     ContentSection {
         title: Translation.tr("General")
         icon: "tune"

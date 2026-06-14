@@ -76,6 +76,9 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.background.blurWhenWindowsOpen = checked;
             }
+            StyledToolTip {
+                text: Translation.tr("Experimental - Blur the wallpaper and widgets when a window is open on the current workspace.")
+            }
         }
 
         ConfigSlider {
@@ -94,10 +97,13 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "zoom_in_map"
-            text: Translation.tr("Zoom animation when overview/cheatsheet is open (EXperimental)")
+            text: Translation.tr("Zoom animation when overview/cheatsheet is open (Beta)")
             checked: Config.options.background.zoomOutEnabled
             onCheckedChanged: {
                 Config.options.background.zoomOutEnabled = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Experimental - Scale windows with wallpaper when Overview/Cheatsheet is opened, this is a work in progress, expect bugs and a lags on low end hardware.")
             }
         }
 

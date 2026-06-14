@@ -205,280 +205,211 @@ Scope {
                     id: wallpaperItem
                     anchors.fill: parent
                     clip: true
-                scale: showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout ? zoomedRatio : defaultRatio
-                opacity: mediaModeOpen ? 0 : 1
+                    scale: showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout ? zoomedRatio : defaultRatio
+                    opacity: mediaModeOpen ? 0 : 1
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-
-                Behavior on scale {
-                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
-                }
-
-                // --- STYLE 0/1: Blurred backing (full-screen blurred wallpaper behind zoomed-out central) ---
-                TransitionImage {
-                    id: bgWallpaperBlurred
-                    anchors.fill: parent
-                    imageSource: ((wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperSafetyTriggered) ? bgRoot.wallpaperPath : ""
-                    animated: Config.options.background.animateWallpaperChanges
-                    fillMode: Image.PreserveAspectCrop
-                    // Visible for both styles during zoom out & return animation to avoid any black fallback margins
-                    visible: Config.options.background.zoomOutStyle !== 2 && (wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperIsVideo
-                    opacity: 1.0
-                    // Performance: disable expensive mipmapping on background blur layer
-                    mipmap: false
-                    antialiasing: false
-                }
-                Loader {
-                    id: bgWallpaperBlurLoader
-                    anchors.fill: bgWallpaperBlurred
-                    active: wallpaperItem.wallpaperZoomedOut || opacity > 0.01
-                    opacity: wallpaperItem.wallpaperZoomedOut ? 1.0 : 0.0
                     Behavior on opacity {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+
+                    Behavior on scale {
+                        animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                    }
+
+                    // --- STYLE 0/1: Blurred backing (full-screen blurred wallpaper behind zoomed-out central) ---
+                    TransitionImage {
+                        id: bgWallpaperBlurred
+                        anchors.fill: parent
+                        imageSource: ((wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperSafetyTriggered) ? bgRoot.wallpaperPath : ""
+                        animated: Config.options.background.animateWallpaperChanges
+                        fillMode: Image.PreserveAspectCrop
+                        // Visible for both styles during zoom out & return animation to avoid any black fallback margins
+                        visible: Config.options.background.zoomOutStyle !== 2 && (wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperIsVideo
+                        opacity: 1.0
+                        // Performance: disable expensive mipmapping on background blur layer
+                        mipmap: false
+                        antialiasing: false
+                    }
+                    Loader {
+                        id: bgWallpaperBlurLoader
+                        anchors.fill: bgWallpaperBlurred
+                        active: wallpaperItem.wallpaperZoomedOut || opacity > 0.01
+                        opacity: wallpaperItem.wallpaperZoomedOut ? 1.0 : 0.0
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
+                        sourceComponent: MultiEffect {
+                            anchors.fill: parent
+                            source: bgWallpaperBlurred
+                            blurEnabled: true
+                            // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
+                            blurMax: 75
+                            blur: 0.7
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "#000000"
+                                opacity: 0.24
+                            }
+                        }
+                    }
+
+                    // Shared zoom-out state — gated on zoomOutEnabled
+                    readonly property bool scratchpadOpen: {
+                        if (!HyprlandData.monitors)
+                            return false;
+                        return HyprlandData.monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
+                    }
+                    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen)
+
+                    // Animated clip radius — drives both the border-radius clip and tile visibility
+                    property real wallpaperClipRadius: wallpaperZoomedOut ? Appearance.rounding.windowRounding : 0
+                    Behavior on wallpaperClipRadius {
                         animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                     }
-                    sourceComponent: MultiEffect {
+
+                    // Wallpaper planes: scale zoom-out.
+                    Item {
+                        id: wallpaperPlanes
                         anchors.fill: parent
-                        source: bgWallpaperBlurred
-                        blurEnabled: true
-                        // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
-                        blurMax: 75
-                        blur: 0.7
+
+                        readonly property bool barVertical: Config.options.bar.vertical
+                        readonly property bool barBottom: Config.options.bar.bottom
+                        readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+                        readonly property int gap: Appearance.gapsOut
+
+                        readonly property int padLeft: barVertical && !barBottom ? barSize : gap
+                        readonly property int padRight: barVertical && barBottom ? barSize : gap
+                        readonly property int padTop: !barVertical && !barBottom ? barSize : gap
+                        readonly property int padBottom: !barVertical && barBottom ? barSize : gap
+
+                        readonly property real scaleOriginX: padLeft + (bgRoot.screen.width - padLeft - padRight) / 2
+                        readonly property real scaleOriginY: padTop + (bgRoot.screen.height - padTop - padBottom) / 2
+
+                        // Shared parallax + size properties used by all 9 tiles
+                        property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
+                        property real wallpaperH: bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
+                        property real parallaxX: -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
+                        property real parallaxY: -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
+                        // Centered position (style 0: no parallax offset)
+                        property real centeredX: -(bgRoot.movableXSpace)
+                        property real centeredY: -(bgRoot.movableYSpace)
+
+                        readonly property real scaleProgress: {
+                            let startScale = 1.0;
+                            let targetScale = Math.max(0.85, bgRoot.minSafeScale * 0.85);
+                            if (startScale === targetScale)
+                                return 0.0;
+                            return Math.max(0.0, Math.min(1.0, (startScale - scaleValue) / (startScale - targetScale)));
+                        }
+
+                        property real scaleValue: {
+                            if (!wallpaperItem.wallpaperZoomedOut)
+                                return 1.0;
+                            if (Config.options.background.zoomOutStyle === 2)
+                                return 1.15;
+                            // Style 1: use zoom-to-fill to cover screen without mirrored tiles
+                            if (Config.options.background.zoomOutStyle === 1)
+                                return Math.max(0.85, zoomOutCoverScale);
+                            return Math.max(0.85, bgRoot.minSafeScale * 0.85);
+                        }
+                        Behavior on scaleValue {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
+
+                        transform: Scale {
+                            origin.x: wallpaperPlanes.scaleOriginX
+                            origin.y: wallpaperPlanes.scaleOriginY
+                            xScale: wallpaperPlanes.scaleValue
+                            yScale: wallpaperPlanes.scaleValue
+                        }
+
+                        // Publish zoom state so OverviewWindowTransition can sync its animation
+                        Binding {
+                            target: GlobalStates
+                            property: "overviewZoomScale"
+                            value: wallpaperPlanes.scaleValue
+                            when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
+                        }
+                        Binding {
+                            target: GlobalStates
+                            property: "overviewZoomOriginX"
+                            value: wallpaperPlanes.scaleOriginX
+                            when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
+                        }
+                        Binding {
+                            target: GlobalStates
+                            property: "overviewZoomOriginY"
+                            value: wallpaperPlanes.scaleOriginY
+                            when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
+                        }
+
+                        // --- STYLE 1: Zoom-to-fill (no mirrored tiles) ---
+                        // When zoomed out, the central wallpaper scales to cover the entire screen
+                        // without parallax movement, eliminating the need for expensive mirrored tiles.
+                        // The wallpaper already uses PreserveAspectCrop and sufficient scale.
+                        property real zoomOutCoverScale: {
+                            // Ensure the wallpaper always covers the screen during zoom-out,
+                            // even when parallax is disabled or the wallpaper is smaller than the screen.
+                            const w = bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale;
+                            const h = bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale;
+                            if (w <= 0 || h <= 0)
+                                return 1.0;
+                            // Scale to cover the screen, adding a small margin for safety
+                            return Math.max(bgRoot.screen.width / w, bgRoot.screen.height / h) * 1.05;
+                        }
+
+                        // Mask rectangle for rounded clip — must be a real scene Item with layer.enabled
+                        Rectangle {
+                            id: centralClipMask
+                            x: 0
+                            y: 0
+                            width: centralWallpaperClipRect.width
+                            height: centralWallpaperClipRect.height
+                            radius: centralWallpaperClipRect.radius
+                            visible: false
+                            layer.enabled: true
+                        }
 
                         Rectangle {
-                            anchors.fill: parent
-                            color: "#000000"
-                            opacity: 0.24
-                        }
-                    }
-                }
-
-                // Shared zoom-out state — gated on zoomOutEnabled
-                readonly property bool scratchpadOpen: {
-                    if (!HyprlandData.monitors)
-                        return false;
-                    return HyprlandData.monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
-                }
-                readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen)
-
-                // Animated clip radius — drives both the border-radius clip and tile visibility
-                property real wallpaperClipRadius: wallpaperZoomedOut ? Appearance.rounding.windowRounding : 0
-                Behavior on wallpaperClipRadius {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                }
-
-                // Wallpaper planes: scale zoom-out.
-                Item {
-                    id: wallpaperPlanes
-                    anchors.fill: parent
-
-                    readonly property bool barVertical: Config.options.bar.vertical
-                    readonly property bool barBottom: Config.options.bar.bottom
-                    readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
-                    readonly property int gap: Appearance.gapsOut
-
-                    readonly property int padLeft: barVertical && !barBottom ? barSize : gap
-                    readonly property int padRight: barVertical && barBottom ? barSize : gap
-                    readonly property int padTop: !barVertical && !barBottom ? barSize : gap
-                    readonly property int padBottom: !barVertical && barBottom ? barSize : gap
-
-                    readonly property real scaleOriginX: padLeft + (bgRoot.screen.width - padLeft - padRight) / 2
-                    readonly property real scaleOriginY: padTop + (bgRoot.screen.height - padTop - padBottom) / 2
-
-                    // Shared parallax + size properties used by all 9 tiles
-                    property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
-                    property real wallpaperH: bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
-                    property real parallaxX: -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
-                    property real parallaxY: -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
-                    // Centered position (style 0: no parallax offset)
-                    property real centeredX: -(bgRoot.movableXSpace)
-                    property real centeredY: -(bgRoot.movableYSpace)
-
-                    readonly property real scaleProgress: {
-                        let startScale = 1.0;
-                        let targetScale = Math.max(0.85, bgRoot.minSafeScale * 0.85);
-                        if (startScale === targetScale)
-                            return 0.0;
-                        return Math.max(0.0, Math.min(1.0, (startScale - scaleValue) / (startScale - targetScale)));
-                    }
-
-                    property real scaleValue: {
-                        if (!wallpaperItem.wallpaperZoomedOut)
-                            return 1.0;
-                        if (Config.options.background.zoomOutStyle === 2)
-                            return 1.15;
-                        // Style 1: use zoom-to-fill to cover screen without mirrored tiles
-                        if (Config.options.background.zoomOutStyle === 1)
-                            return Math.max(0.85, zoomOutCoverScale);
-                        return Math.max(0.85, bgRoot.minSafeScale * 0.85);
-                    }
-                    Behavior on scaleValue {
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                    }
-
-                    transform: Scale {
-                        origin.x: wallpaperPlanes.scaleOriginX
-                        origin.y: wallpaperPlanes.scaleOriginY
-                        xScale: wallpaperPlanes.scaleValue
-                        yScale: wallpaperPlanes.scaleValue
-                    }
-
-                    // Publish zoom state so OverviewWindowTransition can sync its animation
-                    Binding {
-                        target: GlobalStates
-                        property: "overviewZoomScale"
-                        value: wallpaperPlanes.scaleValue
-                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
-                    }
-                    Binding {
-                        target: GlobalStates
-                        property: "overviewZoomOriginX"
-                        value: wallpaperPlanes.scaleOriginX
-                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
-                    }
-                    Binding {
-                        target: GlobalStates
-                        property: "overviewZoomOriginY"
-                        value: wallpaperPlanes.scaleOriginY
-                        when: Hyprland.focusedMonitor?.name == bgRoot.monitor?.name
-                    }
-
-                    // --- STYLE 1: Zoom-to-fill (no mirrored tiles) ---
-                    // When zoomed out, the central wallpaper scales to cover the entire screen
-                    // without parallax movement, eliminating the need for expensive mirrored tiles.
-                    // The wallpaper already uses PreserveAspectCrop and sufficient scale.
-                    property real zoomOutCoverScale: {
-                        // Ensure the wallpaper always covers the screen during zoom-out,
-                        // even when parallax is disabled or the wallpaper is smaller than the screen.
-                        const w = bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale;
-                        const h = bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale;
-                        if (w <= 0 || h <= 0)
-                            return 1.0;
-                        // Scale to cover the screen, adding a small margin for safety
-                        return Math.max(bgRoot.screen.width / w, bgRoot.screen.height / h) * 1.05;
-                    }
-
-                    // Mask rectangle for rounded clip — must be a real scene Item with layer.enabled
-                    Rectangle {
-                        id: centralClipMask
-                        x: 0
-                        y: 0
-                        width: centralWallpaperClipRect.width
-                        height: centralWallpaperClipRect.height
-                        radius: centralWallpaperClipRect.radius
-                        visible: false
-                        layer.enabled: true
-                    }
-
-                    StyledRectangularShadow {
-                        id: centralWallpaperShadow
-                        target: centralWallpaperClipRect
-                        blur: 32 * wallpaperPlanes.scaleProgress
-                        offset: Qt.vector2d(0, 4 * wallpaperPlanes.scaleProgress)
-                        visible: Config.options.background.zoomOutStyle === 0 && wallpaperPlanes.scaleProgress > 0.01
-                        opacity: wallpaperPlanes.scaleProgress
-                    }
-
-                    Rectangle {
-                        id: centralWallpaperClipRect
-                        x: Config.options.background.zoomOutStyle !== 1 ? 0 : wallpaperPlanes.parallaxX
-                        y: Config.options.background.zoomOutStyle !== 1 ? 0 : wallpaperPlanes.parallaxY
-                        width: Config.options.background.zoomOutStyle !== 1 ? bgRoot.screen.width : wallpaperPlanes.wallpaperW
-                        height: Config.options.background.zoomOutStyle !== 1 ? bgRoot.screen.height : wallpaperPlanes.wallpaperH
-                        color: "transparent"
-                        radius: Config.options.background.zoomOutStyle === 0 ? wallpaperItem.wallpaperClipRadius : 0
-                        clip: Config.options.background.zoomOutStyle !== 1
-                        border.color: CF.ColorUtils.transparentize(Appearance.colors.colPrimary, 0.35)
-                        border.width: 1.5 * wallpaperPlanes.scaleProgress
-
-                        layer.enabled: radius > 0
-                        layer.effect: OpacityMask {
-                            maskSource: centralClipMask
+                            id: windowBlurClipMask
+                            x: 0
+                            y: 0
+                            width: centralWallpaperClipRect.width
+                            height: centralWallpaperClipRect.height
+                            radius: centralWallpaperClipRect.radius
+                            visible: false
+                            layer.enabled: true
                         }
 
-                        Behavior on x {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        Behavior on y {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 500
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: 500
-                                easing.type: Easing.OutCubic
-                            }
+                        StyledRectangularShadow {
+                            id: centralWallpaperShadow
+                            target: centralWallpaperClipRect
+                            blur: 32 * wallpaperPlanes.scaleProgress
+                            offset: Qt.vector2d(0, 4 * wallpaperPlanes.scaleProgress)
+                            visible: Config.options.background.zoomOutStyle === 0 && wallpaperPlanes.scaleProgress > 0.01
+                            opacity: wallpaperPlanes.scaleProgress
                         }
 
-                        TransitionImage {
-                            id: wallpaper
-                            // Style 0: Centered when zoomed out, follows parallax when zoomed in
-                            // Style 1: Fills the clip wrapper perfectly, no parallax during zoom-out
-                            x: {
-                                if (Config.options.background.zoomOutStyle === 1) {
-                                    // In style 1, wallpaper fills the clip rect; no parallax offset needed
-                                    return 0;
-                                }
-                                // Style 0: centered when zoomed out, parallax when zoomed in
-                                return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableXSpace : wallpaperPlanes.parallaxX;
-                            }
-                            y: {
-                                if (Config.options.background.zoomOutStyle === 1) {
-                                    return 0;
-                                }
-                                return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableYSpace : wallpaperPlanes.parallaxY;
-                            }
-                            width: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperW : parent.width
-                            height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
+                        Rectangle {
+                            id: centralWallpaperClipRect
+                            x: Config.options.background.zoomOutStyle !== 1 ? 0 : wallpaperPlanes.parallaxX
+                            y: Config.options.background.zoomOutStyle !== 1 ? 0 : wallpaperPlanes.parallaxY
+                            width: Config.options.background.zoomOutStyle !== 1 ? bgRoot.screen.width : wallpaperPlanes.wallpaperW
+                            height: Config.options.background.zoomOutStyle !== 1 ? bgRoot.screen.height : wallpaperPlanes.wallpaperH
+                            color: "transparent"
+                            radius: Config.options.background.zoomOutStyle === 0 ? wallpaperItem.wallpaperClipRadius : 0
+                            clip: Config.options.background.zoomOutStyle !== 1
+                            border.color: CF.ColorUtils.transparentize(Appearance.colors.colPrimary, 0.35)
+                            border.width: 1.5 * wallpaperPlanes.scaleProgress
 
-                            visible: opacity > 0 && !bgRoot.wallpaperIsVideo
-                            opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
-
-                            property int chunkSize: Config?.options.bar.workspaces.shown ?? 10
-                            property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
-                            property int upper: Math.ceil(bgRoot.lastWorkspaceId / chunkSize) * chunkSize
-                            property int range: Math.max(1, upper - lower)
-                            property real valueX: {
-                                let result = 0.5;
-                                if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax)
-                                    result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
-                                return result;
+                            layer.enabled: radius > 0
+                            layer.effect: OpacityMask {
+                                maskSource: centralClipMask
                             }
-                            property real sidebarOffsetX: {
-                                if (!Config.options.background.parallax.enableSidebar)
-                                    return 0;
-                                return (0.15 * GlobalStates.effectiveRightOpen - 0.15 * GlobalStates.effectiveLeftOpen);
-                            }
-                            property real valueY: {
-                                let result = 0.5;
-                                if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax)
-                                    result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
-                                return result;
-                            }
-                            property real effectiveValueX: Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
-                            property real effectiveValueY: Math.max(0, Math.min(1, valueY))
-
-                            imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
-                            animated: Config.options.background.animateWallpaperChanges
-                            fillMode: Image.PreserveAspectCrop
-                            // Performance: disable mipmapping on the central wallpaper
-                            mipmap: false
-                            antialiasing: false
 
                             Behavior on x {
                                 NumberAnimation {
@@ -504,201 +435,286 @@ Scope {
                                     easing.type: Easing.OutCubic
                                 }
                             }
-                        }
 
-                        Loader {
-                            id: blurLoader
-                            active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
-                            anchors.fill: parent
-                            scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
-                            Behavior on scale {
-                                NumberAnimation {
-                                    id: scaleAnim
-                                    duration: 400
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
+                            TransitionImage {
+                                id: wallpaper
+                                // Style 0: Centered when zoomed out, follows parallax when zoomed in
+                                // Style 1: Fills the clip wrapper perfectly, no parallax during zoom-out
+                                x: {
+                                    if (Config.options.background.zoomOutStyle === 1) {
+                                        // In style 1, wallpaper fills the clip rect; no parallax offset needed
+                                        return 0;
+                                    }
+                                    // Style 0: centered when zoomed out, parallax when zoomed in
+                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableXSpace : wallpaperPlanes.parallaxX;
+                                }
+                                y: {
+                                    if (Config.options.background.zoomOutStyle === 1) {
+                                        return 0;
+                                    }
+                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableYSpace : wallpaperPlanes.parallaxY;
+                                }
+                                width: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperW : parent.width
+                                height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
+
+                                visible: opacity > 0 && !bgRoot.wallpaperIsVideo
+                                opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+
+                                property int chunkSize: Config?.options.bar.workspaces.shown ?? 10
+                                property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
+                                property int upper: Math.ceil(bgRoot.lastWorkspaceId / chunkSize) * chunkSize
+                                property int range: Math.max(1, upper - lower)
+                                property real valueX: {
+                                    let result = 0.5;
+                                    if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax)
+                                        result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                    return result;
+                                }
+                                property real sidebarOffsetX: {
+                                    if (!Config.options.background.parallax.enableSidebar)
+                                        return 0;
+                                    return (0.15 * GlobalStates.effectiveRightOpen - 0.15 * GlobalStates.effectiveLeftOpen);
+                                }
+                                property real valueY: {
+                                    let result = 0.5;
+                                    if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax)
+                                        result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                    return result;
+                                }
+                                property real effectiveValueX: Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
+                                property real effectiveValueY: Math.max(0, Math.min(1, valueY))
+
+                                imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
+                                animated: Config.options.background.animateWallpaperChanges
+                                fillMode: Image.PreserveAspectCrop
+                                // Performance: disable mipmapping on the central wallpaper
+                                mipmap: false
+                                antialiasing: false
+
+                                Behavior on x {
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on y {
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.OutCubic
+                                    }
                                 }
                             }
-                            opacity: GlobalStates.screenLocked ? 1.0 : 0.0
+
+                            Loader {
+                                id: blurLoader
+                                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
+                                anchors.fill: parent
+                                scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        id: scaleAnim
+                                        duration: 400
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
+                                    }
+                                }
+                                opacity: GlobalStates.screenLocked ? 1.0 : 0.0
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                                sourceComponent: MultiEffect {
+                                    source: wallpaper
+                                    blurEnabled: true
+                                    // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
+                                    blurMax: 64
+                                    blur: Math.min(Config.options.lock.blur.radius / 4, 24) / 64
+
+                                    Rectangle {
+                                        opacity: 1.0
+                                        anchors.fill: parent
+                                        color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.7)
+                                    }
+                                }
+                            }
+
+                            WidgetCanvas {
+                                id: widgetCanvas
+                                scale: 1 - (defaultRatio - 1)
+                                Behavior on scale {
+                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                }
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    top: parent.top
+                                    bottom: parent.bottom
+                                    horizontalCenter: undefined
+                                    verticalCenter: undefined
+                                    readonly property real parallaxFactor: Config.options.background.parallax.widgetsFactor
+                                    leftMargin: {
+                                        const xOnWallpaper = bgRoot.movableXSpace;
+                                        const extraMove = (wallpaper.effectiveValueX * 2 * bgRoot.movableXSpace) * (parallaxFactor - 1);
+                                        return xOnWallpaper - extraMove;
+                                    }
+                                    topMargin: {
+                                        const yOnWallpaper = bgRoot.movableYSpace;
+                                        const extraMove = (wallpaper.effectiveValueY * 2 * bgRoot.movableYSpace) * (parallaxFactor - 1);
+                                        return yOnWallpaper - extraMove;
+                                    }
+                                    Behavior on leftMargin {
+                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                    }
+                                    Behavior on topMargin {
+                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                    }
+                                }
+                                width: parent.width
+                                height: parent.height
+                                states: State {
+                                    name: "centered"
+                                    when: GlobalStates.screenLocked || bgRoot.wallpaperSafetyTriggered
+                                    PropertyChanges {
+                                        target: widgetCanvas
+                                        width: parent.width
+                                        height: parent.height
+                                    }
+                                    AnchorChanges {
+                                        target: widgetCanvas
+                                        anchors {
+                                            left: undefined
+                                            right: undefined
+                                            top: undefined
+                                            bottom: undefined
+                                            horizontalCenter: parent.horizontalCenter
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+
+                                transitions: Transition {
+                                    PropertyAnimation {
+                                        properties: "width,height"
+                                        duration: Appearance.animation.elementMove.duration
+                                        easing.type: Appearance.animation.elementMove.type
+                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                    }
+                                    AnchorAnimation {
+                                        duration: Appearance.animation.elementMove.duration
+                                        easing.type: Appearance.animation.elementMove.type
+                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                    }
+                                }
+
+                                FadeLoader {
+                                    shown: Config.options.background.widgets.weather.enable
+                                    sourceComponent: WeatherWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
+                                FadeLoader {
+                                    shown: Config.options.background.widgets.clock.enable
+                                    sourceComponent: ClockWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+                                    }
+                                }
+
+                                Timer {
+                                    id: mediaTimer
+                                    interval: 200
+                                    onTriggered: mediaLoader.enableLoading = true
+                                }
+
+                                FadeLoader {
+                                    id: mediaLoader
+                                    property bool enableLoading: true
+                                    shown: Config.options.background.widgets.media.enable && enableLoading
+                                    sourceComponent: Config.options.background.widgets.media.style === "expressive" ? expressiveMediaWidget : circularMediaWidget
+
+                                    Component {
+                                        id: circularMediaWidget
+                                        MediaWidget {
+                                            screenWidth: bgRoot.screen.width
+                                            screenHeight: bgRoot.screen.height
+                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                            wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        }
+                                    }
+
+                                    Component {
+                                        id: expressiveMediaWidget
+                                        ExpressiveMediaWidget {
+                                            screenWidth: bgRoot.screen.width
+                                            screenHeight: bgRoot.screen.height
+                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                            wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        }
+                                    }
+                                    onLoaded: {
+                                        if (item && item.requestReset) {
+                                            item.requestReset.connect(() => { // hard reset
+                                                mediaLoader.enableLoading = false;
+                                                mediaTimer.running = true;
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        MultiEffect {
+                            id: windowBlurEffect
+                            x: centralWallpaperClipRect.x
+                            y: centralWallpaperClipRect.y
+                            width: centralWallpaperClipRect.width
+                            height: centralWallpaperClipRect.height
+
+                            layer.enabled: centralWallpaperClipRect.radius > 0
+                            layer.effect: OpacityMask {
+                                maskSource: windowBlurClipMask
+                            }
+
+                            property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !bgRoot.overviewOpen
+                            visible: shouldBlur || opacity > 0.01
+                            opacity: shouldBlur ? 1.0 : 0.0
                             Behavior on opacity {
                                 NumberAnimation {
                                     duration: 400
                                     easing.type: Easing.OutCubic
                                 }
                             }
-                            sourceComponent: MultiEffect {
-                                source: wallpaper
-                                blurEnabled: true
-                                // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
-                                blurMax: 64
-                                blur: Math.min(Config.options.lock.blur.radius / 4, 24) / 64
 
-                                Rectangle {
-                                    opacity: 1.0
-                                    anchors.fill: parent
-                                    color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.7)
-                                }
-                            }
-                        }
-
-                        WidgetCanvas {
-                            id: widgetCanvas
-                            scale: 1 - (defaultRatio - 1)
-                            Behavior on scale {
-                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                            }
-                            anchors {
-                                left: parent.left
-                                right: parent.right
-                                top: parent.top
-                                bottom: parent.bottom
-                                horizontalCenter: undefined
-                                verticalCenter: undefined
-                                readonly property real parallaxFactor: Config.options.background.parallax.widgetsFactor
-                                leftMargin: {
-                                    const xOnWallpaper = bgRoot.movableXSpace;
-                                    const extraMove = (wallpaper.effectiveValueX * 2 * bgRoot.movableXSpace) * (parallaxFactor - 1);
-                                    return xOnWallpaper - extraMove;
-                                }
-                                topMargin: {
-                                    const yOnWallpaper = bgRoot.movableYSpace;
-                                    const extraMove = (wallpaper.effectiveValueY * 2 * bgRoot.movableYSpace) * (parallaxFactor - 1);
-                                    return yOnWallpaper - extraMove;
-                                }
-                                Behavior on leftMargin {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                                }
-                                Behavior on topMargin {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                                }
-                            }
-                            width: parent.width
-                            height: parent.height
-                            states: State {
-                                name: "centered"
-                                when: GlobalStates.screenLocked || bgRoot.wallpaperSafetyTriggered
-                                PropertyChanges {
-                                    target: widgetCanvas
-                                    width: parent.width
-                                    height: parent.height
-                                }
-                                AnchorChanges {
-                                    target: widgetCanvas
-                                    anchors {
-                                        left: undefined
-                                        right: undefined
-                                        top: undefined
-                                        bottom: undefined
-                                        horizontalCenter: parent.horizontalCenter
-                                        verticalCenter: parent.verticalCenter
-                                    }
-                                }
-                            }
-
-                            transitions: Transition {
-                                PropertyAnimation {
-                                    properties: "width,height"
-                                    duration: Appearance.animation.elementMove.duration
-                                    easing.type: Appearance.animation.elementMove.type
-                                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                }
-                                AnchorAnimation {
-                                    duration: Appearance.animation.elementMove.duration
-                                    easing.type: Appearance.animation.elementMove.type
-                                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                }
-                            }
-
-                            FadeLoader {
-                                shown: Config.options.background.widgets.weather.enable
-                                sourceComponent: WeatherWidget {
-                                    screenWidth: bgRoot.screen.width
-                                    screenHeight: bgRoot.screen.height
-                                    scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                    scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                    wallpaperScale: bgRoot.effectiveWallpaperScale
-                                }
-                            }
-
-                            FadeLoader {
-                                shown: Config.options.background.widgets.clock.enable
-                                sourceComponent: ClockWidget {
-                                    screenWidth: bgRoot.screen.width
-                                    screenHeight: bgRoot.screen.height
-                                    scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                    scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                    wallpaperScale: bgRoot.effectiveWallpaperScale
-                                    wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
-                                }
-                            }
-
-                            Timer {
-                                id: mediaTimer
-                                interval: 200
-                                onTriggered: mediaLoader.enableLoading = true
-                            }
-
-                            FadeLoader {
-                                id: mediaLoader
-                                property bool enableLoading: true
-                                shown: Config.options.background.widgets.media.enable && enableLoading
-                                sourceComponent: Config.options.background.widgets.media.style === "expressive" ? expressiveMediaWidget : circularMediaWidget
-
-                                Component {
-                                    id: circularMediaWidget
-                                    MediaWidget {
-                                        screenWidth: bgRoot.screen.width
-                                        screenHeight: bgRoot.screen.height
-                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                        wallpaperScale: bgRoot.effectiveWallpaperScale
-                                    }
-                                }
-
-                                Component {
-                                    id: expressiveMediaWidget
-                                    ExpressiveMediaWidget {
-                                        screenWidth: bgRoot.screen.width
-                                        screenHeight: bgRoot.screen.height
-                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                        wallpaperScale: bgRoot.effectiveWallpaperScale
-                                    }
-                                }
-                                onLoaded: {
-                                    if (item && item.requestReset) {
-                                        item.requestReset.connect(() => { // hard reset
-                                            mediaLoader.enableLoading = false;
-                                            mediaTimer.running = true;
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Loader {
-                        id: windowBlurLoader
-                        x: centralWallpaperClipRect.x
-                        y: centralWallpaperClipRect.y
-                        width: centralWallpaperClipRect.width
-                        height: centralWallpaperClipRect.height
-
-                        property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
-                        active: shouldBlur || opacity > 0.01
-                        opacity: shouldBlur ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-                        sourceComponent: MultiEffect {
                             source: centralWallpaperClipRect
                             blurEnabled: true
                             blurMax: 64
                             blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
-                            
+
                             Rectangle {
                                 opacity: 1.0
                                 anchors.fill: parent
@@ -707,33 +723,32 @@ Scope {
                         }
                     }
                 }
-            }
 
-            GlobalShortcut {
-                name: "mediaModeToggle"
-                description: "Toggles media mode on press"
+                GlobalShortcut {
+                    name: "mediaModeToggle"
+                    description: "Toggles media mode on press"
 
-                onPressed: {
-                    if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
-                        return;
-                    mediaModeLoader.active = !mediaModeLoader.active;
-                    LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+                    onPressed: {
+                        if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
+                            return;
+                        mediaModeLoader.active = !mediaModeLoader.active;
+                        LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+                    }
                 }
-            }
 
-            Loader {
-                id: mediaModeLoader
-                anchors.fill: parent
-                active: false
-                asynchronous: true
-                sourceComponent: MediaMode {}
-                opacity: mediaModeLoader.status === Loader.Ready ? 1 : 0
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                Loader {
+                    id: mediaModeLoader
+                    anchors.fill: parent
+                    active: false
+                    asynchronous: true
+                    sourceComponent: MediaMode {}
+                    opacity: mediaModeLoader.status === Loader.Ready ? 1 : 0
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
                 }
             }
         }
-    }
     }
 
     // --- Compositor-level blur overlay over active windows and wallpaper ---
@@ -766,25 +781,13 @@ Scope {
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
             readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen)
 
-            // Performance: use a lighter animation with shorter duration
-            property real zoomProgress: isActive ? 1.0 : 0.0
-            Behavior on zoomProgress {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutCubic
-                }
-            }
+            visible: isActive
 
-            // Performance: use stricter visibility threshold to avoid idle composition
-            visible: isActive || zoomProgress > 0.01
-
-            // Performance: use a simple Rectangle instead of animated opacity for dimming
+            // Performance: use a simple Rectangle for dimming
             Rectangle {
                 id: overlayDimRect
                 anchors.fill: parent
                 color: Qt.rgba(0, 0, 0, 0.25)
-                // Opacity directly bound to zoomProgress without separate Behavior
-                opacity: blurOverlayWindow.zoomProgress
             }
         }
     }

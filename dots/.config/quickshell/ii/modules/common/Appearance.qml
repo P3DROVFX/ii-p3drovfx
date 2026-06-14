@@ -282,6 +282,8 @@ Singleton {
         if (Config.ready) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + ignoreAlpha + " })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "animation fade,quickshell:workspaceBlurOverlay"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })"]);
         }
@@ -299,6 +301,8 @@ Singleton {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + root.ignoreAlpha + " })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0 })"]);
+            Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "animation fade,quickshell:workspaceBlurOverlay"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);

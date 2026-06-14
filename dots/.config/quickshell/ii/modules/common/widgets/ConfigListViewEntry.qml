@@ -220,7 +220,7 @@ Item {
         id: dropArea
         anchors {
             fill: parent
-            margins: 20
+            margins: 0
         }
 
         onEntered: (drag) => {
