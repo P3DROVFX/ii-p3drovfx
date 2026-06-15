@@ -108,6 +108,7 @@ Item { // Player instance
 
     StyledRectangularShadow {
         target: background
+        visible: !root.compactMode
     }
     Rectangle { // Background
         id: background

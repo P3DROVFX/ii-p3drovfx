@@ -81,7 +81,7 @@ NestableObject {
         };
         const jsonStr = JSON.stringify(profile, null, 2);
 
-        saveProc.command = ["bash", "-c", "mkdir -p ~/.config/hyprmon/profiles && cat << 'EOF' > ~/.config/hyprmon/profiles/__quickshell_live__.json\n" + jsonStr + "\nEOF\nhyprmon -profile __quickshell_live__"];
+        saveProc.command = ["bash", "-c", "mkdir -p ~/.config/hyprmon/profiles && cat << 'EOF' > ~/.config/hyprmon/profiles/__quickshell_live__.json\n" + jsonStr + "\nEOF\nhyprmon -profile __quickshell_live__ && mkdir -p ~/.config/hypr/hyprmon_backups && mv ~/.config/hypr/*.bak.* ~/.config/hypr/hyprmon_backups/ 2>/dev/null || true; ls -t ~/.config/hypr/hyprmon_backups/*.bak.* 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null || true"];
         saveProc.running = true;
     }
 
@@ -102,7 +102,7 @@ NestableObject {
     }
 
     function applyProfile(name) {
-        applyProfileProc.command = ["hyprmon", "-profile", name];
+        applyProfileProc.command = ["bash", "-c", "hyprmon -profile \"$1\" && mkdir -p ~/.config/hypr/hyprmon_backups && mv ~/.config/hypr/*.bak.* ~/.config/hypr/hyprmon_backups/ 2>/dev/null || true; ls -t ~/.config/hypr/hyprmon_backups/*.bak.* 2>/dev/null | tail -n +21 | xargs rm -f 2>/dev/null || true", "--", name];
         applyProfileProc.running = true;
     }
 

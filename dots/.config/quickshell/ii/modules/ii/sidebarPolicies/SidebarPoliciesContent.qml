@@ -135,8 +135,8 @@ Item {
                 layer.enabled: true
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
-                        width: swipeView.width
-                        height: swipeView.height
+                        width: Math.floor(swipeView.width)
+                        height: Math.floor(swipeView.height)
                         radius: Appearance.rounding.small
                     }
                 }

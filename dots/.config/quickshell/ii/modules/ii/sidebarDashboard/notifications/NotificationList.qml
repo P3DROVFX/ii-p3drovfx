@@ -21,8 +21,8 @@ Item {
         layer.enabled: true
         layer.effect: OpacityMask {
             maskSource: Rectangle {
-                width: listview.width
-                height: listview.height
+                width: Math.floor(listview.width)
+                height: Math.floor(listview.height)
                 radius: Appearance.rounding.windowRounding
             }
         }

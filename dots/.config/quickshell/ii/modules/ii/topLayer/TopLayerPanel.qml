@@ -472,8 +472,8 @@ PanelWindow {
         id: leftSidebar
         x: -(width - GlobalStates.animatedLeftSidebarWidth)
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: Math.max(GlobalStates.policiesWidth, GlobalStates.animatedLeftSidebarWidth)
-        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        width: Math.round(Math.max(GlobalStates.policiesWidth, GlobalStates.animatedLeftSidebarWidth))
+        height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
@@ -528,10 +528,10 @@ PanelWindow {
     // Right Sidebar Dashboard Content
     Rectangle {
         id: rightSidebar
-        x: parent.width - GlobalStates.animatedRightSidebarWidth
+        x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: GlobalStates.dashboardWidth
-        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        width: Math.round(GlobalStates.dashboardWidth)
+        height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: "transparent"
         border.width: 0
         visible: topPanel.rightSidebarActiveOnMonitor
