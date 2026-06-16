@@ -22,7 +22,7 @@ Item {
     readonly property int maxSize: 350
     property int popupWidth: 350
     property int maxPopupWidth: 600
-    readonly property int fixedSize: root.vertical ? 150 : 225
+    readonly property int fixedSize: root.vertical ? 150 : Config.options.bar.activeWindow.customSize
 
     property string appClassText: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
                 root.activeWindow?.appId : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
@@ -30,8 +30,8 @@ Item {
     property string appTitleText: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
                 root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
     
-    implicitHeight: isFixedSize ? fixedSize : (root.vertical ? Math.max(expressiveText.implicitWidth) + 30 : Appearance.sizes.baseBarHeight)
-    implicitWidth: isFixedSize ? fixedSize : (root.vertical ? Appearance.sizes.verticalBarWidth : Math.min(Math.max(expressiveText.implicitWidth) + 30, maxSize))
+    implicitHeight: root.vertical && isFixedSize ? fixedSize : (root.vertical ? Math.max(expressiveText.implicitWidth) + 30 : Appearance.sizes.baseBarHeight)
+    implicitWidth: !root.vertical && isFixedSize ? fixedSize : (root.vertical ? Appearance.sizes.verticalBarWidth : Math.min(Math.max(expressiveText.implicitWidth) + 30, maxSize))
     clip: true
 
     property bool containsMouse: mouseArea.containsMouse
