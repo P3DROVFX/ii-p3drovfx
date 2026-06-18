@@ -23,8 +23,17 @@ Item {
     property real hBarHiddenAmount: 0
     property real vBarHiddenAmount: 0
 
+    property real leftSidebarMaskOffset: 0
+    property real rightSidebarMaskOffset: 0
+
     readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
     readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
+
+    readonly property real staticLeftSidebarOffset: (leftSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? leftSidebarMaskOffset : 0
+    readonly property real staticRightSidebarOffset: (rightSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? rightSidebarMaskOffset : 0
+
+    readonly property real staticTotalLeftPush: staticLeftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real staticTotalRightPush: staticRightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
 
     // Consolidated pushes that account for both the sidebar AND the vertical bar (if present and visible)
     readonly property real totalLeftPush: leftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
@@ -170,30 +179,131 @@ Item {
         corner: RoundCorner.CornerEnum.BottomRight
     }
 
+    // Static items for frame mask to avoid per-frame Region recalculations
+    Item {
+        id: topFrameMask
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+            topMargin: (!hasTopFrame) ? -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount) : 0
+            leftMargin: visualsRoot.staticTotalLeftPush
+            rightMargin: visualsRoot.staticTotalRightPush
+        }
+        height: frameThickness
+    }
+
+    Item {
+        id: bottomFrameMask
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+            bottomMargin: (!hasBottomFrame) ? -Math.max(0, frameThickness - visualsRoot.hBarHiddenAmount) : 0
+            leftMargin: visualsRoot.staticTotalLeftPush
+            rightMargin: visualsRoot.staticTotalRightPush
+        }
+        height: frameThickness
+    }
+
+    Item {
+        id: leftFrameMask
+        anchors {
+            top: parent.top
+            bottom: parent.bottom
+            left: parent.left
+            leftMargin: (!hasLeftFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.staticLeftSidebarOffset
+            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
+            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+        }
+        width: frameThickness
+    }
+
+    Item {
+        id: rightFrameMask
+        anchors {
+            top: parent.top
+            bottom: parent.bottom
+            right: parent.right
+            rightMargin: (!hasRightFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.staticRightSidebarOffset
+            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
+            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+        }
+        width: frameThickness
+    }
+
+    Item {
+        id: bottomLeftCornerMask
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            leftMargin: hasLeftFrame ? frameThickness + visualsRoot.staticLeftSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalLeftPush)
+        }
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+    }
+
+    Item {
+        id: topLeftCornerMask
+        anchors {
+            top: parent.top
+            left: parent.left
+            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
+            leftMargin: hasLeftFrame ? frameThickness + visualsRoot.staticLeftSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalLeftPush)
+        }
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+    }
+
+    Item {
+        id: topRightCornerMask
+        anchors {
+            top: parent.top
+            right: parent.right
+            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
+            rightMargin: hasRightFrame ? frameThickness + visualsRoot.staticRightSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalRightPush)
+        }
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+    }
+
+    Item {
+        id: bottomRightCornerMask
+        anchors {
+            bottom: parent.bottom
+            right: parent.right
+            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            rightMargin: hasRightFrame ? frameThickness + visualsRoot.staticRightSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalRightPush)
+        }
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+    }
+
     property Region frameMask: Region {
         Region {
-            item: topFrame
+            item: topFrameMask
         }
         Region {
-            item: bottomFrame
+            item: bottomFrameMask
         }
         Region {
-            item: leftFrame
+            item: leftFrameMask
         }
         Region {
-            item: rightFrame
+            item: rightFrameMask
         }
         Region {
-            item: topLeftCorner
+            item: topLeftCornerMask
         }
         Region {
-            item: topRightCorner
+            item: topRightCornerMask
         }
         Region {
-            item: bottomLeftCorner
+            item: bottomLeftCornerMask
         }
         Region {
-            item: bottomRightCorner
+            item: bottomRightCornerMask
         }
     }
 }

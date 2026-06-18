@@ -37,10 +37,51 @@ PanelWindow {
     readonly property bool barOnLeft: barVertical && !barBottom
     readonly property bool barOnRight: barVertical && barBottom
 
+    property real leftSidebarMaskWidth: 0
+    property real rightSidebarMaskWidth: 0
+
+    Connections {
+        target: GlobalStates
+        ignoreUnknownSignals: true
+        function onLeftSidebarTargetWidthChanged() {
+            if (GlobalStates.leftSidebarTargetWidth > 0) {
+                topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
+            }
+        }
+        function onRightSidebarTargetWidthChanged() {
+            if (GlobalStates.rightSidebarTargetWidth > 0) {
+                topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (GlobalStates.leftSidebarTargetWidth > 0) {
+            topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
+        }
+        if (GlobalStates.rightSidebarTargetWidth > 0) {
+            topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
+        }
+    }
+
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.activeLeftSidebarMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.activeRightSidebarMonitor
     readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.activeLeftSidebarMonitor && !GlobalStates.policiesDetached
     readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.activeRightSidebarMonitor
+
+    readonly property bool leftSidebarWarmOnMonitor: {
+        if (GlobalStates.policiesDetached) return false;
+        if (GlobalStates.activeLeftSidebarMonitor !== "") {
+            return screen.name === GlobalStates.activeLeftSidebarMonitor;
+        }
+        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+    }
+    readonly property bool rightSidebarWarmOnMonitor: {
+        if (GlobalStates.activeRightSidebarMonitor !== "") {
+            return screen.name === GlobalStates.activeRightSidebarMonitor;
+        }
+        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+    }
 
     onLeftSidebarActiveOnMonitorChanged: {
         // Debug removed for production performance
@@ -74,6 +115,9 @@ PanelWindow {
             
             property real hBarHiddenAmount: topPanel.hBarHiddenAmount
             property real vBarHiddenAmount: topPanel.vBarHiddenAmount
+
+            leftSidebarMaskOffset: topPanel.leftSidebarMaskWidth
+            rightSidebarMaskOffset: topPanel.rightSidebarMaskWidth
         }
     }
 
@@ -478,7 +522,7 @@ PanelWindow {
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         radius: GlobalStates.connectModeActive ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-        visible: topPanel.leftSidebarActiveOnMonitor && !GlobalStates.policiesDetached
+        visible: topPanel.leftSidebarWarmOnMonitor
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -539,7 +583,7 @@ PanelWindow {
         height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: "transparent"
         border.width: 0
-        visible: topPanel.rightSidebarActiveOnMonitor
+        visible: topPanel.rightSidebarWarmOnMonitor
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // Active whenever sidebar is visible (open or closing) so both directions benefit.
@@ -608,6 +652,62 @@ PanelWindow {
         }
     }
 
+    // Static items for input masking to avoid per-frame Region recalculations
+    Item {
+        id: leftSidebarMaskItem
+        x: 0
+        y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
+        width: topPanel.leftSidebarMaskWidth
+        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        visible: GlobalStates.animatedLeftSidebarWidth > 0
+    }
+
+    Item {
+        id: rightSidebarMaskItem
+        x: parent.width - topPanel.rightSidebarMaskWidth
+        y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
+        width: topPanel.rightSidebarMaskWidth
+        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        visible: GlobalStates.animatedRightSidebarWidth > 0
+    }
+
+    // Static corner mask items to prevent per-frame Region recalculation
+    Item {
+        id: leftSidebarTopCornerMaskItem
+        x: topPanel.leftSidebarMaskWidth
+        y: 0
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+        visible: leftSidebarTopCornerLoader.active
+    }
+
+    Item {
+        id: leftSidebarBottomCornerMaskItem
+        x: topPanel.leftSidebarMaskWidth
+        y: topPanel.height - Appearance.rounding.screenRounding
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+        visible: leftSidebarBottomCornerLoader.active
+    }
+
+    Item {
+        id: rightSidebarTopCornerMaskItem
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - Appearance.rounding.screenRounding
+        y: 0
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+        visible: rightSidebarTopCornerLoader.active
+    }
+
+    Item {
+        id: rightSidebarBottomCornerMaskItem
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - Appearance.rounding.screenRounding
+        y: topPanel.height - Appearance.rounding.screenRounding
+        width: Appearance.rounding.screenRounding
+        height: Appearance.rounding.screenRounding
+        visible: rightSidebarBottomCornerLoader.active
+    }
+
     // Mask region definitions
     mask: Region {
         Region {
@@ -624,23 +724,23 @@ PanelWindow {
         }
         Region {
             // Left sidebar
-            item: leftSidebar
+            item: leftSidebarMaskItem
         }
         Region {
             // Right sidebar
-            item: rightSidebar
+            item: rightSidebarMaskItem
         }
         Region {
-            item: leftSidebarTopCornerLoader.item
+            item: leftSidebarTopCornerMaskItem
         }
         Region {
-            item: leftSidebarBottomCornerLoader.item
+            item: leftSidebarBottomCornerMaskItem
         }
         Region {
-            item: rightSidebarTopCornerLoader.item
+            item: rightSidebarTopCornerMaskItem
         }
         Region {
-            item: rightSidebarBottomCornerLoader.item
+            item: rightSidebarBottomCornerMaskItem
         }
     }
 
