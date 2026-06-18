@@ -657,18 +657,16 @@ PanelWindow {
         id: leftSidebarMaskItem
         x: 0
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: topPanel.leftSidebarMaskWidth
+        width: GlobalStates.animatedLeftSidebarWidth > 0 ? topPanel.leftSidebarMaskWidth : 0
         height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
-        visible: GlobalStates.animatedLeftSidebarWidth > 0
     }
 
     Item {
         id: rightSidebarMaskItem
-        x: parent.width - topPanel.rightSidebarMaskWidth
+        x: parent.width - width
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: topPanel.rightSidebarMaskWidth
+        width: GlobalStates.animatedRightSidebarWidth > 0 ? topPanel.rightSidebarMaskWidth : 0
         height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
-        visible: GlobalStates.animatedRightSidebarWidth > 0
     }
 
     // Static corner mask items to prevent per-frame Region recalculation
@@ -676,36 +674,32 @@ PanelWindow {
         id: leftSidebarTopCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
         y: 0
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
-        visible: leftSidebarTopCornerLoader.active
+        width: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
 
     Item {
         id: leftSidebarBottomCornerMaskItem
         x: topPanel.leftSidebarMaskWidth
-        y: topPanel.height - Appearance.rounding.screenRounding
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
-        visible: leftSidebarBottomCornerLoader.active
+        y: topPanel.height - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
+        width: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
 
     Item {
         id: rightSidebarTopCornerMaskItem
-        x: topPanel.width - topPanel.rightSidebarMaskWidth - Appearance.rounding.screenRounding
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - width
         y: 0
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
-        visible: rightSidebarTopCornerLoader.active
+        width: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
 
     Item {
         id: rightSidebarBottomCornerMaskItem
-        x: topPanel.width - topPanel.rightSidebarMaskWidth - Appearance.rounding.screenRounding
-        y: topPanel.height - Appearance.rounding.screenRounding
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
-        visible: rightSidebarBottomCornerLoader.active
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - width
+        y: topPanel.height - height
+        width: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
 
     // Mask region definitions
