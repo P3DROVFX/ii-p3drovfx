@@ -84,7 +84,7 @@ Scope {
 
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
-            visible: GlobalStates.cheatsheetOpen
+            visible: cheatsheetLoader.active
 
             Connections {
                 target: root
@@ -159,11 +159,33 @@ Scope {
                 }
             }
 
-            StyledRectangularShadow {
-                target: cheatsheetBackground
-            }
-            Rectangle {
-                id: cheatsheetBackground
+            Item {
+                id: dialogWrap
+                anchors.fill: parent
+                transformOrigin: Item.Center
+                scale: GlobalStates.cheatsheetOpen ? 1.0 : 0.95
+                opacity: GlobalStates.cheatsheetOpen ? 1.0 : 0.0
+                
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasized
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 180
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasized
+                    }
+                }
+
+                StyledRectangularShadow {
+                    target: cheatsheetBackground
+                }
+                Rectangle {
+                    id: cheatsheetBackground
                 anchors.centerIn: parent
                 color: Appearance.colors.colLayer0
                 border.width: 1
@@ -332,6 +354,7 @@ Scope {
                         }
                     }
                 }
+            }
             }
         }
     }

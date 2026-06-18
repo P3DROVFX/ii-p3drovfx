@@ -71,43 +71,6 @@ ContentPage {
         }
     }
 
-    component SmallLightDarkPreferenceButton: RippleButton {
-        id: smallLightDarkPreferenceButton
-        required property bool dark
-        property color colText: enabled ? toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2 : Appearance.colors.colOnLayer3
-        padding: 5
-        Layout.fillWidth: true
-        toggled: Appearance.m3colors.darkmode === dark
-        colBackground: Appearance.colors.colLayer2
-        onClicked: {
-            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`]);
-        }
-        StyledToolTip {
-            extraVisibleCondition: !smallLightDarkPreferenceButton.enabled
-            text: Translation.tr("Custom color scheme has been selected")
-        }
-        contentItem: Item {
-            anchors.centerIn: parent
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: 10
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconSize: 30
-                    text: dark ? "dark_mode" : "light_mode"
-                    fill: toggled ? 1 : 0
-                    color: smallLightDarkPreferenceButton.colText
-                }
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: dark ? Translation.tr("Dark") : Translation.tr("Light")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: smallLightDarkPreferenceButton.colText
-                }
-            }
-        }
-    }
-
     ContentSection {
         title: Translation.tr("Appearance Preferences")
         icon: "palette"
@@ -115,95 +78,16 @@ ContentPage {
         RowLayout {
             Layout.fillWidth: true
 
-            Item {
-                implicitWidth: 360
-                implicitHeight: 220
-
-                StyledImage {
-                    id: wallpaperPreview
-                    anchors.fill: parent
-                    fillMode: Image.PreserveAspectCrop
-                    source: Config.options.background.wallpaperPath !== "" ? Config.options.background.wallpaperPath : `${Directories.assetsPath}/images/default_wallpaper.png`
-                    cache: false
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: 360
-                            height: 200
-                            radius: Appearance.rounding.normal
-                        }
-                    }
-                }
-
-                RippleButton {
-                    anchors.fill: parent
-                    colBackground: "transparent"
-                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
-                    colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
-                    onClicked: {
-                        if (Config.options.wallpaperSelector.useSystemFileDialog) {
-                            Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode);
-                        } else {
-                            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
-                        }
-                    }
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "hourglass_top"
-                    color: Appearance.colors.colPrimary
-                    iconSize: 40
-                    z: -1
-                }
-
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        bottom: parent.bottom
-                        margins: 10
-                    }
-
-                    implicitWidth: Math.min(text.implicitWidth + 20, parent.width - 20)
-                    implicitHeight: text.implicitHeight + 5
-                    color: Appearance.colors.colPrimary
-                    radius: Appearance.rounding.full
-
-                    StyledText {
-                        id: text
-                        anchors.centerIn: parent
-                        property string fileName: {
-                            const path = Config.options.background.wallpaperPath;
-                            if (path === "")
-                                return "Click to select wallpaper";
-                            const parts = path.split("/");
-                            return parts[parts.length - 1];
-                        }
-                        text: fileName.length > 30 ? fileName.slice(0, 27) + "..." : fileName
-                        color: Appearance.colors.colOnPrimary
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                    }
-                }
+            ConfigWallpaperSelector {
+                text: Translation.tr("Wallpaper Selector")
             }
 
             ColumnLayout {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
 
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 60
-                    uniformCellSizes: true
-
-                    SmallLightDarkPreferenceButton {
-                        Layout.preferredHeight: 60
-                        dark: false
-                    }
-                    SmallLightDarkPreferenceButton {
-                        Layout.preferredHeight: 60
-                        dark: true
-                    }
+                ConfigLightDarkToggle {
+                    text: Translation.tr("Light / Dark Theme")
                 }
 
                 Item {

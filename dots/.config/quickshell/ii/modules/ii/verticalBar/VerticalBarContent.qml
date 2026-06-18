@@ -64,6 +64,7 @@ Item { // Bar content region
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
     Rectangle {
         z: -11
@@ -143,6 +144,8 @@ Item { // Bar content region
             color: barBackground.color
             corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
             visible: root.isDynamicIsland && root.showBarBackground
+            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
         }
         RoundCorner {
             anchors.top: barBackground.bottom
@@ -153,6 +156,8 @@ Item { // Bar content region
             color: barBackground.color
             corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
             visible: root.isDynamicIsland && root.showBarBackground
+            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
         }
     }
 

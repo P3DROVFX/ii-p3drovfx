@@ -90,6 +90,28 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("Screenshot Editor")
+        icon: "transform"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "edit"
+                text: Translation.tr("Enable screenshot editor")
+                checked: Config.options.regionSelector.annotation.enableInlineEditor
+                onCheckedChanged: {
+                    Config.options.regionSelector.annotation.enableInlineEditor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Enable this to have a print editor before copying it, also allows to save file directly.")
+                }
+            }
+        }
+    }
+
+    ContentSection {
         title: Translation.tr("Rectangular Selection")
         icon: "crop_square"
         visible: !Config.options.search.imageSearch.useCircleSelection

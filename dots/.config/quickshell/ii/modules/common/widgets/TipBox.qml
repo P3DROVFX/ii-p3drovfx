@@ -33,10 +33,58 @@ Rectangle {
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
 
-    topLeftRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
-    topRightRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall
-    bottomLeftRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
-    bottomRightRadius: isLast ? Appearance.rounding.large : Appearance.rounding.verysmall
+    readonly property bool isPressed: false
+
+    readonly property bool prevIsPressed: {
+        var p = parent;
+        if (!p) return false;
+        for (var i = 0; i < p.children.length; ++i) {
+            var child = p.children[i];
+            if (child === root) return false;
+            if (child.visible && typeof child.topLeftRadius !== "undefined") {
+                var isImmediatePrev = true;
+                for (var j = i + 1; j < p.children.length; ++j) {
+                    var midChild = p.children[j];
+                    if (midChild === root) break;
+                    if (midChild.visible && typeof midChild.topLeftRadius !== "undefined") {
+                        isImmediatePrev = false;
+                        break;
+                    }
+                }
+                if (isImmediatePrev) {
+                    return child.isPressed === true || (child.down !== undefined && child.down === true);
+                }
+            }
+        }
+        return false;
+    }
+
+    readonly property bool nextIsPressed: {
+        var p = parent;
+        if (!p) return false;
+        var foundSelf = false;
+        for (var i = 0; i < p.children.length; ++i) {
+            var child = p.children[i];
+            if (child === root) {
+                foundSelf = true;
+                continue;
+            }
+            if (foundSelf && child.visible && typeof child.topLeftRadius !== "undefined") {
+                return child.isPressed === true || (child.down !== undefined && child.down === true);
+            }
+        }
+        return false;
+    }
+
+    topLeftRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? Appearance.rounding.full : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomLeftRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    bottomRightRadius: (isPressed || nextIsPressed) ? Appearance.rounding.full : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+
+    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     color: Appearance.colors.colSecondaryContainer
     implicitWidth: mainRowLayout.implicitWidth + mainRowLayout.anchors.margins * 2

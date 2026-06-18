@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell
+import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -17,6 +18,46 @@ Rectangle {
     anchors.fill: parent
 
     readonly property var activePlayer: MprisController.activePlayer
+    readonly property string artUrl: MprisController.activeTrack?.artUrl || ""
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) {
+            artDownloaded = false;
+            return;
+        }
+        if (isLocalArt) {
+            artDownloaded = true;
+            return;
+        }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: {
+            artDownloaded = true;
+        }
+    }
 
     Column {
         anchors {
@@ -97,7 +138,7 @@ Rectangle {
             id: artImage
             Layout.preferredWidth: 58
             Layout.preferredHeight: trackInfo.implicitHeight
-            source: MprisController.activeTrack?.artUrl || ""
+            source: root.artSource
             fillMode: Image.PreserveAspectFit
 
             layer.enabled: true

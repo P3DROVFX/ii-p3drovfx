@@ -17,14 +17,14 @@ Singleton {
     property bool gpsActive: Config.options.bar.weather.enableGPS
     readonly property string city: Config.options.bar.weather.city
 
-    onUseUSCSChanged: getData()
-    onCityChanged: getData()
+    onUseUSCSChanged: getData(true)
+    onCityChanged: getData(true)
     onGpsActiveChanged: {
         if (root.gpsActive) {
             positionSource.start();
         } else {
             positionSource.stop();
-            getData();
+            getData(true);
         }
     }
     onFetchIntervalChanged: {
@@ -89,7 +89,20 @@ Singleton {
         if (!isoStr) return "00:00";
         const parts = isoStr.split("T");
         if (parts.length < 2) return isoStr;
-        return parts[1];
+        let timeStr = parts[1];
+        
+        let uses12h = Config.options.time.format.toLowerCase().includes("a");
+        if (uses12h) {
+            let t = timeStr.split(":");
+            if (t.length >= 2) {
+                let h = parseInt(t[0]);
+                let ampm = h >= 12 ? "PM" : "AM";
+                h = h % 12;
+                if (h === 0) h = 12;
+                return h + ":" + t[1] + " " + ampm;
+            }
+        }
+        return timeStr;
     }
 
     function getWeatherDescription(code) {
@@ -209,8 +222,19 @@ Singleton {
         root.forecastLoading = false;
     }
 
-    function getData() {
-        if (root.city !== "" && !root.gpsActive) {
+    property double lastFetchTimestamp: 0
+
+    function getData(force = false) {
+        const now = Date.now();
+        if (!force && (now - lastFetchTimestamp < 60000)) { // 1 minute rate limit
+            return;
+        }
+        lastFetchTimestamp = now;
+
+        if (root.gpsActive && root.location.valid) {
+            // If GPS is active and we have a valid position, fetch weather for it directly
+            fetchWeather(root.location.lat, root.location.lon, root.location.city || "Current Location");
+        } else if (root.city !== "" && !root.gpsActive) {
             // If manual city is set and GPS is off, use geocoding
             fetchCoordinates(root.city);
         } else {
@@ -302,7 +326,7 @@ Singleton {
             positionSource.start();
             fallbackTimer.start();
         } else {
-            root.getData();
+            root.getData(true);
         }
     }
 
@@ -315,7 +339,7 @@ Singleton {
                 console.info("[WeatherService] GPS timed out or invalid. Falling back to IP-based location.");
                 positionSource.stop();
                 root.gpsActive = false;
-                root.getData();
+                root.getData(true);
             }
         }
     }
@@ -346,7 +370,7 @@ Singleton {
                 root.gpsActive = false;
                 Quickshell.execDetached(["notify-send", Translation.tr("Weather Service"), Translation.tr("Cannot find a GPS service. Using the fallback method instead."), "-a", "Shell"]);
                 console.error("[WeatherService] Could not aquire a valid backend plugin.");
-                root.getData();
+                root.getData(true);
             }
         }
     }

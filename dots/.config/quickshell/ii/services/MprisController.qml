@@ -30,11 +30,7 @@ Singleton {
 	property string _artUrlFallback: "";
 	readonly property string artUrl: {
 		const url = activePlayer?.trackArtUrl;
-		if (url && url !== "") {
-			_artUrlFallback = url;
-			return url;
-		}
-		return _artUrlFallback;
+		return (url && url !== "") ? url : _artUrlFallback;
 	}
 
 	onAllPlayersChanged: {
@@ -124,12 +120,17 @@ Singleton {
 
 		function onPostTrackChanged() {
 			if (root.activePlayer?.trackArtUrl) {
+				root._artUrlFallback = root.activePlayer.trackArtUrl;
 				root.updateTrack();
 			}
 		}
 
 		function onTrackArtUrlChanged() {
-			if (root.activeTrack && root.activeTrack.artUrl === root.activePlayer?.trackArtUrl) return;
+			const url = root.activePlayer?.trackArtUrl;
+			if (url && url !== "") {
+				root._artUrlFallback = url;
+			}
+			if (root.activeTrack && root.activeTrack.artUrl === url) return;
 			const r = root.__reverse;
 			root.updateTrack();
 			root.__reverse = r;
@@ -138,6 +139,7 @@ Singleton {
 
 	onActivePlayerChanged: {
 		if (root.activePlayer?.trackArtUrl) {
+			root._artUrlFallback = root.activePlayer.trackArtUrl;
 			root.updateTrack();
 		}
 	}

@@ -70,14 +70,16 @@ Scope {
 
             readonly property bool isVertical: dock.isVertical
             readonly property real dockThickness: isVertical ? dockRoot.sizing.dockWidth : dockRoot.sizing.dockHeight
-            
-            readonly property bool overlapsOpenSidebar: {
-                if (dock.dockEffectivePosition === "left" && GlobalStates.effectiveLeftOpen) return true;
-                if (dock.dockEffectivePosition === "right" && GlobalStates.effectiveRightOpen) return true;
-                return false;
+            readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
+
+            readonly property bool isSpecialWorkspaceOpen: {
+                if (!dockRoot.screen) return false;
+                const monitor = HyprlandData.monitors.find(m => m.name === dockRoot.screen.name);
+                if (!monitor || !monitor.specialWorkspace) return false;
+                return monitor.specialWorkspace.name !== "";
             }
-            
-            property bool reveal: !overlapsOpenSidebar && (dock.pinned || (Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty))
+
+            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen)))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations

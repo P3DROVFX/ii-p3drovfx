@@ -22,6 +22,9 @@ Item {
     property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
     property color artDominantColor: (root.hasArt && colorQuantizer.colors.length > 0) ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
     property bool downloaded: false
+    property QtObject blendedColors: AdaptedMaterialScheme {
+        color: artDominantColor
+    }
     property real radius
 
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""

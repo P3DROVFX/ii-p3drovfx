@@ -9,6 +9,7 @@ OSDValue {
     property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
     property var brightnessMonitor: Brightness.getMonitorForScreen(focusedScreen)
     iconName: "weather-sunny"
+    materialSymbol: "brightness_6"
     value: brightnessMonitor?.brightness ?? 0
     showNumber: false
 

@@ -426,97 +426,84 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
         Loader {
             id: modelAndProviderLoader
-            width: item?.implicitWidth
-            height: item?.implicitHeight
+            Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
 
             active: Config.options.sidebar.ai.showProviderAndModelButtons && Ai.messageIDs.length === 0
             visible: active
 
-            sourceComponent: Item {
-                implicitWidth: contentLayout.implicitWidth
-                implicitHeight: contentLayout.implicitHeight
-                anchors.horizontalCenter: parent.horizontalCenter
+            sourceComponent: ColumnLayout {
+                id: contentLayout
+                width: modelAndProviderLoader.width
 
-                ColumnLayout {
-                    id: contentLayout
-                    width: 330
-                    anchors.horizontalCenter: parent.horizontalCenter
+                RowLayout {
+                    id: providerSelector
+                    Layout.fillWidth: true
+                    spacing: 2
 
-                    ConfigSelectionArray {
-                        id: providerSelector
-                        Layout.alignment: Qt.AlignHCenter
-                        width: parent.width
+                    property string currentValue: Persistent.states.ai.provider
 
-                        currentValue: Persistent.states.ai.provider
-                        onSelected: newValue => {
-                            Persistent.states.ai.provider = newValue;
-                            Persistent.states.ai.model = Ai.modelsOfProviders[providerSelector.currentValue][0].value
+                    SelectionGroupButton {
+                        Layout.fillWidth: true
+                        leftmost: true
+                        rightmost: false
+                        buttonSymbol: "spark-symbolic"
+                        buttonText: "Google"
+                        toggled: providerSelector.currentValue === "google"
+                        onClicked: {
+                            Persistent.states.ai.provider = "google";
+                            Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
                         }
-                        
-                        
-                        property var allProviderOptions: ({
-                            "google": {
-                                displayName: "Google",
-                                symbol: "spark-symbolic",
-                                value: "google"
-                            },
-                            "openrouter": {
-                                displayName: "OpenRouter",
-                                symbol: "openrouter-symbolic",
-                                value: "openrouter"
-                            },
-                            "others": {
-                                displayName: Translation.tr("Others"),
-                                icon: "more_horiz",
-                                value: "others"
+                    }
+                    SelectionGroupButton {
+                        Layout.fillWidth: true
+                        leftmost: false
+                        rightmost: false
+                        buttonSymbol: "openrouter-symbolic"
+                        buttonText: "OpenRouter"
+                        toggled: providerSelector.currentValue === "openrouter"
+                        onClicked: {
+                            Persistent.states.ai.provider = "openrouter";
+                            Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
+                        }
+                    }
+                    SelectionGroupButton {
+                        Layout.fillWidth: true
+                        leftmost: false
+                        rightmost: true
+                        buttonIcon: "more_horiz"
+                        buttonText: Translation.tr("Others")
+                        toggled: providerSelector.currentValue === "others"
+                        onClicked: {
+                            Persistent.states.ai.provider = "others";
+                            Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
+                        }
+                    }
+                }
+
+                StyledComboBox {
+                    id: modelSelector
+                    Layout.fillWidth: true
+
+                    buttonIcon: "wand_stars"
+                    textRole: "title"
+                    model: Ai.modelsOfProviders[providerSelector.currentValue]
+                    enabled: true
+                    currentIndex: {
+                        const models = Ai.modelsOfProviders[providerSelector.currentValue];
+                        for (var i = 0; i < models.length; i++) {
+                            if (models[i].value === Persistent.states.ai.model) {
+                                return i;
                             }
-                        })
-                        
-                        options: [
-                            {
-                                displayName: "Google",
-                                symbol: "spark-symbolic",
-                                value: "google"
-                            },
-                            {
-                                displayName: "OpenRouter",
-                                symbol: "openrouter-symbolic",
-                                value: "openrouter"
-                            },
-                            {
-                                displayName: Translation.tr("Others"),
-                                icon: "more_horiz",
-                                value: "others"
-                            }
-                        ]
+                        }
+                        return 0;
                     }
 
-
-                    StyledComboBox {
-                        id: modelSelector
-                        width: parent.width
-
-                        buttonIcon: "wand_stars"
-                        textRole: "title"
-                        model: Ai.modelsOfProviders[providerSelector.currentValue]
-                        enabled: true
-                        currentIndex: {
-                            const models = Ai.modelsOfProviders[providerSelector.currentValue];
-                            for (var i = 0; i < models.length; i++) {
-                                if (models[i].value === Persistent.states.ai.model) {
-                                    return i;
-                                }
-                            }
-                            return 0;
-                        }
-
-                        function updateModel(index = 0) {
-                            Persistent.states.ai.model = Ai.modelsOfProviders[providerSelector.currentValue][index].value
-                        }
-
-                        onActivated: index => updateModel(index)
+                    function updateModel(index = 0) {
+                        Persistent.states.ai.model = Ai.modelsOfProviders[providerSelector.currentValue][index].value
                     }
+
+                    onActivated: index => updateModel(index)
                 }
             }
         }

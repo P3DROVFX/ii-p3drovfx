@@ -54,6 +54,7 @@ Item {
         }
         artDownloader.targetFile = root.artUrl;
         artDownloader.artFilePath = root.artFilePath;
+        artDownloader.artTempPath = root.artFilePath + ".tmp";
         root.artDownloaded = false;
         artDownloader.running = true;
     }
@@ -62,7 +63,8 @@ Item {
         id: artDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
         onExited: {
             root.artDownloaded = true;
         }
@@ -199,11 +201,19 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     implicitWidth: 28
                     implicitHeight: 32
-                    buttonRadius: root.isPlaying ? Appearance.rounding.normal : 14
-                    colBackground: root.isPlaying ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
-                    colBackgroundHover: root.isPlaying ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryContainerHover
-                    colRipple: root.isPlaying ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryContainerActive
+                    buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
                     downAction: () => root.activePlayer?.togglePlaying()
+                    
+                    Behavior on buttonRadius {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         text: root.isPlaying ? "pause" : "play_arrow"
@@ -211,7 +221,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: root.isPlaying ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
+                        color: Appearance.colors.colOnPrimary
                     }
                 }
 
@@ -315,6 +325,15 @@ Item {
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
 
+                    visible: root.hasTrack
+                    scale: visible ? 1 : 0
+                    opacity: visible ? 1 : 0
+                    Layout.preferredWidth: visible ? implicitWidth : 0
+                    
+                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: Rectangle {
@@ -352,6 +371,12 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.topMargin: 2
                     Layout.fillWidth: true
+
+                    visible: root.hasTrack
+                    opacity: visible ? 1 : 0
+                    Layout.preferredWidth: visible ? -1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
 
                     StyledText {
                         id: artistText
@@ -424,18 +449,26 @@ Item {
                     Layout.alignment: Qt.AlignVCenter
                     implicitWidth: card.height + 8
                     implicitHeight: card.height - 6
-                    buttonRadius: root.isPlaying ? Appearance.rounding.normal : height / 2
-                    colBackground: root.isPlaying ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
-                    colBackgroundHover: root.isPlaying ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryContainerHover
-                    colRipple: root.isPlaying ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryContainerActive
+                    buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
                     downAction: () => root.activePlayer?.togglePlaying()
+
+                    Behavior on buttonRadius {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         text: root.isPlaying ? "pause" : "play_arrow"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: root.isPlaying ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
+                        color: Appearance.colors.colOnPrimary
                     }
                 }
 
@@ -450,6 +483,15 @@ Item {
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                     colRipple: Appearance.colors.colPrimaryContainerActive
                     downAction: () => root.activePlayer?.next()
+
+                    visible: root.hasTrack
+                    scale: visible ? 1 : 0
+                    opacity: visible ? 1 : 0
+                    Layout.preferredWidth: visible ? implicitWidth : 0
+                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter

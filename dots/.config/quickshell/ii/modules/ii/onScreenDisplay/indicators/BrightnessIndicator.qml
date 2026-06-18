@@ -6,14 +6,20 @@ import qs.modules.ii.onScreenDisplay
 import qs.modules.common.widgets
 
 OsdValueIndicator {
-    id: root
-    property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+    id: brightnessOsd
+    property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
     property var brightnessMonitor: Brightness.getMonitorForScreen(focusedScreen)
 
-    icon: Hyprsunset.temperatureActive ? "routine" : "light_mode"
+    icon: {
+        if (Hyprsunset.temperatureActive) return "routine";
+        const val = brightnessOsd.value;
+        if (val <= 0.33) return "brightness_low";
+        if (val <= 0.66) return "brightness_medium";
+        return "brightness_high";
+    }
     rotateIcon: true
     scaleIcon: true
     name: Translation.tr("Brightness")
-    value: root.brightnessMonitor?.brightness ?? 50
+    value: brightnessOsd.brightnessMonitor?.brightness ?? 0.5
     shape: MaterialShape.Shape.Burst
 }

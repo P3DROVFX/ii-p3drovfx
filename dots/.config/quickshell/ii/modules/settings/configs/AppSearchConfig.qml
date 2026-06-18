@@ -126,6 +126,7 @@ ContentPage {
                     { name: Translation.tr("Translator"), icon: "translate", prop: "translator" }
                 ]
                 delegate: Rectangle {
+                    ScrollAnimate {}
                     Layout.fillWidth: true
                     height: 52
                     color: Appearance.colors.colSurfaceContainerLow
@@ -193,6 +194,7 @@ ContentPage {
                 model: Config.options.search.aliases || []
                 delegate: Rectangle {
                     id: aliasDelegate
+                    ScrollAnimate {}
                     property bool isEditing: false
 
                     Layout.fillWidth: true
@@ -345,7 +347,7 @@ ContentPage {
         ColumnLayout {
             id: addAliasArea
             Layout.fillWidth: true
-            spacing: 16
+            spacing: 12
 
             property string selectedType: "app"
             property string appFilter: ""
@@ -359,7 +361,8 @@ ContentPage {
                 let list = sortedApps;
                 if (appFilter.trim() !== "") {
                     let f = appFilter.toLowerCase();
-                    return list.filter(app => app.name.toLowerCase().includes(f) || app.id.toLowerCase().includes(f));
+                    let res = list.filter(app => app.name.toLowerCase().includes(f) || app.id.toLowerCase().includes(f));
+                    return res.slice(0, 12);
                 }
                 return list.slice(0, 8);
             }

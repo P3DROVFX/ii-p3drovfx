@@ -12,6 +12,7 @@ Item {
     property var shape
     property bool rotateIcon: false
     property bool scaleIcon: false
+    property real maxLimit: 1.0
     property alias from: valueProgressBar.from
     property alias to: valueProgressBar.to
 
@@ -52,11 +53,34 @@ Item {
                 Layout.bottomMargin: valueIndicatorVerticalPadding
 
                 MaterialShapeWrappedMaterialSymbol {
+                    id: symbolWrapper
                     rotation: root.value * 360
                     anchors.centerIn: parent
                     iconSize: Appearance.font.pixelSize.huge
                     shape: root.shape
                     text: root.icon
+
+                    Behavior on rotation {
+                        NumberAnimation {
+                            duration: 350
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 1.5
+                        }
+                    }
+
+                    color: root.value > root.maxLimit ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+                    colSymbol: root.value > root.maxLimit ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnSecondaryContainer
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 150
+                        }
+                    }
+                    Behavior on colSymbol {
+                        ColorAnimation {
+                            duration: 150
+                        }
+                    }
                 }
             }
             ColumnLayout { // Stuff
@@ -84,7 +108,7 @@ Item {
                         text: Math.round(root.value * 100)
                     }
                 }
-                
+
                 StyledProgressBar {
                     id: valueProgressBar
                     Layout.fillWidth: true

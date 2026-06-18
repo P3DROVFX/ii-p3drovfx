@@ -55,6 +55,23 @@ RowLayout {
         color: Appearance.colors.colLayer1
         radius: Appearance.rounding.full
 
+        border.color: searchInput.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
+        border.width: searchInput.activeFocus ? 2 : 1
+
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 150
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        Behavior on border.width {
+            NumberAnimation {
+                duration: 150
+                easing.type: Easing.OutQuad
+            }
+        }
+
         // Shake animation targets the whole search container
         SequentialAnimation {
             id: noMoreResultsAnim
@@ -171,6 +188,14 @@ RowLayout {
         colBackground: Appearance.colors.colLayer2
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
+
+        scale: closeBtn.down ? 0.92 : (closeBtn.hovered ? 1.06 : 1.0)
+        Behavior on scale {
+            NumberAnimation {
+                duration: 150
+                easing.type: Easing.OutBack
+            }
+        }
 
         onClicked: root.closeRequested()
 

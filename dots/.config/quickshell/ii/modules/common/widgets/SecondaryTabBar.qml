@@ -31,6 +31,19 @@ TabBar {
             property real baseWidth: root.width / root.count
             AnimatedTabIndexPair {
                 id: idxPair
+                idx1Duration: 150
+                idx2Duration: 300
+                easingType: Easing.OutBack
+                
+                property real lastIndex: root.currentIndex
+                property real jumpDistance: 1
+                
+                onIndexChanged: {
+                    jumpDistance = Math.max(1, Math.abs(index - lastIndex));
+                    lastIndex = index;
+                }
+                
+                easingOvershoot: jumpDistance <= 1 ? 1.4 : Math.max(0.4, 1.4 / jumpDistance)
                 index: root.currentIndex
             }
             height: 3

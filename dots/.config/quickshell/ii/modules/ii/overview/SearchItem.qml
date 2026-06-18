@@ -9,6 +9,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Hyprland
 
@@ -36,6 +37,46 @@ RippleButton {
     property string cliphistRawString: entry?.rawValue ?? ""
     property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
     property bool blurImage: entry?.blurImage ?? false
+
+    readonly property string artUrl: MprisController.artUrl || ""
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) {
+            artDownloaded = false;
+            return;
+        }
+        if (isLocalArt) {
+            artDownloaded = true;
+            return;
+        }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: {
+            artDownloaded = true;
+        }
+    }
 
     function formatMathResult(raw) {
         if (!raw)
@@ -147,7 +188,7 @@ RippleButton {
                 const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
                 const cleanPath = root.itemName.toString().replace(/^file:\/\//, "");
                 const isPinned = pinnedFiles.includes(cleanPath);
-                
+
                 items.push({
                     name: isPinned ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"),
                     icon: isPinned ? "folder_off" : "create_new_folder",
@@ -273,19 +314,7 @@ RippleButton {
                 easing.type: Easing.OutQuad
             }
         }
-        Behavior on topRightRadius {
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutQuad
-            }
-        }
         Behavior on bottomLeftRadius {
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutQuad
-            }
-        }
-        Behavior on bottomRightRadius {
             NumberAnimation {
                 duration: 100
                 easing.type: Easing.OutQuad
@@ -344,11 +373,12 @@ RippleButton {
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        duration: 375
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.15
                     }
                 }
+
                 Behavior on topLeftRadius {
                     NumberAnimation {
                         duration: 100
@@ -791,7 +821,7 @@ RippleButton {
 
                             Image {
                                 anchors.fill: parent
-                                source: MprisController.artUrl || ""
+                                source: root.artSource
                                 fillMode: Image.PreserveAspectCrop
                                 smooth: true
                                 visible: source !== ""
@@ -810,7 +840,7 @@ RippleButton {
                                 text: "music_note"
                                 iconSize: 28
                                 color: Appearance.colors.colOnSurfaceVariant
-                                visible: !MprisController.artUrl || MprisController.artUrl === ""
+                                visible: root.artSource === ""
                             }
                         }
 
@@ -878,8 +908,14 @@ RippleButton {
                     bottomRightRadius: topRightRadius
 
                     color: isBtnActive ? Appearance.colors.colPrimaryContainer : (root.isSelected && actionBtnMa.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighest)
-                    antialiasing: true
-                    visible: root.actionPanelOpen
+                    visible: root.actionPanelOpen || opacity > 0.0
+                    opacity: root.actionPanelOpen ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     Behavior on color {
                         ColorAnimation {

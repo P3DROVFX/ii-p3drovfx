@@ -71,8 +71,7 @@ Item {
             backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision, parent.height + TaskbarApps.iconThemeRevision)
 
             layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon
-            layer.effect: MultiEffect {
-                maskEnabled: true
+            layer.effect: OpacityMask {
                 maskSource: adaptiveBg
             }
 

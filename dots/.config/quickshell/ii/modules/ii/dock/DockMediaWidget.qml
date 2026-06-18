@@ -41,17 +41,59 @@ Item {
     readonly property string finalTitle: StringUtils.cleanMusicTitle(currentPlayer?.trackTitle) || Translation.tr("Unknown Title")
     readonly property string finalArtist: currentPlayer?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string finalArtUrl: MprisController.artUrl || ""
+    readonly property bool isLocalArt: finalArtUrl.startsWith("file://")
 
     readonly property string localFilePath: {
         if (!finalArtUrl) return "";
-        if (finalArtUrl.startsWith("file://")) return finalArtUrl.replace("file://", "");
+        if (isLocalArt) return finalArtUrl.replace("file://", "");
         return `${Directories.coverArt}/${Qt.md5(finalArtUrl)}`;
+    }
+
+    property bool downloaded: false
+    readonly property string displayedArtFilePath: {
+        if (!finalArtUrl) return "";
+        if (isLocalArt) return finalArtUrl;
+        return downloaded ? `file://${localFilePath}` : "";
     }
 
     Process {
         id: coverDownloader
-        running: root.finalArtUrl.length > 0 && !root.finalArtUrl.startsWith("file://")
-        command: ["bash", "-c", `[ -f '${root.localFilePath}' ] || curl -4 -sSL '${root.finalArtUrl}' -o '${root.localFilePath}'`]
+        property string targetFile: root.finalArtUrl
+        property string localFilePath: root.localFilePath
+        property string tempFilePath: root.localFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f '${localFilePath}' ] || (curl -4 -sSL '${targetFile}' -o '${tempFilePath}' && mv '${tempFilePath}' '${localFilePath}')`]
+        onExited: (exitCode, exitStatus) => {
+            root.downloaded = true;
+        }
+    }
+
+    onFinalArtUrlChanged: {
+        if (!root.finalArtUrl || root.finalArtUrl.length === 0) {
+            root.downloaded = false;
+            return;
+        }
+        if (root.isLocalArt) {
+            root.downloaded = true;
+            return;
+        }
+        // Binding does not work in Process - must start explicitly
+        coverDownloader.targetFile = root.finalArtUrl;
+        coverDownloader.localFilePath = root.localFilePath;
+        coverDownloader.tempFilePath = root.localFilePath + ".tmp";
+        root.downloaded = false;
+        coverDownloader.running = true;
+    }
+
+    Component.onCompleted: {
+        // Handle initial state when widget is created with music already playing
+        if (root.finalArtUrl && root.finalArtUrl.length > 0 && !root.isLocalArt) {
+            Qt.callLater(() => {
+                coverDownloader.targetFile = root.finalArtUrl;
+                coverDownloader.localFilePath = root.localFilePath;
+                coverDownloader.tempFilePath = root.localFilePath + ".tmp";
+                coverDownloader.running = true;
+            });
+        }
     }
 
     property bool mediaHovered: false
@@ -76,12 +118,12 @@ Item {
         StyledImage {
             id: blurredBg
             anchors.fill: parent
-            source: root.localFilePath.length > 0 ? `file://${root.localFilePath}` : ""
+            source: root.displayedArtFilePath
             fillMode: Image.PreserveAspectCrop
             cache: false
             asynchronous: true
             opacity: 0.8
-            visible: root.localFilePath.length > 0
+            visible: root.displayedArtFilePath !== ""
 
             layer.enabled: true
             layer.effect: StyledBlurEffect {
@@ -147,7 +189,7 @@ Item {
                             text: root.finalTitle
                             fontSize: root.textSizeL
                             fontWeight: Font.DemiBold
-                            textColor: root.localFilePath.length > 0 ? "white" : Appearance.colors.colOnLayer0
+                            textColor: root.displayedArtFilePath !== "" ? "white" : Appearance.colors.colOnLayer0
                             running: root.mediaHovered && text.length > root.marqueeRunningThreshold
                         }
 
@@ -155,7 +197,7 @@ Item {
                             Layout.fillWidth: true
                             text: root.finalArtist
                             font.pixelSize: root.textSizeS
-                            color: root.localFilePath.length > 0 ? "#b3ffffff" : Appearance.colors.colSubtext
+                            color: root.displayedArtFilePath !== "" ? "#b3ffffff" : Appearance.colors.colSubtext
                             elide: Text.ElideRight
                         }
                     }

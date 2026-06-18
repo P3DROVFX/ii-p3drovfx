@@ -474,12 +474,33 @@ ContentPage {
                 placeholderText: Translation.tr("Locale code for Gemini generation, e.g. fr_FR")
                 text: Config.options.language.ui === "auto" ? Qt.locale().name : Config.options.language.ui
             }
-            RippleButtonWithIcon {
+            RippleButton {
                 id: generateTranslationBtn
-                Layout.fillHeight: true
-                nerdIcon: ""
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                implicitHeight: 48
+                buttonRadius: Appearance.rounding.normal
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
                 enabled: !translationProc.running || (translationProc.locale !== localeInput.text.trim())
-                mainText: enabled ? Translation.tr("Generate Translation\nTypically takes 2 minutes") : Translation.tr("Generating...\nDon't close this window!")
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 12
+                    MaterialSymbol {
+                        text: "auto_awesome"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                    StyledText {
+                        text: generateTranslationBtn.enabled ? Translation.tr("Generate Translation with AI (Takes ~2 mins)") : Translation.tr("Generating... Do not close window")
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.bold: true
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                }
+
                 onClicked: {
                     translationProc.locale = localeInput.text.trim();
                     translationProc.running = false;
@@ -896,7 +917,7 @@ ContentPage {
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 14
-                            spacing: 14
+                            spacing: 12
 
                             Item {
                                 Layout.preferredWidth: 42
@@ -967,7 +988,7 @@ ContentPage {
 
                 ColumnLayout {
                     anchors.centerIn: parent
-                    spacing: 14
+                    spacing: 12
                     
                     ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
@@ -1001,11 +1022,11 @@ ContentPage {
             title: Translation.tr("Managed Devices")
             visible: btImagesSection.getDeviceImages().length > 0
             isLast: true
-            
+
             Flow {
                 Layout.fillWidth: true
-                spacing: 16
-                
+                spacing: 12
+
                 Repeater {
                     model: btImagesSection.getDeviceImages()
                     delegate: Rectangle {

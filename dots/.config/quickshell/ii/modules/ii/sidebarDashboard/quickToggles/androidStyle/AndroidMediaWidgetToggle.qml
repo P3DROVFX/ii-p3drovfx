@@ -209,18 +209,40 @@ Item {
 
                 // Track downloader
                 property string artUrl: player?.trackArtUrl || ""
-                property string artFilePath: artUrl.length > 0 ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
+                property bool isLocalArt: artUrl.startsWith("file://")
+                property string artFilePath: artUrl.length > 0 && !isLocalArt ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
+                property string artTempPath: artFilePath + ".tmp"
+                property string artSource: {
+                    if (artUrl.length === 0) return "";
+                    if (isLocalArt) return artUrl;
+                    if (coverDownloader2x1.running) return "";
+                    return `file://${artFilePath}`;
+                }
 
                 Process {
                     id: coverDownloader2x1
-                    running: widgetRoot2x1.artUrl.length > 0
-                    command: ["bash", "-c", `[ -f '${widgetRoot2x1.artFilePath}' ] || curl -4 -sSL '${widgetRoot2x1.artUrl}' -o '${widgetRoot2x1.artFilePath}'`]
+                    property string targetFile: widgetRoot2x1.artUrl
+                    property string artFilePath: widgetRoot2x1.artFilePath
+                    property string artTempPath: widgetRoot2x1.artTempPath
+                    command: ["bash", "-c", `[ -f '${artFilePath}' ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+                    onExited: {
+                        // Force reload by briefly clearing source
+                        widgetRoot2x1.artSource = "";
+                    }
+                }
+
+                onArtUrlChanged: {
+                    if (artUrl.length === 0 || isLocalArt) return;
+                    coverDownloader2x1.targetFile = artUrl;
+                    coverDownloader2x1.artFilePath = artFilePath;
+                    coverDownloader2x1.artTempPath = artTempPath;
+                    coverDownloader2x1.running = true;
                 }
 
                 StyledImage {
                     id: blurredBg2x1
                     anchors.fill: parent
-                    source: widgetRoot2x1.artFilePath.length > 0 ? `file://${widgetRoot2x1.artFilePath}` : ""
+                    source: widgetRoot2x1.artSource
                     fillMode: Image.PreserveAspectCrop
                     cache: false
                     asynchronous: true
@@ -310,18 +332,40 @@ Item {
 
                 // Track downloader
                 property string artUrl: player?.trackArtUrl || ""
-                property string artFilePath: artUrl.length > 0 ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
+                property bool isLocalArt: artUrl.startsWith("file://")
+                property string artFilePath: artUrl.length > 0 && !isLocalArt ? `${Directories.coverArt}/${Qt.md5(artUrl)}` : ""
+                property string artTempPath: artFilePath + ".tmp"
+                property string artSource: {
+                    if (artUrl.length === 0) return "";
+                    if (isLocalArt) return artUrl;
+                    if (coverDownloader.running) return "";
+                    return `file://${artFilePath}`;
+                }
 
                 Process {
                     id: coverDownloader
-                    running: widgetRoot.artUrl.length > 0
-                    command: ["bash", "-c", `[ -f '${widgetRoot.artFilePath}' ] || curl -4 -sSL '${widgetRoot.artUrl}' -o '${widgetRoot.artFilePath}'`]
+                    property string targetFile: widgetRoot.artUrl
+                    property string artFilePath: widgetRoot.artFilePath
+                    property string artTempPath: widgetRoot.artTempPath
+                    command: ["bash", "-c", `[ -f '${artFilePath}' ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+                    onExited: {
+                        // Force reload by briefly clearing source
+                        widgetRoot.artSource = "";
+                    }
+                }
+
+                onArtUrlChanged: {
+                    if (artUrl.length === 0 || isLocalArt) return;
+                    coverDownloader.targetFile = artUrl;
+                    coverDownloader.artFilePath = artFilePath;
+                    coverDownloader.artTempPath = artTempPath;
+                    coverDownloader.running = true;
                 }
 
                 StyledImage {
                     id: blurredBg
                     anchors.fill: parent
-                    source: widgetRoot.artFilePath.length > 0 ? `file://${widgetRoot.artFilePath}` : ""
+                    source: widgetRoot.artSource
                     fillMode: Image.PreserveAspectCrop
                     cache: false
                     asynchronous: true

@@ -19,6 +19,16 @@ import qs.modules.common.widgets
 Item {
     id: root
 
+    scale: isPressed ? 0.95 : (mouseArea.containsMouse ? 1.03 : 1.0)
+    z: mouseArea.containsMouse || isPressed ? 1 : 0
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutQuad
+        }
+    }
+
     // ── Position context (set by parent Repeater) ──────────────────────────
     property bool isFirst: false
     property bool isLast: false
@@ -99,11 +109,11 @@ Item {
                     ? Appearance.colors.colLayer2Hover
                     : Appearance.colors.colLayer2)
 
-        Behavior on color            { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on topLeftRadius    { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on topRightRadius   { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on bottomLeftRadius { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-        Behavior on bottomRightRadius{ NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+        Behavior on color            { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(btnBg) }
+        Behavior on topLeftRadius    { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
+        Behavior on topRightRadius   { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
+        Behavior on bottomLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
+        Behavior on bottomRightRadius{ animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(btnBg) }
 
         // Clip content to rounded rect
         layer.enabled: true

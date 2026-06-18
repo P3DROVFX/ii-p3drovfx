@@ -38,10 +38,12 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(visualsRoot)
     }
 
-    property bool hasTopFrame: !(!barVertical && !barBottom)
-    property bool hasBottomFrame: !(!barVertical && barBottom)
-    property bool hasLeftFrame: !(barVertical && !barBottom)
-    property bool hasRightFrame: !(barVertical && barBottom)
+    readonly property bool isFloatingOrIsland: Config.options.bar.cornerStyle === 1 || Config.options.bar.cornerStyle === 3
+
+    property bool hasTopFrame: isFloatingOrIsland || !(!barVertical && !barBottom)
+    property bool hasBottomFrame: isFloatingOrIsland || !(!barVertical && barBottom)
+    property bool hasLeftFrame: isFloatingOrIsland || !(barVertical && !barBottom)
+    property bool hasRightFrame: isFloatingOrIsland || !(barVertical && barBottom)
 
     // HORIZONTAL FRAMES
     Rectangle {

@@ -36,6 +36,8 @@ ColumnLayout {
         stringMap.push(word);
     }
 
+    ScrollAnimate {}
+
     Rectangle {
         id: cardContainer
         Layout.fillWidth: true

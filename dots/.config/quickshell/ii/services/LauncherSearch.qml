@@ -13,7 +13,9 @@ Singleton {
     id: root
 
     property string query: ""
-    property int _mprisTrigger: 0
+    property int mprisTrigger: 0
+
+    Component.onCompleted: Qt.callLater(_scheduleResultsUpdate)
 
     function ensurePrefix(prefix) {
         if ([Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch, Config.options.search.prefix.windowSearch, Config.options.search.prefix.fileBrowser, Config.options.search.prefix.fileSearch].some(i => root.query.startsWith(i))) {
@@ -35,9 +37,7 @@ Singleton {
         const hasPrefix = prefixMath && expr.startsWith(prefixMath);
         const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
         const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
-        const res = hasPrefix || hasDigitsAndOp || hasFunc;
-        console.log("DEBUG isMathQuery('" + expr + "') -> prefixMath=" + prefixMath + " hasPrefix=" + hasPrefix + " hasDigitsAndOp=" + hasDigitsAndOp + " hasFunc=" + hasFunc + " -> " + res);
-        return res;
+        return hasPrefix || hasDigitsAndOp || hasFunc;
     }
 
     // Instantly evaluate simple arithmetic using JS — no qalc needed
@@ -51,20 +51,17 @@ Singleton {
         // Only allow safe chars: digits, operators, parens, dot, space
         const isSafe = /^[\d\s\+\-\*\/\.\(\)%]+$/.test(expr);
         const hasOp = /[\+\-\*\/\%]/.test(expr);
-        console.log("DEBUG jsEvalMath('" + expr + "') -> isSafe=" + isSafe + " hasOp=" + hasOp);
         if (!isSafe || !hasOp)
             return null;
         try {
             // eslint-disable-next-line no-eval
             const result = eval(expr);
-            console.log("DEBUG jsEvalMath eval result: " + result);
             if (typeof result === 'number' && isFinite(result)) {
                 // Format nicely: trim trailing zeros for floats
-                const str = String(result);
-                return str;
+                return String(result);
             }
-        } catch(e) {
-            console.log("DEBUG jsEvalMath error: " + e);
+        } catch (e) {
+            // Silently ignore eval errors
         }
         return null;
     }
@@ -267,7 +264,6 @@ Singleton {
         } else {
             // Try instant JS eval first for simple arithmetic
             const instant = root.jsEvalMath(root.query);
-            console.log("DEBUG onQueryChanged instant eval result: " + instant);
             if (instant !== null) {
                 root.mathResult = instant;
             } else {
@@ -275,8 +271,10 @@ Singleton {
                 nonAppResultsTimer.restart();
             }
         }
-        console.log("DEBUG mathResult=" + root.mathResult);
         root.confirmKey = "";
+
+        // Schedule results recomputation (debounced to avoid per-keystroke stutter)
+        root._scheduleResultsUpdate();
     }
 
     Process {
@@ -406,11 +404,43 @@ Singleton {
         });
     }
 
-    property list<var> results: {
-        let _ = root._mprisTrigger;
-        let _apps = AppSearch.list; // Establish reactive binding to application list!
-        let _mathResult = root.mathResult; // Establish reactive binding to math result - REQUIRED for re-evaluation when qalc returns
-        // Search results are handled here
+    // Manually managed results: updated via _scheduleResultsUpdate() to avoid
+    // synchronous recomputation on every keystroke (was causing stutter).
+    property list<var> results: []
+
+    // Debounce timer: 16ms = 1 frame. Coalesces rapid keystrokes into a single
+    // recomputation at the end of the burst. For the first keystroke of a new
+    // query (or empty query), Qt.callLater in _scheduleResultsUpdate fires
+    // immediately in the next event-loop tick instead of waiting the full 16ms.
+    Timer {
+        id: resultsDebounce
+        interval: 16
+        repeat: false
+        onTriggered: root.results = root._computeResults()
+    }
+
+    function _scheduleResultsUpdate() {
+        if (resultsDebounce.running) {
+            // Already scheduled: just let the existing timer fire
+            return;
+        }
+        // First event in a new burst: defer to next tick (0ms latency for the
+        // user), then arm the debounce to catch any follow-up rapid keystrokes.
+        Qt.callLater(function () {
+            root.results = root._computeResults();
+            // Arm debounce to coalesce any keystrokes that arrived while we
+            // were computing (rare but possible at very high WPM).
+            resultsDebounce.restart();
+        });
+    }
+
+    // Re-schedule when reactive sources (other than query) change
+    onMathResultChanged: _scheduleResultsUpdate()
+    onFileResultsChanged: _scheduleResultsUpdate()
+    onMprisTriggerChanged: _scheduleResultsUpdate()
+
+    function _computeResults() {
+        let _apps = AppSearch.list; // Keep reference for reactive tracking (unused directly)
 
         ////////////////// MPRIS (empty query) //////////////////
         if (root.query === "") {
@@ -656,9 +686,9 @@ Singleton {
 
         ////////////////// Init ///////////////////
         // NOTE: nonAppResultsTimer is restarted in onQueryChanged, not here
-        const mathResultObject = _mathResult ? resultComp.createObject(null, {
-            key: "math:" + _mathResult,
-            name: _mathResult,
+        const mathResultObject = root.mathResult ? resultComp.createObject(null, {
+            key: "math:" + root.mathResult,
+            name: root.mathResult,
             verb: Translation.tr("Copy"),
             type: Translation.tr("Math result"),
             fontType: LauncherSearchResult.FontType.Monospace,
@@ -1120,13 +1150,13 @@ Singleton {
     Connections {
         target: MprisController
         function onActivePlayerChanged() {
-            root._mprisTrigger++;
+            root.mprisTrigger++;
         }
         function onIsPlayingChanged() {
-            root._mprisTrigger++;
+            root.mprisTrigger++;
         }
         function onTrackChanged() {
-            root._mprisTrigger++;
+            root.mprisTrigger++;
         }
     }
 

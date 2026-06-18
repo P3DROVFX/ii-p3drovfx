@@ -6,6 +6,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.services
+import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 
 Item {
@@ -51,7 +53,46 @@ Item {
 
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string artSource: player?.trackArtUrl || ""
+    readonly property string artUrl: player?.trackArtUrl || ""
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) {
+            artDownloaded = false;
+            return;
+        }
+        if (isLocalArt) {
+            artDownloaded = true;
+            return;
+        }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: {
+            artDownloaded = true;
+        }
+    }
 
     implicitWidth: cardPadding * 2 + albumContainerSize + cardSpacing + 350
     implicitHeight: 240

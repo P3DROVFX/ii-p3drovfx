@@ -101,6 +101,7 @@ AbstractBackgroundWidget {
     function updateArt() {
         coverArtDownloader.targetFile = root.artUrl 
         coverArtDownloader.artFilePath = root.artFilePath
+        coverArtDownloader.artTempPath = root.artFilePath + ".tmp"
         root.downloaded = false
         coverArtDownloader.running = true
     }
@@ -109,7 +110,8 @@ AbstractBackgroundWidget {
         id: coverArtDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'` ]
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: [ "bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')` ]
         onExited: (exitCode, exitStatus) => {
             root.downloaded = true
         }

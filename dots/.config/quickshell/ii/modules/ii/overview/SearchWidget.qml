@@ -5,6 +5,7 @@ import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 
 import qs
 import qs.services
@@ -13,25 +14,62 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 Item {
-    signal requestToggleActions()
     id: root
+    signal requestToggleActions
 
     readonly property string xdgConfigHome: Directories.config
     readonly property int typingDebounceInterval: 200
     readonly property int typingResultLimit: {
         const query = LauncherSearch.query;
-        if (!query) return 15;
-        const isPrefixed = query.startsWith(Config.options.search.prefix.app) ||
-                           query.startsWith(Config.options.search.prefix.fileBrowser) ||
-                           query.startsWith(Config.options.search.prefix.emojis) ||
-                           query.startsWith(Config.options.search.prefix.windowSearch) ||
-                           query.startsWith(Config.options.search.prefix.fileSearch);
+        if (!query)
+            return 15;
+        const isPrefixed = query.startsWith(Config.options.search.prefix.app) || query.startsWith(Config.options.search.prefix.fileBrowser) || query.startsWith(Config.options.search.prefix.emojis) || query.startsWith(Config.options.search.prefix.windowSearch) || query.startsWith(Config.options.search.prefix.fileSearch);
         return isPrefixed ? 500 : 15;
     }
     readonly property bool isSearching: false
     readonly property bool showSkeletons: false
 
     property int loadedResultsCount: 50
+
+    readonly property string artUrl: MprisController.artUrl || ""
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) {
+            artDownloaded = false;
+            return;
+        }
+        if (isLocalArt) {
+            artDownloaded = true;
+            return;
+        }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: {
+            artDownloaded = true;
+        }
+    }
 
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
@@ -89,23 +127,28 @@ Item {
         }
     }
     implicitWidth: {
-        if (root.isBluetoothMode) return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
-        if (root.isClipboardMode) return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
-        if (root.isTranslatorMode) return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
+        if (root.isBluetoothMode)
+            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
+        if (root.isClipboardMode)
+            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
+        if (root.isTranslatorMode)
+            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
         return searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2;
     }
     implicitHeight: {
-        if (root.isBluetoothMode) return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + Appearance.sizes.elevationMargin * 2;
-        if (root.isClipboardMode) return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 560) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
-        if (root.isTranslatorMode) return (translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight : 520) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
+        if (root.isBluetoothMode)
+            return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + Appearance.sizes.elevationMargin * 2;
+        if (root.isClipboardMode)
+            return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 560) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
+        if (root.isTranslatorMode)
+            return (translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight : 520) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
         return searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
     }
 
     function focusFirstItem() {
-        if (root.isBluetoothMode) {
-        } else if (root.isClipboardMode) {
-        } else if (root.isTranslatorMode) {
-            if (translatorPanelLoader.item) translatorPanelLoader.item.focusInput();
+        if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
+            if (translatorPanelLoader.item)
+                translatorPanelLoader.item.focusInput();
         } else {
             appResults.currentIndex = 0;
         }
@@ -131,14 +174,19 @@ Item {
     }
 
     function areResultsDifferent(newResults, currentValues) {
-        if (!newResults || !currentValues) return true;
+        if (!newResults || !currentValues)
+            return true;
         const newLen = newResults.length;
         const curLen = currentValues.length;
-        if (newLen !== curLen) return true;
+        if (newLen !== curLen)
+            return true;
         for (let i = 0; i < newLen; i++) {
-            if (!newResults[i] || !currentValues[i]) return true;
-            if (newResults[i].key !== currentValues[i].key) return true;
-            if (newResults[i].name !== currentValues[i].name) return true;
+            if (!newResults[i] || !currentValues[i])
+                return true;
+            if (newResults[i].key !== currentValues[i].key)
+                return true;
+            if (newResults[i].name !== currentValues[i].name)
+                return true;
         }
         return false;
     }
@@ -233,15 +281,21 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         clip: true
         implicitWidth: {
-            if (root.isBluetoothMode) return Config.options.search.clipboard.panelWidth ?? 860;
-            if (root.isClipboardMode) return Config.options.search.clipboard.panelWidth ?? 860;
-            if (root.isTranslatorMode) return Config.options.search.clipboard.panelWidth ?? 860;
+            if (root.isBluetoothMode)
+                return Config.options.search.clipboard.panelWidth ?? 860;
+            if (root.isClipboardMode)
+                return Config.options.search.clipboard.panelWidth ?? 860;
+            if (root.isTranslatorMode)
+                return Config.options.search.clipboard.panelWidth ?? 860;
             return gridLayout.implicitWidth;
         }
         implicitHeight: {
-            if (root.isBluetoothMode) return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
-            if (root.isClipboardMode) return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 560;
-            if (root.isTranslatorMode) return translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
+            if (root.isBluetoothMode)
+                return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
+            if (root.isClipboardMode)
+                return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 560;
+            if (root.isTranslatorMode)
+                return translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
             return gridLayout.implicitHeight;
         }
         radius: searchBar.height / 2 + searchBar.verticalPadding
@@ -271,15 +325,7 @@ Item {
             anchors.right: parent.right
             anchors.top: parent.top
             columns: 1
-
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: searchWidgetContent.width
-                    height: searchWidgetContent.height
-                    radius: searchWidgetContent.radius
-                }
-            }
+            clip: true
 
             SearchBar {
                 id: searchBar
@@ -404,7 +450,10 @@ Item {
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 0.0 : 1.0
                     Behavior on opacity {
-                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutQuad
+                        }
                     }
                     clip: true
                     topMargin: 10
@@ -426,7 +475,7 @@ Item {
                         visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
                         anchors.fill: parent
                         acceptedButtons: Qt.NoButton
-                        onWheel: function(wheelEvent) {
+                        onWheel: function (wheelEvent) {
                             const delta = wheelEvent.angleDelta.y / appResults.mouseScrollDeltaThreshold;
                             var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= appResults.mouseScrollDeltaThreshold ? appResults.mouseScrollFactor : appResults.touchpadScrollFactor;
 
@@ -535,7 +584,8 @@ Item {
                                 }
                                 event.accepted = true;
                             } else if (event.key === Qt.Key_Tab) {
-                                if (searchItem.actionPanelOpen) return;
+                                if (searchItem.actionPanelOpen)
+                                    return;
                                 if (LauncherSearch.results.length === 0)
                                     return;
                                 const tabbedText = searchItem.modelData.name;
@@ -561,7 +611,10 @@ Item {
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
                     Behavior on opacity {
-                        NumberAnimation { duration: 180; easing.type: Easing.OutQuad }
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.OutQuad
+                        }
                     }
 
                     Repeater {
@@ -579,8 +632,18 @@ Item {
                             SequentialAnimation on opacity {
                                 loops: Animation.Infinite
                                 running: searchSkeletons.visible
-                                NumberAnimation { from: 0.25; to: 0.65; duration: 600 + skeletonRow.index * 100; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 0.65; to: 0.25; duration: 600 + skeletonRow.index * 100; easing.type: Easing.InOutQuad }
+                                NumberAnimation {
+                                    from: 0.25
+                                    to: 0.65
+                                    duration: 600 + skeletonRow.index * 100
+                                    easing.type: Easing.InOutQuad
+                                }
+                                NumberAnimation {
+                                    from: 0.65
+                                    to: 0.25
+                                    duration: 600 + skeletonRow.index * 100
+                                    easing.type: Easing.InOutQuad
+                                }
                             }
 
                             RowLayout {
@@ -619,7 +682,6 @@ Item {
                     }
                 }
             }
-
 
             Loader {
                 id: clipboardPanelLoader
@@ -712,47 +774,49 @@ Item {
     // Now Playing Floating Bubble (Expressive Spinning Vinyl)
     Rectangle {
         id: nowPlayingFloatingBubble
-        
+
         readonly property bool bubbleActive: (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
-        
+
         anchors.right: searchWidgetContent.left
         anchors.rightMargin: 12
         y: searchWidgetContent.y + searchBar.y + (searchBar.height - height) / 2
-        
+
         width: bubbleActive ? 96 : 0
         height: 48
         radius: 24
         visible: width > 0
         clip: true
-        
-        color: root.isNowPlayingFocused 
-            ? Appearance.colors.colSurfaceContainerHigh 
-            : Appearance.colors.colBackgroundSurfaceContainer
-            
+
+        color: root.isNowPlayingFocused ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colBackgroundSurfaceContainer
+
         border.width: 0
-        
+
         focus: root.isNowPlayingFocused
         activeFocusOnTab: false
-        
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(nowPlayingFloatingBubble)
         }
-        
+
         Behavior on width {
             NumberAnimation {
                 duration: 350
                 easing.type: Easing.OutQuint
             }
         }
-        
+
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 6
             anchors.rightMargin: 6
             spacing: 6
             opacity: nowPlayingFloatingBubble.width >= 80 ? 1.0 : 0.0
-            Behavior on opacity { NumberAnimation { duration: 150 } }
-            
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 150
+                }
+            }
+
             // Album art circle (Expressive Spinning Vinyl)
             Rectangle {
                 id: artContainer
@@ -760,7 +824,7 @@ Item {
                 Layout.preferredHeight: 36
                 radius: 18
                 color: Appearance.colors.colSurfaceContainerHighest
-                
+
                 layer.enabled: true
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
@@ -769,32 +833,60 @@ Item {
                         radius: artContainer.radius
                     }
                 }
-                
+
                 Image {
+                    id: albumArtImage
                     anchors.fill: parent
-                    source: MprisController.artUrl || ""
+                    source: root.artSource
                     fillMode: Image.PreserveAspectCrop
-                    visible: MprisController.artUrl && MprisController.artUrl !== ""
-                    
-                    // Slow premium spinning animation when music is playing!
-                    RotationAnimator on rotation {
-                        from: 0
-                        to: 360
-                        duration: 12000
-                        loops: Animation.Infinite
-                        running: MprisController.isPlaying
+                    visible: root.artSource !== ""
+
+                    property real currentRotation: 0
+                    property real targetSpeed: MprisController.isPlaying ? 30 : 0
+                    property real currentSpeed: 0
+                    property var lastTime: 0
+
+                    Behavior on currentSpeed {
+                        NumberAnimation {
+                            duration: 2000
+                            easing.type: Easing.OutQuad
+                        }
                     }
+
+                    Timer {
+                        id: spinTimer
+                        interval: 16
+                        repeat: true
+                        running: MprisController.isPlaying || albumArtImage.currentSpeed > 0.1
+                        onTriggered: {
+                            let now = Date.now();
+                            if (albumArtImage.lastTime > 0) {
+                                let dt = (now - albumArtImage.lastTime) / 1000.0;
+                                albumArtImage.currentRotation = (albumArtImage.currentRotation + albumArtImage.currentSpeed * dt) % 360;
+                            }
+                            albumArtImage.lastTime = now;
+                        }
+                        onRunningChanged: {
+                            if (running) {
+                                albumArtImage.lastTime = Date.now();
+                            } else {
+                                albumArtImage.lastTime = 0;
+                            }
+                        }
+                    }
+
+                    rotation: currentRotation
                 }
-                
+
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "music_note"
                     iconSize: 18
                     color: Appearance.colors.colOnSurfaceVariant
-                    visible: !MprisController.artUrl || MprisController.artUrl === ""
+                    visible: root.artSource === ""
                 }
             }
-            
+
             // Play/pause button inside dynamic MaterialShape
             MaterialShape {
                 id: playPauseShape
@@ -802,27 +894,27 @@ Item {
                 Layout.preferredWidth: 36
                 Layout.preferredHeight: 36
                 shape: root.isNowPlayingFocused ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
-                color: root.isNowPlayingFocused 
-                    ? Appearance.colors.colPrimary 
-                    : Appearance.colors.colSurfaceContainerHighest
-                
+                color: root.isNowPlayingFocused ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+
                 Behavior on color {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(playPauseShape)
                 }
-                
+
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: MprisController.isPlaying ? "pause" : "play_arrow"
                     iconSize: 18
-                    color: root.isNowPlayingFocused 
-                        ? Appearance.colors.colOnPrimary 
-                        : Appearance.colors.colOnSurfaceVariant
+                    color: root.isNowPlayingFocused ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                     fill: root.isNowPlayingFocused ? 1 : 0
-                    Behavior on fill { NumberAnimation { duration: 200 } }
+                    Behavior on fill {
+                        NumberAnimation {
+                            duration: 200
+                        }
+                    }
                 }
             }
         }
-        
+
         PointingHandInteraction {
             id: bubbleMouseArea
             anchors.fill: parent
@@ -832,7 +924,7 @@ Item {
                 MprisController.togglePlaying();
             }
         }
-        
+
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Right || event.key === Qt.Key_Escape) {
                 root.isNowPlayingFocused = false;
@@ -845,4 +937,3 @@ Item {
         }
     }
 }
-

@@ -12,20 +12,17 @@ Scope {
     id: root
 
     property bool isOpen: false
-    property bool isInitialized: false
-
-    Component.onCompleted: Qt.callLater(() => {
-        isInitialized = true;
-    })
+    property string _prevLayout: ""
 
     // Listen for keyboard layout changes to show the popup
     Connections {
         target: HyprlandXkb
         function onCurrentLayoutNameChanged() {
-            if (root.isInitialized && HyprlandXkb.layoutCodes.length > 1 && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup) {
+            if (root._prevLayout !== "" && root._prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1 && Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup) {
                 root.isOpen = true;
                 hideTimer.restart();
             }
+            root._prevLayout = HyprlandXkb.currentLayoutName;
         }
     }
 

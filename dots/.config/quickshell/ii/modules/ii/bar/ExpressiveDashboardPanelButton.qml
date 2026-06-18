@@ -18,6 +18,20 @@ Item {
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
+    Behavior on implicitWidth {
+        NumberAnimation {
+            duration: 250
+            easing.type: Easing.OutQuint
+        }
+    }
+
+    Behavior on implicitHeight {
+        NumberAnimation {
+            duration: 250
+            easing.type: Easing.OutQuint
+        }
+    }
+
     MouseArea {
         id: mouseArea
         anchors.fill: parent
@@ -49,6 +63,23 @@ Item {
 
         implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 10
         implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 8
+
+        width: implicitWidth
+        height: implicitHeight
+
+        Behavior on implicitWidth {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.OutQuint
+            }
+        }
+
+        Behavior on implicitHeight {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.OutQuint
+            }
+        }
 
         onPillColorChanged: requestPaint()
         onBorderColorChanged: requestPaint()
@@ -116,14 +147,20 @@ Item {
         }
     }
 
-    Flow {
+    Grid {
         id: flow
         anchors.centerIn: parent
-        flow: root.vertical ? Flow.TopToBottom : Flow.LeftToRight
+        flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
+        columns: root.vertical ? 1 : 10
         spacing: isMaterial ? 6 : 10
+
+        move: Transition {
+            NumberAnimation { properties: "x,y"; duration: 250; easing.type: Easing.OutQuint }
+        }
 
         Revealer {
             reveal: Config.options.bar.dashboardButton.showVolume
+            vertical: root.vertical
             ExpressiveIconWrapper {
                 id: volumeWrapper
                 vertical: root.vertical
@@ -137,6 +174,7 @@ Item {
         }
         Revealer {
             reveal: Config.options.bar.dashboardButton.showMic && (Audio.source?.audio?.muted ?? false)
+            vertical: root.vertical
             ExpressiveIconWrapper {
                 id: micWrapper
                 vertical: root.vertical
@@ -150,6 +188,7 @@ Item {
         }
         Revealer {
             reveal: Config.options.bar.dashboardButton.showNetwork
+            vertical: root.vertical
             ExpressiveIconWrapper {
                 id: netWrapper
                 vertical: root.vertical
@@ -163,6 +202,7 @@ Item {
         }
         Revealer {
             reveal: Config.options.bar.dashboardButton.showBluetooth && BluetoothStatus.available
+            vertical: root.vertical
             ExpressiveIconWrapper {
                 id: btWrapper
                 vertical: root.vertical
@@ -176,6 +216,7 @@ Item {
         }
         Revealer {
             reveal: Config.options.bar.dashboardButton.showNotifications && (Notifications.silent || Notifications.unread > 0)
+            vertical: root.vertical
             ExpressiveIconWrapper {
                 id: notifWrapper
                 vertical: root.vertical

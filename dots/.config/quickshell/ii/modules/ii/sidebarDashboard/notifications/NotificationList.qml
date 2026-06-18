@@ -18,14 +18,15 @@ Item {
         anchors.bottomMargin: 5
 
         clip: true
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: Math.floor(listview.width)
-                height: Math.floor(listview.height)
-                radius: Appearance.rounding.windowRounding
-            }
-        }
+        // layer.enabled and OpacityMask removed to optimize performance and prevent lag on dashboard open
+        // layer.enabled: true
+        // layer.effect: OpacityMask {
+        //     maskSource: Rectangle {
+        //         width: Math.floor(listview.width)
+        //         height: Math.floor(listview.height)
+        //         radius: Appearance.rounding.windowRounding
+        //     }
+        // }
 
         popup: false
     }

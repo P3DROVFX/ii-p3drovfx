@@ -269,9 +269,11 @@ def scavenge_missing_icons(existing_icons):
     Parse .desktop files, find icons not in DynamicTheme.
     Returns list of (icon_name, source_path) tuples for raster icons to recolor.
     SVG icons are processed inline (recolored directly).
+    Also returns a mapping of absolute path icon basenames to their original .desktop paths.
     """
     missing_raster = []  # (icon_name, source_path) — for gowall
     missing_svg = []     # (icon_name, source_path) — for direct SVG recolor
+    absolute_path_desktops = {} # icon_name -> desktop_file_path
 
     for desktop_dir in DESKTOP_SEARCH_DIRS:
         if not os.path.isdir(desktop_dir):
@@ -306,6 +308,9 @@ def scavenge_missing_icons(existing_icons):
                             if os.path.isfile(icon + ext):
                                 source_path = icon + ext
                                 break
+
+                    if source_path:
+                        absolute_path_desktops[icon_basename] = df
                 else:
                     # Icon name — use as-is (preserve full reverse-domain: com.rtosta.zapzap)
                     icon_basename = strip_image_ext(os.path.basename(icon))
@@ -335,7 +340,7 @@ def scavenge_missing_icons(existing_icons):
             except Exception:
                 continue
 
-    return missing_svg, missing_raster
+    return missing_svg, missing_raster, absolute_path_desktops
 
 
 def hex_to_rgb(hex_color):
@@ -348,10 +353,10 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
         from PIL import Image
     except ImportError:
         print("  Pillow not installed, skipping accurate raster recoloring")
-        return 0
+        return []
 
     if not raster_icons:
-        return 0
+        return []
 
     def get_luminance(rgb):
         return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
@@ -389,7 +394,7 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
         g_lut.append(c[1])
         b_lut.append(c[2])
 
-    count = 0
+    successful_names = []
     with tempfile.TemporaryDirectory() as tmpdir:
         for icon_name, source_path in raster_icons:
             try:
@@ -435,16 +440,16 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
                 with open(svg_dest_file, "w") as f:
                     f.write(svg_content)
                 
-                count += 1
+                successful_names.append(icon_name)
             except Exception as e:
                 print(f"  Failed to process {icon_name}: {e}")
 
-    return count
+    return successful_names
 
 
 def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
     """Recolor scavenged SVG icons and inject into DynamicTheme."""
-    count = 0
+    successful_names = []
     for icon_name, source_path in svg_icons:
         try:
             with open(source_path, 'r', errors='ignore') as f:
@@ -458,10 +463,82 @@ def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
                 with open(dest_file, 'w') as f:
                     f.write(new_content)
 
-            count += 1
+            successful_names.append(icon_name)
         except Exception:
             pass
-    return count
+    return successful_names
+
+
+def patch_desktop_file(original_df_path, new_icon_name):
+    """
+    Safely copies system .desktop files to the user local folder if needed,
+    and replaces absolute Icon paths with the relative themed icon name.
+    """
+    user_apps_dir = os.path.expanduser("~/.local/share/applications")
+    filename = os.path.basename(original_df_path)
+    dest_df_path = os.path.join(user_apps_dir, filename)
+
+    if os.path.abspath(original_df_path) != os.path.abspath(dest_df_path):
+        try:
+            os.makedirs(user_apps_dir, exist_ok=True)
+            shutil.copy2(original_df_path, dest_df_path)
+            print(f"  Copied system desktop file {filename} to user directory")
+        except Exception as e:
+            print(f"  Failed to copy {original_df_path} to {dest_df_path}: {e}")
+            return False
+
+    try:
+        with open(dest_df_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        new_lines = []
+        in_desktop_entry = False
+        icon_replaced = False
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('[') and stripped.endswith(']'):
+                if stripped == '[Desktop Entry]':
+                    in_desktop_entry = True
+                else:
+                    in_desktop_entry = False
+
+            if in_desktop_entry and line.startswith('Icon='):
+                new_lines.append(f"Icon={new_icon_name}\n")
+                icon_replaced = True
+            else:
+                new_lines.append(line)
+
+        if icon_replaced:
+            with open(dest_df_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+            print(f"  Patched {filename} to use Icon={new_icon_name}")
+            return True
+    except Exception as e:
+        print(f"  Failed to patch desktop file {dest_df_path}: {e}")
+
+    return False
+
+
+def create_lowercase_symlinks(theme_path):
+    """
+    Scans the theme path and creates lowercase symlinks for all files containing
+    uppercase characters. This ensures case-insensitive icon lookup succeeds on Linux.
+    """
+    print("Creating lowercase symlinks for case-insensitive icon lookup...")
+    symlink_count = 0
+    for root, dirs, files in os.walk(theme_path):
+        for f in files:
+            lower_f = f.lower()
+            if lower_f != f:
+                lower_path = os.path.join(root, lower_f)
+                if not os.path.exists(lower_path):
+                    try:
+                        os.symlink(f, lower_path)
+                        symlink_count += 1
+                    except Exception:
+                        pass
+    print(f"  Created {symlink_count} lowercase symlinks.")
 
 
 # ── Main Generation ─────────────────────────────────────────────────────────
@@ -583,20 +660,34 @@ def generate():
     # ── Phase 2: Scavenge & recolor missing icons ────────────────────────
     print("[Phase 2] Scavenging missing icons from .desktop files...")
     existing = get_existing_tema_icons()
-    missing_svg, missing_raster = scavenge_missing_icons(existing)
+    missing_svg, missing_raster, absolute_path_desktops = scavenge_missing_icons(existing)
     print(f"  Found {len(missing_svg)} SVG + {len(missing_raster)} raster icons to scavenge")
+
+    svg_count = 0
+    raster_count = 0
 
     # 2a: SVGs — direct recolor
     if missing_svg:
-        svg_count = inject_scavenged_svgs(missing_svg, colors, TARGET_THEME_PATH)
+        successful_svgs = inject_scavenged_svgs(missing_svg, colors, TARGET_THEME_PATH)
+        svg_count = len(successful_svgs)
         print(f"  Injected {svg_count} scavenged SVG icons")
+        for name in successful_svgs:
+            if name in absolute_path_desktops:
+                patch_desktop_file(absolute_path_desktops[name], name)
 
     # 2b: Raster — Pillow pixel-perfect brightness mapping recolor
     if missing_raster:
-        raster_count = recolor_raster_icons(missing_raster, colors, TARGET_THEME_PATH)
+        successful_rasters = recolor_raster_icons(missing_raster, colors, TARGET_THEME_PATH)
+        raster_count = len(successful_rasters)
         print(f"  Injected {raster_count} Pillow-recolored raster icons")
+        for name in successful_rasters:
+            if name in absolute_path_desktops:
+                patch_desktop_file(absolute_path_desktops[name], name)
 
     # ── Phase 3: Finalize ────────────────────────────────────────────────
+    # Create lowercase symlinks for case-insensitive lookup
+    create_lowercase_symlinks(TARGET_THEME_PATH)
+
     # Update index.theme Directories if needed (ensure scavenged dirs are listed)
     _ensure_directories_in_index(dst_index)
 
@@ -628,7 +719,7 @@ def generate():
     # Notify system
     subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DynamicTheme"], capture_output=True)
 
-    total = base_count + len(missing_svg) + len(missing_raster)
+    total = base_count + svg_count + raster_count
     print(f"Generation complete. {total} total icons in DynamicTheme.")
 
 

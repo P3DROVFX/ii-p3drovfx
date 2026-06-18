@@ -145,19 +145,47 @@ Item {
                     onClicked: root.openMenu()
                 }
 
-            MaterialSymbol {
+            MaterialShapeWrappedMaterialSymbol {
                 id: icon
                 property bool nearFull: quickSlider.value >= 0.82
                 anchors {
                     verticalCenter: quickSlider.verticalCenter
                     right: nearFull ? quickSlider.handle.right : quickSlider.right
-                    rightMargin: nearFull ? 14 : 8
+                    rightMargin: nearFull ? 10 : 4
                 }
-                iconSize: 20
-                color: nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                iconSize: 16
+                padding: 4
+                shape: MaterialShape.Shape.Cookie7Sided
                 text: root.materialSymbol
 
+                rotation: quickSlider.value * 360
+
+                Behavior on rotation {
+                    NumberAnimation {
+                        duration: 350
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.5
+                    }
+                }
+
+                color: {
+                    if (quickSlider.value > 1.0) {
+                        return Appearance.colors.colErrorContainer;
+                    }
+                    return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
+                }
+
+                colSymbol: {
+                    if (quickSlider.value > 1.0) {
+                        return Appearance.m3colors.m3onErrorContainer;
+                    }
+                    return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+                }
+
                 Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+                Behavior on colSymbol {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                 }
                 Behavior on anchors.rightMargin {

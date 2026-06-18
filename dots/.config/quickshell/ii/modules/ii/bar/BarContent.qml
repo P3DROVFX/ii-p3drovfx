@@ -23,6 +23,8 @@ Item { // Bar content region
     property bool hasActiveWindows: false
     property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
+    readonly property real islandWidth: isDynamicIsland ? barBackground.width : 0
 
     Connections {
         enabled: Config.options.bar.barBackgroundStyle === 2
@@ -149,10 +151,16 @@ Item { // Bar content region
             border.color: root.showBarBackground ? Appearance.colors.colLayer0Border : "transparent"
 
             Behavior on width {
-                enabled: !root.isDynamicIsland
                 NumberAnimation {
                     duration: 450
-                    easing.type: Easing.OutExpo
+                    easing.type: root.isDynamicIsland ? Easing.OutBack : Easing.OutExpo
+                }
+            }
+
+            Behavior on baseRadius {
+                NumberAnimation {
+                    duration: 450
+                    easing.type: root.isDynamicIsland ? Easing.OutBack : Easing.OutExpo
                 }
             }
         }
@@ -172,6 +180,7 @@ Item { // Bar content region
                     duration: 250
                 }
             }
+            anchors.topMargin: root.frameThickness
         }
         RoundCorner {
             anchors.top: barBackground.top
@@ -187,6 +196,7 @@ Item { // Bar content region
                     duration: 250
                 }
             }
+            anchors.topMargin: root.frameThickness
         }
 
         RoundCorner {
@@ -203,6 +213,7 @@ Item { // Bar content region
                     duration: 250
                 }
             }
+            anchors.bottomMargin: root.frameThickness
         }
         RoundCorner {
             anchors.bottom: barBackground.bottom
@@ -218,6 +229,7 @@ Item { // Bar content region
                     duration: 250
                 }
             }
+            anchors.bottomMargin: root.frameThickness
         }
     }
 

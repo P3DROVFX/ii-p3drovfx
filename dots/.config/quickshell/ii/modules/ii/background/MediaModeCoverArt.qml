@@ -73,6 +73,7 @@ Item {
 
                     width: size
                     height: size
+                    sourceSize: Qt.size(mediaArt.width > 0 ? mediaArt.width : 400, mediaArt.height > 0 ? mediaArt.height : 400)
                 }
 
                 FadeLoader {

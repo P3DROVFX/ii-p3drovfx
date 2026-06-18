@@ -409,7 +409,7 @@ AbstractQuickPanel {
                     pageIndex: -1
                     gridColumns: root.columns
                     panel: root
-                    gridRef: pageContentGrid
+                    gridRef: fixedSlidersColumn
 
                     onOpenAudioOutputDialog: root.openAudioOutputDialog()
                     onOpenAudioInputDialog: root.openAudioInputDialog()
@@ -480,9 +480,8 @@ AbstractQuickPanel {
                     id: snapAnimation
                     target: flickable
                     property: "contentX"
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    duration: 350
+                    easing.type: Easing.OutQuint
                 }
 
                 Row {

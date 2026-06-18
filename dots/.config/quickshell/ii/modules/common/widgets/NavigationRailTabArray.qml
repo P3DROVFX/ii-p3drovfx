@@ -27,7 +27,13 @@ Item {
         radius: Appearance.rounding.full
         color: Appearance.colors.colSecondaryContainer
         implicitHeight: root.expanded ? itemHeight : baseHighlightHeight
-        implicitWidth: tabBarColumn?.children[root.currentIndex]?.visualWidth ?? 130
+        implicitWidth: {
+            let child = tabBarColumn.children[root.currentIndex];
+            if (child && child.visualWidth !== undefined) {
+                return child.visualWidth;
+            }
+            return root.expanded ? 130 : 56;
+        }
 
         Behavior on implicitWidth {
             enabled: root._isInitialized

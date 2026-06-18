@@ -79,6 +79,14 @@ Button {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
+    scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
+    Behavior on scale {
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutQuad
+        }
+    }
+
     property alias mouseArea: buttonMouseArea
     MouseArea {
         id: buttonMouseArea

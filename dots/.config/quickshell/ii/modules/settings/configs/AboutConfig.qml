@@ -77,7 +77,7 @@ ContentPage {
                 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 15
+                    spacing: 12
                     Layout.topMargin: 10
                     Layout.bottomMargin: 10
                     IconImage {
@@ -120,7 +120,7 @@ ContentPage {
                 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 15
+                    spacing: 12
                     Layout.topMargin: 10
                     Layout.bottomMargin: 10
                     IconImage {
@@ -163,7 +163,7 @@ ContentPage {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 15
+                    spacing: 12
                     Layout.topMargin: 10
                     Layout.bottomMargin: 10
                     CustomIcon {
@@ -207,7 +207,7 @@ ContentPage {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 15
+                    spacing: 12
                     Layout.topMargin: 10
                     Layout.bottomMargin: 10
                     Image {

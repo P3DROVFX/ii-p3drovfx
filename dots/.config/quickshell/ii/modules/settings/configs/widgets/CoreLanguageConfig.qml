@@ -129,10 +129,7 @@ ContentPage {
                 Layout.fillWidth: true
                 Layout.topMargin: 8
                 implicitHeight: 48
-                topLeftRadius: Appearance.rounding.small
-                topRightRadius: Appearance.rounding.small
-                bottomLeftRadius: Appearance.rounding.small
-                bottomRightRadius: Appearance.rounding.small
+                buttonRadius: Appearance.rounding.normal
                 colBackground: Appearance.colors.colPrimaryContainer
                 colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                 colRipple: Appearance.colors.colPrimaryContainerActive
@@ -141,10 +138,9 @@ ContentPage {
                 RowLayout {
                     anchors.centerIn: parent
                     spacing: 12
-                    StyledText {
-                        text: ""
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.family: Appearance.font.family.iconNerd
+                    MaterialSymbol {
+                        text: "auto_awesome"
+                        iconSize: Appearance.font.pixelSize.large
                         color: Appearance.colors.colOnPrimaryContainer
                     }
                     StyledText {

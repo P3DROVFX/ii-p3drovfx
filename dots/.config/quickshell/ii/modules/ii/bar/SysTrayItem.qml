@@ -118,8 +118,7 @@ MouseArea {
         }
 
         layer.enabled: Config.options.appearance.icons.enableShapeMask
-        layer.effect: MultiEffect {
-            maskEnabled: true
+        layer.effect: OpacityMask {
             maskSource: iconMask
         }
 

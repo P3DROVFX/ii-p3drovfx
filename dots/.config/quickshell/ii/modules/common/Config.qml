@@ -74,9 +74,9 @@ Singleton {
         }
         onLoaded: root.ready = true
         onLoadFailed: error => {
-            if (error == FileViewError.FileNotFound) {
-                writeAdapter();
-            }
+            console.log("Config load failed with error:", error);
+            // We removed writeAdapter() here to prevent accidental default config overwrites
+            // when Quickshell reloads rapidly and the file might be temporarily locked.
         }
 
         JsonAdapter {
@@ -189,6 +189,8 @@ Singleton {
                 }
                 property list<string> customColorSchemes: []
                 property bool colorfulScrollbar: false
+                property bool scrollAnimations: true
+                property bool scrollFadeMask: false
             }
 
             property JsonObject audio: JsonObject {

@@ -56,7 +56,7 @@ Item {
         MaterialShape {
             id: shapeContainer
             anchors.centerIn: parent
-            implicitSize: 22
+            implicitSize: root.vertical ? 28 : 22
 
             // Morph shape based on panel state
             shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie9Sided
@@ -73,8 +73,8 @@ Item {
             CustomIcon {
                 id: distroIcon
                 anchors.centerIn: parent
-                width: 14
-                height: 14
+                width: root.vertical ? 16 : 14
+                height: root.vertical ? 16 : 14
                 visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
                 source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
                 colorize: true
@@ -89,7 +89,7 @@ Item {
                 anchors.centerIn: parent
                 visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
                 text: Config.options.bar.topLeftIcon
-                iconSize: 16
+                iconSize: root.vertical ? 18 : 16
                 fill: 1
                 color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
 

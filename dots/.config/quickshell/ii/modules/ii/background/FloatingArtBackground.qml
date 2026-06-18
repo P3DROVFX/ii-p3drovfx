@@ -49,6 +49,7 @@ Item {
         anchors.fill: parent
         imageSource: root.artFilePath
         visible: false
+        sourceSize: Qt.size(width > 0 ? Math.round(width / 4) : 480, height > 0 ? Math.round(height / 4) : 270)
 
         Rectangle { anchors.fill: parent; color: root.overlayColor }
 

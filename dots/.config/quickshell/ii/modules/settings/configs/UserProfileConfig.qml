@@ -37,7 +37,7 @@ ContentPage {
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 20
+            spacing: 12
 
             // Avatar
             Item {
