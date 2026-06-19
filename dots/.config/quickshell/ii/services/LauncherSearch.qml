@@ -501,7 +501,7 @@ Singleton {
             const fuzzyResults = Cliphist.fuzzyQuery(searchString).filter(e => !Cliphist.isPinned(e));
             const allResults = pinnedMatches.concat(fuzzyResults);
 
-            return allResults.map((entry, index, array) => {
+            return allResults.slice(0, 300).map((entry, index, array) => {
                 const isPinned = index < pinnedMatches.length;
                 const mightBlurImage = Cliphist.entryIsImage(entry) && root.clipboardWorkSafetyActive;
                 let shouldBlurImage = mightBlurImage;
@@ -551,7 +551,7 @@ Singleton {
             }).filter(Boolean);
         } else if (root.query.startsWith(Config.options.search.prefix.emojis)) {
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.emojis);
-            return Emojis.fuzzyQuery(searchString).map(entry => {
+            return Emojis.fuzzyQuery(searchString).slice(0, 300).map(entry => {
                 const emoji = entry.match(/^\s*(\S+)/)?.[1] || "";
                 const emojiName = entry.replace(/^\s*\S+\s+/, "");
                 return resultComp.createObject(null, {
