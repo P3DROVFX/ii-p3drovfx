@@ -527,7 +527,7 @@ Item {
                             implicitHeight: 28
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             text: modelData.launchCmd || ""
-                            placeholderText: "Default: " + root.getDefaultLaunchCmd(modelData.initialClass || modelData.class)
+                            placeholderText: "Custom command/args for " + root.cleanAppName(modelData.initialClass || modelData.class)
                             enabled: modelData.autolaunch || false
 
                             onEditingFinished: {
