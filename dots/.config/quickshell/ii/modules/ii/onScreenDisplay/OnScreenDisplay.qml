@@ -14,7 +14,7 @@ Scope {
     id: root
     property string protectionMessage: ""
     property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
-    
+
     property bool isStartup: true
     Timer {
         running: true

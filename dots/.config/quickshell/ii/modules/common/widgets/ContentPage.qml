@@ -16,10 +16,56 @@ StyledFlickable {
     clip: true
     layer.enabled: true
     layer.effect: OpacityMask {
-        maskSource: Rectangle {
+        maskSource: Item {
+            id: maskRoot
             width: root.width
             height: root.height
-            radius: Appearance.rounding.normal
+
+            property bool fadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
+            property color topFadeColor: (fadeEnabled && !root.atYBeginning) ? "transparent" : "white"
+            property color bottomFadeColor: (fadeEnabled && !root.atYEnd) ? "transparent" : "white"
+
+            Behavior on topFadeColor {
+                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+            }
+            Behavior on bottomFadeColor {
+                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+            }
+
+            Column {
+                anchors.fill: parent
+                spacing: 0
+
+                Rectangle {
+                    width: parent.width
+                    height: Math.min(36, parent.height / 2)
+                    topLeftRadius: Appearance.rounding.normal
+                    topRightRadius: Appearance.rounding.normal
+                    color: "transparent"
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
+                        GradientStop { position: 1.0; color: "white" }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                    color: "white"
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: Math.min(36, parent.height / 2)
+                    bottomLeftRadius: Appearance.rounding.normal
+                    bottomRightRadius: Appearance.rounding.normal
+                    color: "transparent"
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "white" }
+                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                    }
+                }
+            }
         }
     }
     contentHeight: contentColumn.implicitHeight + root.bottomContentPadding // Add some padding at the bottom
@@ -39,7 +85,7 @@ StyledFlickable {
             topMargin: root.forceWidth ? 20 : 0
             bottomMargin: root.forceWidth ? 20 : 0
         }
-        spacing: 30
+        spacing: 12
     }
 
 }

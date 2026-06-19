@@ -5,6 +5,8 @@ import qs
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Mpris
 import Quickshell.Hyprland
 import Qt5Compat.GraphicalEffects
@@ -31,7 +33,7 @@ Item {
     readonly property int artworkBoxSize: artworkEnabled ? Math.min(25, Appearance.sizes.baseBarHeight - 8) : 0
     readonly property int artworkContentPadding: artworkEnabled ? 6 : 0
 
-    property int textMetricsSpacing: artworkEnabled ? 70 : 50 // text metrics returns width without spacing
+    property int textMetricsSpacing: artworkEnabled ? 70 : 50
     property int textMetricsAdvance: Math.min(textMetrics.advanceWidth + textMetricsSpacing, Config.options.bar.mediaPlayer.maxSize)
     implicitWidth: LyricsService.hasSyncedLines && root.lyricsEnabled ? lyricsCustomSize : useFixedSize ? customSize : textMetricsAdvance
     implicitHeight: Appearance.sizes.baseBarHeight
@@ -44,7 +46,45 @@ Item {
         LyricsService.initiliazeLyrics();
     }
 
-    readonly property string artSource: MprisController.artUrl
+    readonly property string artUrl: MprisController.artUrl
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property bool artDownloaded: false
+
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
+
+    onArtFilePathChanged: {
+        if (!artUrl || artUrl.length === 0) {
+            artDownloaded = false;
+            return;
+        }
+        if (isLocalArt) {
+            artDownloaded = true;
+            return;
+        }
+        artDownloader.targetFile = artUrl;
+        artDownloader.artFilePath = artFilePath;
+        artDownloader.artTempPath = artFilePath + ".tmp";
+        artDownloaded = false;
+        artDownloader.running = true;
+    }
+
+    Process {
+        id: artDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: {
+            artDownloaded = true;
+        }
+    }
 
     Item {
         id: artworkItem

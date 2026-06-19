@@ -31,7 +31,9 @@ Item {
     Rectangle {
         id: bg
         anchors.fill: parent
-        color: Appearance.colors.colScrim
+        // Use an alpha lower than 0.3 (ignore_alpha threshold) to avoid aggressive Hyprland blur
+        // This keeps a soft dim without making the screen unreadable.
+        color: Qt.rgba(0, 0, 0, 0.25)
         visible: Config.options.overlay.darkenScreen && opacity > 0
         opacity: (GlobalStates.overlayOpen && root.scale !== initScale) ? 1 : 0
         Behavior on opacity {

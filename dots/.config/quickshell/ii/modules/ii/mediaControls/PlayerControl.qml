@@ -80,6 +80,7 @@ Item { // Player instance
         // Binding does not work in Process
         coverArtDownloader.targetFile = root.artUrl 
         coverArtDownloader.artFilePath = root.artFilePath
+        coverArtDownloader.artTempPath = root.artFilePath + ".tmp"
         // Download
         root.downloaded = false
         coverArtDownloader.running = true
@@ -89,7 +90,8 @@ Item { // Player instance
         id: coverArtDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}'` ]
+        property string artTempPath: root.artFilePath + ".tmp"
+        command: [ "bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')` ]
         onExited: (exitCode, exitStatus) => {
             root.downloaded = true
         }
@@ -108,6 +110,7 @@ Item { // Player instance
 
     StyledRectangularShadow {
         target: background
+        visible: !root.compactMode
     }
     Rectangle { // Background
         id: background

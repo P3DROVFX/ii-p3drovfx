@@ -62,6 +62,9 @@ Please refer to the **[wiki](https://github.com/vaguesyntax/ii-vynx/wiki)** for 
 - **[vaguesyntax](https://github.com/vaguesyntax):** Creator of ii-vynx.
 - **[pc-trade](https://github.com/pctrade):** Some design and features inspo.
 - **[so-do-i-look-like-him](https://github.com/so-do-i-look-like-him):** Instalation bug fixes.
+- **[asteriau](https://github.com/asteriau):** Cheatsheet keybinds animations.
+- **[gowall](https://github.com/Achno/gowall):** Dyanmic icons theme system.
+- **[hyprmon](https://github.com/erans/hyprmon):** Monitor managment in settings.
 - **[Quickshell](https://quickshell.org/):** Widget system.
 - **[Hyprland](https://hypr.land/):** Compositor.
 

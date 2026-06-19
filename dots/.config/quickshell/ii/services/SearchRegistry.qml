@@ -33,11 +33,13 @@ Item {
         ];
         
         
-        let files = [basePath + "ColorsThemesConfig.qml", basePath + "BarConfig.qml", basePath + "BackgroundConfig.qml", basePath + "InterfaceFontsConfig.qml", basePath + "PresetsConfig.qml", basePath + "SidebarsConfig.qml", basePath + "DockConfig.qml", basePath + "WorkspacesConfig.qml", basePath + "OverviewConfig.qml", basePath + "WidgetsConfig.qml", basePath + "OverlaysConfig.qml", basePath + "RegionSelectorConfig.qml", basePath + "AppSearchConfig.qml", basePath + "CheatSheetConfig.qml", basePath + "HyprlandRulesConfig.qml", basePath + "MonitorsConfig.qml", basePath + "CoreServicesConfig.qml", basePath + "LockScreenConfig.qml", basePath + "AboutConfig.qml"];
+        let files = [basePath + "ColorsThemesConfig.qml", basePath + "BarConfig.qml", basePath + "BackgroundConfig.qml", basePath + "InterfaceFontsConfig.qml", basePath + "PresetsConfig.qml", basePath + "SidebarsConfig.qml", basePath + "DockConfig.qml", basePath + "WorkspacesConfig.qml", basePath + "OverviewConfig.qml", basePath + "WidgetsConfig.qml", basePath + "OverlaysConfig.qml", basePath + "RegionSelectorConfig.qml", basePath + "AppSearchConfig.qml", basePath + "CheatSheetConfig.qml", basePath + "HyprlandRulesConfig.qml", basePath + "MonitorsConfig.qml", basePath + "CoreServicesConfig.qml", basePath + "LockScreenConfig.qml", basePath + "AboutConfig.qml", basePath + "UserProfileConfig.qml"];
         
         for (let w of widgetFiles) files.push(basePath + "widgets/" + w);
         
         pageFile.start(files);
+        listPresetsSearchProc.running = false;
+        listPresetsSearchProc.running = true;
     }
 
     Component.onCompleted: startIndexing()
@@ -75,6 +77,40 @@ Item {
         }
     }
 
+    Process {
+        id: listPresetsSearchProc
+        command: ["bash", "-c", Directories.scriptPath + "/presets.sh list"]
+        stdout: SplitParser {
+            onRead: data => {
+                let str = data.trim();
+                if (!str)
+                    return;
+                try {
+                    let obj = JSON.parse(str);
+                    if (obj && obj.name) {
+                        root.addDynamicPresetName(obj.name);
+                    }
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            }
+        }
+    }
+
+    function addDynamicPresetName(name) {
+        for (let i = 0; i < sections.length; i++) {
+            let section = sections[i];
+            if (section.pageIndex === 4) {
+                if (section.searchStrings.indexOf(name) === -1) {
+                    section.searchStrings.push(name);
+                    let combined = (section.title + " " + section.searchStrings.join(" ")).toLowerCase();
+                    section._tokens = tokenize(combined);
+                    section._searchText = combined;
+                }
+            }
+        }
+    }
+
     function extractImports(text) {
         let imports = "";
         let lines = text.split("\n");
@@ -89,7 +125,7 @@ Item {
 
     function extractWidgets(text) {
         let items = [];
-        let types = ["ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField", "ConfigSlider", "ConfigComboBox"];
+        let types = ["ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField", "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle", "ConfigPresetsView"];
         for (let t of types) {
             let blocks = extractBlocks(text, t);
             for (let b of blocks) {
@@ -141,13 +177,11 @@ Item {
             // 2. extract remaining widgets from sectionText
             sectionItems = sectionItems.concat(extractWidgets(sectionText));
 
-            // collect all search strings for scoring
+            // collect all search strings for scoring (excluding individual item texts to prevent them from matching the whole section)
             if (title) searchStrings.push(title);
             for (let sub of sectionSubsections) {
                 if (sub.title) searchStrings.push(sub.title);
-                for (let w of sub.items) if (w.text) searchStrings.push(w.text);
             }
-            for (let w of sectionItems) if (w.text) searchStrings.push(w.text);
 
             registerSection({
                 pageIndex: pageIndex,
@@ -296,16 +330,27 @@ Item {
             let matchedSubsections = [];
 
             let sectionTitleScore = getMatchScore(section.title, query, queryTokens);
-            if (sectionTitleScore > 0) {
+            let searchStringScore = 0;
+            for (let sStr of section.searchStrings) {
+                let sScore = getMatchScore(sStr, query, queryTokens);
+                if (sScore > 0) {
+                    searchStringScore = Math.max(searchStringScore, sScore);
+                }
+            }
+
+            let sectionTitleMatched = (sectionTitleScore > 0 || searchStringScore > 0);
+            if (sectionTitleMatched) {
                 sectionMatches = true;
-                sectionScore += sectionTitleScore;
+                sectionScore += Math.max(sectionTitleScore, searchStringScore);
             }
 
             for (let item of section.items) {
                 let itemScore = getMatchScore(item.text, query, queryTokens);
-                if (itemScore > 0 || (sectionTitleScore > 0 && !item.text)) {
+                if (itemScore > 0 || sectionTitleMatched) {
                     matchedItems.push(item);
-                    sectionScore += itemScore;
+                    if (itemScore > 0) {
+                        sectionScore += itemScore;
+                    }
                     sectionMatches = true;
                 }
             }
@@ -321,9 +366,11 @@ Item {
 
                 for (let item of sub.items) {
                     let itemScore = getMatchScore(item.text, query, queryTokens);
-                    if (itemScore > 0 || subTitleScore > 0 || (sectionTitleScore > 0 && !item.text)) {
+                    if (itemScore > 0 || subTitleScore > 0 || sectionTitleMatched) {
                         subMatchedItems.push(item);
-                        sectionScore += itemScore;
+                        if (itemScore > 0) {
+                            sectionScore += itemScore;
+                        }
                         subMatches = true;
                         sectionMatches = true;
                     }

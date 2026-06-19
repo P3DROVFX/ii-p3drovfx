@@ -24,7 +24,7 @@ Rectangle {
     RowLayout {
         anchors.fill: parent
         anchors.margins: 15
-        spacing: 15
+        spacing: 12
 
         MaterialSymbol {
             text: "display_settings"

@@ -11,6 +11,8 @@ Flow {
     Layout.leftMargin: 4
     Layout.rightMargin: 4
 
+    ScrollAnimate {}
+
     property real calculatedWidth: 0
 
     function updateWidth() {

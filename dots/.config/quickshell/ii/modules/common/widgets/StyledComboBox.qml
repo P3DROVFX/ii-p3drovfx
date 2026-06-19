@@ -94,6 +94,8 @@ ComboBox {
                 text: root.displayText
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
+                animateChange: true
+                animationDistanceY: 8
             }
         }
     }
@@ -171,28 +173,71 @@ ComboBox {
     }
 
     popup: Popup {
+        id: popupRoot
         y: root.height + 4
         width: root.width
         height: Math.min(listView.contentHeight + topPadding + bottomPadding, 300)
         padding: 8
 
+        transformOrigin: Item.Top
+
         enter: Transition {
-            PropertyAnimation {
-                properties: "opacity"
-                to: 1
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            SequentialAnimation {
+                PropertyAction {
+                    target: popupRoot
+                    property: "y"
+                    value: root.height - 10
+                }
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: popupRoot
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.standardDecel
+                    }
+                    NumberAnimation {
+                        target: popupRoot
+                        property: "y"
+                        from: root.height - 10
+                        to: root.height + 4
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.standardDecel
+                    }
+                }
             }
         }
 
         exit: Transition {
-            PropertyAnimation {
-                properties: "opacity"
-                to: 0
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            SequentialAnimation {
+                ParallelAnimation {
+                    NumberAnimation {
+                        target: popupRoot
+                        property: "opacity"
+                        from: 1
+                        to: 0
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.standardAccel
+                    }
+                    NumberAnimation {
+                        target: popupRoot
+                        property: "y"
+                        from: root.height + 4
+                        to: root.height - 10
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.standardAccel
+                    }
+                }
+                PropertyAction {
+                    target: popupRoot
+                    property: "y"
+                    value: root.height + 4
+                }
             }
         }
 
@@ -216,6 +261,51 @@ ComboBox {
             spacing: 2
             model: root.popup.visible ? root.delegateModel : null
             currentIndex: root.highlightedIndex
+
+            add: Transition {
+                ParallelAnimation {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        property: "y"
+                        from: -10
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+
+            remove: Transition {
+                ParallelAnimation {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 1
+                        to: 0
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.InCubic
+                    }
+                    NumberAnimation {
+                        property: "y"
+                        to: 10
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.InCubic
+                    }
+                }
+            }
+
+            displaced: Transition {
+                NumberAnimation {
+                    properties: "x,y"
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.standardDecel
+                }
+            }
         }
     }
 }

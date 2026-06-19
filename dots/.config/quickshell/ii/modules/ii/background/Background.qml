@@ -232,6 +232,7 @@ Scope {
                         // Performance: disable expensive mipmapping on background blur layer
                         mipmap: false
                         antialiasing: false
+                        sourceSize: Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width / 4) : 480, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height / 4) : 270)
                     }
                     Loader {
                         id: bgWallpaperBlurLoader
@@ -292,8 +293,8 @@ Scope {
                         // Shared parallax + size properties used by all 9 tiles
                         property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
                         property real wallpaperH: bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
-                        property real parallaxX: -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
-                        property real parallaxY: -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
+                        property real parallaxX: GlobalStates.screenLocked ? -(bgRoot.movableXSpace) : -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
+                        property real parallaxY: GlobalStates.screenLocked ? -(bgRoot.movableYSpace) : -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
                         // Centered position (style 0: no parallax offset)
                         property real centeredX: -(bgRoot.movableXSpace)
                         property real centeredY: -(bgRoot.movableYSpace)
@@ -362,7 +363,6 @@ Scope {
                             return Math.max(bgRoot.screen.width / w, bgRoot.screen.height / h) * 1.05;
                         }
 
-                        // Mask rectangle for rounded clip — must be a real scene Item with layer.enabled
                         Rectangle {
                             id: centralClipMask
                             x: 0
@@ -374,14 +374,41 @@ Scope {
                             layer.enabled: true
                         }
 
-                        Rectangle {
-                            id: windowBlurClipMask
-                            x: 0
-                            y: 0
-                            width: centralWallpaperClipRect.width
-                            height: centralWallpaperClipRect.height
-                            radius: centralWallpaperClipRect.radius
+                        ShaderEffectSource {
+                            id: windowBlurSource
+                            sourceItem: windowBlurEffect.visible ? centralWallpaperClipRect : null
+                            sourceRect: {
+                                if (Config.options.background.zoomOutStyle === 1) {
+                                    return Qt.rect(-centralWallpaperClipRect.x, -centralWallpaperClipRect.y, bgRoot.screen.width, bgRoot.screen.height);
+                                }
+                                return Qt.rect(0, 0, centralWallpaperClipRect.width, centralWallpaperClipRect.height);
+                            }
+                            width: bgRoot.screen.width
+                            height: bgRoot.screen.height
+                            live: windowBlurEffect.visible
+                            hideSource: false
+                        }
+
+                        Item {
+                            id: windowBlurMask
+                            width: bgRoot.screen.width
+                            height: bgRoot.screen.height
                             visible: false
+
+                            Rectangle {
+                                x: windowBlurEffect.wbLeft
+                                y: windowBlurEffect.wbTop
+                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
+                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
+                                color: "black"
+                                radius: {
+                                    if (wallpaperItem.wallpaperClipRadius > 0)
+                                        return wallpaperItem.wallpaperClipRadius;
+                                    if (Config.options.appearance.fakeScreenRounding > 0)
+                                        return Appearance.rounding.screenRounding;
+                                    return 0;
+                                }
+                            }
                             layer.enabled: true
                         }
 
@@ -407,9 +434,13 @@ Scope {
                             border.width: 1.5 * wallpaperPlanes.scaleProgress
 
                             layer.enabled: radius > 0
-                            layer.effect: OpacityMask {
+                            layer.effect: MultiEffect {
+                                maskEnabled: true
                                 maskSource: centralClipMask
+                                maskThresholdMin: 0.5
+                                maskSpreadAtMin: 1.0
                             }
+
 
                             Behavior on x {
                                 NumberAnimation {
@@ -459,6 +490,7 @@ Scope {
 
                                 visible: opacity > 0 && !bgRoot.wallpaperIsVideo
                                 opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+                                sourceSize: Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080)
 
                                 property int chunkSize: Config?.options.bar.workspaces.shown ?? 10
                                 property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
@@ -520,7 +552,7 @@ Scope {
                             Loader {
                                 id: blurLoader
                                 active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
-                                anchors.fill: parent
+                                anchors.fill: wallpaper
                                 scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
                                 Behavior on scale {
                                     NumberAnimation {
@@ -592,6 +624,10 @@ Scope {
                                         target: widgetCanvas
                                         width: parent.width
                                         height: parent.height
+                                        leftMargin: 0
+                                        rightMargin: 0
+                                        topMargin: 0
+                                        bottomMargin: 0
                                     }
                                     AnchorChanges {
                                         target: widgetCanvas
@@ -608,7 +644,7 @@ Scope {
 
                                 transitions: Transition {
                                     PropertyAnimation {
-                                        properties: "width,height"
+                                        properties: "width,height,leftMargin,rightMargin,topMargin,bottomMargin"
                                         duration: Appearance.animation.elementMove.duration
                                         easing.type: Appearance.animation.elementMove.type
                                         easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
@@ -690,15 +726,22 @@ Scope {
 
                         MultiEffect {
                             id: windowBlurEffect
-                            x: centralWallpaperClipRect.x
-                            y: centralWallpaperClipRect.y
-                            width: centralWallpaperClipRect.width
-                            height: centralWallpaperClipRect.height
+                            anchors.fill: parent
 
-                            layer.enabled: centralWallpaperClipRect.radius > 0
-                            layer.effect: OpacityMask {
-                                maskSource: windowBlurClipMask
-                            }
+                            readonly property bool barVertical: wallpaperPlanes.barVertical
+                            readonly property bool barBottom: wallpaperPlanes.barBottom
+                            readonly property int barSz: wallpaperPlanes.barSize
+                            readonly property int gp: wallpaperPlanes.gap
+                            readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
+
+                            readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gp
+                            readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
+                            readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
+
+                            readonly property int wbLeft:   Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSz : 0, leftSidebarOffset)
+                            readonly property int wbRight:  Math.max(baseMargin, (barEffective && barVertical &&  barBottom) ? barSz : 0, rightSidebarOffset)
+                            readonly property int wbTop:    Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSz : 0)
+                            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical &&  barBottom) ? barSz : 0)
 
                             property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !bgRoot.overviewOpen
                             visible: shouldBlur || opacity > 0.01
@@ -710,14 +753,27 @@ Scope {
                                 }
                             }
 
-                            source: centralWallpaperClipRect
+                            source: windowBlurSource
                             blurEnabled: true
                             blurMax: 64
                             blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
 
+                            maskEnabled: true
+                            maskSource: windowBlurMask
+
                             Rectangle {
+                                x: windowBlurEffect.wbLeft
+                                y: windowBlurEffect.wbTop
+                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
+                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
+                                radius: {
+                                    if (wallpaperItem.wallpaperClipRadius > 0)
+                                        return wallpaperItem.wallpaperClipRadius;
+                                    if (Config.options.appearance.fakeScreenRounding > 0)
+                                        return Appearance.rounding.screenRounding;
+                                    return 0;
+                                }
                                 opacity: 1.0
-                                anchors.fill: parent
                                 color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
                             }
                         }
@@ -777,17 +833,52 @@ Scope {
                 right: true
             }
 
+            readonly property bool barVertical: Config.options.bar.vertical
+            readonly property bool barBottom: Config.options.bar.bottom
+            readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+            readonly property int gap: Appearance.gapsOut
+            readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
+
+            readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gap
+            readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && screen && screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
+            readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && screen && screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
+
+            readonly property int wbLeft:   Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSize : 0, leftSidebarOffset)
+            readonly property int wbRight:  Math.max(baseMargin, (barEffective && barVertical &&  barBottom) ? barSize : 0, rightSidebarOffset)
+            readonly property int wbTop:    Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSize : 0)
+            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical &&  barBottom) ? barSize : 0)
+
+            mask: Region {
+                item: overlayDimRect
+            }
+
             readonly property bool animEnabled: Config.options.background.zoomOutEnabled
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
             readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen)
 
-            visible: isActive
+            visible: isActive || overlayDimRect.opacity > 0.01
 
             // Performance: use a simple Rectangle for dimming
             Rectangle {
                 id: overlayDimRect
-                anchors.fill: parent
+                x: blurOverlayWindow.wbLeft
+                y: blurOverlayWindow.wbTop
+                width: parent.width - blurOverlayWindow.wbLeft - blurOverlayWindow.wbRight
+                height: parent.height - blurOverlayWindow.wbTop - blurOverlayWindow.wbBottom
                 color: Qt.rgba(0, 0, 0, 0.25)
+                opacity: blurOverlayWindow.isActive ? 1.0 : 0.0
+                radius: {
+                    if (Config.options.appearance.fakeScreenRounding > 0)
+                        return Appearance.rounding.screenRounding;
+                    return 0;
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
             }
         }
     }

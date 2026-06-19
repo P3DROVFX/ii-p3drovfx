@@ -30,7 +30,16 @@ Item {
     readonly property list<string> clockNumbers: DateTime.time.split(/[: ]/)
     readonly property int clockHour: parseInt(clockNumbers[0]) % 12
     readonly property int clockMinute: DateTime.clock.minutes
-    readonly property int clockSecond: DateTime.clock.seconds
+    property int clockSecond: DateTime.clock.seconds
+
+    readonly property bool secondHandVisible: Config.options.background.widgets.clock.cookie.secondHandStyle !== "hide"
+
+    Timer {
+        running: root.secondHandVisible && !Config.options.time.secondPrecision
+        repeat: true
+        interval: 1000
+        onTriggered: root.clockSecond = new Date().getSeconds()
+    }
 
     implicitWidth: implicitSize
     implicitHeight: implicitSize
@@ -186,7 +195,7 @@ Item {
     FadeLoader {
         id: secondHandLoader
         z: (Config.options.background.widgets.clock.cookie.secondHandStyle === "line") ? 2 : 3
-        shown: Config.options.time.secondPrecision && Config.options.background.widgets.clock.cookie.secondHandStyle !== "hide"
+        shown: Config.options.background.widgets.clock.cookie.secondHandStyle !== "hide"
         anchors.fill: parent
         sourceComponent: SecondHand {
             id: secondHand

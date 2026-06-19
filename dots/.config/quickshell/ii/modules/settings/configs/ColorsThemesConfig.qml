@@ -71,43 +71,6 @@ ContentPage {
         }
     }
 
-    component SmallLightDarkPreferenceButton: RippleButton {
-        id: smallLightDarkPreferenceButton
-        required property bool dark
-        property color colText: enabled ? toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2 : Appearance.colors.colOnLayer3
-        padding: 5
-        Layout.fillWidth: true
-        toggled: Appearance.m3colors.darkmode === dark
-        colBackground: Appearance.colors.colLayer2
-        onClicked: {
-            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --mode ${dark ? "dark" : "light"} --noswitch`]);
-        }
-        StyledToolTip {
-            extraVisibleCondition: !smallLightDarkPreferenceButton.enabled
-            text: Translation.tr("Custom color scheme has been selected")
-        }
-        contentItem: Item {
-            anchors.centerIn: parent
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: 10
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconSize: 30
-                    text: dark ? "dark_mode" : "light_mode"
-                    fill: toggled ? 1 : 0
-                    color: smallLightDarkPreferenceButton.colText
-                }
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: dark ? Translation.tr("Dark") : Translation.tr("Light")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: smallLightDarkPreferenceButton.colText
-                }
-            }
-        }
-    }
-
     ContentSection {
         title: Translation.tr("Appearance Preferences")
         icon: "palette"
@@ -115,95 +78,16 @@ ContentPage {
         RowLayout {
             Layout.fillWidth: true
 
-            Item {
-                implicitWidth: 360
-                implicitHeight: 220
-
-                StyledImage {
-                    id: wallpaperPreview
-                    anchors.fill: parent
-                    fillMode: Image.PreserveAspectCrop
-                    source: Config.options.background.wallpaperPath !== "" ? Config.options.background.wallpaperPath : `${Directories.assetsPath}/images/default_wallpaper.png`
-                    cache: false
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: 360
-                            height: 200
-                            radius: Appearance.rounding.normal
-                        }
-                    }
-                }
-
-                RippleButton {
-                    anchors.fill: parent
-                    colBackground: "transparent"
-                    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
-                    colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
-                    onClicked: {
-                        if (Config.options.wallpaperSelector.useSystemFileDialog) {
-                            Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode);
-                        } else {
-                            Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
-                        }
-                    }
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "hourglass_top"
-                    color: Appearance.colors.colPrimary
-                    iconSize: 40
-                    z: -1
-                }
-
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        bottom: parent.bottom
-                        margins: 10
-                    }
-
-                    implicitWidth: Math.min(text.implicitWidth + 20, parent.width - 20)
-                    implicitHeight: text.implicitHeight + 5
-                    color: Appearance.colors.colPrimary
-                    radius: Appearance.rounding.full
-
-                    StyledText {
-                        id: text
-                        anchors.centerIn: parent
-                        property string fileName: {
-                            const path = Config.options.background.wallpaperPath;
-                            if (path === "")
-                                return "Click to select wallpaper";
-                            const parts = path.split("/");
-                            return parts[parts.length - 1];
-                        }
-                        text: fileName.length > 30 ? fileName.slice(0, 27) + "..." : fileName
-                        color: Appearance.colors.colOnPrimary
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                    }
-                }
+            ConfigWallpaperSelector {
+                text: Translation.tr("Wallpaper Selector")
             }
 
             ColumnLayout {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
 
-                RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 60
-                    uniformCellSizes: true
-
-                    SmallLightDarkPreferenceButton {
-                        Layout.preferredHeight: 60
-                        dark: false
-                    }
-                    SmallLightDarkPreferenceButton {
-                        Layout.preferredHeight: 60
-                        dark: true
-                    }
+                ConfigLightDarkToggle {
+                    text: Translation.tr("Light / Dark Theme")
                 }
 
                 Item {
@@ -417,6 +301,208 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Uses xdg-desktop-portal instead of the built-in quickshell picker")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "palette"
+            text: Translation.tr("OpenRGB integration")
+            checked: Config.options.appearance.openrgb.enable
+            onCheckedChanged: {
+                Config.options.appearance.openrgb.enable = checked;
+            }
+        }
+    }
+    ContentSection {
+        id: openRgbSection
+        title: Translation.tr("Open RGB integration")
+        icon: "palette"
+        visible: Config.options.appearance.openrgb.enable
+
+        property var openRgbConfig: ({
+            enable: false,
+            applyOnStartup: false,
+            devices: []
+        })
+        property var openRgbDevices: []
+        property string openRgbListScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/openrgb-list-devices.sh`)
+        property string openRgbError: ""
+        property bool openRgbRefreshing: false
+
+        function defaultOpenRgbConfig() {
+            return {
+                enable: false,
+                applyOnStartup: true,
+                devices: []
+            };
+        }
+
+        function refreshOpenRgbConfig() {
+            const appearance = JSON.parse(JSON.stringify(Config.options.appearance || {}));
+            openRgbConfig = Object.assign(defaultOpenRgbConfig(), appearance.openrgb || {});
+            openRgbDevices = openRgbConfig.devices || [];
+        }
+
+        function updateDevice(deviceId, patch) {
+            const devices = [...(openRgbDevices || [])];
+            const index = devices.findIndex(device => device.id === deviceId);
+            if (index === -1) {
+                devices.push(Object.assign({
+                    id: deviceId,
+                    name: patch.name ?? "",
+                    enabled: patch.enabled ?? false
+                }, patch));
+            } else {
+                devices[index] = Object.assign({}, devices[index], patch);
+            }
+            openRgbDevices = devices;
+            openRgbConfig.devices = devices;
+            Config.setNestedValue("appearance.openrgb.devices", devices);
+        }
+
+        function refreshDevices() {
+            openRgbError = "";
+            openRgbRefreshing = true;
+            openRgbDeviceProc.command = ["bash", openRgbListScript];
+            openRgbDeviceProc.running = false;
+            openRgbDeviceProc.running = true;
+        }
+
+        Component.onCompleted: refreshOpenRgbConfig()
+
+        Connections {
+            target: Config
+            function onReadyChanged() {
+                if (Config.ready)
+                    openRgbSection.refreshOpenRgbConfig();
+            }
+        }
+
+        Process {
+            id: openRgbDeviceProc
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    openRgbRefreshing = false;
+                    if (text.length === 0) {
+                        openRgbError = Translation.tr("OpenRGB did not return any data.");
+                        return;
+                    }
+                    try {
+                        const payload = JSON.parse(text);
+                        if (!payload.ok) {
+                            openRgbError = payload.error || Translation.tr("Failed to query OpenRGB devices.");
+                            return;
+                        }
+                        const devices = payload.devices || [];
+                        const existing = openRgbDevices || [];
+                        const merged = devices.map(device => {
+                            const match = existing.find(prev => prev.id === device.id);
+                            return {
+                                id: device.id,
+                                name: device.name,
+                                enabled: match ? match.enabled : false
+                            };
+                        });
+                        Config.options.appearance.openrgb.devices = merged;
+                        openRgbSection.refreshOpenRgbConfig();
+                    } catch (e) {
+                        openRgbError = Translation.tr("Failed to parse OpenRGB response.");
+                    }
+                }
+            }
+            stderr: StdioCollector {
+                onStreamFinished: {
+                    openRgbRefreshing = false;
+                    const trimmed = text.trim();
+                    if (trimmed.length > 0) {
+                        openRgbError = trimmed;
+                    }
+                }
+            }
+        }
+
+        RippleButtonWithIcon {
+            id: openRgbRefreshButton
+            Layout.fillWidth: true
+            materialIcon: "refresh"
+            mainText: openRgbSection.openRgbRefreshing ? Translation.tr("Refreshing...") : Translation.tr("Refresh devices")
+            enabled: !openRgbSection.openRgbRefreshing
+            onClicked: {
+                openRgbSection.refreshDevices();
+            }
+        }
+
+        NoticeBox {
+            id: openRgbErrorBox
+            Layout.fillWidth: true
+            visible: openRgbSection.openRgbError.length > 0
+            materialIcon: "error"
+            text: openRgbSection.openRgbError
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Detected Devices")
+            icon: "memory"
+            visible: openRgbSection.openRgbRefreshing || (openRgbSection.openRgbDevices || []).length > 0
+
+            StyledText {
+                visible: openRgbSection.openRgbRefreshing
+                text: Translation.tr("Querying OpenRGB server...")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colOnLayer2
+                Layout.margins: 8
+            }
+
+            Repeater {
+                model: openRgbSection.openRgbDevices || []
+                ConfigSwitch {
+                    required property var modelData
+                    buttonIcon: "memory"
+                    text: modelData.name && modelData.name.length > 0 ? modelData.name : Translation.tr("Device %1").arg(modelData.id)
+                    checked: modelData.enabled === true
+                    onCheckedChanged: {
+                        openRgbSection.updateDevice(modelData.id, {
+                            enabled: checked,
+                            name: modelData.name
+                        });
+                    }
+                }
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: (openRgbSection.openRgbDevices || []).length === 0 && !openRgbSection.openRgbRefreshing && openRgbSection.openRgbError.length === 0
+            materialIcon: "warning"
+            text: Translation.tr("No OpenRGB devices detected. Ensure the server is running.")
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Integration Settings")
+            icon: "settings"
+
+            ConfigSpinBox {
+                icon: "av_timer"
+                text: Translation.tr("Fade duration (ms)")
+                value: Config.options.appearance.openrgb.fadeDuration * 1000
+                from: 0
+                to: 10000
+                stepSize: 100
+                onValueChanged: {
+                    Config.options.appearance.openrgb.fadeDuration = value / 1000;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "power_settings_new"
+                text: Translation.tr("Apply on startup")
+                checked: Config.options.appearance.openrgb.applyOnStartup
+                onCheckedChanged: {
+                    Config.options.appearance.openrgb.applyOnStartup = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Runs the OpenRGB apply script after startup once config is loaded.")
+                }
             }
         }
     }

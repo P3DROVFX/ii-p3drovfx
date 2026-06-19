@@ -37,17 +37,58 @@ PanelWindow {
     readonly property bool barOnLeft: barVertical && !barBottom
     readonly property bool barOnRight: barVertical && barBottom
 
+    property real leftSidebarMaskWidth: 0
+    property real rightSidebarMaskWidth: 0
+
+    Connections {
+        target: GlobalStates
+        ignoreUnknownSignals: true
+        function onLeftSidebarTargetWidthChanged() {
+            if (GlobalStates.leftSidebarTargetWidth > 0) {
+                topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
+            }
+        }
+        function onRightSidebarTargetWidthChanged() {
+            if (GlobalStates.rightSidebarTargetWidth > 0) {
+                topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (GlobalStates.leftSidebarTargetWidth > 0) {
+            topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
+        }
+        if (GlobalStates.rightSidebarTargetWidth > 0) {
+            topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
+        }
+    }
+
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.activeLeftSidebarMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.activeRightSidebarMonitor
     readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.activeLeftSidebarMonitor && !GlobalStates.policiesDetached
     readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.activeRightSidebarMonitor
 
+    readonly property bool leftSidebarWarmOnMonitor: {
+        if (GlobalStates.policiesDetached) return false;
+        if (GlobalStates.activeLeftSidebarMonitor !== "") {
+            return screen.name === GlobalStates.activeLeftSidebarMonitor;
+        }
+        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+    }
+    readonly property bool rightSidebarWarmOnMonitor: {
+        if (GlobalStates.activeRightSidebarMonitor !== "") {
+            return screen.name === GlobalStates.activeRightSidebarMonitor;
+        }
+        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+    }
+
     onLeftSidebarActiveOnMonitorChanged: {
-        console.log("[TopLayerPanel] leftSidebarActiveOnMonitor changed:", leftSidebarActiveOnMonitor, "screen:", screen.name, "activeLeftSidebarMonitor:", GlobalStates.activeLeftSidebarMonitor, "width:", GlobalStates.animatedLeftSidebarWidth);
+        // Debug removed for production performance
     }
 
     onRightSidebarActiveOnMonitorChanged: {
-        console.log("[TopLayerPanel] rightSidebarActiveOnMonitor changed:", rightSidebarActiveOnMonitor, "screen:", screen.name, "activeRightSidebarMonitor:", GlobalStates.activeRightSidebarMonitor, "width:", GlobalStates.animatedRightSidebarWidth);
+        // Debug removed for production performance
     }
 
     readonly property bool barMustShow: {
@@ -74,6 +115,9 @@ PanelWindow {
             
             property real hBarHiddenAmount: topPanel.hBarHiddenAmount
             property real vBarHiddenAmount: topPanel.vBarHiddenAmount
+
+            leftSidebarMaskOffset: topPanel.leftSidebarMaskWidth
+            rightSidebarMaskOffset: topPanel.rightSidebarMaskWidth
         }
     }
 
@@ -472,13 +516,18 @@ PanelWindow {
         id: leftSidebar
         x: -(width - GlobalStates.animatedLeftSidebarWidth)
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: Math.max(GlobalStates.policiesWidth, GlobalStates.animatedLeftSidebarWidth)
-        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        width: Math.round(Math.max(GlobalStates.policiesWidth, GlobalStates.animatedLeftSidebarWidth))
+        height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         radius: GlobalStates.connectModeActive ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-        visible: topPanel.leftSidebarActiveOnMonitor && !GlobalStates.policiesDetached
+        visible: topPanel.leftSidebarWarmOnMonitor
+
+        // GPU compositing during animation: prevents per-frame mask/Region recalc
+        // which was causing Wayland surface sync stalls on every animation frame.
+        // Active whenever sidebar is visible (open or closing) so both directions benefit.
+        layer.enabled: GlobalStates.animatedLeftSidebarWidth > 0
 
         Loader {
             active: !GlobalStates.policiesDetached
@@ -528,16 +577,20 @@ PanelWindow {
     // Right Sidebar Dashboard Content
     Rectangle {
         id: rightSidebar
-        x: parent.width - GlobalStates.animatedRightSidebarWidth
+        x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
         y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
-        width: GlobalStates.dashboardWidth
-        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+        width: Math.round(GlobalStates.dashboardWidth)
+        height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: "transparent"
         border.width: 0
-        visible: topPanel.rightSidebarActiveOnMonitor
+        visible: topPanel.rightSidebarWarmOnMonitor
+
+        // GPU compositing during animation: prevents per-frame mask/Region recalc
+        // Active whenever sidebar is visible (open or closing) so both directions benefit.
+        layer.enabled: GlobalStates.animatedRightSidebarWidth > 0
 
         Loader {
-            active: true
+            active: topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded
             asynchronous: true
             anchors.fill: parent
             sourceComponent: Dashboard.SidebarDashboardContent {}
@@ -599,6 +652,56 @@ PanelWindow {
         }
     }
 
+    // Static items for input masking to avoid per-frame Region recalculations
+    Item {
+        id: leftSidebarMaskItem
+        x: 0
+        y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
+        width: GlobalStates.animatedLeftSidebarWidth > 0 ? topPanel.leftSidebarMaskWidth : 0
+        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+    }
+
+    Item {
+        id: rightSidebarMaskItem
+        x: parent.width - width
+        y: (!topPanel.barVertical && !topPanel.barBottom) ? Appearance.sizes.barHeight : 0
+        width: GlobalStates.animatedRightSidebarWidth > 0 ? topPanel.rightSidebarMaskWidth : 0
+        height: (!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height
+    }
+
+    // Static corner mask items to prevent per-frame Region recalculation
+    Item {
+        id: leftSidebarTopCornerMaskItem
+        x: topPanel.leftSidebarMaskWidth
+        y: 0
+        width: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: leftSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+    }
+
+    Item {
+        id: leftSidebarBottomCornerMaskItem
+        x: topPanel.leftSidebarMaskWidth
+        y: topPanel.height - (leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0)
+        width: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: leftSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+    }
+
+    Item {
+        id: rightSidebarTopCornerMaskItem
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - width
+        y: 0
+        width: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: rightSidebarTopCornerLoader.active ? Appearance.rounding.screenRounding : 0
+    }
+
+    Item {
+        id: rightSidebarBottomCornerMaskItem
+        x: topPanel.width - topPanel.rightSidebarMaskWidth - width
+        y: topPanel.height - height
+        width: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+        height: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
+    }
+
     // Mask region definitions
     mask: Region {
         Region {
@@ -615,23 +718,23 @@ PanelWindow {
         }
         Region {
             // Left sidebar
-            item: leftSidebar
+            item: leftSidebarMaskItem
         }
         Region {
             // Right sidebar
-            item: rightSidebar
+            item: rightSidebarMaskItem
         }
         Region {
-            item: leftSidebarTopCornerLoader.item
+            item: leftSidebarTopCornerMaskItem
         }
         Region {
-            item: leftSidebarBottomCornerLoader.item
+            item: leftSidebarBottomCornerMaskItem
         }
         Region {
-            item: rightSidebarTopCornerLoader.item
+            item: rightSidebarTopCornerMaskItem
         }
         Region {
-            item: rightSidebarBottomCornerLoader.item
+            item: rightSidebarBottomCornerMaskItem
         }
     }
 

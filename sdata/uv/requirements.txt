@@ -2,12 +2,24 @@
 #    uv pip compile sdata/uv/requirements.in -o sdata/uv/requirements.txt
 build==1.2.2.post1
     # via -r sdata/uv/requirements.in
+certifi==2026.5.20
+    # via requests
 cffi==1.17.1
-    # via pywayland
+    # via
+    #   cryptography
+    #   pywayland
+charset-normalizer==3.4.7
+    # via requests
 click==8.2.1
     # via -r sdata/uv/requirements.in
+cryptography==45.0.7
+    # via google-auth
 dbus-python==1.4.0
     # via kde-material-you-colors
+google-auth==2.54.0
+    # via -r sdata/uv/requirements.in
+idna==3.18
+    # via requests
 kde-material-you-colors==1.10.1
     # via -r sdata/uv/requirements.in
 libsass==0.23.0
@@ -39,6 +51,10 @@ pillow==11.1.0
     #   material-color-utilities
 psutil==6.1.1
     # via -r sdata/uv/requirements.in
+pyasn1==0.6.3
+    # via pyasn1-modules
+pyasn1-modules==0.4.2
+    # via google-auth
 pycairo==1.28.0
     # via
     #   -r sdata/uv/requirements.in
@@ -51,6 +67,8 @@ pyproject-hooks==1.2.0
     # via build
 pywayland==0.4.18
     # via -r sdata/uv/requirements.in
+requests==2.34.2
+    # via -r sdata/uv/requirements.in
 setproctitle==1.3.4
     # via -r sdata/uv/requirements.in
 setuptools==80.9.0
@@ -59,5 +77,7 @@ setuptools-scm==8.1.0
     # via -r sdata/uv/requirements.in
 tqdm==4.67.1
     # via -r sdata/uv/requirements.in
+urllib3==2.7.0
+    # via requests
 wheel==0.45.1
     # via -r sdata/uv/requirements.in

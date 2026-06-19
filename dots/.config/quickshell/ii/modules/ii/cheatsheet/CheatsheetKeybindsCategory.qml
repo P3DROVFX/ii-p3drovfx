@@ -1,203 +1,195 @@
 pragma ComponentBehavior: Bound
 
-import qs.services
 import qs.modules.common
-import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 
-Column {
+Rectangle {
     id: root
-    required property string categoryName
-    readonly property bool isCategorized: categoryName?.length > 0
-    property int maxBindWidth: 0
-    property real columnSpacing: 40
-    property real titleSpacing: 7
 
-    // Excellent symbol explaination and source :
-    // http://xahlee.info/comp/unicode_computing_symbols.html
-    // https://www.nerdfonts.com/cheat-sheet
-    property var macSymbolMap: ({
-        "Ctrl": "󰘴",
-        "Alt": "󰘵",
-        "Shift": "󰘶",
-        "Space": "󱁐",
-        "Tab": "↹",
-        "Equal": "󰇼",
-        "Minus": "",
-        "Print": "",
-        "BackSpace": "󰭜",
-        "Delete": "⌦",
-        "Return": "󰌑",
-        "Period": ".",
-        "Escape": "⎋"
-      })
-    property var functionSymbolMap: ({
-        "F1":  "󱊫",
-        "F2":  "󱊬",
-        "F3":  "󱊭",
-        "F4":  "󱊮",
-        "F5":  "󱊯",
-        "F6":  "󱊰",
-        "F7":  "󱊱",
-        "F8":  "󱊲",
-        "F9":  "󱊳",
-        "F10": "󱊴",
-        "F11": "󱊵",
-        "F12": "󱊶",
-    })
+    required property var sectionData
+    required property int sectionIndex
+    required property var cheatsheetRoot
+    required property real cardWidth
 
-    property var mouseSymbolMap: ({
-        "mouse_up": "󱕐",
-        "mouse_down": "󱕑",
-        "mouse:272": "L󰍽",
-        "mouse:273": "R󰍽",
-        "Scroll ↑/↓": "󱕒",
-        "Page_↑/↓": "⇞/⇟",
-    })
+    property bool bypassFilter: false
 
-    property var keyBlacklist: ["SUPER_L", "SUPER_R"]
-    property var keySubstitutions: {
-        const _super = Config.options.cheatsheet.superKey;
-        const _mac = Config.options.cheatsheet.useMacSymbol;
-        const _fn = Config.options.cheatsheet.useFnSymbol;
-        const _mouse = Config.options.cheatsheet.useMouseSymbol;
-        return Object.assign({
-            "SUPER": "",
-            "Super": "",
-            "Mouse_up": "Scroll ↓",    // ikr, weird
-            "Mouse_down": "Scroll ↑",  // trust me bro
-            "Mouse:272": "LMB",
-            "Mouse:273": "RMB",
-            "Mouse:275": "MouseBack",
-            "Slash": "/",
-            "Hash": "#",
-            "Return": "Enter",
-            // "Shift": "",
-        },
-        !!_super ? {
-            "SUPER": _super,
-            "Super": _super,
-        }: {},
-        _mac ? macSymbolMap : {},
-        _fn ? functionSymbolMap : {},
-        _mouse ? mouseSymbolMap : {}
-        );
+    readonly property string iconName: cheatsheetRoot.categoryIcons[sectionData.name] ?? "keyboard"
+    readonly property string shapeName: cheatsheetRoot.sectionShapes[sectionIndex % cheatsheetRoot.sectionShapes.length]
+
+    readonly property bool hasMatches: {
+        if (bypassFilter || cheatsheetRoot.filter === "") return true;
+        const kbs = sectionData.keybinds;
+        for (let i = 0; i < kbs.length; i++) {
+            if (cheatsheetRoot.bindMatches(kbs[i], sectionData.name)) return true;
+        }
+        return false;
     }
 
-    function modMaskToStringList(modMask: int): list<string> {
-        var list = [];
-        // Funny mathematical order but we wanna have this natural user-facing order
-        if (modMask & (1 << 2)) { list.push("Ctrl"); }
-        if (modMask & (1 << 6)) { list.push("Super"); }
-        if (modMask & (1 << 0)) { list.push("Shift"); }
-        if (modMask & (1 << 3)) { list.push("Alt"); }
-        if (modMask & (1 << 1)) { list.push("Caps"); }
-        if (modMask & (1 << 4)) { list.push("Mod2"); }
-        if (modMask & (1 << 5)) { list.push("Mod3"); }
-        if (modMask & (1 << 7)) { list.push("Mod5"); }
-        return list;
+    visible: hasMatches || opacity > 0
+    opacity: hasMatches ? 1.0 : 0.0
+    clip: true
+
+    width: cardWidth
+    height: hasMatches ? implicitHeight : 0
+    implicitHeight: hasMatches ? (cardContent.implicitHeight + cheatsheetRoot.cardPadding * 2) : 0
+
+    color: Appearance.colors.colLayer4
+    radius: Appearance.rounding.large
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 180
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasized
+        }
+    }
+    Behavior on height {
+        NumberAnimation {
+            duration: 180
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasized
+        }
     }
 
-    spacing: titleSpacing
+    component KeyChip: Rectangle {
+        id: chipRoot
+        property string chipText
+        property color textColor: Appearance.colors.colOnSurface
+        property color bgColor: Appearance.colors.colSurfaceContainerLow
 
-    StyledText {
-        text: root.isCategorized ? root.categoryName : "Uncategorized"
-        font.pixelSize: Appearance.font.pixelSize.title
+        implicitWidth: chipLabel.implicitWidth + 16
+        implicitHeight: chipLabel.implicitHeight + 10
+        radius: Appearance.rounding.small
+        color: bgColor
+
+        StyledText {
+            id: chipLabel
+            anchors.centerIn: parent
+            text: chipRoot.chipText
+            font.family: Appearance.font.family.monospace
+            font.pixelSize: Config.options.cheatsheet.fontSize.key
+            font.weight: Font.Bold
+            color: chipRoot.textColor
+        }
     }
 
     Column {
-        spacing: 4
-        Repeater {
-            model: root.filteredBinds
-            delegate: BindLine {
-                required property var modelData
-                keyData: modelData
-                categoryName: root.categoryName
-            }
+        id: cardContent
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: parent.top
+            margins: cheatsheetRoot.cardPadding
         }
-    }
-
-    component BindLine: Row {
-        id: bindLine
-        required property var keyData
-        property string categoryName: ""
+        spacing: cheatsheetRoot.cardInnerSpacing
 
         Row {
-            spacing: 16
-            Row {
-                id: modRow
-                Component.onCompleted: root.maxBindWidth = Math.max(root.maxBindWidth, implicitWidth)
-                width: root.maxBindWidth
-                spacing: 4
-                Repeater {
-                    model: {
-                        const modList = root.modMaskToStringList(bindLine.keyData.modmask).map(mod => root.keySubstitutions[mod] || mod)
-                        if (modList.length == 0) return []
-                        if (Config.options.cheatsheet.splitButtons) return modList;
-                        return [modList.join(" ")]
-                    }
-                    delegate: KeyboardKey {
-                        required property var modelData
-                        key: modelData
-                        pixelSize: Config.options.cheatsheet.fontSize.key
-                    }
-                }
-                StyledText {
-                    id: keybindPlus
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: !keyBlacklist.includes(bindLine.keyData.key) && bindLine.keyData.modmask > 0
-                    text: "+"
-                }
-                KeyboardKey {
-                    id: keybindKey
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: !keyBlacklist.includes(bindLine.keyData.key)
-                    key: {
-                        const k = StringUtils.toTitleCase(bindLine.keyData.key)
-                        return root.keySubstitutions[k] || k
-                    }
-                    pixelSize: Config.options.cheatsheet.fontSize.key
-                    color: Appearance.colors.colOnLayer0
+            spacing: 10
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            MaterialShape {
+                shapeString: root.shapeName
+                implicitSize: 32
+                color: Appearance.colors.colPrimaryContainer
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.iconName
+                    iconSize: Appearance.font.pixelSize.normal
+                    fill: 1.0
+                    color: Appearance.colors.colOnPrimaryContainer
                 }
             }
-            Item {
+
+            StyledText {
                 anchors.verticalCenter: parent.verticalCenter
-                implicitWidth: commentText.implicitWidth + root.columnSpacing
-                implicitHeight: commentText.implicitHeight
-                StyledText {
-                    id: commentText
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.smaller
-                    text: {
-                        const regex = new RegExp("\\s*" + bindLine.categoryName + "\\s*:\\s*");
-                        return bindLine.keyData.description.replace(regex, "");
-                    }
+                font {
+                    family: Appearance.font.family.title
+                    pixelSize: Appearance.font.pixelSize.title
+                    weight: Font.Bold
                 }
+                color: Appearance.colors.colOnSurface
+                text: root.sectionData.name || "Keybinds"
             }
         }
-    }
-}eturn root.keySubstitutions[k] || k
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            radius: 1
+            color: Appearance.colors.colOutlineVariant
+            opacity: 0.3
+        }
+
+        Column {
+            spacing: cheatsheetRoot.cardBindSpacing
+            anchors.left: parent.left
+            anchors.right: parent.right
+
+            Repeater {
+                model: root.sectionData.keybinds
+
+                delegate: Row {
+                    id: bindRow
+                    required property var modelData
+                    readonly property bool matches: root.bypassFilter || cheatsheetRoot.bindMatches(bindRow.modelData, root.sectionData.name)
+
+                    spacing: 12
+                    height: matches ? implicitHeight : 0
+                    opacity: matches ? 1.0 : 0.0
+                    visible: matches || opacity > 0
+                    clip: true
+
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                        }
                     }
-                    pixelSize: Config.options.cheatsheet.fontSize.key
-                    color: Appearance.colors.colOnLayer0
-                }
-            }
-            Item {
-                anchors.verticalCenter: parent.verticalCenter
-                implicitWidth: commentText.implicitWidth + root.columnSpacing
-                implicitHeight: commentText.implicitHeight
-                StyledText {
-                    id: commentText
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.left: parent.left
-                    font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.smaller
-                    text: {
-                        const regex = new RegExp("\\s*" + bindLine.categoryName + "\\s*:\\s*");
-                        return bindLine.keyData.description.replace(regex, "");
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 180
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                        }
+                    }
+
+                    Row {
+                        spacing: 4
+                        Repeater {
+                            model: bindRow.modelData.mods
+                            delegate: KeyChip {
+                                required property var modelData
+                                chipText: cheatsheetRoot.keySubstitutions[modelData] || modelData
+                                bgColor: Appearance.colors.colSurfaceContainerLow
+                                textColor: Appearance.colors.colOnSurface
+                            }
+                        }
+                        StyledText {
+                            visible: Config.options.cheatsheet.splitButtons && !cheatsheetRoot.keyBlacklist.includes(bindRow.modelData.key) && bindRow.modelData.mods.length > 0
+                            text: "+"
+                            font.pixelSize: Config.options.cheatsheet.fontSize.key
+                            color: Appearance.colors.colPrimary
+                        }
+                        KeyChip {
+                            visible: Config.options.cheatsheet.splitButtons && !cheatsheetRoot.keyBlacklist.includes(bindRow.modelData.key)
+                            chipText: cheatsheetRoot.keySubstitutions[bindRow.modelData.key] || bindRow.modelData.key
+                            bgColor: Appearance.colors.colPrimary
+                            textColor: Appearance.colors.colOnPrimary
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        font.pixelSize: Config.options.cheatsheet.fontSize.comment || Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnSurface
+                        opacity: 0.7
+                        text: bindRow.modelData.comment || ""
                     }
                 }
             }

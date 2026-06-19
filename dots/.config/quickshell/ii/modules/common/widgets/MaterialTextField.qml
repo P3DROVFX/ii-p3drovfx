@@ -31,6 +31,26 @@ TextField {
     }
     wrapMode: TextEdit.Wrap
 
+    background: Rectangle {
+        implicitHeight: 56
+        radius: Appearance.rounding.normal
+        color: Appearance.m3colors.m3surface
+        border.width: root.activeFocus ? 2 : 1
+        border.color: root.activeFocus ? Appearance.m3colors.m3primary : 
+                       root.hovered ? Appearance.m3colors.m3outline : Appearance.m3colors.m3outlineVariant
+
+        Behavior on border.color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+        Behavior on border.width {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+    }
+
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.NoButton

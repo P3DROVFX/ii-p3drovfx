@@ -57,5 +57,18 @@ ContentPage {
                 Config.options.bar.activeWindow.fixedSize = checked;
             }
         }
+
+        ConfigSpinBox {
+            enabled: Config.options.bar.activeWindow.fixedSize
+            icon: "height"
+            text: Translation.tr("Custom size")
+            value: Config.options.bar.activeWindow.customSize
+            from: 100
+            to: 500
+            stepSize: 25
+            onValueChanged: {
+                Config.options.bar.activeWindow.customSize = value;
+            }
+        }
     }
 }

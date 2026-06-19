@@ -44,7 +44,7 @@ Item {
     Behavior on animatedStablePosition {
         NumberAnimation {
             duration: 350
-            easing.type: Easing.OutCubic
+            easing.type: Easing.OutBack
         }
     }
 
@@ -273,6 +273,10 @@ Item {
         AnimatedTabIndexPair {
             id: idxPair
             index: Math.max(0, root.visibleActiveIndex)
+            easingType: Easing.OutBack
+            easingOvershoot: 1.7
+            idx1Duration: 250
+            idx2Duration: 350
         }
 
         property real pairMin: Math.min(idxPair.idx1, idxPair.idx2)
@@ -669,13 +673,19 @@ Item {
                             property int workspaceIndex: workspaceOffset + workspaceGroup * workspacesShown + index + 1
                             model: root.showIcons ? root.monitorWindows?.filter(win => win.workspace === workspaceIndex).splice(0, Config.options.bar.workspaces.maxWindowCount) : []
                             delegate: Item {
+                                id: iconContainer
                                 Layout.alignment: Qt.AlignHCenter
                                 width: root.individualIconBoxHeight
                                 height: root.individualIconBoxHeight
+
+                                layer.enabled: Config.options.appearance.icons.enableShapeMask
+                                layer.effect: OpacityMask {
+                                    maskSource: iconMask
+                                }
+
                                 MaterialShape {
                                     id: iconMask
-                                    width: Math.max(1, mainAppIcon.width)
-                                    height: Math.max(1, mainAppIcon.height)
+                                    anchors.fill: parent
                                     shapeString: Config.options.appearance.icons.shapeMask
                                     visible: false
                                 }
@@ -703,8 +713,7 @@ Item {
                                     }
 
                                     layer.enabled: Config.options.appearance.icons.enableShapeMask
-                                    layer.effect: MultiEffect {
-                                        maskEnabled: true
+                                    layer.effect: OpacityMask {
                                         maskSource: iconMask
                                     }
                                 }
@@ -718,6 +727,10 @@ Item {
                                             anchors.fill: parent
                                             source: mainAppIcon
                                             desaturation: 0.8
+                                            layer.enabled: Config.options.appearance.icons.enableShapeMask
+                                            layer.effect: OpacityMask {
+                                                maskSource: iconMask
+                                            }
                                         }
                                         ColorOverlay {
                                             anchors.fill: desaturatedIcon

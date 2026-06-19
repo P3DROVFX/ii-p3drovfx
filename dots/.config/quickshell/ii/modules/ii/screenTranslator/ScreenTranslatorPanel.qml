@@ -58,6 +58,7 @@ PanelWindow {
     property real scale: 1.0
     property real contentX: 0
     property real contentY: 0
+    property string targetLanguage: ""
 
     MouseArea {
         anchors.fill: parent
@@ -126,6 +127,7 @@ PanelWindow {
             sourceComponent: ScreenTextOverlay {
                 screenshotPath: root.screenshotPath
                 scaleFactor: root.scale
+                targetLanguage: root.targetLanguage
             }
         }
     }
@@ -166,6 +168,39 @@ PanelWindow {
                 StyledToolTip {
                     z: 9999
                     text: Translation.tr("Key input")
+                }
+            }
+
+            Item { width: 8; height: 1 }
+
+            StyledComboBox {
+                implicitWidth: 160
+                implicitHeight: 40
+                buttonRadius: height / 2
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                model: [
+                    { display: Translation.tr("System Language"), value: "", icon: "language" },
+                    { display: "English", value: "en", icon: "translate" },
+                    { display: "Português", value: "pt-BR", icon: "translate" },
+                    { display: "Español", value: "es", icon: "translate" },
+                    { display: "Français", value: "fr", icon: "translate" },
+                    { display: "Deutsch", value: "de", icon: "translate" },
+                    { display: "日本語", value: "ja", icon: "translate" },
+                    { display: "中文", value: "zh-CN", icon: "translate" },
+                    { display: "한국어", value: "ko", icon: "translate" },
+                    { display: "Русский", value: "ru", icon: "translate" }
+                ]
+                textRole: "display"
+                currentIndex: {
+                    for (let i = 0; i < model.length; ++i) {
+                        if (model[i].value === root.targetLanguage) return i;
+                    }
+                    return 0;
+                }
+                onActivated: index => {
+                    root.targetLanguage = model[index].value;
                 }
             }
 

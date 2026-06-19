@@ -24,11 +24,11 @@ Item {
         MaterialShapeWrappedMaterialSymbol {
             anchors.centerIn: parent
             text: "power_settings_new"
-            iconSize: Appearance.font.pixelSize.normal
+            iconSize: root.vertical ? 18 : Appearance.font.pixelSize.normal
             color: Appearance.colors.colOnPrimary
             colSymbol: Appearance.colors.colPrimary
             shape: MaterialShape.Shape.Cookie12Sided
-            padding: 2
+            padding: root.vertical ? 5 : 2
         }
     }
 }

@@ -47,6 +47,14 @@ Button {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
+    scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
+    Behavior on scale {
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutQuad
+        }
+    }
+
     function startRipple(x, y) {
         const stateY = buttonBackground.y;
         rippleAnim.x = x;

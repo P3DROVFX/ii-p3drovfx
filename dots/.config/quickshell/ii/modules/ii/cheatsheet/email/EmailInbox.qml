@@ -373,9 +373,16 @@ Item {
                     readonly property real magneticOffset: {
                         if (root.swipingIndex === -1 || root.swipingIndex === index)
                             return 0;
-                        if (Math.abs(root.swipingIndex - index) === 1) {
-                            // Pull neighbors by 15% of the swipe distance, max 30px
-                            return Math.max(-30, root.activeSwipeX * 0.15);
+                            
+                        let dist = Math.abs(root.swipingIndex - index);
+                        if (dist === 1) {
+                            // Pull immediate neighbors by 15% of the swipe distance, max 30px
+                            let pull = root.activeSwipeX * 0.15;
+                            return Math.max(-30, Math.min(30, pull));
+                        } else if (dist === 2) {
+                            // Pull secondary neighbors by 5% of the swipe distance, max 10px
+                            let pull = root.activeSwipeX * 0.05;
+                            return Math.max(-10, Math.min(10, pull));
                         }
                         return 0;
                     }

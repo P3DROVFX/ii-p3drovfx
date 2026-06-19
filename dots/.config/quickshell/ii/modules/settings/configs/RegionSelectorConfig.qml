@@ -90,6 +90,28 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("Screenshot Editor")
+        icon: "transform"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "edit"
+                text: Translation.tr("Enable built-in right click screenshot editor")
+                checked: Config.options.regionSelector.annotation.enableInlineEditor
+                onCheckedChanged: {
+                    Config.options.regionSelector.annotation.enableInlineEditor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Enable this if you want to use the built-in screenshot editor when using right click to select are, replacing swappy.")
+                }
+            }
+        }
+    }
+
+    ContentSection {
         title: Translation.tr("Rectangular Selection")
         icon: "crop_square"
         visible: !Config.options.search.imageSearch.useCircleSelection

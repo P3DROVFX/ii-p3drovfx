@@ -4,7 +4,7 @@
 hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_blur = true })
 
 -- Disable blur for every window except transparent apps
-hl.window_rule({match = {class = "^(?!(kitty|code|code-url-handler|vscodium|antigravity)).*" }, no_blur = true })
+hl.window_rule({match = {class = "^(?!(kitty|code|code-url-handler|vscodium|antigravity-ide)).*" }, no_blur = true })
 
 -- Floating
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      center = true})
@@ -136,12 +136,12 @@ hl.layer_rule({ match = { namespace = "quickshell.*" }, xray = false})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, order = -1})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, ignore_alpha = 0.0})
-hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, animation = "fade"})
-hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide"})
+hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:actionCenter" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
-hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%"})
+hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
@@ -153,7 +153,8 @@ hl.layer_rule({ match = { namespace = "quickshell:overview" }, xray = false})
 -- overviewWindowTransition: window captures that scale with the wallpaper zoom
 hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, xray = false})
-hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, ignore_alpha = 0.0})
 
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
@@ -166,9 +167,9 @@ hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true}
 hl.layer_rule({ match = { namespace = "quickshell:session" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
-hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right"})
-hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left"})
-hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide"})
+hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
+hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
+hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles
 hl.layer_rule({ match = { namespace = "quickshell:wallpaperSelector" }, animation = "slide top"})

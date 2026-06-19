@@ -113,7 +113,24 @@ Rectangle {
                 required property var modelData
                 Layout.fillWidth: true
                 visible: modelData.show
-                materialSymbol: modelData.icon
+                materialSymbol: {
+                    if (modelData.icon === "volume_up") {
+                        const muted = (Audio.sink && Audio.sink.audio) ? Audio.sink.audio.muted : false;
+                        const vol = value;
+                        if (muted) return "volume_off";
+                        if (vol <= 0.0) return "volume_mute";
+                        if (vol <= 0.33) return "volume_mute";
+                        if (vol <= 0.66) return "volume_down";
+                        return "volume_up";
+                    }
+                    if (modelData.icon === "brightness_6") {
+                        const vol = value;
+                        if (vol <= 0.33) return "brightness_low";
+                        if (vol <= 0.66) return "brightness_medium";
+                        return "brightness_high";
+                    }
+                    return modelData.icon;
+                }
                 secondaryMaterialSymbol: modelData?.secondaryIcon ?? ""
                 value: modelData.getVal()
                 onMoved: modelData.setVal(value)
@@ -129,19 +146,47 @@ Rectangle {
         stopIndicatorValues: []
         dividerValues: secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
 
-        MaterialSymbol {
+        MaterialShapeWrappedMaterialSymbol {
             id: icon
             property bool nearFull: quickSlider.value >= 0.82
             anchors {
                 verticalCenter: quickSlider.verticalCenter
                 right: nearFull ? quickSlider.handle.right : quickSlider.right
-                rightMargin: nearFull ? 14 : 8
+                rightMargin: nearFull ? 10 : 4
             }
-            iconSize: 20
-            color: nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            iconSize: 16
+            padding: 4
+            shape: MaterialShape.Shape.Cookie7Sided
             text: quickSlider.materialSymbol
 
+            rotation: quickSlider.value * 360
+
+            Behavior on rotation {
+                NumberAnimation {
+                    duration: 350
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.5
+                }
+            }
+
+            color: {
+                if (quickSlider.value > 1.0) {
+                    return Appearance.colors.colErrorContainer;
+                }
+                return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
+            }
+
+            colSymbol: {
+                if (quickSlider.value > 1.0) {
+                    return Appearance.m3colors.m3onErrorContainer;
+                }
+                return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+            }
+
             Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+            Behavior on colSymbol {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
             Behavior on anchors.rightMargin {

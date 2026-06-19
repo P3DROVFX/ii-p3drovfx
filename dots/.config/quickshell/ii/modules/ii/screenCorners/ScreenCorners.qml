@@ -70,7 +70,6 @@ Scope {
 
         RoundCorner {
             id: cornerWidget
-            anchors.fill: parent
             visible: true
             opacity: (Config.options.appearance.fakeScreenRounding === 1 || (Config.options.appearance.fakeScreenRounding === 2 && !cornerPanelWindow.fullscreen)) ? 1.0 : 0.0
             corner: cornerPanelWindow.corner
@@ -78,6 +77,12 @@ Scope {
             bottomVisualMargin: (Config.options.interactions.deadPixelWorkaround.enable && cornerPanelWindow.anchors.bottom) * 1
 
             implicitSize: Appearance.rounding.screenRounding
+            anchors {
+                top: cornerPanelWindow.isTop ? parent.top : undefined
+                bottom: cornerPanelWindow.isBottom ? parent.bottom : undefined
+                left: cornerPanelWindow.isLeft ? parent.left : undefined
+                right: cornerPanelWindow.isRight ? parent.right : undefined
+            }
         }
 
         Loader {

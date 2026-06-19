@@ -53,7 +53,7 @@ Item {
             "battery": [batteryComp, batteryCompVert, batteryCompExpressive, batteryCompExpressive],
             "utility_buttons": [utilityButtonsComp, utilityButtonsComp, utilityButtonsCompExpressive, utilityButtonsCompExpressive],
             "system_tray": [systemTrayComp, systemTrayComp, systemTrayComp, systemTrayComp],
-            "active_window": [activeWindowComp, activeWindowComp],
+            "active_window": [activeWindowComp, activeWindowComp, activeWindowCompExpressive, activeWindowCompExpressive],
             "date": [dateCompVert, dateCompVert],
             "record_indicator": [recordIndicatorComp, recordIndicatorComp],
             "screen_share_indicator": [screenshareIndicatorComp, screenshareIndicatorComp],
@@ -101,6 +101,8 @@ Item {
         if (modelData.id === "keyboard_layout" && Config.options.bar.styles.keyboard === "expressive")
             return true;
         if (modelData.id === "sports" && Config.options.bar.styles.sports === "expressive")
+            return true;
+        if (modelData.id === "active_window" && Config.options.bar.styles.activeWindow === "expressive")
             return true;
         return false;
     }
@@ -243,6 +245,13 @@ Item {
     Component {
         id: activeWindowComp
         ActiveWindow {
+            vertical: rootItem.vertical
+        }
+    }
+
+    Component {
+        id: activeWindowCompExpressive
+        ExpressiveActiveWindow {
             vertical: rootItem.vertical
         }
     }
@@ -404,7 +413,9 @@ Item {
     }
     Component {
         id: policiesPanelButtonExpressive
-        ExpressivePoliciesPanelButton {}
+        ExpressivePoliciesPanelButton {
+            vertical: rootItem.vertical
+        }
     }
     Component {
         id: dashboardPanelButtonExpressive

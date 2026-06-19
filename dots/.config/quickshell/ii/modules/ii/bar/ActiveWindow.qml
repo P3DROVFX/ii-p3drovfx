@@ -20,7 +20,9 @@ Item {
     readonly property bool isFixedSize: Config.options.bar.activeWindow.fixedSize
 
     readonly property int maxSize: 350
-    readonly property int fixedSize: root.vertical ? 150 : 225
+    property int popupWidth: 350
+    property int maxPopupWidth: 600
+    readonly property int fixedSize: Config.options.bar.activeWindow.customSize
 
     property string appClassText: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
                 root.activeWindow?.appId : (root.biggestWindow?.class) ?? Translation.tr("Desktop")
@@ -28,15 +30,41 @@ Item {
     property string appTitleText: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
                 root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
     
-    implicitHeight: isFixedSize ? fixedSize : (root.vertical ? Math.max(classText.implicitWidth, titleText.implicitWidth) + 20 : colLayout.implicitHeight)
-    implicitWidth: isFixedSize ? fixedSize : Math.min(Math.max(classText.implicitWidth, titleText.implicitWidth) + 20, maxSize)
+    implicitHeight: root.vertical && isFixedSize ? fixedSize : (root.vertical ? Math.max(classText.implicitWidth, titleText.implicitWidth) + 20 : colLayout.implicitHeight)
+    implicitWidth: !root.vertical && isFixedSize ? fixedSize : (root.vertical ? undefined : Math.min(Math.max(classText.implicitWidth, titleText.implicitWidth) + 20, maxSize))
     clip: true
 
+    property bool containsMouse: mouseArea.containsMouse
+
+    MouseArea {
+        id: mouseArea
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+    }
+
+    ActiveWindowPopup {
+        id: titlePopup
+        targetItem: root
+        appClassText: root.appClassText
+        appTitleText: root.appTitleText
+        activeWindowAddress: root.activeWindowAddress
+        monitor: root.monitor
+        popupWidth: root.popupWidth
+        maxPopupWidth: root.maxPopupWidth
+    }
+
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+        NumberAnimation {
+            duration: 450
+            easing.type: Easing.OutExpo
+        }
     }
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+        NumberAnimation {
+            duration: 450
+            easing.type: Easing.OutExpo
+        }
     }
 
     ColumnLayout {
@@ -68,7 +96,7 @@ Item {
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnLayer0
             elide: Text.ElideRight
-            rotation: root.vertical ? 90 : 0
+            rotation: root.vertical ? -90 : 0
             text: root.vertical ? root.appClassText : root.appTitleText
         }
     }

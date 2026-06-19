@@ -28,6 +28,14 @@ Item {
     property var visionParagraphs: []
     property list<string> translationKeys: []
     property var translation: ({})
+    property string targetLanguage: ""
+
+    onTargetLanguageChanged: {
+        if (root.translationKeys.length > 0) {
+            root.loading = true;
+            cloudTrans.translateStrings(root.translationKeys, root.targetLanguage);
+        }
+    }
 
     function translate(s: string): string {
         return translation[s] ?? s;
@@ -47,7 +55,7 @@ Item {
     }
 
     function reattemptAsNeeded() {
-        if (root.visionParagraphs == [] && GoogleCloud.tokenReady && !GoogleCloud.tokenError) {
+        if (root.visionParagraphs.length === 0 && GoogleCloud.tokenReady && !GoogleCloud.tokenError) {
             root.error = false;
             cloudVision.annotateImage(root.screenshotPath);
         }
@@ -154,7 +162,7 @@ Item {
             // print(gcr.coherentParagraphs)
             root.translationKeys = gcr.coherentParagraphs.map(p => p.text);
             // print("TRANSLATION KEYS:", JSON.stringify(root.translationKeys));
-            cloudTrans.translateStrings(root.translationKeys);
+            cloudTrans.translateStrings(root.translationKeys, root.targetLanguage);
         }
     }
 
@@ -166,12 +174,11 @@ Item {
         onFinished: {
             var values = outputData.translations.map(translation => translation.translatedText);
             const keys = root.translationKeys;
-            root.translation = ({});
+            var newTranslation = {};
             for (var i = 0; i < keys.length; i++) {
-                Object.assign(root.translation, {
-                    [keys[i]]: values[i]
-                });
+                newTranslation[keys[i]] = values[i];
             }
+            root.translation = newTranslation;
             // print("TRANSLATION:", JSON.stringify(root.translation));
             root.loading = false;
         }

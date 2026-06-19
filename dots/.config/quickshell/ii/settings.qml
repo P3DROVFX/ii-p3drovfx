@@ -458,7 +458,8 @@ ApplicationWindow {
                                 from: 1
                                 to: 0
                                 duration: 150
-                                easing.type: Easing.InQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
                             }
                             NumberAnimation {
                                 target: pageLoader
@@ -466,7 +467,8 @@ ApplicationWindow {
                                 from: 1
                                 to: 0.95
                                 duration: 150
-                                easing.type: Easing.InQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
                             }
                             NumberAnimation {
                                 target: pageLoader
@@ -474,7 +476,8 @@ ApplicationWindow {
                                 from: 0
                                 to: 120
                                 duration: 150
-                                easing.type: Easing.InQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
                             }
                         }
                         PropertyAction {
@@ -494,7 +497,8 @@ ApplicationWindow {
                                 from: 0
                                 to: 1
                                 duration: 400
-                                easing.type: Easing.OutQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
                             NumberAnimation {
                                 target: pageLoader
@@ -502,14 +506,16 @@ ApplicationWindow {
                                 from: 0.95
                                 to: 1
                                 duration: 400
-                                easing.type: Easing.OutQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
                             NumberAnimation {
                                 target: pageLoader
                                 property: "x"
                                 to: 0
                                 duration: 400
-                                easing.type: Easing.OutQuart
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
                         }
                     } // closes SequentialAnimation

@@ -158,12 +158,21 @@ apply_term() {
   apply_kitty &
 }
 
+apply_openrgb() {
+    python "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py"
+}
+
 # Check if terminal theming is enabled in config
 CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 if [ -f "$CONFIG_FILE" ]; then
   enable_terminal=$(jq -r '.appearance.wallpaperTheming.enableTerminal' "$CONFIG_FILE")
+  enable_openrgb=$(jq -r '.appearance.openrgb.enable' "$CONFIG_FILE")
   if [ "$enable_terminal" = "true" ]; then
     apply_term &
+  fi
+  if [ "$enable_openrgb" = "true" ]; then
+    openrgb_duration=$(jq -r '.appearance.openrgb.fadeDuration' "$CONFIG_FILE")
+    python "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py" -d $openrgb_duration
   fi
 else
   echo "Config file not found at $CONFIG_FILE. Applying terminal theming by default."

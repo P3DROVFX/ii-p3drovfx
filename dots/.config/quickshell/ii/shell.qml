@@ -18,6 +18,8 @@ import Quickshell.Hyprland
 
 ShellRoot {
     id: root
+    property string openRgbApplyScript: Quickshell.shellPath("scripts/colors/openRGB/apply_openrgb.py")
+    property bool openRgbStartupApplied: false
 
     // Stuff for every panel family
     ReloadPopup {}
@@ -32,6 +34,7 @@ ShellRoot {
         Updates.load();
         DarkModeService.automatic;
         ChangelogService.load();
+        root.applyOpenRgbIfEnabled();
     }
 
     // Panel families
@@ -40,6 +43,33 @@ ShellRoot {
         const currentIndex = families.indexOf(Config.options.panelFamily);
         const nextIndex = (currentIndex + 1) % families.length;
         Config.options.panelFamily = families[nextIndex];
+    }
+
+    function applyOpenRgbIfEnabled() {
+        if (openRgbStartupApplied)
+            return;
+        if (!Config.ready)
+            return;
+        if (!Config.options?.appearance?.openrgb?.enable)
+            return;
+        if (!Config.options?.appearance?.openrgb?.applyOnStartup)
+            return;
+        openRgbStartupApplied = true;
+        openRgbApplyProc.command = ["python", openRgbApplyScript];
+        openRgbApplyProc.running = false;
+        openRgbApplyProc.running = true;
+    }
+
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            if (Config.ready)
+                root.applyOpenRgbIfEnabled();
+        }
+    }
+
+    Process {
+        id: openRgbApplyProc
     }
 
     component PanelFamilyLoader: LazyLoader {

@@ -64,6 +64,7 @@ Item { // Bar content region
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
     Rectangle {
         z: -11
@@ -86,63 +87,78 @@ Item { // Bar content region
         }
     }
 
-    // Background
-    Rectangle {
-        id: barBackground
-        z: -10 // making sure its behind everything
-        anchors {
-            fill: root.isDynamicIsland ? undefined : parent
-            centerIn: root.isDynamicIsland ? parent : undefined
+    Item {
+        id: backgroundGroup
+        z: -10
+        anchors.fill: parent
+
+        property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
+        Behavior on actualColor {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(backgroundGroup)
         }
 
-        width: parent.width
-        height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
+        opacity: actualColor.a
+        layer.enabled: actualColor.a > 0.0 && actualColor.a < 1.0
 
-        color: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
-        property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.windowRounding : 0)
+        // Background
+        Rectangle {
+            id: barBackground
+            anchors {
+                fill: root.isDynamicIsland ? undefined : parent
+                centerIn: root.isDynamicIsland ? parent : undefined
+            }
 
-        // In vertical mode (Left/Right), the edges touching the screen are left/right.
-        // For Left bar (bottom: false): left edges are 0.
-        // For Right bar (bottom: true): right edges are 0.
-        topLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-        bottomLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-        topRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-        bottomRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+            width: parent.width
+            height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
-        border.width: (Config.options.bar.cornerStyle === 1) ? 1 : 0
-        border.color: root.showBarBackground ? Appearance.colors.colLayer0Border : "transparent"
+            color: Qt.rgba(backgroundGroup.actualColor.r, backgroundGroup.actualColor.g, backgroundGroup.actualColor.b, 1.0)
+            property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.windowRounding : 0)
 
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-        Behavior on height {
-            NumberAnimation {
-                duration: 450
-                easing.type: Easing.OutExpo
+            // In vertical mode (Left/Right), the edges touching the screen are left/right.
+            // For Left bar (bottom: false): left edges are 0.
+            // For Right bar (bottom: true): right edges are 0.
+            topLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+            bottomLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+            topRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+            bottomRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+
+            border.width: (Config.options.bar.cornerStyle === 1) ? 1 : 0
+            border.color: root.showBarBackground ? Appearance.colors.colLayer0Border : "transparent"
+
+            Behavior on height {
+                enabled: !root.isDynamicIsland
+                NumberAnimation {
+                    duration: 450
+                    easing.type: Easing.OutExpo
+                }
             }
         }
-    }
 
-    // Concave Corners (HUD Mode)
-    RoundCorner {
-        z: -5
-        anchors.bottom: barBackground.top
-        anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
-        anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-        implicitSize: barBackground.baseRadius
-        color: barBackground.color
-        corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
-        visible: root.isDynamicIsland && root.showBarBackground
-    }
-    RoundCorner {
-        z: -5
-        anchors.top: barBackground.bottom
-        anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
-        anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-        implicitSize: barBackground.baseRadius
-        color: barBackground.color
-        corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
-        visible: root.isDynamicIsland && root.showBarBackground
+        // Concave Corners (HUD Mode)
+        RoundCorner {
+            anchors.bottom: barBackground.top
+            anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
+            anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
+            implicitSize: barBackground.baseRadius
+            extendVertical: true
+            color: barBackground.color
+            corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
+            visible: root.isDynamicIsland && root.showBarBackground
+            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        }
+        RoundCorner {
+            anchors.top: barBackground.bottom
+            anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
+            anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
+            implicitSize: barBackground.baseRadius
+            extendVertical: true
+            color: barBackground.color
+            corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
+            visible: root.isDynamicIsland && root.showBarBackground
+            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        }
     }
 
     ColumnLayout { // Combined Island section

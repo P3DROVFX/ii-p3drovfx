@@ -72,6 +72,30 @@ Item {
     // Cross-page drag: tracks which page the drag is currently hovering over
     property int dragTargetPage: root.pageIndex
 
+    property real pageScale: 1.0
+
+    Connections {
+        target: root.panel
+        ignoreUnknownSignals: true
+        function onCurrentPageChanged() {
+            if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
+                pageEntranceAnimation.restart();
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: pageEntranceAnimation
+        NumberAnimation {
+            target: root
+            property: "pageScale"
+            from: 0.96
+            to: 1.0
+            duration: 350
+            easing.type: Easing.OutQuint
+        }
+    }
+
     // Sizing shenanigans - use effective sizes for live resize preview
     Layout.columnSpan: root.effectiveSizeW
     Layout.rowSpan: root.effectiveSizeH
@@ -124,7 +148,7 @@ Item {
         width: root.width
         height: root.height
 
-        scale: root.isDragging ? 1.05 : 1.0
+        scale: (root.isDragging ? 1.05 : 1.0) * root.pageScale
         opacity: {
             if (root.isUnused) return 0.5;
             if (root.editMode && !root.isDragging) return 0.9;
@@ -134,6 +158,7 @@ Item {
         z: root.isDragging ? 99 : 1
         
         Behavior on scale {
+            enabled: !root.isDragging && !pageEntranceAnimation.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {

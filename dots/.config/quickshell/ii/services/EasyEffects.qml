@@ -71,10 +71,7 @@ Singleton {
     Process {
         id: fetchActiveStateProc
         running: false
-        command: ["bash", "-c", root.isFlatpak
-            ? "flatpak ps | grep -q com.github.wwmm.easyeffects"
-            : "pidof easyeffects > /dev/null 2>&1"
-        ]
+        command: ["bash", "-c", "pgrep -x easyeffects > /dev/null 2>&1"]
         onExited: (exitCode, exitStatus) => {
             root.active = exitCode === 0
         }

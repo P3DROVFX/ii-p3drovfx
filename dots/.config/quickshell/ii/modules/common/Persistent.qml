@@ -72,6 +72,7 @@ Singleton {
 
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
+                property list<string> sectionOrder: []
             }
 
             property JsonObject clipboard: JsonObject {

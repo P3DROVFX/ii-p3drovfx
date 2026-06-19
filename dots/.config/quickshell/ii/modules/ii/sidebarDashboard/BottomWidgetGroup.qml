@@ -5,6 +5,7 @@ import qs.services
 import qs.modules.ii.sidebarDashboard.calendar
 import qs.modules.ii.sidebarDashboard.todo
 import qs.modules.ii.sidebarDashboard.pomodoro
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Layouts
 
@@ -13,6 +14,17 @@ Rectangle {
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
     clip: true
+
+    // layer.enabled and layer.effect: OpacityMask removed to optimize performance and prevent lag on dashboard open
+    // layer.enabled: true
+    // layer.effect: OpacityMask {
+    //     maskSource: Rectangle {
+    //         width: root.width
+    //         height: root.height
+    //         radius: root.radius
+    //     }
+    // }
+
     implicitHeight: effectivelyCollapsed ? collapsedBottomWidgetGroupRow.implicitHeight : 350
     property int selectedTab: Persistent.states.sidebar.bottomGroup.tab
     property int previousIndex: -1
@@ -189,11 +201,13 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             // implicitHeight: tabStack.implicitHeight
+            Layout.topMargin: root.radius / 2
+            Layout.bottomMargin: root.radius / 2
+            Layout.rightMargin: root.radius / 2
 
             Loader {
                 id: tabStack
                 anchors.fill: parent
-                anchors.bottomMargin: -anchors.topMargin
 
                 Component.onCompleted: {
                     tabStack.source = root.tabs[root.selectedTab].widget;

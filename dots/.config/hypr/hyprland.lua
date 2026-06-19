@@ -42,13 +42,8 @@ end
 if is_file_exists(HOME .. "/.config/hypr/custom/keybinds.lua") then
     safe_require("custom.keybinds")
 end
-
--- nwg-displays support --
-if is_file_exists(HOME .. "/.config/hypr/workspaces.lua") then
-    require("workspaces")
-end
-if is_file_exists(HOME .. "/.config/hypr/monitors.lua") then
-    require("monitors")
+if is_file_exists(HOME .. "/.config/hypr/hyprmon.lua") then
+    require("hyprmon")
 end
 
 -- Shell overrides --

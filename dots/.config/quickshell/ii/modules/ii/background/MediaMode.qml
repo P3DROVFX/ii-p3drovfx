@@ -31,6 +31,12 @@ Item { // MediaMode instance
     property string geniusLyricsString: LyricsService.plainLyrics
 
     function updateArt() {
+        if (root.artUrl && root.artUrl.startsWith("file://")) {
+            root.displayedArtFilePath = root.artUrl;
+            root.downloaded = true;
+            return;
+        }
+
         coverArtDownloader.targetFile = root.artUrl;
         coverArtDownloader.artFilePath = root.artFilePath;
         root.downloaded = false;
@@ -50,7 +56,7 @@ Item { // MediaMode instance
         id: coverArtDownloader
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
+        command: ["bash", "-c", `[ -f '${artFilePath}' ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);

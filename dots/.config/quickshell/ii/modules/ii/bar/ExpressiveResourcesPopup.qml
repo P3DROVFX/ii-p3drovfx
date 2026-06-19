@@ -12,6 +12,10 @@ StyledPopup {
     stickyHover: true
     animateHeight: false
 
+    onActiveChanged: {
+        ResourceUsage.gpuMonitoringEnabled = active;
+    }
+
     // String cleanup functions
     function cleanDistro(name) {
         return name.replace(/ Linux/g, "").replace(/\s*\(.*?\)/g, "").trim();

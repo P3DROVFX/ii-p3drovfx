@@ -300,12 +300,17 @@ build_quickshell() {
 
 
 run_bundled_setup() {
-    echo -e "${RED}This fork's base dotfiles are not installed yet. Install them now? (y/n): ${NC}"
-    read -r setup_response
-    [[ ! "$setup_response" =~ ^[Yy]$ ]] && echo -e "${RED}✗ Setup cancelled.${NC}" && exit 1
-
-    bash "$SCRIPT_DIR/setup" "install"
-    [ $? -eq 0 ] || { echo -e "${RED}✗ Setup failed!${NC}"; exit 1; }
+    if [ "$FULL_INSTALL" = true ]; then
+        echo -e "${BLUE}• Installing II base dotfiles...${NC}"
+        bash "$SCRIPT_DIR/setup" "install"
+        [ $? -eq 0 ] || { echo -e "${RED}✗ Setup failed!${NC}"; exit 1; }
+    else
+        echo -e "${RED}This fork's base dotfiles are not installed yet. Install them now? (y/n): ${NC}"
+        read -r setup_response
+        [[ ! "$setup_response" =~ ^[Yy]$ ]] && echo -e "${RED}✗ Setup cancelled.${NC}" && exit 1
+        bash "$SCRIPT_DIR/setup" "install"
+        [ $? -eq 0 ] || { echo -e "${RED}✗ Setup failed!${NC}"; exit 1; }
+    fi
 }
 
 install_cli() {
@@ -492,12 +497,18 @@ if [ ! -d "$SOURCE_DIR" ] || [ -z "$(ls -A "$SOURCE_DIR" 2>/dev/null)" ]; then
 fi
 
 # ── Check illogical-impulse ──────────────────────────────────────────────────
-if [ "$FORCE_INSTALL" = false ] && [ "$FULL_INSTALL" = false ]; then
+# if [ "$FORCE_INSTALL" = false ] && [ "$FULL_INSTALL" = false ]; then
+#     if [ ! -d "$CHECK_DIR" ]; then
+#         run_bundled_setup
+#     fi
+# fi
+if [ "$FULL_INSTALL" = true ]; then
+    run_bundled_setup
+elif [ "$FORCE_INSTALL" = false ]; then
     if [ ! -d "$CHECK_DIR" ]; then
         run_bundled_setup
     fi
 fi
-
 # ── Check Quickshell Qt ABI compatibility ────────────────────────────────────
 if [ "$REBUILD_QS" = true ]; then
     build_quickshell

@@ -76,6 +76,24 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "animation"
+            text: Translation.tr("Scroll animation in settings")
+            checked: Config.options.appearance.scrollAnimations
+            onCheckedChanged: {
+                Config.options.appearance.scrollAnimations = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "blur_linear"
+            text: Translation.tr("Scroll fade gradient mask in settings")
+            checked: Config.options.appearance.scrollFadeMask
+            onCheckedChanged: {
+                Config.options.appearance.scrollFadeMask = checked;
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "smart_toy"
             text: Translation.tr("Show AI provider and model buttons")
             checked: Config.options.sidebar.ai.showProviderAndModelButtons
@@ -130,12 +148,13 @@ ContentPage {
             RippleButtonWithIcon {
                 materialIcon: "magic_button"
                 mainText: Translation.tr("Apply Theme")
-                buttonRadius: Appearance.rounding.small
+                buttonRadius: Appearance.rounding.normal
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                colBackground: Appearance.colors.colPrimary
-                colBackgroundHover: Appearance.colors.colPrimaryHover
-                colRipple: Appearance.colors.colPrimaryActive
+                colBackground: Appearance.colors.colPrimaryContainer
+                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                colRipple: Appearance.colors.colPrimaryContainerActive
+                colText: Appearance.colors.colOnPrimaryContainer
                 onClicked: {
                     IconThemes.applyTheme(false);
                 }

@@ -197,7 +197,7 @@ Singleton {
         repeat: true
         onTriggered: {
             getEventsProcess.running = true;
-            this.interval = Config.options?.resources?.updateInterval ?? 3000;
+            interval.interval = 900000; // 15 minutes
         }
     }
 

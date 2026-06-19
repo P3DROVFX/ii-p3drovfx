@@ -403,9 +403,9 @@ ContentPage {
                                 value: "numbers"
                             },
                             {
-                                displayName: Translation.tr("Roman"),
-                                icon: "format_list_numbered_rtl",
-                                value: "roman"
+                                displayName: Translation.tr("Lines"),
+                                icon: "horizontal_rule",
+                                value: "full"
                             }
                         ]
                     }
@@ -423,14 +423,24 @@ ContentPage {
                         }
                         options: [
                             {
-                                displayName: Translation.tr("Line"),
+                                displayName: Translation.tr("Classic"),
                                 icon: "horizontal_rule",
-                                value: "line"
+                                value: "classic"
                             },
                             {
-                                displayName: Translation.tr("Dot"),
-                                icon: "fiber_manual_record",
-                                value: "dot"
+                                displayName: Translation.tr("Fill"),
+                                icon: "square",
+                                value: "fill"
+                            },
+                            {
+                                displayName: Translation.tr("Hollow"),
+                                icon: "crop_square",
+                                value: "hollow"
+                            },
+                            {
+                                displayName: Translation.tr("Hide"),
+                                icon: "do_not_disturb",
+                                value: "hide"
                             }
                         ]
                     }
@@ -448,14 +458,29 @@ ContentPage {
                         }
                         options: [
                             {
-                                displayName: Translation.tr("Line"),
+                                displayName: Translation.tr("Thin"),
                                 icon: "horizontal_rule",
-                                value: "line"
+                                value: "thin"
                             },
                             {
-                                displayName: Translation.tr("Dot"),
-                                icon: "fiber_manual_record",
-                                value: "dot"
+                                displayName: Translation.tr("Medium"),
+                                icon: "remove",
+                                value: "medium"
+                            },
+                            {
+                                displayName: Translation.tr("Bold"),
+                                icon: "add",
+                                value: "bold"
+                            },
+                            {
+                                displayName: Translation.tr("Classic"),
+                                icon: "format_list_bulleted",
+                                value: "classic"
+                            },
+                            {
+                                displayName: Translation.tr("Hide"),
+                                icon: "do_not_disturb",
+                                value: "hide"
                             }
                         ]
                     }
@@ -475,7 +500,7 @@ ContentPage {
                             {
                                 displayName: Translation.tr("None"),
                                 icon: "do_not_disturb",
-                                value: "none"
+                                value: "hide"
                             },
                             {
                                 displayName: Translation.tr("Line"),
@@ -488,9 +513,9 @@ ContentPage {
                                 value: "dot"
                             },
                             {
-                                displayName: Translation.tr("Fluid"),
-                                icon: "water_drop",
-                                value: "fluid"
+                                displayName: Translation.tr("Classic"),
+                                icon: "format_list_bulleted",
+                                value: "classic"
                             }
                         ]
                     }
@@ -510,17 +535,22 @@ ContentPage {
                             {
                                 displayName: Translation.tr("None"),
                                 icon: "do_not_disturb",
-                                value: "none"
+                                value: "hide"
                             },
                             {
-                                displayName: Translation.tr("Simple"),
-                                icon: "calendar_today",
-                                value: "simple"
+                                displayName: Translation.tr("Bubble"),
+                                icon: "bubble_chart",
+                                value: "bubble"
                             },
                             {
-                                displayName: Translation.tr("Full"),
-                                icon: "event_note",
-                                value: "full"
+                                displayName: Translation.tr("Rectangle"),
+                                icon: "crop_square",
+                                value: "rect"
+                            },
+                            {
+                                displayName: Translation.tr("Border"),
+                                icon: "border_style",
+                                value: "border"
                             }
                         ]
                     }
@@ -538,25 +568,26 @@ ContentPage {
                         }
                         options: [
                             {
-                                displayName: Translation.tr("Solid"),
-                                icon: "format_color_fill",
-                                value: "solid"
+                                displayName: Translation.tr("Cookie"),
+                                icon: "cookie",
+                                value: "cookie"
                             },
                             {
-                                displayName: Translation.tr("Blur"),
-                                icon: "blur_on",
-                                value: "blur"
+                                displayName: Translation.tr("Sine"),
+                                icon: "graphic_eq",
+                                value: "sine"
                             },
                             {
-                                displayName: Translation.tr("Transparent"),
-                                icon: "visibility_off",
-                                value: "transparent"
+                                displayName: Translation.tr("Shape"),
+                                icon: "category",
+                                value: "shape"
                             }
                         ]
                     }
                 }
 
                 ContentSubsection {
+                    visible: Config.options.background.widgets.clock.cookie.backgroundStyle === "shape"
                     title: Translation.tr("Background shape")
                     icon: "category"
                     Layout.fillWidth: true
@@ -570,17 +601,17 @@ ContentPage {
                             {
                                 displayName: Translation.tr("Circle"),
                                 icon: "circle",
-                                value: "circle"
+                                value: "Circle"
                             },
                             {
                                 displayName: Translation.tr("Square"),
                                 icon: "square",
-                                value: "square"
+                                value: "Square"
                             },
                             {
                                 displayName: Translation.tr("Cookie"),
                                 icon: "cookie",
-                                value: "cookie"
+                                value: "Cookie12Sided"
                             }
                         ]
                     }

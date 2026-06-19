@@ -12,10 +12,17 @@ GCloudApi {
     property bool setupReady: false
     readonly property bool preparationReady: GoogleCloud.tokenReady && setupReady
 
-    function translateStrings(strings: list<string>) {
+    property string targetLang: ""
+
+    function translateStrings(strings: list<string>, overrideLang) {
         GoogleCloud.load();
         root.setupReady = false;
         root.pendingStrings = strings;
+        if (overrideLang && overrideLang.length > 0) {
+            root.targetLang = overrideLang;
+        } else {
+            root.targetLang = Translation.languageCode;
+        }
         root.state = GCloudApi.State.Preparing;
         root.setupReady = true;
     }
@@ -24,9 +31,8 @@ GCloudApi {
         if (!preparationReady) return;
         root.state = GCloudApi.State.Processing;
 
-        const targetLang = Translation.languageCode;
         const payload = {
-            "targetLanguageCode": targetLang,
+            "targetLanguageCode": root.targetLang,
             "contents": root.pendingStrings,
             "mimeType": "text/plain"
         };

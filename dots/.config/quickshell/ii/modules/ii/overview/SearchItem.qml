@@ -9,6 +9,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Hyprland
 
@@ -36,6 +37,23 @@ RippleButton {
     property string cliphistRawString: entry?.rawValue ?? ""
     property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
     property bool blurImage: entry?.blurImage ?? false
+
+    readonly property string artUrl: MprisController.artUrl || ""
+    readonly property bool isLocalArt: artUrl.startsWith("file://")
+    property string artDownloadLocation: Directories.coverArt
+    property string artFileName: Qt.md5(artUrl)
+    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+
+    // Art is downloaded by SearchWidget. We just reference the cached file path.
+    readonly property string artSource: {
+        if (!artUrl) return "";
+        if (isLocalArt) return artUrl;
+        return Qt.resolvedUrl(artFilePath); // SearchWidget ensures this exists
+    }
+
+    onArtFilePathChanged: {
+        // Art downloading is managed by SearchWidget
+    }
 
     function formatMathResult(raw) {
         if (!raw)
@@ -97,6 +115,11 @@ RippleButton {
     readonly property real actionBtnPadY: 4
 
     property var allActionItems: {
+        // Lazy: only compute when this item is selected or action panel is open.
+        // Avoids creating closures for every off-screen / unselected item.
+        if (!root.isSelected && !root.actionPanelOpen)
+            return [];
+
         let items = [];
         items.push({
             name: root.itemClickActionName || Translation.tr("Open"),
@@ -147,7 +170,7 @@ RippleButton {
                 const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
                 const cleanPath = root.itemName.toString().replace(/^file:\/\//, "");
                 const isPinned = pinnedFiles.includes(cleanPath);
-                
+
                 items.push({
                     name: isPinned ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"),
                     icon: isPinned ? "folder_off" : "create_new_folder",
@@ -239,7 +262,11 @@ RippleButton {
             result += StringUtils.escapeHtml(content.slice(lastIndex));
         return result;
     }
-    property string displayContent: highlightContent(root.itemName, root.query)
+    property string displayContent: {
+        // Skip highlight computation when selected — text shows itemName directly
+        if (root.isSelected) return "";
+        return highlightContent(root.itemName, root.query);
+    }
 
     property list<string> urls: {
         if (!root.itemName)
@@ -273,19 +300,7 @@ RippleButton {
                 easing.type: Easing.OutQuad
             }
         }
-        Behavior on topRightRadius {
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutQuad
-            }
-        }
         Behavior on bottomLeftRadius {
-            NumberAnimation {
-                duration: 100
-                easing.type: Easing.OutQuad
-            }
-        }
-        Behavior on bottomRightRadius {
             NumberAnimation {
                 duration: 100
                 easing.type: Easing.OutQuad
@@ -344,11 +359,14 @@ RippleButton {
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        duration: 375
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 1.15
                     }
                 }
+
+                // Only animate topLeft - the other radii mirror it and
+                // animating all 4 independently costs 4x animation overhead per item
                 Behavior on topLeftRadius {
                     NumberAnimation {
                         duration: 100
@@ -394,31 +412,12 @@ RippleButton {
                     anchors.rightMargin: root.buttonHorizontalPadding
                     visible: !root.isNowPlaying
 
-                    Behavior on spacing {
-                        NumberAnimation {
-                            duration: 120
-                        }
-                    }
-
                     Item {
                         id: iconContainer
                         Layout.preferredWidth: iconVisible ? 36 : 0
                         Layout.preferredHeight: 36
                         visible: iconVisible
                         readonly property bool iconVisible: root.iconType !== LauncherSearchResult.IconType.None
-
-                        Behavior on Layout.preferredWidth {
-                            NumberAnimation {
-                                duration: 150
-                                easing.type: Easing.OutQuint
-                            }
-                        }
-                        Behavior on Layout.preferredHeight {
-                            NumberAnimation {
-                                duration: 150
-                                easing.type: Easing.OutQuint
-                            }
-                        }
 
                         Item {
                             anchors.fill: parent
@@ -791,7 +790,7 @@ RippleButton {
 
                             Image {
                                 anchors.fill: parent
-                                source: MprisController.artUrl || ""
+                                source: root.artSource
                                 fillMode: Image.PreserveAspectCrop
                                 smooth: true
                                 visible: source !== ""
@@ -810,7 +809,7 @@ RippleButton {
                                 text: "music_note"
                                 iconSize: 28
                                 color: Appearance.colors.colOnSurfaceVariant
-                                visible: !MprisController.artUrl || MprisController.artUrl === ""
+                                visible: root.artSource === ""
                             }
                         }
 
@@ -878,8 +877,14 @@ RippleButton {
                     bottomRightRadius: topRightRadius
 
                     color: isBtnActive ? Appearance.colors.colPrimaryContainer : (root.isSelected && actionBtnMa.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighest)
-                    antialiasing: true
-                    visible: root.actionPanelOpen
+                    visible: root.actionPanelOpen || opacity > 0.0
+                    opacity: root.actionPanelOpen ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.OutCubic
+                        }
+                    }
 
                     Behavior on color {
                         ColorAnimation {
