@@ -435,7 +435,12 @@ fn cmd_watch(class: &str, target_ws_str: &str, width: i32, height: i32, x: i32, 
             
             let mut batch = Vec::new();
             let ws_param = get_dispatcher_workspace(&target_ws, &clients);
-            batch.push(format!("dispatch hl.dsp.window.move({{ workspace = {}, window = \"{}\", follow = false }})", ws_param, addr_sel));
+            
+            if is_special_workspace(&target_ws) {
+                batch.push(format!("dispatch movetoworkspacesilent {},{}", ws_param.trim_matches('"'), addr_sel));
+            } else {
+                batch.push(format!("dispatch hl.dsp.window.move({{ workspace = {}, window = \"{}\", follow = false }})", ws_param, addr_sel));
+            }
             
             let float_action = if is_floating { "set" } else { "disable" };
             batch.push(format!("dispatch hl.dsp.window.float({{ action = \"{}\", window = \"{}\" }})", float_action, addr_sel));
@@ -645,7 +650,11 @@ fn cmd_restore(slug: &str) {
         let addr_sel = format!("address:{}", addr_clean);
         let ws_param = get_dispatcher_workspace(&sw.workspace_id, &clients);
         
-        batch_commands.push(format!("dispatch hl.dsp.window.move({{ workspace = {}, window = \"{}\", follow = false }})", ws_param, addr_sel));
+        if is_special_workspace(&sw.workspace_id) {
+            batch_commands.push(format!("dispatch movetoworkspacesilent {},{}", ws_param.trim_matches('"'), addr_sel));
+        } else {
+            batch_commands.push(format!("dispatch hl.dsp.window.move({{ workspace = {}, window = \"{}\", follow = false }})", ws_param, addr_sel));
+        }
         
         let float_action = if sw.floating { "set" } else { "disable" };
         batch_commands.push(format!("dispatch hl.dsp.window.float({{ action = \"{}\", window = \"{}\" }})", float_action, addr_sel));
@@ -665,7 +674,7 @@ fn cmd_restore(slug: &str) {
                 let addr_clean = if addr.starts_with("0x") { addr.to_string() } else { format!("0x{}", addr) };
                 if !assigned_clean.contains(&addr_clean) {
                     if let Some(ws_id) = c.get("workspace").and_then(|w| w.get("id")).and_then(|v| v.as_i64()) {
-                        if ws_id >= 1 {
+                        if ws_id != 0 {
                             if profile.kill_others {
                                 if let Some(pid) = c.get("pid").and_then(|v| v.as_i64()) {
                                     let top_pid = get_app_root_pid(pid);
