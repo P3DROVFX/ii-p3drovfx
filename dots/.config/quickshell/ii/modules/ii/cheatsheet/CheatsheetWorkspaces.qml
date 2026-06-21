@@ -474,6 +474,7 @@ Item {
 
                             shortcutHint: {
                                 var _trigger = gridArea.visibleProfileCount;
+                                var _rev = gridArea.layoutRevision;
                                 if (!card.visible) return "";
                                 var count = 0;
                                 for (var i = 0; i < profileRepeater.count; i++) {
