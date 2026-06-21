@@ -646,29 +646,6 @@ Item {
                     }
                 }
 
-                // Close other windows switch
-                RowLayout {
-                    spacing: 8
-                    Layout.leftMargin: 4
-
-                    StyledSwitch {
-                        checked: root.closeOthers
-                        onCheckedChanged: {
-                            if (checked !== root.closeOthers) {
-                                let newClose = checked;
-                                let newKill = root.killOthers;
-                                if (newClose) newKill = false;
-                                WorkspaceProfileService.updateProfileOptions(root.slug, newClose, newKill)
-                            }
-                        }
-                    }
-                    StyledText {
-                        text: "Close all other windows on restore"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: root.colOnSurface
-                    }
-                }
-
                 // Kill other windows switch
                 RowLayout {
                     spacing: 8
@@ -687,6 +664,29 @@ Item {
                     }
                     StyledText {
                         text: "Kill all other windows on restore"
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: root.colOnSurface
+                    }
+                }
+
+                // Close other windows switch
+                RowLayout {
+                    spacing: 8
+                    Layout.leftMargin: 4
+
+                    StyledSwitch {
+                        checked: root.closeOthers
+                        onCheckedChanged: {
+                            if (checked !== root.closeOthers) {
+                                let newClose = checked;
+                                let newKill = root.killOthers;
+                                if (newClose) newKill = false;
+                                WorkspaceProfileService.updateProfileOptions(root.slug, newClose, newKill)
+                            }
+                        }
+                    }
+                    StyledText {
+                        text: "Close all other windows on restore"
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: root.colOnSurface
                     }
