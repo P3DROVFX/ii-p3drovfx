@@ -47,21 +47,48 @@ Singleton {
 
     // Internals
 
+    property bool _windowListNeedsUpdate: false
+    property bool _monitorsNeedsUpdate: false
+    property bool _layersNeedsUpdate: false
+    property bool _workspacesNeedsUpdate: false
+    property bool _activeWorkspaceNeedsUpdate: false
+
     function updateWindowList() {
-        getClients.running = true;
+        if (getClients.running) {
+            root._windowListNeedsUpdate = true;
+        } else {
+            getClients.running = true;
+        }
     }
 
     function updateLayers() {
-        getLayers.running = true;
+        if (getLayers.running) {
+            root._layersNeedsUpdate = true;
+        } else {
+            getLayers.running = true;
+        }
     }
 
     function updateMonitors() {
-        getMonitors.running = true;
+        if (getMonitors.running) {
+            root._monitorsNeedsUpdate = true;
+        } else {
+            getMonitors.running = true;
+        }
     }
 
     function updateWorkspaces() {
-        getWorkspaces.running = true;
-        getActiveWorkspace.running = true;
+        if (getWorkspaces.running) {
+            root._workspacesNeedsUpdate = true;
+        } else {
+            getWorkspaces.running = true;
+        }
+
+        if (getActiveWorkspace.running) {
+            root._activeWorkspaceNeedsUpdate = true;
+        } else {
+            getActiveWorkspace.running = true;
+        }
     }
 
     function updateAll() {
@@ -94,9 +121,48 @@ Singleton {
         target: Hyprland
 
         function onRawEvent(event) {
-            // console.log("Hyprland raw event:", event.name);
-            if (["openlayer", "closelayer", "screencast"].includes(event.name)) return;
-            updateAll()
+            switch (event.name) {
+                case "workspace":
+                case "workspacev2":
+                case "focusedmon":
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    break;
+
+                case "activewindow":
+                case "activewindowv2":
+                    root.updateWindowList();
+                    root.updateWorkspaces();
+                    break;
+
+                case "openwindow":
+                case "closewindow":
+                case "movewindow":
+                case "movewindowv2":
+                    root.updateWindowList();
+                    root.updateWorkspaces();
+                    break;
+
+                case "changefloatingmode":
+                case "fullscreen":
+                case "urgent":
+                case "minimize":
+                    root.updateWindowList();
+                    break;
+
+                case "createworkspace":
+                case "destroyworkspace":
+                case "moveworkspace":
+                case "renameworkspace":
+                    root.updateWorkspaces();
+                    break;
+
+                case "monitoradded":
+                case "monitorremoved":
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    break;
+            }
         }
     }
 
@@ -114,6 +180,11 @@ Singleton {
                 }
                 root.windowByAddress = tempWinByAddress;
                 root.addresses = root.windowList.map(win => win.address);
+
+                if (root._windowListNeedsUpdate) {
+                    root._windowListNeedsUpdate = false;
+                    getClients.running = true;
+                }
             }
         }
     }
@@ -125,6 +196,11 @@ Singleton {
             id: monitorsCollector
             onStreamFinished: {
                 root.monitors = JSON.parse(monitorsCollector.text);
+
+                if (root._monitorsNeedsUpdate) {
+                    root._monitorsNeedsUpdate = false;
+                    getMonitors.running = true;
+                }
             }
         }
     }
@@ -136,6 +212,11 @@ Singleton {
             id: layersCollector
             onStreamFinished: {
                 root.layers = JSON.parse(layersCollector.text);
+
+                if (root._layersNeedsUpdate) {
+                    root._layersNeedsUpdate = false;
+                    getLayers.running = true;
+                }
             }
         }
     }
@@ -156,6 +237,11 @@ Singleton {
                 }
                 root.workspaceById = tempWorkspaceById;
                 root.workspaceIds = root.workspaces.map(ws => ws.id);
+
+                if (root._workspacesNeedsUpdate) {
+                    root._workspacesNeedsUpdate = false;
+                    getWorkspaces.running = true;
+                }
             }
         }
     }
@@ -167,6 +253,11 @@ Singleton {
             id: activeWorkspaceCollector
             onStreamFinished: {
                 root.activeWorkspace = JSON.parse(activeWorkspaceCollector.text);
+
+                if (root._activeWorkspaceNeedsUpdate) {
+                    root._activeWorkspaceNeedsUpdate = false;
+                    getActiveWorkspace.running = true;
+                }
             }
         }
     }
