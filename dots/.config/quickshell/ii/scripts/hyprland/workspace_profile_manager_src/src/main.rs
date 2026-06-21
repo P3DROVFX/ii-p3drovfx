@@ -409,6 +409,51 @@ fn get_app_root_pid(mut pid: i64) -> i64 {
     top_pid
 }
 
+fn cmd_watch(class: &str, target_ws_str: &str, width: i32, height: i32, x: i32, y: i32, is_floating: bool) {
+    let target_ws: Value = serde_json::from_str(target_ws_str).unwrap_or(json!(target_ws_str));
+    let timeout_iterations = 150; // 30 seconds
+    
+    for _ in 0..timeout_iterations {
+        let clients = live_clients();
+        let mut found = None;
+        
+        for c in &clients {
+            let cls = c.get("class").and_then(|v| v.as_str()).unwrap_or("");
+            if cls.eq_ignore_ascii_case(class) {
+                let init_title = c.get("initialTitle").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                if class.eq_ignore_ascii_case("discord") && init_title.contains("updater") { continue; }
+                if class.eq_ignore_ascii_case("steam") && (init_title.contains("updating") || init_title == "sign in to steam") { continue; }
+                
+                found = Some(c.clone());
+                break;
+            }
+        }
+        
+        if let Some(c) = found {
+            let addr = c.get("address").and_then(|v| v.as_str()).unwrap_or("");
+            let addr_sel = if addr.starts_with("0x") { format!("address:{}", addr) } else { format!("address:0x{}", addr) };
+            
+            let mut batch = Vec::new();
+            let ws_param = get_dispatcher_workspace(&target_ws, &clients);
+            batch.push(format!("dispatch hl.dsp.window.move({{ workspace = {}, window = \"{}\", follow = false }})", ws_param, addr_sel));
+            
+            let float_action = if is_floating { "set" } else { "disable" };
+            batch.push(format!("dispatch hl.dsp.window.float({{ action = \"{}\", window = \"{}\" }})", float_action, addr_sel));
+            
+            if width > 0 && height > 0 {
+                batch.push(format!("dispatch hl.dsp.window.resize({{ x = {}, y = {}, relative = false, window = \"{}\" }})", width, height, addr_sel));
+                if is_floating {
+                    batch.push(format!("dispatch hl.dsp.window.move({{ x = {}, y = {}, relative = false, window = \"{}\" }})", x, y, addr_sel));
+                }
+            }
+            
+            hyprctl(&["--batch", &batch.join(";")]);
+            return;
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
+}
+
 fn cmd_restore(slug: &str) {
     let profile = match load_profile(slug) {
         Some(p) => p,
@@ -492,14 +537,7 @@ fn cmd_restore(slug: &str) {
     }
     
     if !missing_to_launch.is_empty() {
-        let has_slow_app = missing_to_launch.iter().any(|cmd| {
-            let lower = cmd.to_lowercase();
-            lower.contains("steam") || lower.contains("discord") || lower.contains("spotify") || lower.contains("slack")
-        });
-        
-        let iterations = if has_slow_app { 35 } else { 15 }; // 7s or 3s
-        
-        for _ in 0..iterations {
+        for _ in 0..15 {
             thread::sleep(Duration::from_millis(200));
             let fresh = live_clients();
             live_by_class.clear();
@@ -514,7 +552,7 @@ fn cmd_restore(slug: &str) {
                     break;
                 }
             }
-            if all_found && !has_slow_app { break; }
+            if all_found { break; }
         }
     }
     
@@ -529,7 +567,21 @@ fn cmd_restore(slug: &str) {
         });
         
         for sw in saved_list {
-            if available.is_empty() { continue; }
+            if available.is_empty() {
+                let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("workspace_profile_manager"));
+                Command::new(exe)
+                    .arg("watch")
+                    .arg(&sw.class)
+                    .arg(sw.workspace_id.to_string())
+                    .arg(sw.width.to_string())
+                    .arg(sw.height.to_string())
+                    .arg(sw.x.to_string())
+                    .arg(sw.y.to_string())
+                    .arg(if sw.floating { "1" } else { "0" })
+                    .spawn()
+                    .ok();
+                continue;
+            }
             let saved_area = sw.width * sw.height;
             
             available.sort_by(|a, b| {
@@ -767,6 +819,14 @@ fn main() {
         "delete_window" if args.len() >= 4 => cmd_delete_window(&args[2], &args[3]),
         "update_window_workspace" if args.len() >= 5 => cmd_update_window_workspace(&args[2], &args[3], &args[4]),
         "toggle_pin" if args.len() >= 3 => cmd_toggle_pin(&args[2]),
+        "watch" if args.len() >= 9 => {
+            let width = args[4].parse().unwrap_or(0);
+            let height = args[5].parse().unwrap_or(0);
+            let x = args[6].parse().unwrap_or(0);
+            let y = args[7].parse().unwrap_or(0);
+            let floating = args[8] == "1";
+            cmd_watch(&args[2], &args[3], width, height, x, y, floating);
+        },
         _ => std::process::exit(1),
     }
 }
