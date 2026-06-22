@@ -9,6 +9,7 @@ import QtQuick.Layouts
 MouseArea {
     id: root
     property bool borderless: Config.options.bar.borderless
+    property bool disablePopup: false
 
     readonly property var chargeState: Battery.chargeState
     readonly property bool isCharging: Battery.isCharging
@@ -294,8 +295,15 @@ MouseArea {
         }
     }
 
-    BatteryPopup {
-        id: batteryPopup
-        hoverTarget: root
+    Component {
+        id: popupComponent
+        BatteryPopup {
+            hoverTarget: root
+        }
+    }
+
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: popupComponent
     }
 }

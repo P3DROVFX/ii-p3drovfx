@@ -50,6 +50,12 @@ MouseArea {
                 property: "textColor"
                 value: Appearance.colors.colPrimary
             }
+
+            Binding {
+                target: batteryIcon.item
+                property: "disablePopup"
+                value: true
+            }
         }
     }
 

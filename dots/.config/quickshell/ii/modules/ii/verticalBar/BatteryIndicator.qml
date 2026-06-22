@@ -10,6 +10,7 @@ import Quickshell.Services.UPower
 MouseArea {
     id: root
     property bool borderless: Config.options.bar.borderless
+    property bool disablePopup: false
     visible: Battery.available
 
     Component.onCompleted: {
@@ -336,8 +337,15 @@ MouseArea {
         }
     }
 
-    Bar.BatteryPopup {
-        id: batteryPopup
-        hoverTarget: root
+    Component {
+        id: popupComponent
+        Bar.BatteryPopup {
+            hoverTarget: root
+        }
+    }
+
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: popupComponent
     }
 }
