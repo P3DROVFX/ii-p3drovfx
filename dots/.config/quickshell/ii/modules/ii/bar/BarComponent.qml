@@ -1,6 +1,7 @@
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -56,6 +57,7 @@ Item {
             "active_window": [activeWindowComp, activeWindowComp, activeWindowCompExpressive, activeWindowCompExpressive],
             "date": [dateCompVert, dateCompVert],
             "record_indicator": [recordIndicatorComp, recordIndicatorComp],
+            "phone_scrcpy_indicator": [phoneScrcpyIndicatorComp, phoneScrcpyIndicatorComp],
             "screen_share_indicator": [screenshareIndicatorComp, screenshareIndicatorComp],
             "timer": [timerComp, timerCompVert],
             "weather": [weatherComp, weatherComp, weatherCompExpressive, weatherCompExpressive],
@@ -104,10 +106,14 @@ Item {
             return true;
         if (modelData.id === "active_window" && Config.options.bar.styles.activeWindow === "expressive")
             return true;
+        if (modelData.id === "record_indicator")
+            return true;
+        if (modelData.id === "phone_scrcpy_indicator")
+            return true;
         return false;
     }
 
-    property list<string> primaryBackgroundComps: ["timer", "record_indicator", "screen_share_indicator"] // components that are mostly indicators
+    property list<string> primaryBackgroundComps: ["timer", "record_indicator", "phone_scrcpy_indicator", "screen_share_indicator"] // components that are mostly indicators
 
     property real startRadius: {
         if (barGroupStyle === 1)
@@ -238,6 +244,13 @@ Item {
     Component {
         id: recordIndicatorComp
         RecordIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+
+    Component {
+        id: phoneScrcpyIndicatorComp
+        PhoneScrcpyIndicator {
             vertical: rootItem.vertical
         }
     }

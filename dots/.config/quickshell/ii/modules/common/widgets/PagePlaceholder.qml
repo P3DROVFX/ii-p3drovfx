@@ -27,6 +27,10 @@ Item {
 
     ColumnLayout {
         anchors.centerIn: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
         spacing: 5
 
         MaterialShapeWrappedMaterialSymbol {
@@ -52,9 +56,10 @@ Item {
             id: widgetDescriptionText
             visible: description !== ""
             Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.m3colors.m3outline
-            horizontalAlignment: Text.AlignLeft
+            horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap
         }
     }

@@ -12,7 +12,7 @@ import Quickshell.Hyprland
 Scope { // Scope
     id: root
     property bool detach: false
-    property bool pin: false
+    property bool pin: GlobalStates.policiesPinned
     property Component contentComponent: SidebarPoliciesContent {}
     property Item sidebarContent
 
@@ -51,7 +51,7 @@ Scope { // Scope
             running = true;
         }
         function doIt3(output) {
-            root.pin = !root.pin;
+            GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
             command = ["bash", "-c", `sleep 0.01; hyprctl dispatch 'hl.dsp.cursor.move({x=${cursorX},y=${cursorY}})'`];
             hook = null
             running = true;
@@ -65,8 +65,8 @@ Scope { // Scope
 
     function togglePin() {
         if (GlobalStates.connectModeActive) return;
-        if (!root.pin) pinWithFunnyHyprlandWorkaroundProc.doIt()
-        else root.pin = !root.pin;
+        if (!GlobalStates.policiesPinned) pinWithFunnyHyprlandWorkaroundProc.doIt()
+        else GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
     }
 
     Component.onCompleted: {
@@ -120,8 +120,18 @@ Scope { // Scope
                 if (p.player !== 0) activeCount++;
                 if (p.wallpapers !== 0) activeCount++;
                 if (p.weeb !== 0 && p.weeb !== 2) activeCount++;
+                if (p.phone !== 0) activeCount++;
 
-                return activeCount >= 4 ? Appearance.sizes.sidebarWidthExpanded : Appearance.sizes.sidebarWidth;
+                // Keep Room for the toolbar with all tab buttons. Each
+                // ToolbarTabButton is ~130px (10 padding + 22 icon + 6 spacing
+                // + ~85 text + 10 padding). Plus 4 spacing between buttons,
+                // plus 16 internal toolbar padding, plus 24 sidebar padding.
+                // 160 per extra tab is a safe margin that accommodates
+                // translated strings that are wider than English (e.g.,
+                // "Inteligência", "Papéis de parede").
+                const minTabs = 3;
+                const perTabWidth = 160;
+                return Appearance.sizes.sidebarWidth + Math.max(0, activeCount - minTabs) * perTabWidth;
             }
             
             property var contentParent: sidebarLeftBackground
@@ -132,7 +142,7 @@ Scope { // Scope
 
             exclusionMode: ExclusionMode.Normal
             exclusiveZone: root.pin ? sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin : 0
-            implicitWidth: Appearance.sizes.sidebarWidthExtended + Appearance.sizes.elevationMargin
+            implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
             // Hyprland 0.49: OnDemand is Exclusive, Exclusive just breaks click-outside-to-close
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand

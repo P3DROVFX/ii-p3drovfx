@@ -22,7 +22,7 @@ MaterialShape {
         MaterialShape.Shape.SoftBoom
     ]
 
-    implicitSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 14
+    implicitSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 15
     color: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colSecondaryContainerHover
 
     Component.onCompleted: {

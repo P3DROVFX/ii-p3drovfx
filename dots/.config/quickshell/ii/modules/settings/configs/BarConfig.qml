@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -26,20 +27,11 @@ Item {
             const compInfo = BarComponentRegistry.getComponent(componentId);
             if (compInfo) {
                 if (typeof compInfo.sidebarPage !== "undefined") {
-                    var p = barConfigRoot;
-                    while(p && !p.hasOwnProperty("currentPage")) {
-                        p = p.parent;
-                    }
-                    if (p) {
-                        p.currentPage = compInfo.sidebarPage;
-                        if (componentId === "dashboard_panel_button") {
-                            let t = Qt.createQmlObject('import QtQuick; Timer { interval: 150; repeat: false }', barConfigRoot);
-                            t.triggered.connect(() => {
-                                SearchRegistry.currentSearch = Translation.tr("Dashboard Panel Button");
-                                t.destroy();
-                            });
-                            t.start();
-                        }
+                    var win = barConfigRoot.QsWindow.window;
+                    if (win && win.currentPage !== undefined) {
+                        if (compInfo.sectionTitle)
+                            win.pendingSectionHighlight = Translation.tr(compInfo.sectionTitle);
+                        win.currentPage = compInfo.sidebarPage;
                     }
                 } else if (compInfo.configPage) {
                     barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/" + compInfo.configPage);
@@ -297,6 +289,46 @@ Item {
             }
         }
 
+        // ── Top Left Brand Icon ───────────────────────────────────────────
+        ContentSection {
+            icon: "star"
+            title: Translation.tr("Top Left Brand Icon")
+
+            ConfigSwitch {
+                buttonIcon: "text_fields"
+                text: Translation.tr("Use Material Symbol for top-left icon")
+                checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                onCheckedChanged: {
+                    Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
+                }
+            }
+
+            ConfigTextField {
+                text: Translation.tr("Top-left icon identifier")
+                icon: "image"
+                tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
+                placeholderText: Translation.tr("Identifier...")
+
+                Component.onCompleted: {
+                    inputText = Config.options.bar.topLeftIcon;
+                }
+
+                Connections {
+                    target: Config.options.bar
+                    function onTopLeftIconChanged() {
+                        textField.text = Config.options.bar.topLeftIcon;
+                    }
+                }
+
+                textField.onTextChanged: {
+                    var val = textField.text.trim();
+                    if (val !== "" && textField.activeFocus) {
+                        Config.options.bar.topLeftIcon = val;
+                    }
+                }
+            }
+        }
+
         // ── Scroll Actions ────────────────────────────────────────────────
         ContentSection {
             icon: "mouse"
@@ -323,135 +355,6 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
-                }
-            }
-        }
-
-        // ── Top Left Brand Icon ───────────────────────────────────────────
-        ContentSection {
-            icon: "policy"
-            title: Translation.tr("Top Left Brand Icon")
-
-            ConfigSwitch {
-                buttonIcon: "text_fields"
-                text: Translation.tr("Use Material Symbol for Top Left Icon")
-                checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
-                onCheckedChanged: {
-                    Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
-                }
-            }
-
-            ConfigTextField {
-                text: Translation.tr("Top Left Icon identifier")
-                icon: "image"
-                tooltip: Translation.tr("If not using Material Symbol, this selects a preset SVG (e.g. arch, fedora)")
-                placeholderText: Translation.tr("Identifier...")
-
-                Component.onCompleted: {
-                    inputText = Config.options.bar.topLeftIcon;
-                }
-
-                Connections {
-                    target: Config.options.bar
-                    function onTopLeftIconChanged() {
-                        textField.text = Config.options.bar.topLeftIcon;
-                    }
-                }
-
-                textField.onTextChanged: {
-                    var val = textField.text.trim();
-                    if (val !== "" && textField.activeFocus) {
-                        Config.options.bar.topLeftIcon = val;
-                    }
-                }
-            }
-        }
-
-        // ── Notifications ───────────────────────────────────
-        ContentSection {
-            icon: "notifications"
-            title: Translation.tr("Notifications")
-
-            ConfigSpinBox {
-                icon: "timer"
-                text: Translation.tr("Timeout duration (ms)")
-                value: Config.options.notifications.timeout
-                from: 1000
-                to: 10000
-                stepSize: 500
-                onValueChanged: {
-                    Config.options.notifications.timeout = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "desktop_windows"
-                text: Translation.tr("Force specific monitor")
-                checked: Config.options.notifications.monitor.enable
-                onCheckedChanged: {
-                    Config.options.notifications.monitor.enable = checked;
-                }
-            }
-
-            ConfigTextField {
-                text: Translation.tr("Force monitor name")
-                icon: "desktop_windows"
-                visible: Config.options.notifications.monitor.enable
-                placeholderText: Translation.tr("Monitor Name (e.g. eDP-1)")
-                inputText: Config.options.notifications.monitor.name
-                
-                textField.onTextChanged: {
-                    if (textField.activeFocus) {
-                        Config.options.notifications.monitor.name = textField.text;
-                    }
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "counter_2"
-                text: Translation.tr("Show unread count")
-                checked: Config.options.bar.indicators.notifications.showUnreadCount
-                onCheckedChanged: {
-                    Config.options.bar.indicators.notifications.showUnreadCount = checked;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Notification indicator style")
-                icon: "notifications"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.styles.notification
-                    onSelected: newValue => { Config.options.bar.styles.notification = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Notification position")
-                icon: "place"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.notifications.position
-                    onSelected: newValue => { Config.options.notifications.position = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Top Left"),     icon: "align_horizontal_left",   value: "top_left" },
-                        { displayName: Translation.tr("Top"),          icon: "align_horizontal_center", value: "top" },
-                        { displayName: Translation.tr("Top Right"),    icon: "align_horizontal_right",  value: "top_right" }
-                    ]
-                }
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.notifications.position
-                    onSelected: newValue => { Config.options.notifications.position = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Bottom Left"),  icon: "align_horizontal_left",   value: "bottom_left" },
-                        { displayName: Translation.tr("Bottom"),       icon: "align_horizontal_center", value: "bottom" },
-                        { displayName: Translation.tr("Bottom Right"), icon: "align_horizontal_right",  value: "bottom_right" }
-                    ]
                 }
             }
         }
@@ -550,6 +453,9 @@ Item {
             active: subPageOverlay.overlayActive
 
             onLoaded: {
+                if (item.hasOwnProperty("showBackButton")) {
+                    item.showBackButton = true;
+                }
                 item.goBack.connect(function() {
                     barConfigRoot.activeSubPage = "";
                 });
@@ -557,3 +463,4 @@ Item {
         }
     }
 }
+

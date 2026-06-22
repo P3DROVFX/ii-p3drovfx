@@ -25,6 +25,62 @@ Scope {
     property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
     property list<real> visualizerPoints: []
 
+    property bool popupHovered: false
+    readonly property bool targetHovered: GlobalStates.mediaWidgetHovered
+    property bool stickyActive: false
+    property bool openedViaHover: false
+
+    property QtObject _timers: QtObject {
+        property Timer grace: Timer {
+            id: graceTimer
+            interval: 200 // 200ms grace period to transit from widget to popup
+            repeat: false
+            onTriggered: {
+                if (!GlobalStates.mediaControlsPinned) {
+                    root.stickyActive = false;
+                    GlobalStates.mediaControlsOpen = false;
+                }
+            }
+        }
+    }
+
+    function evaluateHoverState() {
+        if (!openedViaHover || GlobalStates.mediaControlsPinned)
+            return;
+
+        if (targetHovered || popupHovered) {
+            stickyActive = true;
+            _timers.grace.stop();
+        } else if (stickyActive && !_timers.grace.running) {
+            _timers.grace.start();
+        }
+    }
+
+    onTargetHoveredChanged: evaluateHoverState()
+    onPopupHoveredChanged: evaluateHoverState()
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen) {
+                root.openedViaHover = GlobalStates.mediaWidgetHovered;
+                if (root.openedViaHover) {
+                    root.stickyActive = true;
+                    root.evaluateHoverState();
+                }
+            } else {
+                root.openedViaHover = false;
+                root.stickyActive = false;
+                root._timers.grace.stop();
+            }
+        }
+        function onMediaControlsPinnedChanged() {
+            if (!GlobalStates.mediaControlsPinned) {
+                root.evaluateHoverState();
+            }
+        }
+    }
+
     function filterDuplicatePlayers(players) {
         let filtered = [];
         let used = new Set();
@@ -79,6 +135,9 @@ Scope {
             if (!mediaControlsLoader.active && root.realPlayers.length === 0) {
                 GlobalStates.mediaControlsOpen = false;
             }
+            if (!mediaControlsLoader.active) {
+                GlobalStates.mediaControlsPinned = false;
+            }
         }
 
         sourceComponent: PanelWindow {
@@ -90,7 +149,7 @@ Scope {
             implicitHeight: playerColumnLayout.implicitHeight
             color: "transparent"
             WlrLayershell.namespace: "quickshell:mediaControls"
-            
+
             readonly property var rect: GlobalStates.mediaPopupRect
             readonly property real barThickness: {
                 if (Config.options.bar.vertical) {
@@ -106,7 +165,8 @@ Scope {
             }
             margins {
                 top: {
-                    if (rect.width === 0) return 0;
+                    if (rect.width === 0)
+                        return 0;
                     if (Config.options.bar.vertical) {
                         let targetY = rect.y + (rect.height / 2) - (panelWindow.implicitHeight / 2);
                         return Math.max(0, Math.min(targetY, screen.height - panelWindow.implicitHeight));
@@ -119,7 +179,8 @@ Scope {
                     }
                 }
                 left: {
-                    if (rect.width === 0) return 0;
+                    if (rect.width === 0)
+                        return 0;
                     if (Config.options.bar.vertical) {
                         if (!Config.options.bar.bottom) {
                             return barThickness;
@@ -131,7 +192,8 @@ Scope {
                     }
                 }
                 right: {
-                    if (rect.width === 0) return 0;
+                    if (rect.width === 0)
+                        return 0;
                     if (Config.options.bar.vertical && Config.options.bar.bottom) {
                         return barThickness;
                     }
@@ -144,7 +206,9 @@ Scope {
             }
 
             Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(panelWindow);
+                if (!GlobalStates.mediaControlsPinned && !root.openedViaHover) {
+                    GlobalFocusGrab.addDismissable(panelWindow);
+                }
             }
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
@@ -152,7 +216,19 @@ Scope {
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    GlobalStates.mediaControlsOpen = false;
+                    if (!GlobalStates.mediaControlsPinned) {
+                        GlobalStates.mediaControlsOpen = false;
+                    }
+                }
+            }
+            Connections {
+                target: GlobalStates
+                function onMediaControlsPinnedChanged() {
+                    if (GlobalStates.mediaControlsPinned) {
+                        GlobalFocusGrab.removeDismissable(panelWindow);
+                    } else if (!root.openedViaHover) {
+                        GlobalFocusGrab.addDismissable(panelWindow);
+                    }
                 }
             }
 
@@ -161,6 +237,13 @@ Scope {
                 anchors.fill: parent
                 spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
 
+                HoverHandler {
+                    id: popupHoverHandler
+                    onHoveredChanged: {
+                        root.popupHovered = hovered;
+                    }
+                }
+
                 Repeater {
                     model: ScriptModel {
                         values: root.meaningfulPlayers
@@ -168,7 +251,7 @@ Scope {
                     delegate: Loader {
                         id: delegateLoader
                         required property MprisPlayer modelData
-                        
+
                         sourceComponent: Config.options.bar.mediaPlayer.expressivePopup ? expressiveComp : standardComp
 
                         Component {

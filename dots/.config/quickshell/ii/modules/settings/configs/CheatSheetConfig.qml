@@ -138,6 +138,16 @@ ContentPage {
             }
 
             ConfigSwitch {
+                enabled: Config.options.cheatsheet.enableTimetable
+                buttonIcon: "calendar_today"
+                text: Translation.tr("Timetable: start with today")
+                checked: Config.options.cheatsheet.timetableTodayFirst
+                onCheckedChanged: {
+                    Config.options.cheatsheet.timetableTodayFirst = checked;
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "experiment"
                 text: Translation.tr("Enable Elements")
                 checked: Config.options.cheatsheet.enablePeriodicTable

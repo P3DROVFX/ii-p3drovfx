@@ -21,6 +21,20 @@ ContentPage {
         spacing: 12
     }
 
+    Item {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        visible: searchPageRoot.queryString !== "" && searchPageRoot.results.length === 0
+
+        PagePlaceholder {
+            anchors.fill: parent
+            icon: "search_off"
+            shape: MaterialShape.Shape.Circle
+            title: Translation.tr("No results")
+            description: Translation.tr("No settings match your search.")
+        }
+    }
+
     function buildResults() {
         for (var i = dynamicContainer.children.length - 1; i >= 0; i--) {
             dynamicContainer.children[i].destroy();

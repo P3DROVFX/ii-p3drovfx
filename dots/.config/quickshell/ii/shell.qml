@@ -34,6 +34,14 @@ ShellRoot {
         Updates.load();
         DarkModeService.automatic;
         ChangelogService.load();
+        // Only spin up KdeConnectService if the Phone tab is enabled in
+        // config. Touching the singleton forces QML to instantiate it and
+        // runs its Component.onCompleted, which starts the DBus monitor,
+        // pgrep polling, and ADB probing. For users who don't use phone
+        // integration this is pure overhead.
+        if (Config.options?.policies?.phone !== 0) {
+            KdeConnectService.available;
+        }
         root.applyOpenRgbIfEnabled();
     }
 
@@ -88,6 +96,22 @@ ShellRoot {
         component: WaffleFamily {}
     }
 
+    // Settings app loaded in-process once requested, then kept alive
+    Loader {
+        id: settingsLoader
+        property bool loadedOnce: false
+        active: loadedOnce || GlobalStates.settingsOpen
+        source: "SettingsWindow.qml"
+
+        Connections {
+            target: GlobalStates
+            function onSettingsOpenChanged() {
+                if (GlobalStates.settingsOpen && !settingsLoader.loadedOnce)
+                    settingsLoader.loadedOnce = true;
+            }
+        }
+    }
+
     // Shortcuts
     IpcHandler {
         target: "panelFamily"
@@ -104,3 +128,10 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
+
+
+
+
+
+
+

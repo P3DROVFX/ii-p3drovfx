@@ -30,7 +30,8 @@ Item { // Bar content region
         enabled: Config.options.bar.barBackgroundStyle === 2
         target: HyprlandData
         function onWindowListChanged() {
-            const monitor = HyprlandData.monitors.find(m => m.id === monitorIndex);
+            const monitorName = root.screen ? root.screen.name : "";
+            const monitor = monitorName ? HyprlandData.monitors.find(m => m.name === monitorName) : null;
             const wsId = monitor?.activeWorkspace?.id;
 
             const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
@@ -75,40 +76,19 @@ Item { // Bar content region
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
+    // === Transparent bar background: simple color gradient (no blur) ===
+    // Uses a semi-transparent solid color that fades from a subtle tint at the
+    // screen edge to fully transparent at the content edge.
     Rectangle {
-        id: shadowSource
-        z: -12
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: !Config.options.bar.vertical && !Config.options.bar.bottom ? parent.top : undefined
-            bottom: !Config.options.bar.vertical && Config.options.bar.bottom ? parent.bottom : undefined
-            leftMargin: (Config.options.bar.vertical && !Config.options.bar.bottom) ? 0 : undefined
-            rightMargin: (Config.options.bar.vertical && Config.options.bar.bottom) ? 0 : undefined
-        }
-        width: Config.options.bar.vertical ? 1 : parent.width
-        height: Config.options.bar.vertical ? parent.height : 1
-        visible: Config.options.bar.barBackgroundStyle === 0
-        color: "transparent"
-    }
-
-    Rectangle {
+        id: transparentGradientLayer
         z: -11
         anchors.fill: parent
         visible: Config.options.bar.barBackgroundStyle === 0
+        readonly property bool barAtTop: !Config.options.bar.bottom
         gradient: Gradient {
-            GradientStop {
-                position: Config.options.bar.bottom ? 1.0 : 0.0
-                color: Qt.rgba(0, 0, 0, 0.6)
-            }
-            GradientStop {
-                position: Config.options.bar.bottom ? 0.6 : 0.4
-                color: Qt.rgba(0, 0, 0, 0.2)
-            }
-            GradientStop {
-                position: Config.options.bar.bottom ? 0.0 : 1.0
-                color: "transparent"
-            }
+            orientation: Gradient.Vertical
+            GradientStop { position: transparentGradientLayer.barAtTop ? 0.0 : 1.0; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.30) }
+            GradientStop { position: transparentGradientLayer.barAtTop ? 1.0 : 0.0; color: "transparent" }
         }
     }
 
@@ -118,7 +98,7 @@ Item { // Bar content region
         anchors.fill: parent
 
         property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
-        
+
         Behavior on actualColor {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(backgroundGroup)
         }
@@ -244,8 +224,10 @@ Item { // Bar content region
         }
         implicitHeight: Appearance.sizes.baseBarHeight
 
-        onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
-        onScrollUp: if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
+        onScrollDown: if (Config.options.bar.enableBrightnessScroll)
+            Brightness.decreaseBrightness()
+        onScrollUp: if (Config.options.bar.enableBrightnessScroll)
+            Brightness.increaseBrightness()
         onMovedAway: GlobalStates.osdBrightnessOpen = false
         onPressed: event => {
             if (event.button === Qt.LeftButton)
@@ -459,8 +441,10 @@ Item { // Bar content region
         }
         implicitHeight: Appearance.sizes.baseBarHeight
 
-        onScrollDown: if (Config.options.bar.enableVolumeScroll) Audio.decrementVolume()
-        onScrollUp: if (Config.options.bar.enableVolumeScroll) Audio.incrementVolume()
+        onScrollDown: if (Config.options.bar.enableVolumeScroll)
+            Audio.decrementVolume()
+        onScrollUp: if (Config.options.bar.enableVolumeScroll)
+            Audio.incrementVolume()
         onMovedAway: GlobalStates.osdVolumeOpen = false
         onPressed: event => {
             if (event.button === Qt.LeftButton) {

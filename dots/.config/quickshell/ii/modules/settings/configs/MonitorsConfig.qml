@@ -1132,8 +1132,8 @@ ContentPage {
     // ── Floating Action Buttons (Fixed Bottom-Right) ─────────────────────────
     RowLayout {
         parent: page.parent ? page.parent : page
-        anchors.bottom: parent?.bottom
-        anchors.right: parent?.right
+        anchors.bottom: parent ? parent.bottom : undefined
+        anchors.right: parent ? parent.right : undefined
         anchors.margins: 25
         spacing: 12
         z: 9999

@@ -54,8 +54,10 @@ Item {
     property bool artDownloaded: false
 
     readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
+        if (!artUrl)
+            return "";
+        if (isLocalArt)
+            return artUrl;
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
     }
 
@@ -134,9 +136,20 @@ Item {
     MouseArea {
         id: mediaMouseArea
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
+        onEntered: {
+            GlobalStates.setMediaWidgetHovered(true);
+            if (hoverEnabled) {
+                var globalPos = root.mapToItem(null, 0, 0);
+                GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+                GlobalStates.mediaControlsOpen = true;
+            }
+        }
+        onExited: {
+            GlobalStates.setMediaWidgetHovered(false);
+        }
         onPressed: event => {
             if (event.button === Qt.MiddleButton) {
                 activePlayer.togglePlaying();
@@ -145,9 +158,11 @@ Item {
             } else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton) {
                 activePlayer.next();
             } else if (event.button === Qt.LeftButton) {
-                var globalPos = root.mapToItem(null, 0, 0);
-                GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
-                GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+                if (!hoverEnabled) {
+                    var globalPos = root.mapToItem(null, 0, 0);
+                    GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+                    GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+                }
             }
         }
     }

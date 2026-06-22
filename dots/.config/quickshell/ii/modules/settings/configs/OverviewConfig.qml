@@ -54,21 +54,6 @@ ContentPage {
                 }
             }
 
-            ConfigSwitch {
-                enabled: Config.options.overview.enable
-                buttonIcon: "map"
-                text: Translation.tr("Use workspace map")
-                checked: Config.options.overview.useWorkspaceMap
-                onCheckedChanged: {
-                    Config.options.overview.useWorkspaceMap = checked;
-                    if (checked) {
-                        Config.options.overview.workspaceMap = JSON.parse(JSON.stringify(Config.options.bar.workspaces.workspaceMap || []));
-                    }
-                }
-                StyledToolTip {
-                    text: Translation.tr("Apply the same workspace map constraints to the Overview screen")
-                }
-            }
         }
 
         Item { Layout.preferredHeight: 16 }

@@ -25,8 +25,8 @@ Item {
     // readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
     // readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
 
-    readonly property bool useWorkspaceMap: Config.options.overview.useWorkspaceMap
-    readonly property list<int> workspaceMap: Config.options.overview.workspaceMap
+    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
     property int monitorIndex // to be set by parent
     property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
 

@@ -12,8 +12,9 @@ Item {
     // GPU compositing during sidebar animation: the 8 frame Rectangles/RoundCorners
     // all have anchor margins bound to animatedLeftSidebarWidth, which changes every
     // frame. layer.enabled lets the compositor cache the texture and skip per-frame
-    // CPU layout invalidation of all children.
-    layer.enabled: GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.animatedRightSidebarWidth > 0
+    // CPU layout invalidation of all children. Only active during animation to
+    // avoid unnecessary FBO re-renders while the sidebar is statically open.
+    layer.enabled: GlobalStates.leftSidebarAnimating || GlobalStates.rightSidebarAnimating
 
     property var screen: null
     property int frameThickness: Config.options.appearance.wrappedFrameThickness

@@ -29,7 +29,8 @@ Item {
             "CorePowerConfig.qml", "CoreTimeDateConfig.qml", "CoreLanguageConfig.qml",
             "CoreAlertsConfig.qml", "CoreMediaConfig.qml", "CorePoliciesConfig.qml",
             "CoreNetworkConfig.qml", "CoreFilesConfig.qml", "CoreWeatherConfig.qml",
-            "CoreTerminalConfig.qml", "CoreWaffleConfig.qml", "GameOverlayConfig.qml"
+            "CoreTerminalConfig.qml", "CoreWaffleConfig.qml", "GameOverlayConfig.qml",
+            "BTDeviceImagesConfig.qml", "DashboardButtonConfig.qml"
         ];
         
         

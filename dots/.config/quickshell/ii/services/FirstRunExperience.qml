@@ -33,6 +33,7 @@ Singleton {
     FileView {
         id: firstRunFileView
         path: Qt.resolvedUrl(firstRunFilePath)
+        atomicWrites: true
         onLoadFailed: (error) => {
             if (error == FileViewError.FileNotFound) {
                 firstRunFileView.setText(root.firstRunFileContent)

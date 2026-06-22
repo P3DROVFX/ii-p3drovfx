@@ -24,33 +24,27 @@ MouseArea {
     // Size calculation (dynamic and perfectly padded to prevent any overlapping)
     implicitWidth: vertical 
         ? Appearance.sizes.verticalBarWidth 
-        : (activelyRecording || isLoading ? (layoutHoriz.implicitWidth + 24) : 0)
+        : (activelyRecording || isLoading ? layoutHoriz.implicitWidth : 0)
     implicitHeight: vertical 
-        ? (activelyRecording || isLoading ? (layoutVert.implicitHeight + 24) : 0) 
+        ? (activelyRecording || isLoading ? layoutVert.implicitHeight : 0) 
         : Appearance.sizes.baseBarHeight
 
     visible: activelyRecording || isLoading
 
     Component.onCompleted: {
-        updateColors()
         updateHighlight()
         updateVisibility()
     }
     onActivelyRecordingChanged: {
-        updateColors()
         updateHighlight()
         updateVisibility()
     }
     onIsLoadingChanged: {
-        updateColors()
         updateHighlight()
         updateVisibility()
     }
     onIsPausedChanged: {
         updateHighlight()
-    }
-    onContainsMouseChanged: {
-        updateColors()
     }
 
     function updateVisibility() {
@@ -60,19 +54,6 @@ MouseArea {
     function updateHighlight() {
         // Highlight the bar item when recording (and not paused) or loading
         rootItem.toggleHighlight((activelyRecording && !isPaused) || isLoading)
-    }
-
-    // Proactively update BarGroup's background color dynamically on state/hover changes
-    function updateColors() {
-        if (indicator.isLoading) {
-            rootItem.colBackgroundHighlight = indicator.containsMouse 
-                ? Appearance.colors.colSecondaryContainerHover 
-                : Appearance.colors.colSecondaryContainer
-        } else {
-            rootItem.colBackgroundHighlight = indicator.containsMouse 
-                ? Appearance.colors.colErrorContainerHover 
-                : Appearance.colors.colErrorContainer
-        }
     }
 
     function formatTime(s) {
@@ -86,21 +67,31 @@ MouseArea {
         id: layoutHoriz
         visible: !indicator.vertical
         anchors.centerIn: parent
-        spacing: 8
+        spacing: 6
 
-        // Blinking dot when recording, or loading spinner / stop icon on hover
-        Item {
-            implicitWidth: 16
-            implicitHeight: 16
-            Layout.alignment: Qt.AlignVCenter
+        // Shape 1: Icon Shape
+        MaterialShape {
+            id: iconShapeHoriz
+            width: 32
+            height: 32
+            shape: MaterialShape.Shape.Cookie9Sided
+            color: indicator.isLoading 
+                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
 
-            // Loading spinner (high contrast on highlighted background)
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+
             MaterialSymbol {
-                visible: indicator.isLoading
                 anchors.centerIn: parent
-                text: "progress_activity"
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colOnSecondaryContainer
+                text: indicator.isLoading 
+                    ? "progress_activity" 
+                    : (indicator.containsMouse ? "stop" : "fiber_manual_record")
+                iconSize: indicator.isLoading ? 16 : (indicator.containsMouse ? 14 : 12)
+                color: indicator.isLoading 
+                    ? Appearance.colors.colOnSecondaryContainer 
+                    : Appearance.colors.colOnErrorContainer
 
                 RotationAnimator on rotation {
                     running: indicator.isLoading
@@ -109,44 +100,47 @@ MouseArea {
                     loops: Animation.Infinite
                 }
             }
+        }
 
-            // REC Dot / Stop Icon on hover
-            MaterialSymbol {
-                visible: !indicator.isLoading
-                anchors.centerIn: parent
-                text: indicator.containsMouse ? "stop" : "fiber_manual_record"
-                iconSize: indicator.containsMouse ? 14 : 12
-                color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
+        // Shape 2: Timer/Status Shape
+        Rectangle {
+            id: timerShapeHoriz
+            height: 32
+            implicitWidth: timerLayoutHoriz.implicitWidth + 16
+            radius: height / 2
+            color: indicator.isLoading 
+                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+            opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.6 : 1.0
 
-                SequentialAnimation on opacity {
-                    running: indicator.activelyRecording && !indicator.isPaused && !indicator.containsMouse
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutSine }
-                }
-                opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.5 : 1.0
+            Behavior on color {
+                ColorAnimation { duration: 150 }
             }
-        }
+            Behavior on opacity {
+                NumberAnimation { duration: 150 }
+            }
 
-        // Timer Text (high contrast colOnErrorContainer when active, colSubtext when paused)
-        StyledText {
-            visible: !indicator.isLoading
-            text: indicator.formatTime(indicator.elapsedSeconds)
-            color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.features: ({ "tnum": 1 })
-            font.weight: Font.Bold
-            Layout.alignment: Qt.AlignVCenter
-        }
+            RowLayout {
+                id: timerLayoutHoriz
+                anchors.centerIn: parent
 
-        // Quick Indicator label if loading
-        StyledText {
-            visible: indicator.isLoading
-            text: Translation.tr("REC...")
-            color: Appearance.colors.colOnSecondaryContainer
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Bold
-            Layout.alignment: Qt.AlignVCenter
+                StyledText {
+                    visible: !indicator.isLoading
+                    text: indicator.formatTime(indicator.elapsedSeconds)
+                    color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.features: ({ "tnum": 1 })
+                    font.weight: Font.Bold
+                }
+
+                StyledText {
+                    visible: indicator.isLoading
+                    text: Translation.tr("REC...")
+                    color: Appearance.colors.colOnSecondaryContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                }
+            }
         }
     }
 
@@ -157,18 +151,30 @@ MouseArea {
         anchors.centerIn: parent
         spacing: 6
 
-        // Blinking dot / Loading spinner / Stop Icon on hover
-        Item {
-            implicitWidth: 16
-            implicitHeight: 16
+        // Shape 1: Icon Shape
+        MaterialShape {
+            id: iconShapeVert
+            width: 32
+            height: 32
+            shape: MaterialShape.Shape.Cookie9Sided
+            color: indicator.isLoading 
+                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
             Layout.alignment: Qt.AlignHCenter
 
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+
             MaterialSymbol {
-                visible: indicator.isLoading
                 anchors.centerIn: parent
-                text: "progress_activity"
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colOnSecondaryContainer
+                text: indicator.isLoading 
+                    ? "progress_activity" 
+                    : (indicator.containsMouse ? "stop" : "fiber_manual_record")
+                iconSize: indicator.isLoading ? 16 : (indicator.containsMouse ? 14 : 12)
+                color: indicator.isLoading 
+                    ? Appearance.colors.colOnSecondaryContainer 
+                    : Appearance.colors.colOnErrorContainer
 
                 RotationAnimator on rotation {
                     running: indicator.isLoading
@@ -177,43 +183,81 @@ MouseArea {
                     loops: Animation.Infinite
                 }
             }
+        }
 
-            MaterialSymbol {
-                visible: !indicator.isLoading
-                anchors.centerIn: parent
-                text: indicator.containsMouse ? "stop" : "fiber_manual_record"
-                iconSize: indicator.containsMouse ? 14 : 12
-                color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
+        // Shape 2: Timer/Status Shape (vertical pill)
+        Rectangle {
+            id: timerShapeVert
+            width: 32
+            implicitHeight: timerLayoutVert.implicitHeight + 12
+            radius: width / 2
+            color: indicator.isLoading 
+                ? (indicator.containsMouse ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer)
+                : (indicator.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
+            Layout.alignment: Qt.AlignHCenter
+            opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.6 : 1.0
 
-                SequentialAnimation on opacity {
-                    running: indicator.activelyRecording && !indicator.isPaused && !indicator.containsMouse
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutSine }
-                    NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutSine }
-                }
-                opacity: (indicator.isPaused && !indicator.containsMouse) ? 0.5 : 1.0
+            Behavior on color {
+                ColorAnimation { duration: 150 }
             }
-        }
+            Behavior on opacity {
+                NumberAnimation { duration: 150 }
+            }
 
-        // Vertical Timer digits (Minutes on top, Seconds below)
-        StyledText {
-            visible: !indicator.isLoading
-            Layout.alignment: Qt.AlignHCenter
-            text: indicator.formatTime(indicator.elapsedSeconds).substring(0, 2)
-            color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Bold
-            font.features: ({ "tnum": 1 })
-        }
+            ColumnLayout {
+                id: timerLayoutVert
+                anchors.centerIn: parent
+                spacing: 2
 
-        StyledText {
-            visible: !indicator.isLoading
-            Layout.alignment: Qt.AlignHCenter
-            text: indicator.formatTime(indicator.elapsedSeconds).substring(3, 5)
-            color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Bold
-            font.features: ({ "tnum": 1 })
+                StyledText {
+                    visible: !indicator.isLoading
+                    Layout.alignment: Qt.AlignHCenter
+                    text: indicator.formatTime(indicator.elapsedSeconds).substring(0, 2)
+                    color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                }
+
+                StyledText {
+                    visible: !indicator.isLoading
+                    Layout.alignment: Qt.AlignHCenter
+                    text: indicator.formatTime(indicator.elapsedSeconds).substring(3, 5)
+                    color: indicator.isPaused ? Appearance.colors.colSubtext : Appearance.colors.colOnErrorContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                }
+
+                // Vertical stacked letters for "REC" when loading
+                Column {
+                    visible: indicator.isLoading
+                    spacing: 1
+                    Layout.alignment: Qt.AlignHCenter
+
+                    StyledText {
+                        text: "R"
+                        color: Appearance.colors.colOnSecondaryContainer
+                        font.pixelSize: 10
+                        font.weight: Font.Black
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                    StyledText {
+                        text: "E"
+                        color: Appearance.colors.colOnSecondaryContainer
+                        font.pixelSize: 10
+                        font.weight: Font.Black
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                    StyledText {
+                        text: "C"
+                        color: Appearance.colors.colOnSecondaryContainer
+                        font.pixelSize: 10
+                        font.weight: Font.Black
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+                }
+            }
         }
     }
 

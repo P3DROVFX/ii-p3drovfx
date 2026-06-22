@@ -14,6 +14,17 @@ Singleton {
     property bool ready: false
     property string previousHyprlandInstanceSignature: ""
     property bool isNewHyprlandInstance: previousHyprlandInstanceSignature !== states.hyprlandInstanceSignature
+    // See Config.qml for the rationale on these guards. Same pattern: avoid
+    // clobbering the on-disk states.json with QML defaults during transient
+    // file inaccessibility, and write atomically so a kill mid-save cannot
+    // corrupt the file.
+    property bool blockWrites: false
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 5000
+    property int missingFileRetryInterval: 1500
+    // Same write guard as Config.qml — prevents hot-reload race condition.
+    // Increased from 3000 to 5000 to match Config.qml.
+    property int writeGuardDelay: 5000
 
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature;
@@ -34,7 +45,29 @@ Singleton {
         interval: 100
         repeat: false
         onTriggered: {
+            if (root.blockWrites) {
+                return;
+            }
+            if (!root.ready) {
+                fileWriteTimer.restart();
+                return;
+            }
+            // Extra guard: see Config.qml for rationale.
+            const elapsed = Date.now() - root.initTimestamp;
+            if (elapsed < root.writeGuardDelay) {
+                fileWriteTimer.restart();
+                return;
+            }
             persistentStatesFileView.writeAdapter();
+        }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: {
+            persistentStatesFileView.reload();
         }
     }
 
@@ -43,13 +76,22 @@ Singleton {
         path: root.filePath
 
         watchChanges: true
+        atomicWrites: true
+        blockWrites: root.blockWrites
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: fileWriteTimer.restart()
         onLoaded: root.ready = true
         onLoadFailed: error => {
             console.log("Failed to load persistent states file:", error);
-            if (error == FileViewError.FileNotFound) {
+            if (error != FileViewError.FileNotFound) {
+                return;
+            }
+            const elapsed = Date.now() - root.initTimestamp;
+            if (elapsed > root.missingFileGracePeriod) {
                 fileWriteTimer.restart();
+                root.ready = true;
+            } else {
+                missingFileRetryTimer.restart();
             }
         }
 
@@ -82,6 +124,11 @@ Singleton {
             property JsonObject sidebar: JsonObject {
                 property JsonObject policies: JsonObject {
                     property int tab: 0
+                    property JsonObject phone: JsonObject {
+                        property string activeDeviceId: ""
+                        property list<string> recentDeviceIds: []
+                        property string cachedNotificationsJson: ""
+                    }
                 }
                 property JsonObject bottomGroup: JsonObject {
                     property bool collapsed: false
@@ -172,6 +219,10 @@ Singleton {
                     property real height: 330
                     property int tabIndex: 0
                 }
+            }
+
+            property JsonObject phoneMic: JsonObject {
+                property string originalDefaultSink: ""
             }
 
             property JsonObject screenRecord: JsonObject {

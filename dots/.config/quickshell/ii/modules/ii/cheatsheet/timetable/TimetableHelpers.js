@@ -28,10 +28,14 @@ function minutesToKhalTimeStr(totalMinutes) {
     return (hour < 10 ? "0" : "") + hour + ":" + (minute < 10 ? "0" : "") + minute;
 }
 
-function getDateForDayIndex(dayIndex, firstDayOfWeek) {
+function getDateForDayIndex(dayIndex, firstDayOfWeek, todayFirst) {
     let d = new Date();
-    let currentConfigDayIndex = (d.getDay() - firstDayOfWeek + 6) % 7;
-    d.setDate(d.getDate() - currentConfigDayIndex + dayIndex);
+    if (todayFirst) {
+        d.setDate(d.getDate() + dayIndex);
+    } else {
+        let currentConfigDayIndex = (d.getDay() - firstDayOfWeek + 6) % 7;
+        d.setDate(d.getDate() - currentConfigDayIndex + dayIndex);
+    }
     return d;
 }
 

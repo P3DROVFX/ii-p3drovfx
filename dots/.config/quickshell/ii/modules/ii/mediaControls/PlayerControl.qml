@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.widgets
+import qs
 import qs.services
 import qs.modules.common.functions
 import Qt5Compat.GraphicalEffects
@@ -67,23 +68,23 @@ Item { // Player instance
         interval: Config.options.resources.updateInterval
         repeat: true
         onTriggered: {
-            root.player.positionChanged()
+            root.player.positionChanged();
         }
     }
 
     onArtFilePathChanged: {
         if (root.artUrl.length == 0) {
-            root.artDominantColor = Appearance.m3colors.m3secondaryContainer
+            root.artDominantColor = Appearance.m3colors.m3secondaryContainer;
             return;
         }
 
         // Binding does not work in Process
-        coverArtDownloader.targetFile = root.artUrl 
-        coverArtDownloader.artFilePath = root.artFilePath
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp"
+        coverArtDownloader.targetFile = root.artUrl;
+        coverArtDownloader.artFilePath = root.artFilePath;
+        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
         // Download
-        root.downloaded = false
-        coverArtDownloader.running = true
+        root.downloaded = false;
+        coverArtDownloader.running = true;
     }
 
     Process { // Cover art downloader
@@ -91,9 +92,9 @@ Item { // Player instance
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')` ]
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
         onExited: (exitCode, exitStatus) => {
-            root.downloaded = true
+            root.downloaded = true;
         }
     }
 
@@ -221,7 +222,9 @@ Item { // Player instance
                     animationDistanceX: 6
                     animationDistanceY: 0
                 }
-                Item { Layout.fillHeight: true }
+                Item {
+                    Layout.fillHeight: true
+                }
                 Item {
                     Layout.fillWidth: true
                     implicitHeight: Math.max(playPauseButton.height, trackTime.implicitHeight) + (root.compactMode ? 1 : 5) + sliderRow.implicitHeight
@@ -257,7 +260,7 @@ Item { // Player instance
                                 id: sliderLoader
                                 anchors.fill: parent
                                 active: root.player?.canSeek ?? false
-                                sourceComponent: StyledSlider { 
+                                sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
@@ -277,15 +280,13 @@ Item { // Player instance
                                     right: parent.right
                                 }
                                 active: !(root.player?.canSeek ?? false)
-                                sourceComponent: StyledProgressBar { 
+                                sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     value: root.player?.position / root.player?.length
                                 }
                             }
-
-                            
                         }
                         TrackChangeButton {
                             iconName: "skip_next"
@@ -297,12 +298,10 @@ Item { // Player instance
                             visible: root.showPinButton
                             iconName: "keep"
                             buttonSize: 18
-                            fill: MprisController.activePlayer == root.player
-                            downAction: () => MprisController.activePlayer = root.player
+                            fill: GlobalStates.mediaControlsPinned
+                            downAction: () => GlobalStates.mediaControlsPinned = !GlobalStates.mediaControlsPinned
                         }
                     }
-
-                    
 
                     RippleButton {
                         id: playPauseButton
@@ -312,7 +311,7 @@ Item { // Player instance
                         property real size: root.playPauseButtonSize
                         implicitWidth: size
                         implicitHeight: size
-                        downAction: () => root.player.togglePlaying();
+                        downAction: () => root.player.togglePlaying()
 
                         buttonRadius: root.player?.isPlaying ? Appearance?.rounding.normal : size / 2
                         colBackground: root.player?.isPlaying ? blendedColors.colPrimary : blendedColors.colSecondaryContainer

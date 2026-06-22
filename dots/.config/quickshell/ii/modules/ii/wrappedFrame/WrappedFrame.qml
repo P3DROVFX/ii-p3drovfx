@@ -44,7 +44,7 @@ Item {
                     enabled: Config.options.bar.barBackgroundStyle === 2
                     target: HyprlandData
                     function onWindowListChanged() {
-                        const monitor = HyprlandData.monitors.find(m => m.id === monitorScope.index);
+                        const monitor = HyprlandData.monitors.find(m => m.name === monitorScope.modelData.name);
                         const wsId = monitor?.activeWorkspace?.id;
 
                         const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;

@@ -25,6 +25,21 @@ MouseArea {
     property color textColor: Appearance.colors.colOnSurface
     visible: Battery.available
 
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(Battery.available);
+        }
+    }
+
+    Connections {
+        target: Battery
+        function onAvailableChanged() {
+            if (typeof rootItem !== "undefined") {
+                rootItem.toggleVisible(Battery.available);
+            }
+        }
+    }
+
     implicitWidth: {
         if (Config.options.battery.style === "android16")
             return android16Battery.width + 12;

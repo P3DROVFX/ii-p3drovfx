@@ -16,6 +16,11 @@ Singleton {
 
     readonly property string filePath: Directories.commandsPath
 
+    // See Config.qml for the rationale on these guards.
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 2000
+    property int missingFileRetryInterval: 1500
+
     function save() {
         const arr = [];
         for (let i = 0; i < commandsModel.count; i++) {
@@ -145,6 +150,7 @@ Singleton {
     FileView {
         id: fileView
         path: Qt.resolvedUrl(root.filePath)
+        atomicWrites: true
         onLoaded: {
             try {
                 const data = JSON.parse(fileView.text());
@@ -165,13 +171,27 @@ Singleton {
             }
         }
         onLoadFailed: (error) => {
-            if (error == FileViewError.FileNotFound) {
-                console.log("[CommandsService] File not found, creating new file.");
+            if (error != FileViewError.FileNotFound) {
+                console.log("[CommandsService] Load error: " + error);
+                return;
+            }
+            // Lazy creation of an empty commands file: defer it past the
+            // startup grace window so a transient missing file (hot-reload /
+            // restart) doesn't wipe the user's existing commands.json with "[]".
+            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
+                console.log("[CommandsService] File genuinely missing, creating new file.");
                 fileView.setText("[]");
             } else {
-                console.log("[CommandsService] Load error: " + error);
+                missingFileRetryTimer.restart();
             }
         }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: fileView.reload()
     }
 
     Component.onCompleted: fileView.reload()

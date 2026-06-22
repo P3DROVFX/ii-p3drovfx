@@ -20,6 +20,8 @@ LockScreen {
         repeat: false
         onTriggered: {
             var batch = ""
+            var style = Config.options.background.parallax.vertical ? "slidevert" : "slide"
+            batch += "hyprctl keyword animation workspaces,1,7,menu_decel," + style + "; "
             for (var j = 0; j < Quickshell.screens.length; ++j) {
                 var monName = Quickshell.screens[j].name
                 var wsId = root.savedWorkspaces[monName]
@@ -44,7 +46,7 @@ LockScreen {
             if (GlobalStates.screenLocked) {
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
                 var next = {}
-                var batch = "keyword animation workspaces,1,7,menu_decel,slidevert; "
+                var batch = "hyprctl keyword animation workspaces,1,7,menu_decel,slidevert; "
                 for (var i = 0; i < Quickshell.screens.length; ++i) {
                     var mon = Quickshell.screens[i] ? Quickshell.screens[i].name : null
                     if (!mon) continue;

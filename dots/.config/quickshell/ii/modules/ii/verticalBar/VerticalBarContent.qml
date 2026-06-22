@@ -23,7 +23,8 @@ Item { // Bar content region
         enabled: Config.options.bar.barBackgroundStyle === 2
         target: HyprlandData
         function onWindowListChanged() {
-            const monitor = HyprlandData.monitors.find(m => m.id === monitorIndex);
+            const monitorName = root.screen ? root.screen.name : "";
+            const monitor = monitorName ? HyprlandData.monitors.find(m => m.name === monitorName) : null;
             const wsId = monitor?.activeWorkspace?.id;
 
             const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
@@ -66,24 +67,19 @@ Item { // Bar content region
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
+    // === Transparent bar background: simple color gradient (no blur) ===
+    // Uses a semi-transparent solid color that fades from a subtle tint at the
+    // screen edge to fully transparent at the content edge.
     Rectangle {
+        id: transparentGradientLayer
         z: -11
         anchors.fill: parent
         visible: Config.options.bar.barBackgroundStyle === 0
+        readonly property bool barAtLeft: !Config.options.bar.bottom
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop {
-                position: Config.options.bar.bottom ? 1.0 : 0.0
-                color: Qt.rgba(0, 0, 0, 0.6)
-            }
-            GradientStop {
-                position: Config.options.bar.bottom ? 0.6 : 0.4
-                color: Qt.rgba(0, 0, 0, 0.2)
-            }
-            GradientStop {
-                position: Config.options.bar.bottom ? 0.0 : 1.0
-                color: "transparent"
-            }
+            GradientStop { position: transparentGradientLayer.barAtLeft ? 0.0 : 1.0; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.30) }
+            GradientStop { position: transparentGradientLayer.barAtLeft ? 1.0 : 0.0; color: "transparent" }
         }
     }
 

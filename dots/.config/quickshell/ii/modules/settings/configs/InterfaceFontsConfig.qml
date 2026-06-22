@@ -170,50 +170,15 @@ ContentPage {
             }
         }
 
-        HelperLinkBox {
-            Layout.fillWidth: true
-            title: Translation.tr("Themed icons configuration")
-            text: Translation.tr("You can configure specific tint settings for different interface elements below:")
-            
-            ConfigSwitch {
-                Layout.fillWidth: true
-                enabled: Config.options.dock.enable
-                buttonIcon: "palette"
-                text: Translation.tr("Tint dock icons")
-                checked: Config.options.dock.monochromeIcons
-                onCheckedChanged: {
-                    Config.options.dock.monochromeIcons = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Applies monochrome tint to dock icons")
-                }
+        ConfigSwitch {
+            buttonIcon: "palette"
+            text: Translation.tr("Tint workspaces icons")
+            checked: Config.options.bar.workspaces.monochromeIcons
+            onCheckedChanged: {
+                Config.options.bar.workspaces.monochromeIcons = checked;
             }
-
-            ConfigSwitch {
-                Layout.fillWidth: true
-                enabled: Config.options.dock.enable && !Config.options.dock.monochromeIcons
-                buttonIcon: "tonality"
-                text: Translation.tr("Dim inactive dock icons")
-                checked: Config.options.dock.dimInactiveIcons
-                onCheckedChanged: {
-                    Config.options.dock.dimInactiveIcons = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Dims icons of inactive applications in the dock")
-                }
-            }
-
-            ConfigSwitch {
-                Layout.fillWidth: true
-                buttonIcon: "palette"
-                text: Translation.tr("Tint workspaces icons")
-                checked: Config.options.bar.workspaces.monochromeIcons
-                onCheckedChanged: {
-                    Config.options.bar.workspaces.monochromeIcons = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Applies monochrome tint to workspaces icons. Turn on show workspace icons to see this")
-                }
+            StyledToolTip {
+                text: Translation.tr("Applies monochrome tint to workspaces icons. Turn on show workspace icons to see this")
             }
         }
     }

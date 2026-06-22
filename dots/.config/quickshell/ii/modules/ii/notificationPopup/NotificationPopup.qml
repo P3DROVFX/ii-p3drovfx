@@ -16,7 +16,12 @@ Scope {
         visible: (Notifications.popupList.length > 0) && !GlobalStates.screenLocked
         screen: Quickshell.screens.find(s => Config.options.notifications.monitor.enable ? s.name === Config.options.notifications.monitor.name : s.name === Hyprland.focusedMonitor?.name) ?? null
 
-        property string position: Config.options.notifications.position ?? "top_right"
+        property string position: {
+            const raw = Config.options.notifications.position ?? "top_right"
+            if (raw === "top") return "top_right"
+            if (raw === "bottom") return "bottom_right"
+            return raw
+        }
         property bool isTop: position.startsWith("top")
         property bool isBottom: position.startsWith("bottom")
         property bool isLeft: position.endsWith("left")
@@ -64,18 +69,6 @@ Scope {
                     }
                 },
                 State {
-                    name: "top"
-                    when: root.position === "top"
-                    AnchorChanges {
-                        target: listview
-                        anchors.left: undefined
-                        anchors.right: undefined
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        anchors.bottom: undefined
-                    }
-                },
-                State {
                     name: "top_right"
                     when: root.position === "top_right"
                     AnchorChanges {
@@ -95,18 +88,6 @@ Scope {
                         anchors.left: parent.left
                         anchors.right: undefined
                         anchors.horizontalCenter: undefined
-                        anchors.top: undefined
-                        anchors.bottom: parent.bottom
-                    }
-                },
-                State {
-                    name: "bottom"
-                    when: root.position === "bottom"
-                    AnchorChanges {
-                        target: listview
-                        anchors.left: undefined
-                        anchors.right: undefined
-                        anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: undefined
                         anchors.bottom: parent.bottom
                     }

@@ -87,6 +87,7 @@ Item {
             anchors.fill: parent
             anchors.margins: parent.height * 0.04
             spacing: 0
+            visible: root.player !== null
 
             // ── Player selector ──
             StyledComboBox {
@@ -426,6 +427,48 @@ Item {
                         text: "volume_up"
                     }
                 }
+            }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 24
+            spacing: 16
+            visible: root.player === null
+
+            Item {
+                Layout.fillHeight: true
+            }
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignHCenter
+                text: "music_off"
+                iconSize: 64
+                color: Appearance.colors.colSubtext
+            }
+
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                text: Translation.tr("No Active Media")
+                font.pixelSize: Appearance.font.pixelSize.huge
+                font.weight: Font.Bold
+                color: root.activeTitleColor
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            StyledText {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: parent.width * 0.85
+                text: Translation.tr("Play media from any player (Spotify, browser, etc.) to control playback and view lyrics here.")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: root.activeSubtextColor
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+            }
+
+            Item {
+                Layout.fillHeight: true
             }
         }
     }

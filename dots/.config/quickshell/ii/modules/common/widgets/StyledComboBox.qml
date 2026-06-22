@@ -10,6 +10,8 @@ import qs.modules.common.functions
 ComboBox {
     id: root
 
+    hoverEnabled: true
+
     property string buttonIcon: ""
     property real buttonRadius: Appearance.rounding.full
     property real topLeftRadius: buttonRadius

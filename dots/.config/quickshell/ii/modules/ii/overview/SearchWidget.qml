@@ -15,6 +15,8 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    width: implicitWidth
+    height: implicitHeight
     signal requestToggleActions
 
     readonly property string xdgConfigHome: Directories.config
@@ -269,7 +271,17 @@ Item {
     Rectangle {
         id: searchWidgetContent
         anchors.horizontalCenter: parent.horizontalCenter
+        width: implicitWidth
+        height: implicitHeight
         clip: true
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Rectangle {
+                width: searchWidgetContent.width
+                height: searchWidgetContent.height
+                radius: searchWidgetContent.radius
+            }
+        }
         implicitWidth: {
             if (root.isBluetoothMode)
                 return Config.options.search.clipboard.panelWidth ?? 860;

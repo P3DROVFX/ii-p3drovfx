@@ -139,7 +139,7 @@ PanelWindow {
                     enabled: Config.options.bar.barBackgroundStyle === 2
                     target: HyprlandData
                     function onWindowListChanged() {
-                        const monitor = HyprlandData.monitors.find(m => m.id === hBarItem.monitorIndex);
+                        const monitor = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
                         const wsId = monitor?.activeWorkspace?.id;
                         const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
                         hBarItem.hasActiveWindows = hasWindow;
@@ -331,7 +331,7 @@ PanelWindow {
                     enabled: Config.options.bar.barBackgroundStyle === 2
                     target: HyprlandData
                     function onWindowListChanged() {
-                        const monitor = HyprlandData.monitors.find(m => m.id === vBarItem.monitorIndex);
+                        const monitor = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
                         const wsId = monitor?.activeWorkspace?.id;
                         const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
                         vBarItem.hasActiveWindows = hasWindow;
@@ -526,8 +526,12 @@ PanelWindow {
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
-        // Active whenever sidebar is visible (open or closing) so both directions benefit.
-        layer.enabled: GlobalStates.animatedLeftSidebarWidth > 0
+        // Only active DURING the open/close animation — not while the sidebar is
+        // statically open. Keeping it on while open caused massive CPU usage
+        // because every minor visual change (timer ticks, notification syncs,
+        // infinite pulse animations, gradient behaviors) forced a full FBO
+        // re-render of the entire Phone tab subtree.
+        layer.enabled: GlobalStates.leftSidebarAnimating
 
         Loader {
             active: !GlobalStates.policiesDetached

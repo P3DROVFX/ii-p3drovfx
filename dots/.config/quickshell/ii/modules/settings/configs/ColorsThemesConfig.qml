@@ -32,8 +32,8 @@ ContentPage {
         id: restartFab
         parent: pageRoot.parent
         anchors {
-            right: parent?.right
-            bottom: parent?.bottom
+            right: parent ? parent.right : undefined
+            bottom: parent ? parent.bottom : undefined
             margins: 30
         }
         z: 100

@@ -99,7 +99,11 @@ Singleton {
 
         for (let i = 0; i < root.weekdays.length; i++) {
             const d = new Date(now);
-            d.setDate(d.getDate() - currentConfiguredDayIndex + i);
+            if (Config.options.cheatsheet.timetableTodayFirst) {
+                d.setDate(d.getDate() + i);
+            } else {
+                d.setDate(d.getDate() - currentConfiguredDayIndex + i);
+            }
             const events = this.getTasksByDate(d);
             const name_weekday = root.weekdays[d.getDay()];
             let obj = {
@@ -351,5 +355,12 @@ Singleton {
         console.log("[CalendarService] Importing ICS:", path, "autoDelete:", !!autoDelete);
         icsImportProcess.command = ["python3", Directories.scriptPath + "/email/import_ics.py", path, autoDelete ? "true" : "false"];
         icsImportProcess.running = true;
+    }
+
+    Connections {
+        target: Config.options.cheatsheet
+        function onTimetableTodayFirstChanged() {
+            root.eventsInWeek = root.getEventsInWeek();
+        }
     }
 }

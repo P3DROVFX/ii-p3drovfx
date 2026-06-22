@@ -1,0 +1,43 @@
+groups=(illogical-impulse)
+pkgname=illogical-impulse-phone
+pkgver=2.0
+pkgrel=1
+pkgdesc='Illogical Impulse Phone Integration Dependencies (KDE Connect + scrcpy + DroidCam)'
+arch=(any)
+license=(None)
+depends=(
+  # ── KDE Connect (backbone of the Phone tab) ───────────────
+  kdeconnect
+  # ── scrcpy (screen mirror + mic backend) ─────────────────
+  scrcpy
+  # ── ADB (USB connection, quick actions, intents) ──────────
+  android-tools
+  # ── Audio routing (null-sink creation for phone mic) ─────
+  pulseaudio-utils
+  # ── V4L2 utils (device detection, mirror/flip controls) ──
+  v4l-utils
+  # ── Python DBus bindings (monitor.py, fetch_notifications.py)
+  python-dbus
+  # ── Python GObject introspection (GLib mainloop in monitor.py)
+  python-gobject
+  # ── Clipboard (wl-copy for install guide copy buttons) ──
+  wl-clipboard
+  # ── Notifications (notify-send for battery alerts) ───────
+  libnotify
+  # ── File manager (gio open for SFTP browse fallback) ─────
+  # glib2 provides gio; installed as part of the base system
+)
+
+optdepends=(
+  # ── DroidCam (alternative backend for webcam + mic) ────────
+  # Install from https://www.dev47apps.com/droidcam/linux/
+  # or AUR: droidcam (bundles v4l2loopback-dc kernel module)
+  'droidcam: phone webcam via DroidCam (alternative to scrcpy)'
+  'v4l2loopback-dkms: kernel module for DroidCam webcam (required for DroidCam)'
+  # ── Preview window for webcam ─────────────────────────────
+  'mpv: low-latency webcam preview window'
+  # ── SFTP file browsing fallback ───────────────────────────
+  'sshfs: mount phone filesystem via SFTP'
+  # ── Window management fallback ────────────────────────────
+  'wmctrl: focus scrcpy window (fallback to hyprctl)'
+)

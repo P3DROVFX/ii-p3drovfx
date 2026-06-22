@@ -46,6 +46,7 @@ Item {
         id: pill
         visible: root.isMaterial
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: root.vertical ? 0 : -1
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
@@ -62,7 +63,7 @@ Item {
         property real dashOffset: 0
 
         implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 10
-        implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 8
+        implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 9
 
         width: implicitWidth
         height: implicitHeight
@@ -150,8 +151,9 @@ Item {
     Grid {
         id: flow
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: root.vertical ? 0 : -1
         flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
-        columns: root.vertical ? 1 : 10
+        columns: root.vertical ? 1 : Math.max(1, flow.visibleChildren.length)
         spacing: isMaterial ? 6 : 10
 
         move: Transition {

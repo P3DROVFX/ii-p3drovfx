@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
 import qs.services
 import qs.modules.common
@@ -184,8 +185,10 @@ Item {
                     iconText: "open_in_new"
                     tooltip: Translation.tr("Open sidebar page")
                     onClicked: {
-                        let win = Window.window;
+                        var win = wrapper.QsWindow.window;
                         if (win && win.currentPage !== undefined) {
+                            if (wrapper.compInfo.sectionTitle)
+                                win.pendingSectionHighlight = Translation.tr(wrapper.compInfo.sectionTitle);
                             win.currentPage = wrapper.compInfo.sidebarPage;
                         }
                     }

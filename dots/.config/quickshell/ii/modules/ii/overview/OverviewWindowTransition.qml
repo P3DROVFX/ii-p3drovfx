@@ -120,7 +120,8 @@ Scope {
                 interval: 60
                 onTriggered: {
                     if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
-                        Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })"]);
+                        const focusedWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? 1;
+                        Quickshell.execDetached(["hyprctl", "eval", `hl.window_rule({ match = { class = '.*', workspace = 'name:${focusedWsId}' }, opacity = '0.0 0.0', no_anim = true })`]);
                     }
                 }
             }
@@ -150,7 +151,8 @@ Scope {
             // capture representation of its own active workspace windows.
             readonly property bool shouldBeActive:
                 transitionScope.featureEnabled &&
-                isOverviewActive
+                isOverviewActive &&
+                monitorFocused
 
             visible: shouldBeActive
 

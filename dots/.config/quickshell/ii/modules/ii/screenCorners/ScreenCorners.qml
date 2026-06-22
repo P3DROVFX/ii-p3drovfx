@@ -48,7 +48,7 @@ Scope {
             console.info("[ScreenCorners] CornerPanelWindow completed. Corner:", corner, "Visible:", visible, "Enable option:", Config.options.sidebar.cornerOpen.enable, "Fake rounding:", Config.options.appearance.fakeScreenRounding);
         }
         mask: Region {
-            item: (cornerWidget.opacity > 0.0) ? cornerWidget : (sidebarCornerOpenInteractionLoader.active ? sidebarCornerOpenInteractionLoader : null)
+            item: cornerPanelWindow.isCornerOpenActive ? sidebarCornerOpenInteractionLoader : null
         }
         WlrLayershell.namespace: "quickshell:screenCorners"
         WlrLayershell.layer: WlrLayer.Overlay

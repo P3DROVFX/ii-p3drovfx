@@ -18,6 +18,12 @@ Singleton {
     id: root
     property var filePath: Directories.todoPath
 
+    // See Config.qml for the rationale on these guards (avoid clobbering user
+    // data during transient file inaccessibility; write atomically).
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 2000
+    property int missingFileRetryInterval: 1500
+
     // Use TickTick if available
     readonly property bool useTickTick: TickTickService.available
 
@@ -130,6 +136,7 @@ Singleton {
     FileView {
         id: todoFileView
         path: Qt.resolvedUrl(root.filePath)
+        atomicWrites: true
         onLoaded: {
             const fileContents = todoFileView.text()
             root.localList = JSON.parse(fileContents)
@@ -143,13 +150,27 @@ Singleton {
             console.log("[To Do] File loaded")
         }
         onLoadFailed: (error) => {
-            if(error == FileViewError.FileNotFound) {
-                console.log("[To Do] File not found, creating new file.")
+            if(error != FileViewError.FileNotFound) {
+                console.log("[To Do] Error loading file: " + error)
+                return
+            }
+            // File might be transiently missing during a shell hot-reload or
+            // restart — retrying first avoids wiping the user's todo list with
+            // an empty array.
+            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
+                console.log("[To Do] File not found after grace, creating new file.")
                 root.localList = []
                 todoFileView.setText(JSON.stringify(root.localList))
             } else {
-                console.log("[To Do] Error loading file: " + error)
+                missingFileRetryTimer.restart()
             }
         }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: todoFileView.reload()
     }
 }

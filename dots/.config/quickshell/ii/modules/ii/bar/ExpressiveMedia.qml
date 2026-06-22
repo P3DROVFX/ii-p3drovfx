@@ -23,12 +23,31 @@ Item {
     property int customSize: Config.options.bar.mediaPlayer.customSize
     property bool useFixedSize: Config.options.bar.mediaPlayer.useFixedSize
 
+    property int lyricsCustomSize: Config.options.bar.mediaPlayer.lyrics.customSize
+    readonly property bool lyricsEnabled: Config.options.bar.mediaPlayer.lyrics.enable
+    readonly property bool useGradientMask: Config.options.bar.mediaPlayer.lyrics.useGradientMask
+    readonly property string lyricsStyle: Config.options.bar.mediaPlayer.lyrics.style
+    readonly property bool lyricsAvailable: LyricsService.hasSyncedLines && lyricsEnabled
+
     // DockMedia-like properties
-    property var artUrl: MprisController.artUrl
-    property string trackTitle: activePlayer?.trackTitle ?? ""
-    property string trackArtist: activePlayer?.trackArtist ?? ""
-    property bool isPlaying: activePlayer?.isPlaying ?? false
-    property bool hasTrack: trackTitle.length > 0
+    readonly property var artUrl: MprisController.artUrl
+    readonly property string trackTitle: activePlayer?.trackTitle ?? ""
+    readonly property string trackArtist: activePlayer?.trackArtist ?? ""
+    readonly property bool isPlaying: activePlayer?.isPlaying ?? false
+    readonly property bool hasTrack: trackTitle.length > 0
+
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
+    Component.onCompleted: {
+        LyricsService.initiliazeLyrics();
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
 
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
@@ -71,7 +90,7 @@ Item {
     }
 
     Layout.fillHeight: true
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (useFixedSize ? customSize : (isMaterial ? materialRow.implicitWidth : Math.min(rowLayout.implicitWidth + 8, 280)))
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (root.lyricsAvailable ? lyricsCustomSize : (useFixedSize ? customSize : (isMaterial ? materialRow.implicitWidth : Math.min(rowLayout.implicitWidth + 8, 280))))
     implicitHeight: vertical ? (isMaterial ? materialCol.implicitHeight : mediaCircProg.implicitHeight + 6) : Appearance.sizes.baseBarHeight
 
     Behavior on implicitWidth {
@@ -96,6 +115,17 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        onEntered: {
+            GlobalStates.setMediaWidgetHovered(true);
+            if (hoverEnabled) {
+                var globalPos = root.mapToItem(null, 0, 0);
+                GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+                GlobalStates.mediaControlsOpen = true;
+            }
+        }
+        onExited: {
+            GlobalStates.setMediaWidgetHovered(false);
+        }
         onPressed: event => {
             if (event.button === Qt.MiddleButton)
                 activePlayer.togglePlaying();
@@ -104,9 +134,11 @@ Item {
             else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton)
                 activePlayer.next();
             else if (event.button === Qt.LeftButton) {
-                var globalPos = root.mapToItem(null, 0, 0);
-                GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
-                GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+                if (!hoverEnabled) {
+                    var globalPos = root.mapToItem(null, 0, 0);
+                    GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+                    GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
+                }
             }
         }
     }
@@ -150,7 +182,7 @@ Item {
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
-            
+
             ColumnLayout {
                 id: innerCol
                 anchors.centerIn: parent
@@ -165,7 +197,7 @@ Item {
                     implicitHeight: innerCol.width - 4
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
-                    
+
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: Rectangle {
@@ -206,7 +238,7 @@ Item {
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colRipple: Appearance.colors.colPrimaryActive
                     downAction: () => root.activePlayer?.togglePlaying()
-                    
+
                     Behavior on buttonRadius {
                         NumberAnimation {
                             duration: 250
@@ -329,10 +361,25 @@ Item {
                     scale: visible ? 1 : 0
                     opacity: visible ? 1 : 0
                     Layout.preferredWidth: visible ? implicitWidth : 0
-                    
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on Layout.preferredWidth {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
 
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -372,11 +419,21 @@ Item {
                     Layout.topMargin: 2
                     Layout.fillWidth: true
 
-                    visible: root.hasTrack
+                    visible: root.hasTrack && !root.lyricsAvailable
                     opacity: visible ? 1 : 0
                     Layout.preferredWidth: visible ? -1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on Layout.preferredWidth {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
 
                     StyledText {
                         id: artistText
@@ -389,10 +446,10 @@ Item {
                             SequentialAnimation {
                                 NumberAnimation {
                                     target: artistText
-                                    property: "x"
-                                    to: -artistText.width
+                                    property: "opacity"
+                                    to: 0
                                     duration: 150
-                                    easing.type: Easing.InQuad
+                                    easing.type: Easing.OutQuad
                                 }
                                 PropertyAction {
                                     target: artistText
@@ -400,9 +457,8 @@ Item {
                                 }
                                 NumberAnimation {
                                     target: artistText
-                                    property: "x"
-                                    from: artistText.width
-                                    to: 0
+                                    property: "opacity"
+                                    to: 1
                                     duration: 150
                                     easing.type: Easing.OutQuad
                                 }
@@ -422,10 +478,10 @@ Item {
                             SequentialAnimation {
                                 NumberAnimation {
                                     target: titleText
-                                    property: "x"
-                                    to: -artistText.width
+                                    property: "opacity"
+                                    to: 0
                                     duration: 150
-                                    easing.type: Easing.InQuad
+                                    easing.type: Easing.OutQuad
                                 }
                                 PropertyAction {
                                     target: titleText
@@ -433,12 +489,62 @@ Item {
                                 }
                                 NumberAnimation {
                                     target: titleText
-                                    property: "x"
-                                    from: artistText.width
-                                    to: 0
+                                    property: "opacity"
+                                    to: 0.7
                                     duration: 150
                                     easing.type: Easing.OutQuad
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // Lyrics Loader
+                Loader {
+                    id: lyricsItemLoader
+                    active: root.lyricsEnabled
+                    visible: root.hasTrack && root.lyricsAvailable
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: visible ? -1 : 0
+
+                    opacity: visible ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+
+                    sourceComponent: Item {
+                        id: lyricsItem
+                        anchors.fill: parent
+
+                        Loader {
+                            active: root.lyricsStyle == "static"
+                            anchors.fill: parent
+                            sourceComponent: LyricsStatic {
+                                anchors.fill: parent
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+
+                        Loader {
+                            active: root.lyricsStyle == "scroller"
+                            anchors.fill: parent
+                            sourceComponent: LyricScroller {
+                                id: lyricScroller
+
+                                anchors.fill: parent
+                                visible: root.lyricsStyle == "scroller" && LyricsService.hasSyncedLines
+
+                                defaultLyricsSize: Appearance.font.pixelSize.smallest
+                                useGradientMask: root.useGradientMask
+                                halfVisibleLines: 1
+                                downScale: 0.98
+                                rowHeight: 10
+                                gradientDensity: 0.25
                             }
                         }
                     }
@@ -488,9 +594,24 @@ Item {
                     scale: visible ? 1 : 0
                     opacity: visible ? 1 : 0
                     Layout.preferredWidth: visible ? implicitWidth : 0
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                    Behavior on Layout.preferredWidth { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on Layout.preferredWidth {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
 
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent

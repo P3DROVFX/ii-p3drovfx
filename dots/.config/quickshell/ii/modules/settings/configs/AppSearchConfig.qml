@@ -351,12 +351,7 @@ ContentPage {
 
             property string selectedType: "app"
             property string appFilter: ""
-            property var sortedApps: []
-            Component.onCompleted: {
-                Qt.callLater(() => {
-                    sortedApps = AppSearch.frecencyQuery("");
-                });
-            }
+            property var sortedApps: AppSearch.list.length > 0 ? AppSearch.frecencyQuery("") : []
             readonly property var filteredApps: {
                 let list = sortedApps;
                 if (appFilter.trim() !== "") {

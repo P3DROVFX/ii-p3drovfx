@@ -16,7 +16,8 @@ LazyLoader {
     readonly property bool isScreenSmall: screenHeight > 0 && screenHeight < 800
 
     readonly property real layoutScale: {
-        if (screenHeight <= 0 || !root.contentItem) return 1.0;
+        if (screenHeight <= 0 || !root.contentItem)
+            return 1.0;
         var barSpace = Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight;
         var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
         var naturalHeight = root.contentItem.implicitHeight + 20; // 10 margin * 2

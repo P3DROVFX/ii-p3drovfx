@@ -10,6 +10,42 @@ ContentPage {
     id: page
     forceWidth: false
 
+    property bool showBackButton: false
+    signal goBack()
+
+    RowLayout {
+        spacing: 12
+        visible: page.showBackButton
+
+        RippleButton {
+            implicitWidth: implicitHeight
+            implicitHeight: 40
+            topLeftRadius: Appearance.rounding.full
+            topRightRadius: Appearance.rounding.full
+            bottomLeftRadius: Appearance.rounding.full
+            bottomRightRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_back"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+
+            onClicked: page.goBack()
+        }
+
+        StyledText {
+            text: Translation.tr("Sidebars & Panels Settings")
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.family: Appearance.font.family.title
+            color: Appearance.colors.colOnLayer0
+        }
+    }
+
 
 
     ContentSection {
@@ -383,51 +419,88 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Dashboard Panel Button")
-        icon: "space_dashboard"
+        icon: "policy"
+        title: Translation.tr("Sidebar Policies Visibility")
 
-        ConfigSwitch {
-            buttonIcon: "volume_up"
-            text: Translation.tr("Show Volume")
-            checked: Config.options.bar.dashboardButton.showVolume
-            onCheckedChanged: {
-                Config.options.bar.dashboardButton.showVolume = checked;
-            }
+        NoticeBox {
+            Layout.fillWidth: true
+            isFirst: true
+            text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
         }
 
-        ConfigSwitch {
-            buttonIcon: "mic"
-            text: Translation.tr("Show Microphone")
-            checked: Config.options.bar.dashboardButton.showMic
-            onCheckedChanged: {
-                Config.options.bar.dashboardButton.showMic = checked;
+        ConfigToggleGrid {
+            Layout.fillWidth: true
+            gridColumns: Math.max(1, Math.floor(parent.width / 300))
+            currentValues: {
+                return {
+                    ai: Config.options.policies.ai,
+                    weeb: Config.options.policies.weeb,
+                    wallpapers: Config.options.policies.wallpapers,
+                    translator: Config.options.policies.translator,
+                    player: Config.options.policies.player,
+                    phone: Config.options.policies.phone
+                };
             }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "wifi"
-            text: Translation.tr("Show Network")
-            checked: Config.options.bar.dashboardButton.showNetwork
-            onCheckedChanged: {
-                Config.options.bar.dashboardButton.showNetwork = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "bluetooth"
-            text: Translation.tr("Show Bluetooth")
-            checked: Config.options.bar.dashboardButton.showBluetooth
-            onCheckedChanged: {
-                Config.options.bar.dashboardButton.showBluetooth = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "notifications"
-            text: Translation.tr("Show Notifications")
-            checked: Config.options.bar.dashboardButton.showNotifications
-            onCheckedChanged: {
-                Config.options.bar.dashboardButton.showNotifications = checked;
+            model: [
+                {
+                    key: "ai",
+                    name: Translation.tr("AI"),
+                    icon: "smart_toy",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
+                        { displayName: Translation.tr("Local"), icon: "sync_saved_locally", value: 2 }
+                    ]
+                },
+                {
+                    key: "weeb",
+                    name: Translation.tr("Weeb"),
+                    icon: "face",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
+                        { displayName: Translation.tr("Closet"), icon: "ev_shadow", value: 2 }
+                    ]
+                },
+                {
+                    key: "wallpapers",
+                    name: Translation.tr("Wallpaper browser"),
+                    icon: "wallpaper",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "translator",
+                    name: Translation.tr("Translator"),
+                    icon: "translate",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "player",
+                    name: Translation.tr("Sidebar player"),
+                    icon: "music_note",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "phone",
+                    name: Translation.tr("Phone"),
+                    icon: "smartphone",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                }
+            ]
+            onItemChanged: (key, value) => {
+                Config.options.policies[key] = value;
             }
         }
     }

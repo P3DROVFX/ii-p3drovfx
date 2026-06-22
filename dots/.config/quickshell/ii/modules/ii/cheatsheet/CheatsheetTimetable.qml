@@ -35,7 +35,7 @@ Item {
         let availableWidth = root.width > 0 ? root.width : maxContentWidth;
         return Math.max(80, (availableWidth - timeColumnWidth - days.length * spacing) / Math.max(1, days.length));
     }
-    readonly property int currentDayIndex: (DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7
+    readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
 
     implicitWidth: maxContentWidth
     implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
@@ -181,7 +181,7 @@ Item {
     function openPopupForGhost() {
         let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
         let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek);
+        let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         let colX = root.timeColumnWidth + (root.ghostDayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
         let colY = root.ghostTopY + root.headerHeight - styledFlickable.contentY + 20;
         eventPopup.open(H.minutesToTimeStr(topMin, Config.options?.time.format), H.minutesToTimeStr(botMin, Config.options?.time.format), eventDate, root.ghostDayIndex, colX, colY);
@@ -190,7 +190,7 @@ Item {
     function openPopupForEdit(event, dayIndex) {
         let startMin = H.parseTimeToMinutes(event.start);
         let endMin = H.parseTimeToMinutes(event.end);
-        let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek);
+        let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
         let colX = root.timeColumnWidth + (dayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
         let colY = H.minutesToY(startMin, root.startHour, root.startMinute, root.pixelsPerMinute) + root.headerHeight - styledFlickable.contentY + 20;
         eventPopup.openForEdit(H.minutesToTimeStr(startMin, Config.options?.time.format), H.minutesToTimeStr(endMin, Config.options?.time.format), eventDate, dayIndex, colX, colY, event);
@@ -353,7 +353,7 @@ Item {
         onEventCreated: (title, description) => {
             let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
             let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-            CalendarService.addEvent(H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek), H.minutesToKhalTimeStr(topMin), H.minutesToKhalTimeStr(botMin), title, description);
+            CalendarService.addEvent(H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(topMin), H.minutesToKhalTimeStr(botMin), title, description);
             root.ghostVisible = false;
         }
         onEventUpdated: (oldTitle, title, description) => {
@@ -368,7 +368,7 @@ Item {
                 CalendarService.removeEventByUid(evt.uid);
             else
                 CalendarService.removeEvent(oldTitle);
-            CalendarService.addEvent(H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description);
+            CalendarService.addEvent(H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description);
         }
         onEventDeleted: title => {
             if (eventPopup.editEventData?.uid)

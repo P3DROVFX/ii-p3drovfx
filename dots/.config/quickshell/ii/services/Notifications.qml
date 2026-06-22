@@ -80,6 +80,10 @@ Singleton {
     property var popupList: list.filter((notif) => notif.popup);
     property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || silent
     property var latestTimeForApp: ({})
+    // See Config.qml for the rationale on these guards.
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 2000
+    property int missingFileRetryInterval: 1500
     Component {
         id: notifComponent
         Notif {}
@@ -267,6 +271,7 @@ Singleton {
     FileView {
         id: notifFileView
         path: Qt.resolvedUrl(filePath)
+        atomicWrites: true
         onLoaded: {
             const fileContents = notifFileView.text()
             root.list = JSON.parse(fileContents).map((notif) => {
@@ -293,13 +298,28 @@ Singleton {
             root.initDone()
         }
         onLoadFailed: (error) => {
-            if(error == FileViewError.FileNotFound) {
-                console.log("[Notifications] File not found, creating new file.")
+            if(error != FileViewError.FileNotFound) {
+                console.log("[Notifications] Error loading file: " + error)
+                return
+            }
+            // Lazy-rstoration: a transient missing file (hot-reload / restart /
+            // partial disk I/O) should not erase the user's existing
+            // notifications history. Only seed an empty list past the grace
+            // window if the file is genuinely absent.
+            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
+                console.log("[Notifications] File genuinely missing, creating new file.")
                 root.list = []
                 notifFileView.setText(stringifyList(root.list));
             } else {
-                console.log("[Notifications] Error loading file: " + error)
+                missingFileRetryTimer.restart()
             }
         }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: notifFileView.reload()
     }
 }

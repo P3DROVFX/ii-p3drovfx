@@ -17,6 +17,21 @@ MouseArea {
     visible: Battery.available
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(Battery.available);
+        }
+    }
+
+    Connections {
+        target: Battery
+        function onAvailableChanged() {
+            if (typeof rootItem !== "undefined") {
+                rootItem.toggleVisible(Battery.available);
+            }
+        }
+    }
+
     Rectangle {
         id: pill
         anchors.centerIn: parent

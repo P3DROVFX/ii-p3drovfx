@@ -21,6 +21,10 @@ OverlayBackground {
     property real maxCopyButtonSize: 20
     property int currentTabIndex: Persistent.states.overlay.notes.tabIndex
     property bool tabEditModeEnabled: false
+    // See Config.qml for the rationale on these guards.
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 2000
+    property int missingFileRetryInterval: 1500
 
     Component.onCompleted: {
         noteFile.reload();
@@ -445,6 +449,7 @@ OverlayBackground {
     FileView {
         id: noteFile
         path: Qt.resolvedUrl(Directories.notesPath)
+        atomicWrites: true
         onLoaded: {
             try {
                 const jsonText = noteFile.text();
@@ -473,22 +478,36 @@ OverlayBackground {
             Qt.callLater(root.updateCopyListEntries);
         }
         onLoadFailed: error => {
-            if (error === FileViewError.FileNotFound) {
+            if (error != FileViewError.FileNotFound) {
+                console.log("[Overlay Notes] Error loading file: " + error);
+                return;
+            }
+            // Lazy-create the notes file: defer past the startup grace window so
+            // a transient missing file (hot-reload / restart) doesn't wipe the
+            // user's existing notes.json with the empty default layout.
+            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
                 root.tabsData = {
                     tabs: root.defaultTabs
                 };
                 root.content = "";
                 saveToFile();
-                
+
                 if (pendingReload) {
                     pendingReload = false;
                     Qt.callLater(root.focusAtEnd);
                 }
                 Qt.callLater(root.updateCopyListEntries);
             } else {
-                console.log("[Overlay Notes] Error loading file: " + error);
+                missingFileRetryTimer.restart();
             }
         }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: noteFile.reload()
     }
 
     component TitleEditComp: Row {

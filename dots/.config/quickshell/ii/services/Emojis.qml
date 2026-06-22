@@ -21,11 +21,15 @@ Singleton {
         entry: a
     }))
     function fuzzyQuery(search: string): var {
-        if (root.sloppySearch) {
-            const results = entries.slice(0, 100).map(str => ({
+        if (!search || search.trim() === "") {
+            return root.list;
+        }
+        if (root.levenshteinSearch) {
+            const threshold = Config.options?.search.scoreThreshold ?? 0.2;
+            const results = root.list.slice(0, 100).map(str => ({
                 entry: str,
                 score: Levendist.computeTextMatchScore(str.toLowerCase(), search.toLowerCase())
-            })).filter(item => item.score > root.scoreThreshold)
+            })).filter(item => item.score > threshold)
                 .sort((a, b) => b.score - a.score)
             return results
                 .map(item => item.entry)

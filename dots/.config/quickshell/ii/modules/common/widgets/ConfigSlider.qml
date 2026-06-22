@@ -23,6 +23,11 @@ Rectangle {
 
     color: Appearance.colors.colLayer2Base
 
+    HoverHandler {
+        id: hoverHandler
+    }
+    property bool hovered: hoverHandler.hovered
+
     readonly property int itemIndex: {
         var p = parent;
         if (!p)

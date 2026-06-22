@@ -17,6 +17,7 @@ Singleton {
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false
     property bool mediaControlsOpen: false
+    property bool mediaControlsPinned: false
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false
@@ -44,6 +45,7 @@ Singleton {
     property bool videoEditorPopupOpen: false
     property bool videoEditorOpen: false
     property string videoEditorPath: ""
+    property bool settingsOpen: false
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
     property bool policiesExtended: false
@@ -60,6 +62,23 @@ Singleton {
 
     // Media Popup placement (transient, non-persistent)
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)
+    property bool mediaWidgetHovered: false
+    property Timer mediaWidgetHoverTimer: Timer {
+        interval: 100
+        repeat: false
+        onTriggered: {
+            root.mediaWidgetHovered = false;
+        }
+    }
+
+    function setMediaWidgetHovered(hovered) {
+        if (hovered) {
+            mediaWidgetHoverTimer.stop();
+            root.mediaWidgetHovered = true;
+        } else {
+            mediaWidgetHoverTimer.restart();
+        }
+    }
 
     // Color Picker Popup
     property bool colorPickerPopupOpen: false
@@ -98,6 +117,32 @@ Singleton {
         function handle(path: string): void {
             root.launchVideoEditor(path);
         }
+    }
+
+    function toggleSettings() {
+        root.settingsOpen = !root.settingsOpen;
+    }
+
+    function openSettings() {
+        root.settingsOpen = true;
+    }
+
+    IpcHandler {
+        target: "settings"
+
+        function toggle(): void {
+            root.toggleSettings();
+        }
+
+        function open(): void {
+            root.openSettings();
+        }
+    }
+
+    GlobalShortcut {
+        name: "settingsToggle"
+        description: "Toggles the settings window"
+        onPressed: root.toggleSettings()
     }
 
     readonly property bool connectModeActive: {
@@ -152,18 +197,16 @@ Singleton {
 
         const p = Config.options.policies;
         let activeCount = 0;
-        if (p.ai !== 0)
-            activeCount++;
-        if (p.translator !== 0)
-            activeCount++;
-        if (p.player !== 0)
-            activeCount++;
-        if (p.wallpapers !== 0)
-            activeCount++;
-        if (p.weeb !== 0 && p.weeb !== 2)
-            activeCount++;
+        if (p.ai !== 0) activeCount++;
+        if (p.translator !== 0) activeCount++;
+        if (p.player !== 0) activeCount++;
+        if (p.wallpapers !== 0) activeCount++;
+        if (p.weeb !== 0 && p.weeb !== 2) activeCount++;
+        if (p.phone !== 0) activeCount++;
 
-        return activeCount >= 4 ? Appearance.sizes.sidebarWidthExpanded : Appearance.sizes.sidebarWidth;
+        const minTabs = 3;
+        const perTabWidth = 100;
+        return Appearance.sizes.sidebarWidth + Math.max(0, activeCount - minTabs) * perTabWidth;
     }
 
     readonly property real dashboardWidth: Appearance.sizes.sidebarWidth
@@ -208,6 +251,15 @@ Singleton {
 
     property real animatedLeftSidebarWidth: 0
     property real animatedRightSidebarWidth: 0
+
+    // Exposed for TopLayerPanel/WrappedFrameVisuals to gate `layer.enabled`
+    // so the FBO layer is only active during the open/close animation, NOT
+    // while the sidebar is statically open. Keeping the layer enabled while
+    // open caused massive CPU usage (380%+) because every minor visual
+    // change (timer ticks, notification syncs, infinite pulse animations)
+    // forced a full FBO re-render of the entire sidebar subtree.
+    readonly property bool leftSidebarAnimating: leftSidebarAnimation.running
+    readonly property bool rightSidebarAnimating: rightSidebarAnimation.running
 
     NumberAnimation {
         id: leftSidebarAnimation

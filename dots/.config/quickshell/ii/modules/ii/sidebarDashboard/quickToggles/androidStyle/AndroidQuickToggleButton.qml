@@ -104,6 +104,7 @@ Item {
     Layout.fillWidth: false
     Layout.fillHeight: false
 
+
     property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
     property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 

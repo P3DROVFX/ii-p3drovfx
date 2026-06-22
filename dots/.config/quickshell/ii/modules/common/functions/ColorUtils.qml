@@ -224,4 +224,59 @@ Singleton {
 
         return Math.sqrt(dr * dr * 0.3 + dg * dg * 0.59 + db * db * 0.11);
     }
+
+    /**
+     * Builds a per-category accent color with a FIXED hue (in degrees) and a
+     * saturation/lightness adapted to the active Material theme, so each section
+     * keeps a stable, identifiable identity while staying harmonized with the
+     * matugen palette (works in both light and dark modes).
+     *
+     * The lightness is taken from the supplied theme token, so dark mode yields
+     * a deep tinted container and light mode yields a soft pastel — matching M3
+     * container behaviour without hardcoding any hex values.
+     *
+     * @param {number} hueDegrees - Fixed hue for the category (0-360).
+     * @param {color} themeColor - A theme token to derive lightness from
+     *   (e.g. Appearance.colors.colPrimaryContainer or colLayer2).
+     * @param {number} saturation - Target saturation (0-1).
+     * @returns {color} The derived accent color.
+     */
+    function categoryContainer(hueDegrees, themeColor, saturation) {
+        var t = Qt.color(themeColor);
+        var h = ((hueDegrees % 360) + 360) % 360 / 360;
+        var s = Math.min(1, Math.max(0, saturation));
+        return Qt.hsla(h, s, t.hslLightness, 1);
+    }
+
+    /**
+     * Returns a readable "on" color for a category container, tinted with the
+     * same hue and with high contrast against the container's lightness.
+     *
+     * @param {color} containerColor - The result of categoryContainer().
+     * @param {number} hueDegrees - The same fixed hue (0-360).
+     * @returns {color} The on-container foreground color.
+     */
+    function categoryOnColor(containerColor, hueDegrees) {
+        var c = Qt.color(containerColor);
+        var h = ((hueDegrees % 360) + 360) % 360 / 360;
+        var lightness = c.hslLightness < 0.5 ? 0.92 : 0.14;
+        return Qt.hsla(h, 0.35, lightness, 1);
+    }
+
+    /**
+     * Mixes a fixed-hue category tint into a base theme color by a given ratio,
+     * preserving the base's alpha so the project's transparency architecture is
+     * respected (useful for tinted card backgrounds that stay translucent).
+     *
+     * @param {number} hueDegrees - Fixed category hue (0-360).
+     * @param {color} baseColor - The base theme color (e.g. colLayer2).
+     * @param {color} lightnessRef - Theme token to derive lightness from.
+     * @param {number} saturation - Tint saturation (0-1).
+     * @param {number} ratio - How much of the tint to apply (0-1).
+     * @returns {color} The subtly tinted background color.
+     */
+    function categoryTint(hueDegrees, baseColor, lightnessRef, saturation, ratio) {
+        var tint = root.categoryContainer(hueDegrees, lightnessRef, saturation);
+        return root.mix(tint, baseColor, Math.min(1, Math.max(0, ratio)));
+    }
 }

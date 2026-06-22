@@ -522,38 +522,8 @@ RippleButton {
                         visible: !root.actionPanelOpen
 
                         RowLayout {
-                            spacing: 4
-                            visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) || (!!root.entry?.comment && !root.entry?.isMath)
-
-                            StyledText {
-                                text: root.itemType
-                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.family: Appearance.font.family.main
-                                opacity: (root.isBuiltinItem || root.isSelected) ? 1.0 : 0.7
-                                visible: root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath
-                            }
-
-                            StyledText {
-                                text: "•"
-                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                opacity: 0.5
-                                visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) && (!!root.entry?.comment && !root.entry?.isMath)
-                            }
-
-                            StyledText {
-                                text: root.entry?.comment ?? ""
-                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.family: Appearance.font.family.main
-                                visible: !!root.entry?.comment && !root.entry?.isMath
-                                opacity: 0.7
-                            }
-                        }
-
-                        RowLayout {
                             visible: !root.entry?.isMath
+                            Layout.fillWidth: true
                             Rectangle {
                                 implicitWidth: activeText.implicitHeight
                                 implicitHeight: activeText.implicitHeight
@@ -616,6 +586,40 @@ RippleButton {
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
                                 text: root.isSelected ? root.itemName : root.displayContent
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) || (!!root.entry?.comment && !root.entry?.isMath)
+
+                            StyledText {
+                                text: root.itemType
+                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.family: Appearance.font.family.main
+                                opacity: (root.isBuiltinItem || root.isSelected) ? 1.0 : 0.7
+                                visible: root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath
+                            }
+
+                            StyledText {
+                                text: "•"
+                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                opacity: 0.5
+                                visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) && (!!root.entry?.comment && !root.entry?.isMath)
+                            }
+
+                            StyledText {
+                                text: root.entry?.comment ?? ""
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                color: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : (root.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.family: Appearance.font.family.main
+                                visible: !!root.entry?.comment && !root.entry?.isMath
+                                opacity: 0.7
                             }
                         }
 

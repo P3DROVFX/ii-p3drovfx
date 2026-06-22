@@ -9,6 +9,42 @@ ContentPage {
     id: page
     forceWidth: false
 
+    property bool showBackButton: false
+    signal goBack()
+
+    RowLayout {
+        spacing: 12
+        visible: page.showBackButton
+
+        RippleButton {
+            implicitWidth: implicitHeight
+            implicitHeight: 40
+            topLeftRadius: Appearance.rounding.full
+            topRightRadius: Appearance.rounding.full
+            bottomLeftRadius: Appearance.rounding.full
+            bottomRightRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_back"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+
+            onClicked: page.goBack()
+        }
+
+        StyledText {
+            text: Translation.tr("Workspaces Settings")
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.family: Appearance.font.family.title
+            color: Appearance.colors.colOnLayer0
+        }
+    }
+
     ContentSection {
         title: Translation.tr("Display Options")
         icon: "monitor"
@@ -58,9 +94,6 @@ ContentPage {
                             }
                             map[index] = value - 1;
                             Config.options.bar.workspaces.workspaceMap = map;
-                            if (Config.options.overview.useWorkspaceMap) {
-                                Config.options.overview.workspaceMap = map;
-                            }
                         }
                         StyledToolTip {
                             text: Translation.tr("Set starting workspaces based on the number of workspaces shown to prevent overlapping.")
@@ -69,17 +102,6 @@ ContentPage {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "sync"
-                text: Translation.tr("Sync overview map")
-                checked: Config.options.overview.useWorkspaceMap
-                onCheckedChanged: {
-                    Config.options.overview.useWorkspaceMap = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Apply the same workspace map constraints to the Overview screen")
-                }
-            }
         }
 
         Item { Layout.preferredHeight: 16 }

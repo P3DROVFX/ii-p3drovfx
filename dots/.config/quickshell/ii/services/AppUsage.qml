@@ -17,6 +17,12 @@ Singleton {
 
     property var launchData: ({})
     property bool ready: false
+    // See Config.qml for the rationale. Same protection: don't clobber the
+    // on-disk app_usage.json with the empty in-memory default during transient
+    // file inaccessibility, and write atomically.
+    property real initTimestamp: Date.now()
+    property int missingFileGracePeriod: 2000
+    property int missingFileRetryInterval: 1500
 
     // Time window weights for frecency calculation
     readonly property var timeWindows: [
@@ -131,7 +137,20 @@ Singleton {
         id: fileWriteTimer
         interval: 500
         repeat: false
-        onTriggered: usageFileView.writeAdapter()
+        onTriggered: {
+            if (!root.ready) {
+                fileWriteTimer.restart();
+                return;
+            }
+            usageFileView.writeAdapter()
+        }
+    }
+
+    Timer {
+        id: missingFileRetryTimer
+        interval: root.missingFileRetryInterval
+        repeat: false
+        onTriggered: usageFileView.reload()
     }
 
     onLaunchDataChanged: {
@@ -145,15 +164,22 @@ Singleton {
         path: Directories.appUsagePath
 
         watchChanges: true
+        atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
         onLoaded: {
             root.ready = true;
             root.launchData = usageAdapter.data;
         }
         onLoadFailed: error => {
-            if (error == FileViewError.FileNotFound) {
+            if (error != FileViewError.FileNotFound) {
+                return;
+            }
+            const elapsed = Date.now() - root.initTimestamp;
+            if (elapsed > root.missingFileGracePeriod) {
                 root.ready = true;
                 fileWriteTimer.restart();
+            } else {
+                missingFileRetryTimer.restart();
             }
         }
 

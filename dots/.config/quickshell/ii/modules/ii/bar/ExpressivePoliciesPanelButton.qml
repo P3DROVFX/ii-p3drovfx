@@ -39,15 +39,44 @@ Item {
         }
     }
 
+    // Phone integration in-use state (scrcpy mirror, phone webcam or phone mic).
+    // While any of these is running, the button switches to the error container
+    // palette as a recording/broadcast indicator (colErrorContainer /
+    // colOnErrorContainer), mirroring the RecordIndicator convention.
+    //
+    // We also include the "connecting"/"launching" states so the colour flips
+    // instantly when the user clicks — otherwise the button would wait 5-6s
+    // for the verify timers to confirm the process is alive before changing
+    // colour, which feels broken.
+    //
+    // Gated by Config.options.policies.phone: when Phone integration is
+    // disabled, this binding short-circuits to false without ever
+    // referencing the singletons, which prevents QML from instantiating
+    // KdeConnectService / PhoneCameraService / PhoneMicService on boot.
+    readonly property bool phoneIntegrationActive:
+        Config.options.policies.phone !== 0
+        && (KdeConnectService.scrcpyRunning
+            || KdeConnectService.scrcpyLaunching
+            || PhoneCameraService.connecting
+            || PhoneCameraService.running
+            || PhoneMicService.connecting
+            || PhoneMicService.running)
+
     RippleButton {
         id: button
         anchors.fill: parent
         buttonRadius: Appearance.rounding.full
 
         // Approach 1 Vibrant Dynamic Colors
-        colBackground: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
-        colBackgroundHover: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryHover
-        colRipple: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive
+        colBackground: root.phoneIntegrationActive
+            ? Appearance.colors.colErrorContainer
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
+        colBackgroundHover: root.phoneIntegrationActive
+            ? Appearance.colors.colErrorContainerHover ?? Appearance.colors.colErrorContainer
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryHover)
+        colRipple: root.phoneIntegrationActive
+            ? Appearance.colors.colErrorContainerActive ?? Appearance.colors.colErrorContainer
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive)
 
         onPressed: {
             GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
@@ -62,7 +91,9 @@ Item {
             shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie9Sided
 
             // Contrast shape color with button background
-            color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
+            color: root.phoneIntegrationActive
+                ? Appearance.colors.colOnErrorContainer
+                : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
 
             // Rotate shape 90 degrees smoothly
             rotation: GlobalStates.sidebarLeftOpen ? 90 : 0
@@ -78,7 +109,9 @@ Item {
                 visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
                 source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
                 colorize: true
-                color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
+                color: root.phoneIntegrationActive
+                    ? Appearance.colors.colErrorContainer
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -91,7 +124,9 @@ Item {
                 text: Config.options.bar.topLeftIcon
                 iconSize: root.vertical ? 18 : 16
                 fill: 1
-                color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary
+                color: root.phoneIntegrationActive
+                    ? Appearance.colors.colErrorContainer
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -112,7 +147,9 @@ Item {
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colError
                 border.width: 1.5
-                border.color: GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary
+                border.color: root.phoneIntegrationActive
+                    ? Appearance.colors.colOnErrorContainer
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
 
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pingBadge)

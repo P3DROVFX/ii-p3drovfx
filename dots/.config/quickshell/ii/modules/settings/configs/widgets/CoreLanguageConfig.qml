@@ -46,15 +46,15 @@ ContentPage {
     }
 
     // Translator languages model
-        property list<string> languages: ["auto"]
-        property list<var> languagesModel: [{ "displayName": "auto", "value": "auto" }]
-    
-        Process {
-            id: getLanguagesProc
-            command: ["trans", "-list-languages", "-no-bidi"]
-            property list<string> bufferList: ["auto"]
-            running: true
-            stdout: SplitParser {
+    property var languages: ["auto"]
+    property var languagesModel: [{ "displayName": "auto", "value": "auto" }]
+
+    Process {
+        id: getLanguagesProc
+        command: ["trans", "-list-languages", "-no-bidi"]
+        property var bufferList: ["auto"]
+        running: true
+        stdout: SplitParser {
                 onRead: data => {
                     getLanguagesProc.bufferList.push(data.trim());
                 }
@@ -81,6 +81,43 @@ ContentPage {
             property string locale: ""
             command: [Directories.aiTranslationScriptPath, translationProc.locale]
         }
+
+    ContentSection {
+        icon: "neurology"
+        title: Translation.tr("AI Assistant")
+
+        HelperLinkBox {
+            Layout.fillWidth: true
+            title: Translation.tr("Google AI Studio")
+            text: Translation.tr("Get your Gemini API Key here for free.")
+            isFirst: true
+
+            RippleButtonWithIcon {
+                mainText: Translation.tr("Open Website")
+                materialIcon: "open_in_new"
+                Layout.topMargin: 4
+                Layout.bottomMargin: 4
+                colBackground: Appearance.colors.colLayer0
+                colBackgroundHover: Appearance.colors.colLayer0Hover
+                colRipple: Appearance.colors.colLayer0Active
+                downAction: () => {
+                    Qt.openUrlExternally("https://aistudio.google.com/app/apikey")
+                }
+            }
+        }
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("System prompt")
+            text: Config.options.ai.systemPrompt
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Qt.callLater(() => {
+                    Config.options.ai.systemPrompt = text;
+                });
+            }
+        }
+    }
 
     ContentSection {
         icon: "language"

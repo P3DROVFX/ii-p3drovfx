@@ -7,11 +7,20 @@ import QtQuick.Controls
  */
 Switch {
     id: root
-    property real scale: 0.75 // Default in m3 spec is huge af
-    implicitHeight: 32 * root.scale
-    implicitWidth: 52 * root.scale
+    property real sizeScale: 0.75 // Default in m3 spec is huge af
+    implicitHeight: 32 * root.sizeScale
+    implicitWidth: 52 * root.sizeScale
     property color activeColor: Appearance?.colors.colPrimary ?? "#685496"
     property color inactiveColor: Appearance?.colors.colSurfaceContainerHighest ?? "#45464F"
+
+    property bool isPressed: root.pressed || root.down
+    scale: isPressed ? 0.95 : 1.0
+    Behavior on scale {
+        NumberAnimation {
+            duration: 150
+            easing.type: Easing.OutQuad
+        }
+    }
 
     PointingHandInteraction {}
 
@@ -21,7 +30,7 @@ Switch {
         height: parent.height
         radius: Appearance?.rounding.full ?? 9999
         color: root.checked ? root.activeColor : root.inactiveColor
-        border.width: 2 * root.scale
+        border.width: 2 * root.sizeScale
         border.color: root.checked ? root.activeColor : Appearance.m3colors.m3outline
 
         Behavior on color {
@@ -34,15 +43,15 @@ Switch {
 
     // Custom thumb styling
     indicator: Rectangle {
-        width: (root.pressed || root.down) ? (28 * root.scale) : (24 * root.scale)
-        height: (root.pressed || root.down) ? (28 * root.scale) : (24 * root.scale)
+        width: (root.pressed || root.down) ? (28 * root.sizeScale) : (24 * root.sizeScale)
+        height: (root.pressed || root.down) ? (28 * root.sizeScale) : (24 * root.sizeScale)
         radius: Appearance.rounding.full
         color: root.checked ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3outline
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: root.checked
-            ? ((root.pressed || root.down) ? (22 * root.scale) : (24 * root.scale))
-            : ((root.pressed || root.down) ? (2 * root.scale) : (4 * root.scale))
+            ? ((root.pressed || root.down) ? (22 * root.sizeScale) : (24 * root.sizeScale))
+            : ((root.pressed || root.down) ? (2 * root.sizeScale) : (4 * root.sizeScale))
 
         Behavior on anchors.leftMargin {
             NumberAnimation {
@@ -70,11 +79,11 @@ Switch {
         }
 
         MaterialSymbol {
-            width: 18 * root.scale
-            height: 18 * root.scale
+            width: 18 * root.sizeScale
+            height: 18 * root.sizeScale
             anchors.centerIn: parent
             text: root.checked ? "check" : "close"
-            iconSize: 18 * root.scale
+            iconSize: 18 * root.sizeScale
             color: root.checked ? root.activeColor : root.inactiveColor
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter

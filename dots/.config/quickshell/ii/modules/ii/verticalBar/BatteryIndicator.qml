@@ -12,6 +12,21 @@ MouseArea {
     property bool borderless: Config.options.bar.borderless
     visible: Battery.available
 
+    Component.onCompleted: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(Battery.available);
+        }
+    }
+
+    Connections {
+        target: Battery
+        function onAvailableChanged() {
+            if (typeof rootItem !== "undefined") {
+                rootItem.toggleVisible(Battery.available);
+            }
+        }
+    }
+
     readonly property var chargeState: Battery.chargeState
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isPluggedIn: Battery.isPluggedIn

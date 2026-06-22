@@ -127,6 +127,8 @@ AbstractQuickPanel {
         return rowsNeeded;
     }
 
+
+
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
         if (pageIndex < 0 || pageIndex >= pages.length)
@@ -181,7 +183,7 @@ AbstractQuickPanel {
                 var placed = false;
 
                 for (var row = 0; row < 20 && !placed; row++) {
-                    for (var col = 0; col < gridColumns && !placed; col++) {
+                    for (var col = 0; col <= gridColumns - item.sizeW && !placed; col++) {
                         var fits = true;
 
                         for (var h = 0; h < item.sizeH && fits; h++) {
@@ -502,20 +504,35 @@ AbstractQuickPanel {
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.pages[index] || []
 
-                            GridLayout {
-                                id: pageContentGrid
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: parent.top
-                                }
-                                columns: root.columns
-                                columnSpacing: root.spacing
-                                rowSpacing: root.spacing
-                                objectName: "pageContent_" + pageContainer.index
+                                GridLayout {
+                                    id: pageContentGrid
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: parent.top
+                                    }
+                                    columns: root.columns
+                                    columnSpacing: root.spacing
+                                    rowSpacing: root.spacing
+                                    objectName: "pageContent_" + pageContainer.index
 
-                                Repeater {
-                                    id: gridRepeater
+                                    Repeater {
+                                        model: root.columns
+                                        Item {
+                                            required property int index
+                                            Layout.row: 1000
+                                            Layout.column: index
+                                            Layout.columnSpan: 1
+                                            Layout.rowSpan: 1
+                                            Layout.preferredWidth: root.baseCellWidth
+                                            Layout.preferredHeight: 0
+                                            implicitWidth: root.baseCellWidth
+                                            implicitHeight: 0
+                                        }
+                                    }
+
+                                    Repeater {
+                                        id: gridRepeater
                                     model: ScriptModel {
                                         values: pageContainer.pageToggles
                                         objectProp: "type"
@@ -732,6 +749,21 @@ AbstractQuickPanel {
                 columns: root.columns
                 columnSpacing: root.spacing
                 rowSpacing: root.spacing
+
+                Repeater {
+                    model: root.columns
+                    Item {
+                        required property int index
+                        Layout.row: 1000
+                        Layout.column: index
+                        Layout.columnSpan: 1
+                        Layout.rowSpan: 1
+                        Layout.preferredWidth: root.baseCellWidth
+                        Layout.preferredHeight: 0
+                        implicitWidth: root.baseCellWidth
+                        implicitHeight: 0
+                    }
+                }
 
                 Repeater {
                     model: ScriptModel {

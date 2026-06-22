@@ -13,7 +13,7 @@ RippleButton {
     property Component extraComponent: null
 
     Layout.fillWidth: true
-    implicitHeight: contentLayout.implicitHeight + 32
+    implicitHeight: contentLayout.implicitHeight + 20
     font.pixelSize: Appearance.font.pixelSize.small
 
     onClicked: checked = !checked
@@ -54,7 +54,7 @@ RippleButton {
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
 
-    readonly property bool isPressed: root.down
+
 
     readonly property bool prevIsPressed: {
         var p = parent;
@@ -124,7 +124,10 @@ RippleButton {
         RowLayout {
             id: contentLayout
             anchors.fill: parent
-            anchors.margins: 16
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.topMargin: 10
+            anchors.bottomMargin: 10
             spacing: 12
 
             Loader {
@@ -166,7 +169,9 @@ RippleButton {
                 id: switchWidget
                 Layout.fillWidth: false
                 checked: root.checked
-                onClicked: root.clicked()
+                enabled: false
+                isPressed: root.isPressed
+                opacity: root.enabled ? 1.0 : 0.4
             }
         }
     }

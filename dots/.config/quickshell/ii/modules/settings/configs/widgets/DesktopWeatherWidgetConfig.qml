@@ -46,6 +46,20 @@ ContentPage {
         title: Translation.tr("Weather Settings")
         icon: "cloud"
 
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: !Config.options.background.widgets.weather.enable
+
+            PagePlaceholder {
+                anchors.fill: parent
+                icon: "cloud_off"
+                shape: MaterialShape.Shape.Circle
+                title: Translation.tr("Weather widget disabled")
+                description: Translation.tr("Enable the desktop weather widget in Desktop Widgets settings to use this page.")
+            }
+        }
+
         ConfigSelectionArray {
             currentValue: Config.options.background.widgets.weather.placementStrategy
             onSelected: newValue => {

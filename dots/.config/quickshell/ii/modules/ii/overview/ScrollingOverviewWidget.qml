@@ -17,10 +17,10 @@ Item {
     required property var panelWindow
 
     readonly property bool hyprscrollingEnabled: true //FIXME
-    readonly property list<int> workspaceMap: Config.options.overview.workspaceMap
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
     readonly property string backgroundStyle: Config.options.overview.scrollingStyle.backgroundStyle
 
-    readonly property bool useWorkspaceMap: Config.options.overview.useWorkspaceMap
+    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property var extendedWorkspaceMap: root.extendWorkspaceMap(workspaceMap)
     property int workspaceOffset: useWorkspaceMap ? extendedWorkspaceMap[root.monitorIndex] : 0
 

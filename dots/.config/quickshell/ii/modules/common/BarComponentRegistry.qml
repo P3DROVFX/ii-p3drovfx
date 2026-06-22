@@ -26,7 +26,7 @@ Singleton {
             title: "Policies panel button",
             styleConfigKey: "policies",
             styleOptions: defaultStyleOptions,
-            sidebarPage: 5
+            configPage: "CorePoliciesConfig.qml"
         },
         {
             id: "active_window",
@@ -49,7 +49,7 @@ Singleton {
             icon: "workspaces",
             title: "Workspaces",
             styleConfigKey: "workspaces",
-            sidebarPage: 7,
+            configPage: "../WorkspacesConfig.qml",
             styleOptions: [
                 {
                     displayName: qsTr("Default"),
@@ -81,7 +81,8 @@ Singleton {
             icon: "nest_clock_farsight_analog",
             title: "Clock",
             styleConfigKey: "clock",
-            styleOptions: defaultStyleOptions
+            styleOptions: defaultStyleOptions,
+            configPage: "CoreTimeDateConfig.qml"
         },
         {
             id: "system_tray",
@@ -95,22 +96,31 @@ Singleton {
             title: "Dashboard panel button",
             styleConfigKey: "dashboard",
             styleOptions: defaultStyleOptions,
-            sidebarPage: 5
+            configPage: "DashboardButtonConfig.qml"
         },
         {
             id: "record_indicator",
             icon: "screen_record",
-            title: "Record indicator"
+            title: "Record indicator",
+            configPage: "IndicatorsConfig.qml"
         },
         {
             id: "screen_share_indicator",
             icon: "screen_share",
-            title: "Screen share indicator"
+            title: "Screen share indicator",
+            configPage: "IndicatorsConfig.qml"
+        },
+        {
+            id: "phone_scrcpy_indicator",
+            icon: "smart_display",
+            title: "Phone scrcpy indicator",
+            configPage: "CorePoliciesConfig.qml"
         },
         {
             id: "date",
             icon: "date_range",
-            title: "Date"
+            title: "Date",
+            configPage: "CoreTimeDateConfig.qml"
         },
         {
             id: "battery",
@@ -132,7 +142,7 @@ Singleton {
             title: "Weather",
             styleConfigKey: "weather",
             styleOptions: defaultStyleOptions,
-            sidebarPage: 16
+            configPage: "CoreWeatherConfig.qml"
         },
         {
             id: "utility_buttons",
@@ -171,7 +181,8 @@ Singleton {
             icon: "power_settings_new",
             title: "Power button",
             styleConfigKey: "power",
-            styleOptions: defaultStyleOptions
+            styleOptions: defaultStyleOptions,
+            configPage: "CorePowerConfig.qml"
         }
     ]
 

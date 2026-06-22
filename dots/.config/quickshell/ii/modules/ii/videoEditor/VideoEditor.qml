@@ -24,7 +24,12 @@ FloatingWindow {
     MediaPlayer {
         id: player
         autoPlay: true
-        source: GlobalStates.videoEditorPath !== "" ? "file://" + encodeURI(GlobalStates.videoEditorPath) : ""
+        // Only resolve the source once the editor is actually visible. Otherwise,
+        // setting videoEditorPath from the record.sh IPC handler triggers
+        // autoPlay in the background while the user is still looking at the
+        // "Edit Video?" popup, causing the recorded audio to loop invisibly
+        // (loops: MediaPlayer.Infinite) with no visible window to stop it.
+        source: root.visible && GlobalStates.videoEditorPath !== "" ? "file://" + encodeURI(GlobalStates.videoEditorPath) : ""
         videoOutput: videoOutput
         audioOutput: AudioOutput {}
         loops: MediaPlayer.Infinite

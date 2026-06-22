@@ -55,15 +55,17 @@ Item {
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string artUrl: player?.trackArtUrl || ""
     readonly property bool isLocalArt: artUrl.startsWith("file://")
-    
+
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`
     property bool artDownloaded: false
 
     readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
+        if (!artUrl)
+            return "";
+        if (isLocalArt)
+            return artUrl;
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
     }
 
@@ -281,11 +283,11 @@ Item {
                                 contentItem: MaterialSymbol {
                                     text: "keep"
                                     iconSize: 18
-                                    fill: MprisController.activePlayer == root.player ? 1 : 0
-                                    color: MprisController.activePlayer == root.player ? Appearance.colors.colPrimary : root.colTimeSub
+                                    fill: GlobalStates.mediaControlsPinned ? 1 : 0
+                                    color: GlobalStates.mediaControlsPinned ? Appearance.colors.colPrimary : root.colTimeSub
                                     horizontalAlignment: Text.AlignHCenter
                                 }
-                                onClicked: MprisController.activePlayer = root.player
+                                onClicked: GlobalStates.mediaControlsPinned = !GlobalStates.mediaControlsPinned
                             }
                         }
 

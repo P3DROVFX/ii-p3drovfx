@@ -13,6 +13,8 @@ Button {
     id: root
     property bool toggled
     property string buttonText
+    readonly property bool isHovered: buttonMouseArea.containsMouse
+    property bool isPressed: false
     property real buttonRadius: Appearance?.rounding?.small ?? 8
     property real buttonRadiusPressed: Appearance?.rounding?.small ?? 6
     property var downAction // When left clicking (down)
@@ -33,8 +35,8 @@ Button {
 
     Layout.fillWidth: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
     Layout.fillHeight: (clickIndex - 1 <= indexInParent && indexInParent <= clickIndex + 1)
-    implicitWidth: (root.down && bounce) ? clickedWidth : baseWidth
-    implicitHeight: (root.down && bounce) ? clickedHeight : baseHeight
+    implicitWidth: (root.isPressed && bounce) ? clickedWidth : baseWidth
+    implicitHeight: (root.isPressed && bounce) ? clickedHeight : baseHeight
 
     property color colBackground: ColorUtils.transparentize(colBackgroundHover, 1) || "transparent"
     property color colBackgroundHover: Appearance?.colors.colLayer1Hover ?? "#E5DFED"
@@ -43,19 +45,19 @@ Button {
     property color colBackgroundToggledHover: Appearance?.colors.colPrimaryHover ?? "#77699C"
     property color colBackgroundToggledActive: Appearance?.colors.colPrimaryActive ?? "#D6CEE2"
 
-    property real radius: root.down ? root.buttonRadiusPressed : root.buttonRadius
-    property real leftRadius: root.down ? root.buttonRadiusPressed : root.buttonRadius
-    property real rightRadius: root.down ? root.buttonRadiusPressed : root.buttonRadius
+    property real radius: root.isPressed ? root.buttonRadiusPressed : root.buttonRadius
+    property real leftRadius: root.isPressed ? root.buttonRadiusPressed : root.buttonRadius
+    property real rightRadius: root.isPressed ? root.buttonRadiusPressed : root.buttonRadius
     property color color: root.enabled ? (root.toggled ? 
-        (root.down ? colBackgroundToggledActive : 
-            root.hovered ? colBackgroundToggledHover : 
+        (root.isPressed ? colBackgroundToggledActive : 
+            isHovered ? colBackgroundToggledHover : 
             colBackgroundToggled) :
-        (root.down ? colBackgroundActive : 
-            root.hovered ? colBackgroundHover : 
+        (root.isPressed ? colBackgroundActive : 
+            isHovered ? colBackgroundHover : 
             colBackground)) : colBackground
 
-    onDownChanged: {
-        if (root.down) {
+    onIsPressedChanged: {
+        if (root.isPressed) {
             if (root.parent.clickIndex !== undefined) {
                 root.parent.clickIndex = parent.children.indexOf(root)
             }
@@ -79,7 +81,7 @@ Button {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
-    scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
+    scale: root.isPressed ? 0.95 : (isHovered ? 1.01 : 1.0)
     Behavior on scale {
         NumberAnimation {
             duration: 150
@@ -95,6 +97,10 @@ Button {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onPressed: (event) => { 
+            if (event.button === Qt.LeftButton) {
+                root.isPressed = true;
+                root.down = true;
+            }
             if(event.button === Qt.RightButton) {
                 if (root.altAction) root.altAction();
                 return;
@@ -103,11 +109,13 @@ Button {
                 if (root.middleClickAction) root.middleClickAction();
                 return;
             }
-            root.down = true
             if (root.downAction) root.downAction();
         }
         onReleased: (event) => {
-            root.down = false
+            if (event.button === Qt.LeftButton) {
+                root.isPressed = false;
+                root.down = false;
+            }
             if (event.button != Qt.LeftButton) return;
             if (root.releaseAction) root.releaseAction();
         }
@@ -116,12 +124,12 @@ Button {
             root.click()
         }
         onCanceled: (event) => {
-            root.down = false
+            root.isPressed = false;
+            root.down = false;
         }
 
         onPressAndHold: () => {
             altAction(); 
-            root.down = false; 
             root.clicked = false;
         };
     }

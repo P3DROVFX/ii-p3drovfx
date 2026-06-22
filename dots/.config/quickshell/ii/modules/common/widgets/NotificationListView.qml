@@ -10,6 +10,7 @@ StyledListView { // Scrollable window
     id: root
     property bool popup: false
     dismissToLeft: popup && (Config.options.notifications.position ?? "top_right").endsWith("left")
+    useSlideInAnimation: popup
 
     spacing: 3
 
@@ -21,7 +22,7 @@ StyledListView { // Scrollable window
         required property var modelData
         popup: root.popup
         width: ListView.view.width // https://doc.qt.io/qt-6/qml-qtquick-listview.html
-        notificationGroup: popup ? 
+        notificationGroup: popup ?
             Notifications.popupGroupsByAppName[modelData] :
             Notifications.groupsByAppName[modelData]
     }

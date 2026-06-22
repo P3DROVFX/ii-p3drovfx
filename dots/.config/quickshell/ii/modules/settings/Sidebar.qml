@@ -56,10 +56,20 @@ Item {
 
         // ── Pages container rectangle ───────────────────────────────────────
         Rectangle {
+            id: sidebarContainer
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: Appearance.colors.colLayer0
             radius: Appearance.rounding.windowRounding
+
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    width: sidebarContainer.width
+                    height: sidebarContainer.height
+                    radius: sidebarContainer.radius
+                }
+            }
 
             StyledFlickable {
                 id: pagesScrollView

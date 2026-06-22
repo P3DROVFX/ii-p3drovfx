@@ -11,15 +11,37 @@ Item {
     readonly property Item parentItem: parent
     property Flickable flickable: null
 
+    Scale {
+        id: scrollScaleTransform
+        origin.x: parentItem ? parentItem.width / 2 : 0
+        origin.y: parentItem ? parentItem.height / 2 : 0
+        xScale: root.animatedScale
+        yScale: root.animatedScale
+    }
+
     Component.onCompleted: {
         findFlickable();
         if (!flickable) {
             retryTimer.start();
         }
+        if (parentItem) {
+            var trans = parentItem.transform;
+            if (trans.indexOf(scrollScaleTransform) === -1) {
+                trans.push(scrollScaleTransform);
+                parentItem.transform = trans;
+            }
+        }
     }
 
     onParentChanged: {
         findFlickable();
+        if (parentItem) {
+            var trans = parentItem.transform;
+            if (trans.indexOf(scrollScaleTransform) === -1) {
+                trans.push(scrollScaleTransform);
+                parentItem.transform = trans;
+            }
+        }
     }
 
     Timer {
@@ -108,11 +130,7 @@ Item {
         target: parentItem
         property: "opacity"
         value: root.animatedOpacity
-    }
-
-    Binding {
-        target: parentItem
-        property: "scale"
-        value: root.animatedScale
+        when: root.animateEnabled && root.animatedOpacity < 0.999
     }
 }
+

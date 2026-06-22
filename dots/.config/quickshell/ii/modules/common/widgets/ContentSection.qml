@@ -17,16 +17,73 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 12
 
+    // NOTE: The `page` id (declared in the consuming ContentPage file, e.g.
+    // `WidgetsConfig.qml`) is NOT accessible from this separate component file
+    // because QML ids do not propagate across file boundaries. So we resolve
+    // the containing Flickable at runtime by walking the parent chain.
+    // (Previously this used `page` which threw `ReferenceError: page is not
+    // defined` and silently broke the scroll + highlight feature.)
+    property Flickable flickable: null
+
+    function findFlickable() {
+        var p = parent;
+        while (p) {
+            if (p.flickableDirection !== undefined && p.contentY !== undefined) {
+                root.flickable = p;
+                return;
+            }
+            p = p.parent;
+        }
+        root.flickable = null;
+    }
+
     Component.onCompleted: {
-        if (page?.register == false)
-            return;
-        if (!page?.index)
-            return;
-        SearchRegistry.registerSection({
-            pageIndex: page?.index,
-            title: root.title,
-            searchStrings: root.stringMap.slice(),
-            yPos: root.y
+        findFlickable();
+        // Catch a pending search that was set BEFORE this ContentSection was
+        // instantiated (e.g. during the Loader's async page load). This closes
+        // the race where SearchRegistry.currentSearch was already matching our
+        // title before bindings could re-fire onCurrentSearchChanged.
+        tryPendingHighlight();
+    }
+
+    onParentChanged: findFlickable()
+
+    readonly property string currentSearch: SearchRegistry.currentSearch
+    onCurrentSearchChanged: {
+        if (matchesCurrent(SearchRegistry.currentSearch)) {
+            doScrollAndHighlight();
+            SearchRegistry.currentSearch = "";
+        }
+    }
+
+    function matchesCurrent(query) {
+        if (!query || query.length === 0)
+            return false;
+        return query.toLowerCase() === root.title.toLowerCase();
+    }
+
+    function tryPendingHighlight() {
+        if (matchesCurrent(SearchRegistry.currentSearch)) {
+            doScrollAndHighlight();
+            SearchRegistry.currentSearch = "";
+        }
+    }
+
+    function doScrollAndHighlight() {
+        var sectionRef = root;
+        Qt.callLater(() => {
+            // Layout settles between frames, so Qt.callLater guarantees
+            // contentHeight/flickable.height have been computed.
+            if (!root.flickable)
+                findFlickable();
+            if (root.flickable && root.flickable.contentItem) {
+                let p = root.flickable.contentItem.mapFromItem(sectionRef, 0, 0);
+                let targetY = p.y - 100;
+                let maxContentY = Math.max(0, root.flickable.contentHeight - root.flickable.height);
+                root.flickable.contentY = Math.max(0, Math.min(targetY, maxContentY));
+            }
+            highlightOverlay.startAnimation();
+            bgPulseAnimation.restart();
         });
     }
 
@@ -46,6 +103,10 @@ ColumnLayout {
         color: root.customBackgroundColor !== undefined ? root.customBackgroundColor : Appearance.colors.colLayer0
         border.width: root.customBackgroundColor !== undefined ? 0 : 1
         border.color: Appearance.colors.colLayer0Border
+
+        Behavior on color {
+            ColorAnimation { duration: 280; easing.type: Easing.InOutQuad }
+        }
 
         ColumnLayout {
             id: cardInnerLayout
@@ -119,6 +180,24 @@ ColumnLayout {
             anchors.fill: parent
             radius: cardContainer.radius
             visible: opacity > 0
+        }
+
+        SequentialAnimation {
+            id: bgPulseAnimation
+            ColorAnimation {
+                target: cardContainer
+                property: "color"
+                to: Appearance.colors.colPrimaryContainer
+                duration: 350
+                easing.type: Easing.InOutQuad
+            }
+            ColorAnimation {
+                target: cardContainer
+                property: "color"
+                to: Appearance.colors.colLayer0
+                duration: 500
+                easing.type: Easing.InOutQuad
+            }
         }
     }
 }

@@ -29,6 +29,7 @@ Scope {
         
         // Check if there are no windows inside the active special workspace.
         const specialWindows = HyprlandData.windowList.filter(win => {
+            if (!win.workspace || !win.workspace.name) return false;
             return win.workspace.name === root.specialWorkspaceName || 
                    win.workspace.name === "special:" + root.specialWorkspaceName ||
                    (root.specialWorkspaceName === "special:special" && win.workspace.name === "special") ||
@@ -45,6 +46,12 @@ Scope {
         
         sourceComponent: PanelWindow {
             id: overlayWindow
+            screen: {
+                if (!HyprlandData.monitors) return null;
+                const activeMon = HyprlandData.monitors.find(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
+                if (!activeMon) return null;
+                return Quickshell.screens.find(s => s.name === activeMon.name) ?? null;
+            }
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:scratchpad_empty_overlay"
             WlrLayershell.layer: WlrLayer.Overlay

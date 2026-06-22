@@ -52,9 +52,37 @@ Scope {
 
             // Workspaces
             property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
-            property list<var> relevantWindows: HyprlandData.windowList.filter(win => win.monitor == monitor?.id && win.workspace.id >= 0).sort((a, b) => a.workspace.id - b.workspace.id)
-            property int firstWorkspaceId: relevantWindows[0]?.workspace.id || 1
-            property int lastWorkspaceId: relevantWindows[relevantWindows.length - 1]?.workspace.id || 10
+            readonly property bool isMonitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
+            readonly property bool loopEnabled: Config.options.background.parallax.loop
+            readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
+            readonly property int chunkSize: {
+                let intensity = Config.options.background.parallax.intensity;
+                if (intensity === undefined || isNaN(intensity)) intensity = 4;
+                let idx = Math.max(1, Math.min(10, intensity)) - 1;
+                return intensitySpans[idx] ?? 10;
+            }
+            readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
+            readonly property list<var> workspaceMap: Config.options.bar.workspaces.workspaceMap
+            readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
+            readonly property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
+            readonly property int workspaceGroup: {
+                if (!loopEnabled)
+                    return 0;
+                let activeId = monitor?.activeWorkspace?.id;
+                if (!activeId)
+                    return 0;
+                if (activeId <= workspaceOffset)
+                    return 0;
+                if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
+                    let nextMonitorStart = workspaceMap[monitorIndex + 1];
+                    if (activeId > nextMonitorStart)
+                        return 0;
+                }
+                let group = Math.floor((activeId - workspaceOffset - 1) / chunkSize);
+                return Math.max(0, group);
+            }
+            property int firstWorkspaceId: workspaceOffset + workspaceGroup * chunkSize + 1
+            property int lastWorkspaceId: workspaceOffset + (workspaceGroup + 1) * chunkSize
 
             // Wallpaper
             property bool wallpaperIsVideo: {
@@ -264,7 +292,7 @@ Scope {
                             return false;
                         return HyprlandData.monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
                     }
-                    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen)
+                    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && bgRoot.isMonitorFocused
 
                     // Animated clip radius — drives both the border-radius clip and tile visibility
                     property real wallpaperClipRadius: wallpaperZoomedOut ? Appearance.rounding.windowRounding : 0
@@ -441,7 +469,6 @@ Scope {
                                 maskSpreadAtMin: 1.0
                             }
 
-
                             Behavior on x {
                                 NumberAnimation {
                                     duration: 400
@@ -492,14 +519,16 @@ Scope {
                                 opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
                                 sourceSize: Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080)
 
-                                property int chunkSize: Config?.options.bar.workspaces.shown ?? 10
+                                property int chunkSize: bgRoot.chunkSize
                                 property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
                                 property int upper: Math.ceil(bgRoot.lastWorkspaceId / chunkSize) * chunkSize
                                 property int range: Math.max(1, upper - lower)
                                 property real valueX: {
                                     let result = 0.5;
-                                    if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax)
-                                        result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                    if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) {
+                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                        result = Config.options.background.parallax.invertHorizontal ? (1.0 - ratio) : ratio;
+                                    }
                                     return result;
                                 }
                                 property real sidebarOffsetX: {
@@ -509,8 +538,10 @@ Scope {
                                 }
                                 property real valueY: {
                                     let result = 0.5;
-                                    if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax)
-                                        result = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                    if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) {
+                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                        result = Config.options.background.parallax.invertVertical ? (1.0 - ratio) : ratio;
+                                    }
                                     return result;
                                 }
                                 property real effectiveValueX: Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
@@ -735,13 +766,13 @@ Scope {
                             readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
 
                             readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gp
-                            readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
-                            readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
+                            readonly property real leftSidebarOffset: (GlobalStates.policiesPinned && !GlobalStates.policiesDetached && GlobalStates.animatedLeftSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
+                            readonly property real rightSidebarOffset: 0
 
-                            readonly property int wbLeft:   Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSz : 0, leftSidebarOffset)
-                            readonly property int wbRight:  Math.max(baseMargin, (barEffective && barVertical &&  barBottom) ? barSz : 0, rightSidebarOffset)
-                            readonly property int wbTop:    Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSz : 0)
-                            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical &&  barBottom) ? barSz : 0)
+                            readonly property int wbLeft: Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSz : 0, leftSidebarOffset)
+                            readonly property int wbRight: Math.max(baseMargin, (barEffective && barVertical && barBottom) ? barSz : 0, rightSidebarOffset)
+                            readonly property int wbTop: Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSz : 0)
+                            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSz : 0)
 
                             property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !bgRoot.overviewOpen
                             visible: shouldBlur || opacity > 0.01
@@ -840,13 +871,13 @@ Scope {
             readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
 
             readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gap
-            readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && screen && screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
-            readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && screen && screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
+            readonly property real leftSidebarOffset: (GlobalStates.policiesPinned && !GlobalStates.policiesDetached && GlobalStates.animatedLeftSidebarWidth > 0 && screen && screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
+            readonly property real rightSidebarOffset: 0
 
-            readonly property int wbLeft:   Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSize : 0, leftSidebarOffset)
-            readonly property int wbRight:  Math.max(baseMargin, (barEffective && barVertical &&  barBottom) ? barSize : 0, rightSidebarOffset)
-            readonly property int wbTop:    Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSize : 0)
-            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical &&  barBottom) ? barSize : 0)
+            readonly property int wbLeft: Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSize : 0, leftSidebarOffset)
+            readonly property int wbRight: Math.max(baseMargin, (barEffective && barVertical && barBottom) ? barSize : 0, rightSidebarOffset)
+            readonly property int wbTop: Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSize : 0)
+            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSize : 0)
 
             mask: Region {
                 item: overlayDimRect
@@ -854,7 +885,7 @@ Scope {
 
             readonly property bool animEnabled: Config.options.background.zoomOutEnabled
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
-            readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen)
+            readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && (Hyprland.focusedMonitor?.name == Hyprland.monitorFor(modelData)?.name)
 
             visible: isActive || overlayDimRect.opacity > 0.01
 

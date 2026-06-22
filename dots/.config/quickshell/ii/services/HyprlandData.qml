@@ -121,10 +121,13 @@ Singleton {
         target: Hyprland
 
         function onRawEvent(event) {
+            // console.log("Hyprland raw event:", event.name);
             switch (event.name) {
                 case "workspace":
                 case "workspacev2":
                 case "focusedmon":
+                case "activespecial":
+                case "activespecialv2":
                     root.updateMonitors();
                     root.updateWorkspaces();
                     break;

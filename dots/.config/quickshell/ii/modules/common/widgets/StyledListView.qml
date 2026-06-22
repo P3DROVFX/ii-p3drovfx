@@ -16,6 +16,8 @@ ListView {
     property bool animateAppearance: true
     property bool animateMovement: false
     property bool dismissToLeft: false
+    property bool useSlideInAnimation: false
+
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
 
@@ -70,13 +72,35 @@ ListView {
     }
 
     add: Transition {
-        animations: animateAppearance ? [
+        animations: animateAppearance ? (root.useSlideInAnimation ? [
+            Appearance?.animation.elementMove.numberAnimation.createObject(this, {
+                property: "x",
+                from: root.dismissToLeft ? -(root.width + root.removeOvershoot) : (root.width + root.removeOvershoot),
+                to: 0,
+            }),
+        ] : [
             Appearance?.animation.elementMove.numberAnimation.createObject(this, {
                 properties: popin ? "opacity,scale" : "opacity",
                 from: 0,
                 to: 1,
             }),
-        ] : []
+        ]) : []
+    }
+
+    populate: Transition {
+        animations: animateAppearance ? (root.useSlideInAnimation ? [
+            Appearance?.animation.elementMove.numberAnimation.createObject(this, {
+                property: "x",
+                from: root.dismissToLeft ? -(root.width + root.removeOvershoot) : (root.width + root.removeOvershoot),
+                to: 0,
+            }),
+        ] : [
+            Appearance?.animation.elementMove.numberAnimation.createObject(this, {
+                properties: popin ? "opacity,scale" : "opacity",
+                from: 0,
+                to: 1,
+            }),
+        ]) : []
     }
 
     addDisplaced: Transition {
@@ -132,11 +156,12 @@ ListView {
                 property: "x",
                 to: root.dismissToLeft ? -(root.width + root.removeOvershoot) : (root.width + root.removeOvershoot),
             }),
+        ].concat(root.useSlideInAnimation ? [] : [
             Appearance?.animation.elementMove.numberAnimation.createObject(this, {
                 property: "opacity",
                 to: 0,
-            })
-        ] : []
+            }),
+        ]) : []
     }
 
     // This is movement when something is removed, not removing animation!

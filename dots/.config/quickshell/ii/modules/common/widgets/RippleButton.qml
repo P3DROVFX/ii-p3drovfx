@@ -16,12 +16,13 @@ Button {
     property real buttonRadius: Appearance?.rounding?.small ?? 4
     property real buttonRadiusPressed: buttonRadius
     property real buttonEffectiveRadius: root.down ? root.buttonRadiusPressed : root.buttonRadius
+    readonly property bool isPressed: root.down
     property int rippleDuration: 1200
     property bool rippleEnabled: true
-    property var downAction // When left clicking (down)
-    property var releaseAction // When left clicking (release)
-    property var altAction // When right clicking
-    property var middleClickAction // When middle clicking
+    property var downAction
+    property var releaseAction
+    property var altAction
+    property var middleClickAction
 
     property real topLeftRadius: buttonEffectiveRadius
     property real topRightRadius: buttonEffectiveRadius
@@ -47,6 +48,7 @@ Button {
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
+    readonly property real visualScale: scale
     scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
     Behavior on scale {
         NumberAnimation {
@@ -59,11 +61,9 @@ Button {
         const stateY = buttonBackground.y;
         rippleAnim.x = x;
         rippleAnim.y = y - stateY;
-
         const dist = (ox, oy) => ox * ox + oy * oy;
         const stateEndY = stateY + buttonBackground.height;
         rippleAnim.radius = Math.sqrt(Math.max(dist(0, stateY), dist(0, stateEndY), dist(width, stateY), dist(width, stateEndY)));
-
         rippleFadeAnim.complete();
         rippleAnim.restart();
     }
@@ -94,10 +94,7 @@ Button {
                 root.downAction();
             if (!root.rippleEnabled)
                 return;
-            const {
-                x,
-                y
-            } = event;
+            const { x, y } = event;
             startRipple(x, y);
         }
         onReleased: event => {
@@ -106,7 +103,7 @@ Button {
                 return;
             if (root.releaseAction)
                 root.releaseAction();
-            root.click(); // Because the MouseArea already consumed the event
+            root.click();
             if (!root.rippleEnabled)
                 return;
             rippleFadeAnim.restart();
@@ -129,26 +126,12 @@ Button {
 
     SequentialAnimation {
         id: rippleAnim
-
         property real x
         property real y
         property real radius
-
-        PropertyAction {
-            target: ripple
-            property: "x"
-            value: rippleAnim.x
-        }
-        PropertyAction {
-            target: ripple
-            property: "y"
-            value: rippleAnim.y
-        }
-        PropertyAction {
-            target: ripple
-            property: "opacity"
-            value: 1
-        }
+        PropertyAction { target: ripple; property: "x"; value: rippleAnim.x }
+        PropertyAction { target: ripple; property: "y"; value: rippleAnim.y }
+        PropertyAction { target: ripple; property: "opacity"; value: 1 }
         ParallelAnimation {
             RippleAnim {
                 target: ripple
@@ -161,17 +144,16 @@ Button {
 
     background: Rectangle {
         id: buttonBackground
+        scale: root.visualScale
         topLeftRadius: root.topLeftRadius
         topRightRadius: root.topRightRadius
         bottomLeftRadius: root.bottomLeftRadius
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
-
         color: root.buttonColor
         Behavior on color {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-
         layer.enabled: true
         layer.samples: 8
         layer.smooth: true
@@ -186,39 +168,25 @@ Button {
                 antialiasing: true
             }
         }
-
         Item {
             id: ripple
             width: ripple.implicitWidth
             height: ripple.implicitHeight
             opacity: 0
             visible: width > 0 && height > 0
-
             property real implicitWidth: 0
             property real implicitHeight: 0
-
             Behavior on opacity {
                 animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
             }
-
             RadialGradient {
                 anchors.fill: parent
                 gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.3
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.5
-                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
-                    }
+                    GradientStop { position: 0.0; color: root.rippleColor }
+                    GradientStop { position: 0.3; color: root.rippleColor }
+                    GradientStop { position: 0.5; color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0) }
                 }
             }
-
             transform: Translate {
                 x: -ripple.width / 2
                 y: -ripple.height / 2
@@ -228,5 +196,6 @@ Button {
 
     contentItem: StyledText {
         text: root.buttonText
+        scale: root.visualScale
     }
 }
