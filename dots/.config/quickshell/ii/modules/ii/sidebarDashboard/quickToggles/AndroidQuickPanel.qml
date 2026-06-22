@@ -132,10 +132,10 @@ AbstractQuickPanel {
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
         if (pageIndex < 0 || pageIndex >= pages.length)
-            return baseCellHeight;
+            return baseCellHeight + 8;
         var pageToggles = pages[pageIndex] || [];
         var rows = getGridRowsNeeded(pageToggles);
-        return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing);
+        return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
     }
 
     // Dynamic height based on current page + page indicators

@@ -41,6 +41,14 @@ Item {
     // the main content is shown.
     property url activeSubPage: ""
 
+    readonly property bool emptyStateVisible: !KdeConnectService.available
+                                               || (KdeConnectService.hasDevices
+                                                   && KdeConnectService.devices
+                                                          .filter(d => d.reachable && d.paired)
+                                                          .length === 0)
+                                               || !KdeConnectService.hasDevices
+
+
     function openSubPage(url: url): void {
         root.activeSubPage = Qt.resolvedUrl(url)
     }
@@ -588,6 +596,7 @@ Item {
             PhoneHeader {
                 id: phoneHeader
                 Layout.fillWidth: true
+                visible: !root.emptyStateVisible
             }
 
             // ───────── PAIRING REQUEST BANNERS ─────────
@@ -601,6 +610,7 @@ Item {
                     color: Appearance.colors.colPrimaryContainer
                     opacity: 0
                     scale: 0.98
+                    visible: !root.emptyStateVisible
                     Component.onCompleted: {
                         opacity = 1
                         scale = 1
@@ -697,6 +707,7 @@ Item {
             PhoneActionsRow {
                 id: actionsRow
                 Layout.fillWidth: true
+                visible: !root.emptyStateVisible
             }
 
             // ───────── NOTIFICATIONS ─────────
@@ -712,6 +723,7 @@ Item {
                 id: notifArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: !root.emptyStateVisible
 
                 RemoteNotificationListView {
                     id: notifList
@@ -829,6 +841,89 @@ Item {
                 }
             }
 
+            // Empty state — KDE Connect unavailable / no paired device.
+            ColumnLayout {
+                id: emptyState
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 14
+                visible: root.emptyStateVisible
+                // When invisible, this ColumnLayout's children include a
+                // RippleButton ("Install KDE Connect") whose MouseArea could
+                // still be enabled if the parent reports visibility async.
+                // Bind `enabled` to `visible` so the whole subtree becomes
+                // completely inert whenever the empty state isn't shown —
+                // this guarantees the underlying action buttons remain
+                // clickable while a paired+reachable device is connected.
+                enabled: visible
+                z: 100
+
+                Item { Layout.fillHeight: true }
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: KdeConnectService.available
+                          ? "phonelink_off" : "phonelink_erase"
+                    iconSize: 64
+                    color: Appearance.colors.colSubtext
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: root.width * 0.85
+                    text: KdeConnectService.available
+                          ? Translation.tr("No device connected")
+                          : Translation.tr("KDE Connect not installed")
+                    font.pixelSize: Appearance.font.pixelSize.huge
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer2
+                    horizontalAlignment: Text.AlignHCenter
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: root.width * 0.85
+                    text: KdeConnectService.available
+                          ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
+                          : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    opacity: 0.7
+                }
+
+                RippleButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: 36
+                    Layout.preferredWidth: 220
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    visible: !KdeConnectService.available
+                    contentItem: RowLayout {
+                        spacing: 6
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "download"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+                        StyledText {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: Translation.tr("Install KDE Connect")
+                            color: Appearance.colors.colOnPrimaryContainer
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                    onClicked: () => {
+                        Quickshell.execDetached(["xdg-open",
+                            "https://kdeconnect.kde.org/download.html"])
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+            }
+
             // ───────── FOOTER (3 hero cards: scrcpy / webcam / microphone) ─────────
             PhoneFooter {
                 id: phoneFooter
@@ -884,92 +979,6 @@ Item {
                 }
             }
         }
-
-        // Empty state — KDE Connect unavailable / no paired device.
-        ColumnLayout {
-            id: emptyState
-            anchors.fill: parent
-            anchors.margins: 24
-            visible: !KdeConnectService.available
-                       || (KdeConnectService.hasDevices
-                           && KdeConnectService.devices
-                                  .filter(d => d.reachable && d.paired)
-                                  .length === 0)
-                       || !KdeConnectService.hasDevices
-            // When invisible, this ColumnLayout's children include a
-            // RippleButton ("Install KDE Connect") whose MouseArea could
-            // still be enabled if the parent reports visibility async.
-            // Bind `enabled` to `visible` so the whole subtree becomes
-            // completely inert whenever the empty state isn't shown —
-            // this guarantees the underlying action buttons remain
-            // clickable while a paired+reachable device is connected.
-            enabled: visible
-            z: 100
-
-            Item { Layout.fillHeight: true }
-
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignHCenter
-                text: KdeConnectService.available
-                      ? "phonelink_off" : "phonelink_erase"
-                iconSize: 64
-                color: Appearance.colors.colSubtext
-            }
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: parent.width * 0.85
-                text: KdeConnectService.available
-                      ? Translation.tr("No device connected")
-                      : Translation.tr("KDE Connect not installed")
-                font.pixelSize: Appearance.font.pixelSize.huge
-                font.weight: Font.Bold
-                color: Appearance.colors.colOnLayer2
-                horizontalAlignment: Text.AlignHCenter
-            }
-            StyledText {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: parent.width * 0.85
-                text: KdeConnectService.available
-                      ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
-                      : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colSubtext
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                opacity: 0.7
-            }
-
-            RippleButton {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: 36
-                Layout.preferredWidth: 220
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colPrimaryContainer
-                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                visible: !KdeConnectService.available
-                contentItem: RowLayout {
-                    spacing: 6
-                    MaterialSymbol {
-                        Layout.alignment: Qt.AlignVCenter
-                        text: "download"
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnPrimaryContainer
-                    }
-                    StyledText {
-                        Layout.alignment: Qt.AlignVCenter
-                        text: Translation.tr("Install KDE Connect")
-                        color: Appearance.colors.colOnPrimaryContainer
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
-                    }
-                }
-                onClicked: () => {
-                    Quickshell.execDetached(["xdg-open",
-                        "https://kdeconnect.kde.org/download.html"])
-                }
-            }
-
-            Item { Layout.fillHeight: true }
-        }
     }
 }
+
