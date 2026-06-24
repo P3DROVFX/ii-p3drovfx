@@ -735,7 +735,7 @@ Item {
                                         ColorOverlay {
                                             anchors.fill: desaturatedIcon
                                             source: desaturatedIcon
-                                            color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+                                            color: ColorUtils.transparentize(Appearance.colors.colPrimary, Config.options.appearance.iconTintPercentage)
                                         }
                                     }
                                 }

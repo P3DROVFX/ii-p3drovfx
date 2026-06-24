@@ -243,6 +243,15 @@ ContentPage {
                 text: Translation.tr("Applies monochrome tint to workspaces icons. Turn on show workspace icons to see this")
             }
         }
+
+        ConfigSlider {
+            buttonIcon: "humidity_percentage"
+            text: Translation.tr("Tint percentage")
+            value: Config.options.appearance.iconTintPercentage ?? 0.6
+            onValueChanged: Config.options.appearance.iconTintPercentage = value;
+            enabled: Config.options.bar.workspaces.monochromeIcons
+            opacity: enabled ? 1.0 : 0.5
+        }
     }
 
     ContentSection {
