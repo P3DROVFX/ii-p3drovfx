@@ -46,8 +46,10 @@ RippleButton {
 
     // Art is downloaded by SearchWidget. We just reference the cached file path.
     readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
+        if (!artUrl)
+            return "";
+        if (isLocalArt)
+            return artUrl;
         return Qt.resolvedUrl(artFilePath); // SearchWidget ensures this exists
     }
 
@@ -226,7 +228,7 @@ RippleButton {
 
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: 350
+            duration: 250
             easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
         }
@@ -264,7 +266,8 @@ RippleButton {
     }
     property string displayContent: {
         // Skip highlight computation when selected — text shows itemName directly
-        if (root.isSelected) return "";
+        if (root.isSelected)
+            return "";
         return highlightContent(root.itemName, root.query);
     }
 
@@ -283,8 +286,8 @@ RippleButton {
     background: Rectangle {
         id: bgRect
         anchors.fill: root
-        anchors.leftMargin: root.horizontalMargin
-        anchors.rightMargin: root.horizontalMargin
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
         color: "transparent"
         antialiasing: true
         clip: true
@@ -320,7 +323,7 @@ RippleButton {
 
             x: {
                 if (!root.actionPanelOpen)
-                    return 0;
+                    return root.horizontalMargin;
                 let visibleW = bgRect.width;
                 let itemW = itemRect.width + root.actionBtnSpacing;
                 let btnX = itemW;
@@ -331,14 +334,12 @@ RippleButton {
                 let selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
                 let selW = selBtn ? selBtn.width : 0;
                 let selRight = btnX + selW;
-                if (selRight <= visibleW)
-                    return 0;
-                return -(selRight - visibleW + 4);
+                return Math.min(root.horizontalMargin, visibleW - 4 - selRight);
             }
 
             Behavior on x {
                 NumberAnimation {
-                    duration: 350
+                    duration: 250
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                 }
@@ -346,7 +347,7 @@ RippleButton {
 
             Rectangle {
                 id: itemRect
-                width: root.actionPanelOpen ? root.contractedWidth : bgRect.width
+                width: root.actionPanelOpen ? root.contractedWidth : (bgRect.width - root.horizontalMargin * 2)
                 height: slideRow.height
                 y: 0
                 topLeftRadius: bgRect.topLeftRadius
@@ -359,7 +360,7 @@ RippleButton {
 
                 Behavior on width {
                     NumberAnimation {
-                        duration: 375
+                        duration: 250
                         easing.type: Easing.OutBack
                         easing.overshoot: 1.15
                     }
@@ -426,7 +427,7 @@ RippleButton {
                             MaterialShape {
                                 id: iconShapeBg
                                 anchors.fill: parent
-                                shape: MaterialShape.Shape.Cookie7Sided
+                                shape: root.isSelected ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
                                 color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
@@ -885,7 +886,7 @@ RippleButton {
                     opacity: root.actionPanelOpen ? 1.0 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 300
+                            duration: 250
                             easing.type: Easing.OutCubic
                         }
                     }

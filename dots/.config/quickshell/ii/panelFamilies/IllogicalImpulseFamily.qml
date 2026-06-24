@@ -97,7 +97,12 @@ Scope {
     }
     // GNOME-like window scale-out during overview (OverviewWindowTransition)
     // It's a Scope managing its own Variants/PanelWindows — instantiate directly.
-    OverviewWindowTransition {}
+    // Disabled when searchConnectActive to keep workspace captures from
+    // interfering with the drop's emergence animation.
+    Loader {
+        active: !GlobalStates.searchConnectActive
+        sourceComponent: OverviewWindowTransition {}
+    }
     PanelLoader {
         component: Polkit {}
     }

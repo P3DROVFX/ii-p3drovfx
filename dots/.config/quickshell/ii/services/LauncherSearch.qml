@@ -445,7 +445,7 @@ Singleton {
         ////////////////// MPRIS (empty query) //////////////////
         if (root.query === "") {
             let mprisResults = [];
-            if (MprisController.activePlayer) {
+            if (Config.options.search.showNowPlayingBubble && MprisController.activePlayer) {
                 const player = MprisController.activePlayer;
                 const title = player.trackTitle || Translation.tr("Unknown");
                 const artist = player.trackArtist || "";

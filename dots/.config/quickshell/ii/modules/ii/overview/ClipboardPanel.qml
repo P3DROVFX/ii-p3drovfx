@@ -21,7 +21,7 @@ Item {
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth
     readonly property real listColumnRatio: Config.options.search.clipboard.listColumnRatio
     readonly property int listColumnWidth: Math.round(panelWidth * listColumnRatio)
-    readonly property int detailColumnWidth: panelWidth - listColumnWidth - 1
+    readonly property int detailColumnWidth: panelWidth - listColumnWidth
 
     implicitWidth: panelWidth
     implicitHeight: Math.min(560, Math.max(320, entryListView.contentHeight + 40))
@@ -59,15 +59,11 @@ Item {
     property string selectedEntry: filteredEntries.length > 0 ? filteredEntries[Math.min(selectedIndex, filteredEntries.length - 1)] : ""
 
     readonly property bool hasSmartAction: {
-        if (selectedIsImage) return true;
-        if (!selectedContentType) return false;
-        return selectedContentType === "filepath" ||
-               selectedContentType === "url" ||
-               selectedContentType === "email" ||
-               selectedContentType === "phone" ||
-               selectedContentType === "json" ||
-               selectedContentType === "markdown" ||
-               selectedContentType === "number";
+        if (selectedIsImage)
+            return true;
+        if (!selectedContentType)
+            return false;
+        return selectedContentType === "filepath" || selectedContentType === "url" || selectedContentType === "email" || selectedContentType === "phone" || selectedContentType === "json" || selectedContentType === "markdown" || selectedContentType === "number";
     }
 
     readonly property int copyIndex: 0
@@ -122,7 +118,7 @@ Item {
         command: ["bash", "-c", ""]
 
         stdout: SplitParser {
-            onRead: (line) => {
+            onRead: line => {
                 decodeProc.buffer.push(line);
             }
         }
@@ -170,14 +166,16 @@ Item {
     }
 
     readonly property string selectedContent: {
-        if (!selectedEntry) return "";
+        if (!selectedEntry)
+            return "";
         return StringUtils.cleanCliphistEntry(selectedEntry);
     }
 
     readonly property bool selectedIsImage: selectedEntry ? Cliphist.entryIsImage(selectedEntry) : false
     readonly property bool selectedIsPinned: selectedEntry ? Cliphist.isPinned(selectedEntry) : false
     readonly property string selectedContentType: {
-        if (!selectedEntry) return "";
+        if (!selectedEntry)
+            return "";
         const content = selectedContent.trim();
         if (/^#?([0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(content))
             return "hex-color";
@@ -193,25 +191,31 @@ Item {
     }
 
     readonly property int selectedSize: {
-        if (!selectedDecodedContent) return 0;
+        if (!selectedDecodedContent)
+            return 0;
         return selectedDecodedContent.length;
     }
 
     readonly property string selectedCopiedAt: {
-        if (!selectedEntry) return "";
+        if (!selectedEntry)
+            return "";
         const id = selectedEntry.match(/^(\d+)\t/);
-        if (!id) return "";
+        if (!id)
+            return "";
         return "#" + id[1];
     }
 
     readonly property string selectedMd5: {
-        if (!selectedDecodedContent) return "";
+        if (!selectedDecodedContent)
+            return "";
         return Qt.md5(selectedDecodedContent);
     }
 
     function formatBytes(bytes) {
-        if (bytes < 1024) return bytes + " bytes";
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+        if (bytes < 1024)
+            return bytes + " bytes";
+        if (bytes < 1048576)
+            return (bytes / 1024).toFixed(1) + " KB";
         return (bytes / 1048576).toFixed(1) + " MB";
     }
 
@@ -229,7 +233,8 @@ Item {
         const r = parseInt(color.substring(0, 2), 16);
         const g = parseInt(color.substring(2, 4), 16);
         const b = parseInt(color.substring(4, 6), 16);
-        if (isNaN(r) || isNaN(g) || isNaN(b)) return Appearance.colors.colOnSurface;
+        if (isNaN(r) || isNaN(g) || isNaN(b))
+            return Appearance.colors.colOnSurface;
         const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
         return (yiq >= 128) ? "#000000" : "#ffffff";
     }
@@ -272,7 +277,8 @@ Item {
     }
 
     function triggerSmartAction() {
-        if (!selectedEntry) return;
+        if (!selectedEntry)
+            return;
         if (selectedIsImage) {
             const match = selectedEntry.match(/^(\d+)\t/);
             const entryNumber = match ? parseInt(match[1]) : 0;
@@ -300,18 +306,17 @@ Item {
                 const formatted = JSON.stringify(parsed, null, 4);
                 Quickshell.execDetached(["bash", "-c", "printf '" + StringUtils.shellSingleQuoteEscape(formatted) + "' | wl-copy"]);
                 GlobalStates.overviewOpen = false;
-            } catch(e) {}
+            } catch (e) {}
         } else if (selectedContentType === "markdown") {
             // Strip common markdown markup and copy plain text
-            let plain = content
-                .replace(/^#{1,6}\s+/gm, "")        // headings
-                .replace(/\*\*(.+?)\*\*/g, "$1")    // bold
-                .replace(/\*(.+?)\*/g, "$1")         // italic
-                .replace(/`{1,3}([^`]+)`{1,3}/g, "$1") // code
-                .replace(/^\s*[-*+]\s+/gm, "• ")    // bullets
-                .replace(/^\s*>\s*/gm, "")           // blockquotes
-                .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
-                .trim();
+            let plain = content.replace(/^#{1,6}\s+/gm, "")        // headings
+            .replace(/\*\*(.+?)\*\*/g, "$1")    // bold
+            .replace(/\*(.+?)\*/g, "$1")         // italic
+            .replace(/`{1,3}([^`]+)`{1,3}/g, "$1") // code
+            .replace(/^\s*[-*+]\s+/gm, "• ")    // bullets
+            .replace(/^\s*>\s*/gm, "")           // blockquotes
+            .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
+            .trim();
             Quickshell.clipboardText = plain;
             GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "number") {
@@ -393,7 +398,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
                     Layout.leftMargin: 12
-                    Layout.rightMargin: 8
+                    Layout.rightMargin: 12
                     Layout.topMargin: 6
                     color: "transparent"
 
@@ -420,6 +425,56 @@ Item {
                     currentIndex: root.selectedIndex
                     highlightMoveDuration: 80
 
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Item {
+                            id: maskRoot
+                            width: entryListView.width
+                            height: entryListView.height
+
+                            property color topFadeColor: !entryListView.atYBeginning ? "transparent" : "white"
+                            property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
+
+                            Behavior on topFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+                            Behavior on bottomFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+
+                            Column {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
+                                        GradientStop { position: 1.0; color: "white" }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                                    color: "white"
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: "white" }
+                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     ScrollBar.vertical: StyledScrollBar {}
 
                     // Touchpad and mouse scroll physics adjustments
@@ -435,7 +490,7 @@ Item {
                         visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
                         anchors.fill: parent
                         acceptedButtons: Qt.NoButton
-                        onWheel: function(wheelEvent) {
+                        onWheel: function (wheelEvent) {
                             const delta = wheelEvent.angleDelta.y / entryListView.mouseScrollDeltaThreshold;
                             var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= entryListView.mouseScrollDeltaThreshold ? entryListView.mouseScrollFactor : entryListView.touchpadScrollFactor;
 
@@ -488,7 +543,10 @@ Item {
                         buttonRadius: 0
 
                         opacity: 0
-                        transform: Translate { id: entrySlide; y: -12 }
+                        transform: Translate {
+                            id: entrySlide
+                            y: -12
+                        }
 
                         Component.onCompleted: {
                             entryRevealOpacity.start();
@@ -499,7 +557,8 @@ Item {
                             id: entryRevealOpacity
                             target: entryDelegate
                             property: "opacity"
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -508,18 +567,15 @@ Item {
                             id: entryRevealSlide
                             target: entrySlide
                             property: "y"
-                            from: -16; to: 0
+                            from: -16
+                            to: 0
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
 
-                        colBackground: isSelected
-                            ? Appearance.colors.colSecondaryContainer
-                            : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: isSelected
-                            ? Appearance.colors.colSecondaryContainerHover
-                            : Appearance.colors.colSurfaceContainerHighest
+                        colBackground: isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: isSelected ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighest
                         colRipple: Appearance.colors.colPrimaryContainerActive
 
                         background: Rectangle {
@@ -529,17 +585,35 @@ Item {
                             color: entryDelegate.colBackground
                             antialiasing: true
 
-                            topLeftRadius: entryDelegate.isFirst ? Appearance.rounding.large
-                                : (entryDelegate.isSelected || entryDelegate.isBelowSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                            topLeftRadius: entryDelegate.isFirst ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isBelowSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
                             topRightRadius: topLeftRadius
-                            bottomLeftRadius: entryDelegate.isLast ? Appearance.rounding.large
-                                : (entryDelegate.isSelected || entryDelegate.isAboveSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                            bottomLeftRadius: entryDelegate.isLast ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isAboveSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
                             bottomRightRadius: bottomLeftRadius
 
-                            Behavior on topLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                            Behavior on topRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                            Behavior on bottomLeftRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
-                            Behavior on bottomRightRadius { NumberAnimation { duration: 350; easing.type: Easing.OutQuad } }
+                            Behavior on topLeftRadius {
+                                NumberAnimation {
+                                    duration: 350
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
+                            Behavior on topRightRadius {
+                                NumberAnimation {
+                                    duration: 350
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
+                            Behavior on bottomLeftRadius {
+                                NumberAnimation {
+                                    duration: 350
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
+                            Behavior on bottomRightRadius {
+                                NumberAnimation {
+                                    duration: 350
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
                             Behavior on color {
                                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
@@ -592,23 +666,31 @@ Item {
                                 MaterialSymbol {
                                     anchors.centerIn: parent
                                     text: {
-                                        if (entryDelegate.isCurrentClipboard) return "check_circle";
-                                        switch(entryDelegate.contentType) {
-                                            case "url": return "link";
-                                            case "email": return "alternate_email";
-                                            case "phone": return "phone";
-                                            case "json": return "data_object";
-                                            case "filepath": return "folder_open";
-                                            case "markdown": return "markdown";
-                                            case "number": return "tag";
-                                            case "multiline": return "notes";
-                                            default: return "content_paste";
+                                        if (entryDelegate.isCurrentClipboard)
+                                            return "check_circle";
+                                        switch (entryDelegate.contentType) {
+                                        case "url":
+                                            return "link";
+                                        case "email":
+                                            return "alternate_email";
+                                        case "phone":
+                                            return "phone";
+                                        case "json":
+                                            return "data_object";
+                                        case "filepath":
+                                            return "folder_open";
+                                        case "markdown":
+                                            return "markdown";
+                                        case "number":
+                                            return "tag";
+                                        case "multiline":
+                                            return "notes";
+                                        default:
+                                            return "content_paste";
                                         }
                                     }
                                     iconSize: 18
-                                    color: entryDelegate.isCurrentClipboard
-                                        ? Appearance.colors.colPrimary
-                                        : (entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant)
+                                    color: entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : (entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant)
                                 }
                             }
                         }
@@ -616,7 +698,7 @@ Item {
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 12
-                            anchors.rightMargin: 8
+                            anchors.rightMargin: 12
                             spacing: 8
 
                             Loader {
@@ -636,8 +718,10 @@ Item {
                                 Layout.preferredWidth: 32
                                 Layout.preferredHeight: 32
                                 sourceComponent: {
-                                    if (entryDelegate.isImage) return listImageComponent;
-                                    if (entryDelegate.contentType === "hex-color") return listColorComponent;
+                                    if (entryDelegate.isImage)
+                                        return listImageComponent;
+                                    if (entryDelegate.contentType === "hex-color")
+                                        return listColorComponent;
                                     return listIconComponent;
                                 }
                             }
@@ -648,9 +732,7 @@ Item {
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: entryDelegate.isImage
-                                        ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "")
-                                        : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
+                                    text: entryDelegate.isImage ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "") : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     font.family: entryDelegate.contentType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
                                     color: entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
@@ -661,21 +743,32 @@ Item {
                                 StyledText {
                                     Layout.fillWidth: true
                                     visible: {
-                                        if (entryDelegate.isImage) return true;
-                                        if (entryDelegate.contentType && entryDelegate.contentType !== "clipboard") return true;
+                                        if (entryDelegate.isImage)
+                                            return true;
+                                        if (entryDelegate.contentType && entryDelegate.contentType !== "clipboard")
+                                            return true;
                                         const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length;
                                         return lines >= 1;
                                     }
                                     text: {
-                                        if (entryDelegate.isImage) return "Image";
-                                        if (entryDelegate.contentType === "url") return StringUtils.getDomain(entryDelegate.cleanContent) || "URL";
-                                        if (entryDelegate.contentType === "json") return "JSON";
-                                        if (entryDelegate.contentType === "email") return "Email";
-                                        if (entryDelegate.contentType === "phone") return "Phone";
-                                        if (entryDelegate.contentType === "filepath") return "File path";
-                                        if (entryDelegate.contentType === "hex-color") return "Color";
-                                        if (entryDelegate.contentType === "markdown") return "Markdown";
-                                        if (entryDelegate.contentType === "number") return "Number";
+                                        if (entryDelegate.isImage)
+                                            return "Image";
+                                        if (entryDelegate.contentType === "url")
+                                            return StringUtils.getDomain(entryDelegate.cleanContent) || "URL";
+                                        if (entryDelegate.contentType === "json")
+                                            return "JSON";
+                                        if (entryDelegate.contentType === "email")
+                                            return "Email";
+                                        if (entryDelegate.contentType === "phone")
+                                            return "Phone";
+                                        if (entryDelegate.contentType === "filepath")
+                                            return "File path";
+                                        if (entryDelegate.contentType === "hex-color")
+                                            return "Color";
+                                        if (entryDelegate.contentType === "markdown")
+                                            return "Markdown";
+                                        if (entryDelegate.contentType === "number")
+                                            return "Number";
                                         const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length + 1;
                                         return lines + " lines";
                                     }
@@ -690,15 +783,6 @@ Item {
                     }
                 }
             }
-        }
-
-        Rectangle {
-            id: divider
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            Layout.topMargin: 8
-            Layout.bottomMargin: 8
-            color: Appearance.colors.colOutlineVariant
         }
 
         Rectangle {
@@ -739,9 +823,13 @@ Item {
                         clip: true
 
                         opacity: 0
-                        transform: Translate { id: imgSlide; y: -10 }
+                        transform: Translate {
+                            id: imgSlide
+                            y: -10
+                        }
                         NumberAnimation on opacity {
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -750,7 +838,8 @@ Item {
                             target: imgSlide
                             property: "y"
                             running: true
-                            from: -10; to: 0
+                            from: -10
+                            to: 0
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -794,9 +883,13 @@ Item {
                         clip: true
 
                         opacity: 0
-                        transform: Translate { id: txtSlide; y: -10 }
+                        transform: Translate {
+                            id: txtSlide
+                            y: -10
+                        }
                         NumberAnimation on opacity {
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -805,7 +898,8 @@ Item {
                             target: txtSlide
                             property: "y"
                             running: true
-                            from: -10; to: 0
+                            from: -10
+                            to: 0
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -822,9 +916,7 @@ Item {
                                 width: parent.width
                                 text: root.selectedDecodedContent
                                 font.pixelSize: Config.options.search.clipboard.previewFontSize
-                                font.family: (root.selectedContentType === "json" || root.selectedContentType === "number")
-                                    ? Appearance.font.family.monospace
-                                    : Appearance.font.family.main
+                                font.family: (root.selectedContentType === "json" || root.selectedContentType === "number") ? Appearance.font.family.monospace : Appearance.font.family.main
                                 color: Appearance.m3colors.m3onSurface
                                 wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                 textFormat: Text.PlainText
@@ -849,9 +941,13 @@ Item {
                         border.color: Appearance.colors.colOutlineVariant
 
                         opacity: 0
-                        transform: Translate { id: colorSlide; y: -10 }
+                        transform: Translate {
+                            id: colorSlide
+                            y: -10
+                        }
                         NumberAnimation on opacity {
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -860,7 +956,8 @@ Item {
                             target: colorSlide
                             property: "y"
                             running: true
-                            from: -10; to: 0
+                            from: -10
+                            to: 0
                             duration: 350
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -946,7 +1043,10 @@ Item {
                     rowSpacing: 4
                     opacity: 0
                     Behavior on opacity {
-                        NumberAnimation { duration: 100; easing.type: Easing.OutQuad }
+                        NumberAnimation {
+                            duration: 100
+                            easing.type: Easing.OutQuad
+                        }
                     }
                     Connections {
                         target: root
@@ -1069,9 +1169,7 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === 0
-                            ? Appearance.colors.colPrimary
-                            : Appearance.colors.colSurfaceContainerHigh
+                        colBackground: root.selectedActionIndex === 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
@@ -1090,12 +1188,13 @@ Item {
                                 text: "content_copy"
                                 iconSize: 18
                                 fill: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === 0
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnSurfaceVariant
+                                color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                                 scale: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                    NumberAnimation {
+                                        duration: 120
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                             StyledText {
@@ -1104,9 +1203,7 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.Medium
                                 elide: Text.ElideRight
-                                color: root.selectedActionIndex === 0
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnSurfaceVariant
+                                color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                             }
                         }
                     }
@@ -1116,9 +1213,7 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === 1
-                            ? Appearance.colors.colPrimary
-                            : Appearance.colors.colPrimaryContainer
+                        colBackground: root.selectedActionIndex === 1 ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
                         colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
@@ -1137,12 +1232,13 @@ Item {
                                 text: "content_paste"
                                 iconSize: 18
                                 fill: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === 1
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnPrimaryContainer
+                                color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                    NumberAnimation {
+                                        duration: 120
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                             StyledText {
@@ -1151,9 +1247,7 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.Medium
                                 elide: Text.ElideRight
-                                color: root.selectedActionIndex === 1
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnPrimaryContainer
+                                color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                             }
                         }
                     }
@@ -1164,9 +1258,7 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.smartIndex
-                            ? Appearance.colors.colPrimary
-                            : Appearance.colors.colPrimaryContainer
+                        colBackground: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
                         colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
@@ -1183,45 +1275,60 @@ Item {
                                 id: smartIcon
                                 Layout.alignment: Qt.AlignVCenter
                                 text: {
-                                    if (root.selectedIsImage) return "image";
-                                    if (root.selectedContentType === "filepath") return "folder_open";
-                                    if (root.selectedContentType === "url") return "open_in_new";
-                                    if (root.selectedContentType === "email") return "mail";
-                                    if (root.selectedContentType === "phone") return "call";
-                                    if (root.selectedContentType === "json") return "data_object";
-                                    if (root.selectedContentType === "markdown") return "text_fields";
-                                    if (root.selectedContentType === "number") return "pin";
+                                    if (root.selectedIsImage)
+                                        return "image";
+                                    if (root.selectedContentType === "filepath")
+                                        return "folder_open";
+                                    if (root.selectedContentType === "url")
+                                        return "open_in_new";
+                                    if (root.selectedContentType === "email")
+                                        return "mail";
+                                    if (root.selectedContentType === "phone")
+                                        return "call";
+                                    if (root.selectedContentType === "json")
+                                        return "data_object";
+                                    if (root.selectedContentType === "markdown")
+                                        return "text_fields";
+                                    if (root.selectedContentType === "number")
+                                        return "pin";
                                     return "star";
                                 }
                                 iconSize: 18
                                 fill: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === root.smartIndex
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnPrimaryContainer
+                                color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                    NumberAnimation {
+                                        duration: 120
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                             StyledText {
                                 Layout.fillWidth: true
                                 text: {
-                                    if (root.selectedIsImage) return Translation.tr("Open Image");
-                                    if (root.selectedContentType === "filepath") return Translation.tr("Open File");
-                                    if (root.selectedContentType === "url") return Translation.tr("Open Link");
-                                    if (root.selectedContentType === "email") return Translation.tr("Send Email");
-                                    if (root.selectedContentType === "phone") return Translation.tr("Call Number");
-                                    if (root.selectedContentType === "json") return Translation.tr("Format JSON");
-                                    if (root.selectedContentType === "markdown") return Translation.tr("Copy Plain");
-                                    if (root.selectedContentType === "number") return Translation.tr("Copy Clean");
+                                    if (root.selectedIsImage)
+                                        return Translation.tr("Open Image");
+                                    if (root.selectedContentType === "filepath")
+                                        return Translation.tr("Open File");
+                                    if (root.selectedContentType === "url")
+                                        return Translation.tr("Open Link");
+                                    if (root.selectedContentType === "email")
+                                        return Translation.tr("Send Email");
+                                    if (root.selectedContentType === "phone")
+                                        return Translation.tr("Call Number");
+                                    if (root.selectedContentType === "json")
+                                        return Translation.tr("Format JSON");
+                                    if (root.selectedContentType === "markdown")
+                                        return Translation.tr("Copy Plain");
+                                    if (root.selectedContentType === "number")
+                                        return Translation.tr("Copy Clean");
                                     return Translation.tr("Smart Action");
                                 }
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.Medium
                                 elide: Text.ElideRight
-                                color: root.selectedActionIndex === root.smartIndex
-                                    ? Appearance.colors.colOnPrimary
-                                    : Appearance.colors.colOnPrimaryContainer
+                                color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                             }
                         }
                     }
@@ -1231,9 +1338,7 @@ Item {
                         implicitWidth: 36
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.pinIndex
-                            ? Appearance.colors.colPrimaryContainer
-                            : Appearance.colors.colSurfaceContainerHigh
+                        colBackground: root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
@@ -1247,12 +1352,13 @@ Item {
                             text: root.selectedIsPinned ? "keep_off" : "keep"
                             iconSize: 18
                             fill: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.0 : 0.0
-                            color: root.selectedIsPinned
-                                ? Appearance.colors.colPrimary
-                                : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                            color: root.selectedIsPinned ? Appearance.colors.colPrimary : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                             scale: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.08 : 1.0
                             Behavior on scale {
-                                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                NumberAnimation {
+                                    duration: 120
+                                    easing.type: Easing.OutQuad
+                                }
                             }
                         }
                         StyledToolTip {
@@ -1266,9 +1372,7 @@ Item {
                         implicitWidth: 36
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.deleteIndex
-                            ? Appearance.colors.colErrorContainer
-                            : Appearance.colors.colSurfaceContainerHigh
+                        colBackground: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colErrorContainer : Appearance.colors.colSurfaceContainerHigh
                         colBackgroundHover: Appearance.colors.colErrorContainerHover
                         colRipple: Appearance.colors.colErrorContainerActive
                         onClicked: {
@@ -1282,12 +1386,13 @@ Item {
                             text: "delete"
                             iconSize: 18
                             fill: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.0 : 0.0
-                            color: root.selectedActionIndex === root.deleteIndex
-                                ? Appearance.colors.colOnErrorContainer
-                                : Appearance.colors.colError
+                            color: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                             scale: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.08 : 1.0
                             Behavior on scale {
-                                NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+                                NumberAnimation {
+                                    duration: 120
+                                    easing.type: Easing.OutQuad
+                                }
                             }
                         }
                         StyledToolTip {

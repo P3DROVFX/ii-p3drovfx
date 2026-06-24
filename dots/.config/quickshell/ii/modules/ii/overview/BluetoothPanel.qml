@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Bluetooth
 
@@ -19,7 +20,7 @@ Item {
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 860
     readonly property real listColumnRatio: 0.40
     readonly property int listColumnWidth: Math.round(panelWidth * listColumnRatio)
-    readonly property int detailColumnWidth: panelWidth - listColumnWidth - 1
+    readonly property int detailColumnWidth: panelWidth - listColumnWidth
 
     implicitWidth: panelWidth
     implicitHeight: 520
@@ -118,8 +119,10 @@ Item {
 
         // Sort: paired devices first, then unpaired
         all.sort((a, b) => {
-            if (a.paired && !b.paired) return -1;
-            if (!a.paired && b.paired) return 1;
+            if (a.paired && !b.paired)
+                return -1;
+            if (!a.paired && b.paired)
+                return 1;
             return 0;
         });
 
@@ -133,17 +136,7 @@ Item {
     property bool isScanning: false
 
     // Random shape and custom image properties
-    property list<int> detailShapes: [
-        MaterialShape.Shape.Cookie7Sided,
-        MaterialShape.Shape.SoftBurst,
-        MaterialShape.Shape.Cookie9Sided,
-        MaterialShape.Shape.Pentagon,
-        MaterialShape.Shape.Sunny,
-        MaterialShape.Shape.Cookie4Sided,
-        MaterialShape.Shape.Arch,
-        MaterialShape.Shape.Fan,
-        MaterialShape.Shape.SemiCircle
-    ]
+    property list<int> detailShapes: [MaterialShape.Shape.Cookie7Sided, MaterialShape.Shape.SoftBurst, MaterialShape.Shape.Cookie9Sided, MaterialShape.Shape.Pentagon, MaterialShape.Shape.Sunny, MaterialShape.Shape.Cookie4Sided, MaterialShape.Shape.Arch, MaterialShape.Shape.Fan, MaterialShape.Shape.SemiCircle]
     property int currentRandomShape: MaterialShape.Shape.Cookie7Sided
     onSelectedDeviceChanged: {
         if (selectedDevice) {
@@ -152,7 +145,8 @@ Item {
     }
 
     function getDeviceImageSource(device) {
-        if (!device) return "";
+        if (!device)
+            return "";
         let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
         if (custom) {
             return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
@@ -162,8 +156,6 @@ Item {
     readonly property string deviceImageSource: getDeviceImageSource(selectedDevice)
     readonly property bool hasCustomImage: deviceImageSource !== ""
 
-
-
     Timer {
         id: scanTimer
         interval: 12000
@@ -172,7 +164,8 @@ Item {
     }
 
     function startScan() {
-        if (!root.btEnabled) return;
+        if (!root.btEnabled)
+            return;
         root.isScanning = true;
         scanTimer.restart();
         Quickshell.execDetached(["bash", "-c", "bluetoothctl scan on &"]);
@@ -186,7 +179,8 @@ Item {
 
     function toggleBluetooth() {
         const adapter = Bluetooth.defaultAdapter;
-        if (!adapter) return;
+        if (!adapter)
+            return;
         if (!adapter.enabled) {
             root.isEnabling = true;
             enablingTimeout.restart();
@@ -240,15 +234,18 @@ Item {
 
     function activateSelected() {
         if (selectedIndex === -1) {
-            if (root.isScanning) root.stopScan();
-            else root.startScan();
+            if (root.isScanning)
+                root.stopScan();
+            else
+                root.startScan();
             return;
         }
         if (selectedIndex === -2) {
             root.toggleBluetooth();
             return;
         }
-        if (!selectedDevice) return;
+        if (!selectedDevice)
+            return;
         if (selectedActionIndex <= 0) {
             if (selectedDevice.connected) {
                 let temp = Object.assign({}, root.disconnectingDevices);
@@ -273,11 +270,22 @@ Item {
     }
 
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_Up) { navigateUp(); event.accepted = true; }
-        else if (event.key === Qt.Key_Down) { navigateDown(); event.accepted = true; }
-        else if (event.key === Qt.Key_Left) { navigateLeft(); event.accepted = true; }
-        else if (event.key === Qt.Key_Right) { navigateRight(); event.accepted = true; }
-        else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { activateSelected(); event.accepted = true; }
+        if (event.key === Qt.Key_Up) {
+            navigateUp();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Down) {
+            navigateDown();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Left) {
+            navigateLeft();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Right) {
+            navigateRight();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            activateSelected();
+            event.accepted = true;
+        }
     }
 
     RowLayout {
@@ -297,7 +305,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.leftMargin: 12
-                    Layout.rightMargin: 8
+                    Layout.rightMargin: 12
                     Layout.topMargin: 8
                     Layout.bottomMargin: 4
                     spacing: 6
@@ -315,9 +323,7 @@ Item {
                         implicitWidth: 84
                         implicitHeight: 32
                         buttonRadius: Appearance.rounding.full
-                        colBackground: (root.selectedIndex === -1 || scanBtn.hovered)
-                            ? Appearance.colors.colSurfaceContainerHighest
-                            : (root.isScanning ? Appearance.colors.colPrimaryContainer : "transparent")
+                        colBackground: (root.selectedIndex === -1 || scanBtn.hovered) ? Appearance.colors.colSurfaceContainerHighest : (root.isScanning ? Appearance.colors.colPrimaryContainer : "transparent")
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
                         PointingHandInteraction {}
 
@@ -331,8 +337,10 @@ Item {
 
                         onClicked: {
                             root.selectedIndex = -1;
-                            if (root.isScanning) root.stopScan();
-                            else root.startScan();
+                            if (root.isScanning)
+                                root.stopScan();
+                            else
+                                root.startScan();
                         }
 
                         RowLayout {
@@ -345,7 +353,8 @@ Item {
                                 color: (root.selectedIndex === -1 || scanBtn.hovered || root.isScanning) ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
 
                                 RotationAnimator on rotation {
-                                    from: 0; to: 360
+                                    from: 0
+                                    to: 360
                                     duration: 1200
                                     loops: Animation.Infinite
                                     running: root.isScanning
@@ -371,9 +380,7 @@ Item {
                         implicitWidth: 100
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.full
-                        colBackground: (root.selectedIndex === -2 || powerBtn.hovered)
-                            ? Appearance.colors.colSurfaceContainerHighest
-                            : "transparent"
+                        colBackground: (root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colSurfaceContainerHighest : "transparent"
                         colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         PointingHandInteraction {}
@@ -390,9 +397,7 @@ Item {
                                 text: root.btEnabled ? Translation.tr("On") : Translation.tr("Off")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.weight: Font.Medium
-                                color: (root.selectedIndex === -2 || powerBtn.hovered)
-                                    ? Appearance.colors.colPrimary
-                                    : Appearance.colors.colOnSurfaceVariant
+                                color: (root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                             }
 
                             // Toggle track
@@ -400,10 +405,12 @@ Item {
                                 width: 40
                                 height: 20
                                 radius: 10
-                                color: root.btEnabled 
-                                    ? ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary)
-                                    : ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colSurfaceContainerHighest : Appearance.colors.colSurfaceContainerHigh)
-                                Behavior on color { ColorAnimation { duration: 200 } }
+                                color: root.btEnabled ? ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary) : ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colSurfaceContainerHighest : Appearance.colors.colSurfaceContainerHigh)
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 200
+                                    }
+                                }
 
                                 // Toggle thumb
                                 Rectangle {
@@ -412,9 +419,7 @@ Item {
                                     width: 16
                                     height: 16
                                     radius: 8
-                                    color: root.btEnabled 
-                                        ? Appearance.colors.colOnPrimary 
-                                        : ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                                    color: root.btEnabled ? Appearance.colors.colOnPrimary : ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                                     x: root.btEnabled ? 22 : 2
 
                                     Behavior on x {
@@ -423,7 +428,11 @@ Item {
                                             easing.type: Easing.OutQuint
                                         }
                                     }
-                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 200
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -459,20 +468,25 @@ Item {
 
                     sourceComponent: ColumnLayout {
                         spacing: 12
-                        
-                        Item { Layout.fillHeight: true; visible: root.isEnabling }
+
+                        Item {
+                            Layout.fillHeight: true
+                            visible: root.isEnabling
+                        }
 
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignHCenter
                             text: {
-                                if (!root.btAvailable) return "bluetooth_searching";
-                                if (root.isEnabling) return "bluetooth_searching";
+                                if (!root.btAvailable)
+                                    return "bluetooth_searching";
+                                if (root.isEnabling)
+                                    return "bluetooth_searching";
                                 return "bluetooth_disabled";
                             }
                             iconSize: 48
                             color: Appearance.colors.colPrimary
                             opacity: 0.8
-                            
+
                             RotationAnimator on rotation {
                                 from: 0
                                 to: 360
@@ -485,8 +499,10 @@ Item {
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
                             text: {
-                                if (!root.btAvailable) return Translation.tr("No Bluetooth adapter");
-                                if (root.isEnabling) return Translation.tr("Enabling Bluetooth...");
+                                if (!root.btAvailable)
+                                    return Translation.tr("No Bluetooth adapter");
+                                if (root.isEnabling)
+                                    return Translation.tr("Enabling Bluetooth...");
                                 return Translation.tr("Bluetooth is off");
                             }
                             font.pixelSize: Appearance.font.pixelSize.small
@@ -502,8 +518,11 @@ Item {
                             color: Appearance.colors.colOnSurfaceVariant
                             opacity: 0.6
                         }
-                        
-                        Item { Layout.fillHeight: true; visible: root.isEnabling }
+
+                        Item {
+                            Layout.fillHeight: true
+                            visible: root.isEnabling
+                        }
                     }
                 }
 
@@ -516,8 +535,10 @@ Item {
 
                     sourceComponent: ColumnLayout {
                         spacing: 12
-                        
-                        Item { Layout.fillHeight: true }
+
+                        Item {
+                            Layout.fillHeight: true
+                        }
 
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignHCenter
@@ -525,11 +546,21 @@ Item {
                             iconSize: 48
                             color: Appearance.colors.colPrimary
                             opacity: 0.8
-                            
+
                             SequentialAnimation on scale {
                                 loops: Animation.Infinite
-                                NumberAnimation { from: 1.0; to: 1.15; duration: 1000; easing.type: Easing.InOutQuad }
-                                NumberAnimation { from: 1.15; to: 1.0; duration: 1000; easing.type: Easing.InOutQuad }
+                                NumberAnimation {
+                                    from: 1.0
+                                    to: 1.15
+                                    duration: 1000
+                                    easing.type: Easing.InOutQuad
+                                }
+                                NumberAnimation {
+                                    from: 1.15
+                                    to: 1.0
+                                    duration: 1000
+                                    easing.type: Easing.InOutQuad
+                                }
                             }
                         }
 
@@ -548,8 +579,10 @@ Item {
                             color: Appearance.colors.colOnSurfaceVariant
                             opacity: 0.7
                         }
-                        
-                        Item { Layout.fillHeight: true }
+
+                        Item {
+                            Layout.fillHeight: true
+                        }
                     }
                 }
 
@@ -568,6 +601,56 @@ Item {
                     currentIndex: root.selectedIndex
                     highlightMoveDuration: 80
 
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Item {
+                            id: maskRoot
+                            width: deviceListView.width
+                            height: deviceListView.height
+
+                            property color topFadeColor: !deviceListView.atYBeginning ? "transparent" : "white"
+                            property color bottomFadeColor: !deviceListView.atYEnd ? "transparent" : "white"
+
+                            Behavior on topFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+                            Behavior on bottomFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+
+                            Column {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
+                                        GradientStop { position: 1.0; color: "white" }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                                    color: "white"
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: "white" }
+                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     ScrollBar.vertical: StyledScrollBar {}
 
                     delegate: Column {
@@ -582,7 +665,10 @@ Item {
                         readonly property bool isFirstUnpaired: !dev.paired && (index === 0 || (deviceListView.model[index - 1] && deviceListView.model[index - 1].paired))
 
                         opacity: 0
-                        transform: Translate { id: devSlide; y: -10 }
+                        transform: Translate {
+                            id: devSlide
+                            y: -10
+                        }
 
                         Component.onCompleted: {
                             devRevealOp.start();
@@ -593,7 +679,8 @@ Item {
                             id: devRevealOp
                             target: delegateContainer
                             property: "opacity"
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -602,7 +689,8 @@ Item {
                             id: devRevealSlide
                             target: devSlide
                             property: "y"
-                            from: -10; to: 0
+                            from: -10
+                            to: 0
                             duration: 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -678,12 +766,8 @@ Item {
                             readonly property bool isBelowSelected: root.selectedIndex === delegateContainer.index - 1
                             readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
 
-                            colBackground: isSelected
-                                ? Appearance.colors.colSecondaryContainer
-                                : Appearance.colors.colSurfaceContainerHigh
-                            colBackgroundHover: isSelected
-                                ? Appearance.colors.colSecondaryContainerHover
-                                : Appearance.colors.colSurfaceContainerHighest
+                            colBackground: isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
+                            colBackgroundHover: isSelected ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighest
                             colRipple: Appearance.colors.colPrimaryContainerActive
 
                             background: Rectangle {
@@ -692,17 +776,35 @@ Item {
                                 anchors.rightMargin: 4
                                 color: deviceDelegate.colBackground
                                 antialiasing: true
-                                topLeftRadius: deviceDelegate.isFirst ? Appearance.rounding.large
-                                    : (deviceDelegate.isSelected || deviceDelegate.isBelowSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
+                                topLeftRadius: deviceDelegate.isFirst ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isBelowSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
                                 topRightRadius: topLeftRadius
-                                bottomLeftRadius: deviceDelegate.isLast ? Appearance.rounding.large
-                                    : (deviceDelegate.isSelected || deviceDelegate.isAboveSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
+                                bottomLeftRadius: deviceDelegate.isLast ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isAboveSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
                                 bottomRightRadius: bottomLeftRadius
 
-                                Behavior on topLeftRadius { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
-                                Behavior on topRightRadius { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
-                                Behavior on bottomLeftRadius { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
-                                Behavior on bottomRightRadius { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
+                                Behavior on topLeftRadius {
+                                    NumberAnimation {
+                                        duration: 300
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+                                Behavior on topRightRadius {
+                                    NumberAnimation {
+                                        duration: 300
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+                                Behavior on bottomLeftRadius {
+                                    NumberAnimation {
+                                        duration: 300
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+                                Behavior on bottomRightRadius {
+                                    NumberAnimation {
+                                        duration: 300
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
                                 Behavior on color {
                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                                 }
@@ -714,108 +816,119 @@ Item {
                                 root.activateSelected();
                             }
 
-                        PointingHandInteraction {}
+                            PointingHandInteraction {}
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 8
-                            spacing: 10
-                             Item {
-                                 id: iconContainer
-                                 implicitWidth: 32
-                                 implicitHeight: 32
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 10
+                                Item {
+                                    id: iconContainer
+                                    implicitWidth: 32
+                                    implicitHeight: 32
 
-                                 readonly property bool isProcessing: deviceDelegate.dev ? (deviceDelegate.dev.state === 3 || deviceDelegate.dev.state === 2 || !!root.connectingDevices[deviceDelegate.dev.address] || !!root.disconnectingDevices[deviceDelegate.dev.address]) : false
-
-                                 MaterialSymbol {
-                                     anchors.centerIn: parent
-                                     text: Icons.getBluetoothDeviceMaterialSymbol(deviceDelegate.dev?.icon || "")
-                                     iconSize: 20
-                                     color: deviceDelegate.isSelected
-                                         ? (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSecondaryContainer)
-                                         : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
-                                     visible: !iconContainer.isProcessing
-                                 }
-
-                                 MaterialShape {
-                                     anchors.centerIn: parent
-                                     width: 18
-                                     height: 18
-                                     shape: MaterialShape.Shape.Cookie7Sided
-                                     color: deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary
-                                     visible: iconContainer.isProcessing
-
-                                     RotationAnimator on rotation {
-                                         from: 0
-                                         to: 360
-                                         duration: 2000
-                                         loops: Animation.Infinite
-                                         running: iconContainer.isProcessing
-                                     }
-                                 }
-                             }
-
-                             ColumnLayout {
-                                 Layout.fillWidth: true
-                                 spacing: 1
-
-                                 StyledText {
-                                     Layout.fillWidth: true
-                                     text: deviceDelegate.dev?.name || Translation.tr("Unknown device")
-                                     font.pixelSize: Appearance.font.pixelSize.smaller
-                                     font.weight: Font.Medium
-                                     color: deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
-                                     elide: Text.ElideRight
-                                     maximumLineCount: 1
-                                 }
-
-                                 StyledText {
-                                     Layout.fillWidth: true
-                                     text: {
-                                         const dev = deviceDelegate.dev;
-                                         if (!dev) return "";
-                                         if (dev.connected) return Translation.tr("Connected");
-                                         if (dev.address && (dev.state === 3 || root.connectingDevices[dev.address])) return Translation.tr("Connecting...");
-                                         if (dev.address && (dev.state === 2 || root.disconnectingDevices[dev.address])) return Translation.tr("Disconnecting...");
-                                         if (dev.paired) return Translation.tr("Paired");
-                                         return Translation.tr("Available");
-                                     }
-                                     font.pixelSize: Appearance.font.pixelSize.smallest
-                                     color: {
-                                        const dev = deviceDelegate.dev;
-                                        if (!dev) return Appearance.colors.colSubtext;
-                                        if (dev.connected) return deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary;
-                                        return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext;
-                                    }
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                    opacity: 0.85
-                                }
-                            }
-
-                            Loader {
-                                active: deviceDelegate.dev?.batteryAvailable ?? false
-                                visible: active
-                                Layout.preferredWidth: active ? 28 : 0
-
-                                sourceComponent: RowLayout {
-                                    spacing: 2
+                                    readonly property bool isProcessing: deviceDelegate.dev ? (deviceDelegate.dev.state === 3 || deviceDelegate.dev.state === 2 || !!root.connectingDevices[deviceDelegate.dev.address] || !!root.disconnectingDevices[deviceDelegate.dev.address]) : false
 
                                     MaterialSymbol {
-                                        text: {
-                                            const b = deviceDelegate.dev?.battery ?? 0;
-                                            if (b <= 0.15) return "battery_1_bar";
-                                            if (b <= 0.35) return "battery_3_bar";
-                                            if (b <= 0.60) return "battery_5_bar";
-                                            if (b <= 0.85) return "battery_6_bar";
-                                            return "battery_full";
+                                        anchors.centerIn: parent
+                                        text: Icons.getBluetoothDeviceMaterialSymbol(deviceDelegate.dev?.icon || "")
+                                        iconSize: 20
+                                        color: deviceDelegate.isSelected ? (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSecondaryContainer) : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                                        visible: !iconContainer.isProcessing
+                                    }
+
+                                    MaterialShape {
+                                        anchors.centerIn: parent
+                                        width: 18
+                                        height: 18
+                                        shape: MaterialShape.Shape.Cookie7Sided
+                                        color: deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary
+                                        visible: iconContainer.isProcessing
+
+                                        RotationAnimator on rotation {
+                                            from: 0
+                                            to: 360
+                                            duration: 2000
+                                            loops: Animation.Infinite
+                                            running: iconContainer.isProcessing
                                         }
-                                        iconSize: 14
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: deviceDelegate.dev?.name || Translation.tr("Unknown device")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.weight: Font.Medium
+                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: {
+                                            const dev = deviceDelegate.dev;
+                                            if (!dev)
+                                                return "";
+                                            if (dev.connected)
+                                                return Translation.tr("Connected");
+                                            if (dev.address && (dev.state === 3 || root.connectingDevices[dev.address]))
+                                                return Translation.tr("Connecting...");
+                                            if (dev.address && (dev.state === 2 || root.disconnectingDevices[dev.address]))
+                                                return Translation.tr("Disconnecting...");
+                                            if (dev.paired)
+                                                return Translation.tr("Paired");
+                                            return Translation.tr("Available");
+                                        }
+                                        font.pixelSize: Appearance.font.pixelSize.smallest
                                         color: {
-                                            const b = deviceDelegate.dev?.battery ?? 0;
-                                            if (b <= 0.15) return Appearance.m3colors.m3error;
-                                            return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant;
+                                            const dev = deviceDelegate.dev;
+                                            if (!dev)
+                                                return Appearance.colors.colSubtext;
+                                            if (dev.connected)
+                                                return deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary;
+                                            return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext;
+                                        }
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                        opacity: 0.85
+                                    }
+                                }
+
+                                Loader {
+                                    active: deviceDelegate.dev?.batteryAvailable ?? false
+                                    visible: active
+                                    Layout.preferredWidth: active ? 28 : 0
+
+                                    sourceComponent: RowLayout {
+                                        spacing: 2
+
+                                        MaterialSymbol {
+                                            text: {
+                                                const b = deviceDelegate.dev?.battery ?? 0;
+                                                if (b <= 0.15)
+                                                    return "battery_1_bar";
+                                                if (b <= 0.35)
+                                                    return "battery_3_bar";
+                                                if (b <= 0.60)
+                                                    return "battery_5_bar";
+                                                if (b <= 0.85)
+                                                    return "battery_6_bar";
+                                                return "battery_full";
+                                            }
+                                            iconSize: 14
+                                            color: {
+                                                const b = deviceDelegate.dev?.battery ?? 0;
+                                                if (b <= 0.15)
+                                                    return Appearance.m3colors.m3error;
+                                                return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant;
+                                            }
                                         }
                                     }
                                 }
@@ -824,15 +937,6 @@ Item {
                     }
                 }
             }
-        }
-    }
-
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            Layout.topMargin: 8
-            Layout.bottomMargin: 8
-            color: Appearance.colors.colOutlineVariant
         }
 
         Rectangle {
@@ -870,9 +974,13 @@ Item {
                         spacing: 0
 
                         opacity: 0
-                        transform: Translate { id: detailSlide; y: -8 }
+                        transform: Translate {
+                            id: detailSlide
+                            y: -8
+                        }
                         NumberAnimation on opacity {
-                            from: 0; to: 1
+                            from: 0
+                            to: 1
                             duration: 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -881,7 +989,8 @@ Item {
                             target: detailSlide
                             property: "y"
                             running: true
-                            from: -8; to: 0
+                            from: -8
+                            to: 0
                             duration: 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -898,9 +1007,7 @@ Item {
                                 width: 120
                                 height: 120
                                 shape: root.currentRandomShape
-                                color: root.selectedDevice?.connected
-                                    ? Appearance.colors.colPrimaryContainer
-                                    : Appearance.colors.colSurfaceContainerHigh
+                                color: root.selectedDevice?.connected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
 
                                 Behavior on color {
                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(backdropShape)
@@ -926,9 +1033,7 @@ Item {
                                     sourceComponent: MaterialSymbol {
                                         text: Icons.getBluetoothDeviceMaterialSymbol(root.selectedDevice?.icon || "")
                                         iconSize: 48
-                                        color: root.selectedDevice?.connected
-                                            ? Appearance.colors.colPrimary
-                                            : Appearance.colors.colOnSurfaceVariant
+                                        color: root.selectedDevice?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                                     }
                                 }
                             }
@@ -956,7 +1061,9 @@ Item {
                             opacity: 0.8
                         }
 
-                        Item { height: 12 }
+                        Item {
+                            height: 12
+                        }
 
                         Rectangle {
                             Layout.fillWidth: true
@@ -990,16 +1097,17 @@ Item {
                                     StyledText {
                                         text: {
                                             const dev = root.selectedDevice;
-                                            if (!dev) return "";
-                                            if (dev.connected) return Translation.tr("Connected");
-                                            if (dev.paired) return Translation.tr("Paired");
+                                            if (!dev)
+                                                return "";
+                                            if (dev.connected)
+                                                return Translation.tr("Connected");
+                                            if (dev.paired)
+                                                return Translation.tr("Paired");
                                             return Translation.tr("Available");
                                         }
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
-                                        color: root.selectedDevice?.connected
-                                            ? Appearance.colors.colPrimary
-                                            : Appearance.m3colors.m3onSurface
+                                        color: root.selectedDevice?.connected ? Appearance.colors.colPrimary : Appearance.m3colors.m3onSurface
                                     }
                                 }
 
@@ -1034,7 +1142,8 @@ Item {
                                                 font.weight: Font.Medium
                                                 color: {
                                                     const b = root.selectedDevice?.battery ?? 0;
-                                                    if (b <= 0.15) return Appearance.m3colors.m3error;
+                                                    if (b <= 0.15)
+                                                        return Appearance.m3colors.m3error;
                                                     return Appearance.m3colors.m3onSurface;
                                                 }
                                             }
@@ -1046,7 +1155,8 @@ Item {
                                             value: root.selectedDevice?.battery ?? 0
                                             highlightColor: {
                                                 const b = root.selectedDevice?.battery ?? 0;
-                                                if (b <= 0.15) return Appearance.m3colors.m3error;
+                                                if (b <= 0.15)
+                                                    return Appearance.m3colors.m3error;
                                                 return Appearance.colors.colPrimary;
                                             }
                                             trackColor: Appearance.colors.colSurfaceContainerHighest
@@ -1081,7 +1191,9 @@ Item {
                             }
                         }
 
-                        Item { Layout.fillHeight: true }
+                        Item {
+                            Layout.fillHeight: true
+                        }
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -1094,13 +1206,9 @@ Item {
                                 buttonRadius: Appearance.rounding.large
                                 colBackground: {
                                     if (connectActionBtn.isActionSelected || connectActionBtn.hovered) {
-                                        return root.selectedDevice?.connected 
-                                            ? Appearance.m3colors.m3error 
-                                            : Appearance.colors.colPrimary;
+                                        return root.selectedDevice?.connected ? Appearance.m3colors.m3error : Appearance.colors.colPrimary;
                                     }
-                                    return root.selectedDevice?.connected 
-                                        ? Appearance.colors.colErrorContainer 
-                                        : Appearance.colors.colPrimaryContainer;
+                                    return root.selectedDevice?.connected ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimaryContainer;
                                 }
                                 colBackgroundHover: colBackground
                                 colRipple: Appearance.colors.colPrimaryContainerActive
@@ -1111,7 +1219,8 @@ Item {
                                 PointingHandInteraction {}
                                 onClicked: {
                                     root.selectedActionIndex = 0;
-                                    if (!root.selectedDevice) return;
+                                    if (!root.selectedDevice)
+                                        return;
                                     if (root.selectedDevice.connected) {
                                         let temp = Object.assign({}, root.disconnectingDevices);
                                         temp[root.selectedDevice.address] = true;
@@ -1133,9 +1242,7 @@ Item {
                                     MaterialSymbol {
                                         text: root.selectedDevice?.connected ? "bluetooth_disabled" : "bluetooth_connected"
                                         iconSize: 16
-                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered)
-                                            ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary)
-                                            : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
+                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered) ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary) : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
                                         visible: !connectActionBtn.isProcessing
                                     }
 
@@ -1143,9 +1250,7 @@ Item {
                                         width: 16
                                         height: 16
                                         shape: MaterialShape.Shape.Cookie7Sided
-                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered)
-                                            ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary)
-                                            : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
+                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered) ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary) : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
                                         visible: connectActionBtn.isProcessing
 
                                         RotationAnimator on rotation {
@@ -1173,9 +1278,7 @@ Item {
                                         }
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
-                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered)
-                                            ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary)
-                                            : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
+                                        color: (connectActionBtn.isActionSelected || connectActionBtn.hovered) ? (root.selectedDevice?.connected ? Appearance.m3colors.m3onError : Appearance.colors.colOnPrimary) : (root.selectedDevice?.connected ? Appearance.m3colors.m3onErrorContainer : Appearance.colors.colOnPrimaryContainer)
                                     }
                                 }
                             }
@@ -1190,9 +1293,7 @@ Item {
                                     Layout.fillWidth: true
                                     implicitHeight: 40
                                     buttonRadius: Appearance.rounding.large
-                                    colBackground: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered)
-                                        ? Appearance.m3colors.m3error
-                                        : Appearance.colors.colSurfaceContainerHighest
+                                    colBackground: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered) ? Appearance.m3colors.m3error : Appearance.colors.colSurfaceContainerHighest
                                     colBackgroundHover: colBackground
                                     colRipple: Appearance.colors.colErrorContainerActive
 
@@ -1211,18 +1312,14 @@ Item {
                                         MaterialSymbol {
                                             text: "link_off"
                                             iconSize: 16
-                                            color: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered)
-                                                ? Appearance.m3colors.m3onError
-                                                : Appearance.m3colors.m3error
+                                            color: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered) ? Appearance.m3colors.m3onError : Appearance.m3colors.m3error
                                         }
 
                                         StyledText {
                                             text: Translation.tr("Forget")
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             font.weight: Font.Medium
-                                            color: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered)
-                                                ? Appearance.m3colors.m3onError
-                                                : Appearance.m3colors.m3error
+                                            color: (forgetActionBtn.isActionSelected || forgetActionBtn.hovered) ? Appearance.m3colors.m3onError : Appearance.m3colors.m3error
                                         }
                                     }
                                 }
@@ -1234,9 +1331,7 @@ Item {
                                 Layout.fillWidth: true
                                 implicitHeight: 40
                                 buttonRadius: Appearance.rounding.large
-                                colBackground: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered)
-                                    ? Appearance.colors.colPrimary
-                                    : Appearance.colors.colSurfaceContainerHighest
+                                colBackground: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered) ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 colBackgroundHover: colBackground
                                 colRipple: Appearance.colors.colPrimaryContainerActive
 
@@ -1257,18 +1352,14 @@ Item {
                                     MaterialSymbol {
                                         text: "content_copy"
                                         iconSize: 16
-                                        color: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered)
-                                            ? Appearance.colors.colOnPrimary
-                                            : Appearance.m3colors.m3onSurface
+                                        color: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered) ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
                                     }
 
                                     StyledText {
                                         text: Translation.tr("Copy MAC")
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
-                                        color: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered)
-                                            ? Appearance.colors.colOnPrimary
-                                            : Appearance.m3colors.m3onSurface
+                                        color: (copyMacActionBtn.isActionSelected || copyMacActionBtn.hovered) ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
                                     }
                                 }
                             }
@@ -1286,7 +1377,9 @@ Item {
                         anchors.fill: parent
                         spacing: 12
 
-                        Item { Layout.fillHeight: true }
+                        Item {
+                            Layout.fillHeight: true
+                        }
 
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignHCenter
@@ -1298,19 +1391,18 @@ Item {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.btEnabled
-                                ? Translation.tr("No devices found")
-                                : Translation.tr("Enable Bluetooth to see devices")
+                            text: root.btEnabled ? Translation.tr("No devices found") : Translation.tr("Enable Bluetooth to see devices")
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: Appearance.colors.colOnSurfaceVariant
                             opacity: 0.6
                         }
 
-                        Item { Layout.fillHeight: true }
+                        Item {
+                            Layout.fillHeight: true
+                        }
                     }
                 }
             }
         }
     }
-
 }

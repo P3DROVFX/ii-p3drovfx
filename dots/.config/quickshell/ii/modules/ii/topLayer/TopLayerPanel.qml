@@ -12,6 +12,7 @@ import qs.modules.ii.verticalBar as VBar
 import qs.modules.ii.sidebarPolicies as Policies
 import qs.modules.ii.sidebarDashboard as Dashboard
 import qs.modules.ii.wrappedFrame as Frame
+import qs.modules.ii.topLayer.search as SearchConnect
 
 PanelWindow {
     id: topPanel
@@ -24,6 +25,34 @@ PanelWindow {
         bottom: true
         left: true
         right: true
+    }
+
+    readonly property int monitorIndex: Quickshell.screens.indexOf(topPanel.screen)
+
+    // Animation timing constants
+    readonly property int animDurationEnter: 480
+    readonly property int animDurationExit: 200
+    readonly property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
+    readonly property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
+
+    property bool exitAnimating: false
+    Timer {
+        id: exitAnimTimer
+        interval: topPanel.animDurationExit + 30
+        onTriggered: topPanel.exitAnimating = false
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen) {
+                topPanel.exitAnimating = true;
+                exitAnimTimer.restart();
+            } else {
+                topPanel.exitAnimating = false;
+                exitAnimTimer.stop();
+            }
+        }
     }
 
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
@@ -68,6 +97,7 @@ PanelWindow {
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.activeRightSidebarMonitor
     readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.activeLeftSidebarMonitor && !GlobalStates.policiesDetached
     readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.activeRightSidebarMonitor
+    readonly property bool searchOpenOnMonitor: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
 
     readonly property bool leftSidebarWarmOnMonitor: {
         if (GlobalStates.policiesDetached) return false;
@@ -102,7 +132,7 @@ PanelWindow {
     readonly property real hBarHiddenAmount: horizontalBarLoader.item ? horizontalBarLoader.item.hiddenAmount : 0
     readonly property real vBarHiddenAmount: verticalBarLoader.item ? verticalBarLoader.item.hiddenAmount : 0
 
-    WlrLayershell.keyboardFocus: (leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     // 1. Wrapped Frame Visuals
     Loader {
@@ -590,8 +620,12 @@ PanelWindow {
         visible: topPanel.rightSidebarWarmOnMonitor
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
-        // Active whenever sidebar is visible (open or closing) so both directions benefit.
-        layer.enabled: GlobalStates.animatedRightSidebarWidth > 0
+        // which was causing Wayland surface sync stalls on every animation frame.
+        // Only active DURING the open/close animation — not while the sidebar is
+        // statically open. Keeping it on while open caused visible seam artifacts
+        // at the corner junctions because the FBO edge anti-aliasing differs from
+        // direct rendering of the RoundCorner overlays.
+        layer.enabled: GlobalStates.rightSidebarAnimating
 
         Loader {
             active: topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded
@@ -610,6 +644,7 @@ PanelWindow {
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
+            implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopLeft
             color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
         }
@@ -623,6 +658,7 @@ PanelWindow {
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
+            implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomLeft
             color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
         }
@@ -637,6 +673,7 @@ PanelWindow {
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
+            implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopRight
             color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
         }
@@ -651,10 +688,44 @@ PanelWindow {
         width: Appearance.rounding.screenRounding
         height: Appearance.rounding.screenRounding
         sourceComponent: RoundCorner {
+            implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomRight
             color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
         }
     }
+
+    // 4. Search Drop (Connect Mode integration)
+    Loader {
+        id: searchDropLoader
+        z: 10
+        active: GlobalStates.searchConnectActive
+                && !GlobalStates.screenLocked
+        focus: searchOpenOnMonitor
+        sourceComponent: Component {
+            SearchConnect.SearchDrop {
+                id: searchDrop
+                screen: topPanel.screen
+                monitorIndex: Quickshell.screens.indexOf(topPanel.screen)
+                panelWindow: topPanel
+                barVertical: topPanel.barVertical
+                barBottom: topPanel.barBottom
+                barOnLeft: topPanel.barOnLeft
+                barOnRight: topPanel.barOnRight
+                usingWrappedFrame: topPanel.usingWrappedFrame
+                frameThickness: Config.options.appearance.wrappedFrameThickness
+                barHeight: Appearance.sizes.barHeight
+                verticalBarWidth: Appearance.sizes.verticalBarWidth
+                hBarHiddenAmount: topPanel.hBarHiddenAmount
+                vBarHiddenAmount: topPanel.vBarHiddenAmount
+                animatedLeftSidebarWidth: GlobalStates.animatedLeftSidebarWidth
+                animatedRightSidebarWidth: GlobalStates.animatedRightSidebarWidth
+                leftSidebarActiveOnMonitor: topPanel.leftSidebarActiveOnMonitor
+                rightSidebarActiveOnMonitor: topPanel.rightSidebarActiveOnMonitor
+            }
+        }
+    }
+
+
 
     // Static items for input masking to avoid per-frame Region recalculations
     Item {
@@ -706,6 +777,35 @@ PanelWindow {
         height: rightSidebarBottomCornerLoader.active ? Appearance.rounding.screenRounding : 0
     }
 
+    // Static mask item for search drop bounds
+    Item {
+        id: searchDropMaskItem
+        visible: searchDropLoader.active
+                 && searchDropLoader.item
+                 && searchDropLoader.item.isWidgetActive
+        x: searchDropLoader.item ? searchDropLoader.item.x + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.x : 0) : 0
+        y: searchDropLoader.item ? searchDropLoader.item.y + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.y : 0) : 0
+        width: searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.width : 0) : 0
+        height: searchDropLoader.item ? (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.height : 0) : 0
+    }
+
+    // Static mask item for search drop float media bubble
+    Item {
+        id: searchDropBubbleMaskItem
+        visible: searchDropLoader.active
+                 && searchDropLoader.item
+                 && searchDropLoader.item.isWidgetActive
+                 && searchDropLoader.item.searchWidgetRef
+                 && searchDropLoader.item.nowPlayingBubble
+                 && searchDropLoader.item.nowPlayingBubble.bubbleActive
+        x: searchDropLoader.item ? searchDropLoader.item.x + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.x : 0) + (searchDropLoader.item.nowPlayingBubble ? searchDropLoader.item.nowPlayingBubble.x : 0) : 0
+        y: searchDropLoader.item ? searchDropLoader.item.y + (searchDropLoader.item.maskItem ? searchDropLoader.item.maskItem.y : 0) + (searchDropLoader.item.nowPlayingBubble ? searchDropLoader.item.nowPlayingBubble.y : 0) : 0
+        width: searchDropLoader.item && searchDropLoader.item.nowPlayingBubble ? searchDropLoader.item.nowPlayingBubble.width : 0
+        height: searchDropLoader.item && searchDropLoader.item.nowPlayingBubble ? searchDropLoader.item.nowPlayingBubble.height : 0
+    }
+
+
+
     // Mask region definitions
     mask: Region {
         Region {
@@ -740,6 +840,15 @@ PanelWindow {
         Region {
             item: rightSidebarBottomCornerMaskItem
         }
+        Region {
+            // Search drop
+            item: searchDropMaskItem
+        }
+        Region {
+            // Search drop bubble
+            item: searchDropBubbleMaskItem
+        }
+
     }
 
     Connections {
@@ -782,6 +891,9 @@ PanelWindow {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }
+            if (GlobalStates.overviewOpen && GlobalStates.searchConnectActive && topPanel.screen.name === GlobalStates.activeSearchMonitor) {
+                GlobalStates.overviewOpen = false;
+            }
         }
     }
 
@@ -794,6 +906,7 @@ PanelWindow {
                 GlobalStates.sidebarLeftOpen = false;
                 event.accepted = true;
             }
+
             if (event.modifiers === Qt.ControlModifier && leftSidebarOpenOnMonitor) {
                 if (event.key === Qt.Key_O) {
                     GlobalStates.policiesExtended = !GlobalStates.policiesExtended;

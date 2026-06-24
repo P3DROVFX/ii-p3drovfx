@@ -84,10 +84,15 @@ Flow {
                 if (index === 0) {
                     paletteButton.leftmost = true
                 } else {
-                    var prev = root.children[index - 1]
-                    var thisIsOnNewLine = prev && prev.y !== paletteButton.y
-                    paletteButton.leftmost = thisIsOnNewLine
-                    prev.rightmost = thisIsOnNewLine
+                    for (var i = index - 1; i >= 0; i--) {
+                        var prev = repeater.itemAt(i)
+                        if (prev) {
+                            var thisIsOnNewLine = prev.y !== paletteButton.y
+                            paletteButton.leftmost = thisIsOnNewLine
+                            prev.rightmost = thisIsOnNewLine
+                            break
+                        }
+                    }
                 }
             }
             leftmost: index === 0

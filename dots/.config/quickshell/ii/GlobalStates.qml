@@ -50,6 +50,8 @@ Singleton {
     property string settingsPendingSubPage: ""
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
+    property string activeSearchMonitor: ""
+    property string activeSearchQuery: ""
     property bool policiesExtended: false
     property bool policiesPinned: false
     property bool policiesDetached: false
@@ -151,16 +153,27 @@ Singleton {
         if (!Config.ready) return false;
         const style = Config.options.sidebar.sidebarStyle || "default";
         if (style !== "connect") return false;
-        
+
         // Connect style is disabled if the bar background style is Transparent
         if (Config.options.bar.barBackgroundStyle === 0) return false;
-        
+
         // Works in all rounding modes except Edge (4)
         if (Config.options.appearance.fakeScreenRounding === 4) return false;
-        
+
         // Only works with cornerStyle 0 (Hug) or 2 (Rect)
         const cs = Config.options.bar.cornerStyle;
         return cs === 0 || cs === 2;
+    }
+
+    readonly property bool searchConnectActive: {
+        if (!connectModeActive) return false;
+        if (Config.options.search.connectStyle !== "connect") return false;
+
+        // Float mode (cornerStyle 1) excluded — bar disconnected from edges
+        if (Config.options.bar.cornerStyle === 1) return false;
+
+        // All other corner styles (Hug, Rect, Dynamic Island) supported
+        return true;
     }
 
     function enforceSidebarStyle() {
@@ -367,6 +380,29 @@ Singleton {
     function openRightSidebar(monitorName) {
         root.activeRightSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.dashboardPanelOpen = true;
+    }
+
+    function toggleSearch(monitorName) {
+        if (root.overviewOpen) {
+            root.overviewOpen = false;
+        } else {
+            root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+            root.overviewOpen = true;
+        }
+    }
+
+    function openSearch(monitorName) {
+        root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.overviewOpen = true;
+    }
+
+    onOverviewOpenChanged: {
+        if (root.overviewOpen && root.searchConnectActive && root.activeSearchMonitor === "") {
+            root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? ""
+        }
+        if (!root.overviewOpen && root.searchConnectActive) {
+            root.activeSearchMonitor = ""
+        }
     }
 
     onAnimatedLeftSidebarWidthChanged: {

@@ -17,6 +17,7 @@ Item {
     id: root
     width: implicitWidth
     height: implicitHeight
+    focus: true
     signal requestToggleActions
 
     readonly property string xdgConfigHome: Directories.config
@@ -41,8 +42,10 @@ Item {
     property bool artDownloaded: false
 
     readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
+        if (!artUrl)
+            return "";
+        if (isLocalArt)
+            return artUrl;
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
     }
 
@@ -102,6 +105,7 @@ Item {
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
     property string overviewPosition: Config.options.overview?.position ?? ""
     property bool isNowPlayingFocused: false
+    readonly property alias nowPlayingBubble: nowPlayingFloatingBubble
 
     Connections {
         target: GlobalStates
@@ -134,24 +138,8 @@ Item {
             });
         }
     }
-    implicitWidth: {
-        if (root.isBluetoothMode)
-            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
-        if (root.isClipboardMode)
-            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
-        if (root.isTranslatorMode)
-            return (Config.options.search.clipboard.panelWidth ?? 860) + Appearance.sizes.elevationMargin * 2;
-        return searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2;
-    }
-    implicitHeight: {
-        if (root.isBluetoothMode)
-            return (bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight : 520) + Appearance.sizes.elevationMargin * 2;
-        if (root.isClipboardMode)
-            return (clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight : 560) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
-        if (root.isTranslatorMode)
-            return (translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight : 520) + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
-        return searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2;
-    }
+    implicitWidth: searchWidgetContent.implicitWidth + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    implicitHeight: searchWidgetContent.implicitHeight + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
 
     function focusFirstItem() {
         if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
@@ -267,12 +255,13 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
+        visible: !GlobalStates.searchConnectActive
     }
     Rectangle {
         id: searchWidgetContent
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: implicitWidth
-        height: implicitHeight
+        anchors.centerIn: parent
+        width: GlobalStates.searchConnectActive ? parent.width : implicitWidth
+        height: GlobalStates.searchConnectActive ? parent.height : implicitHeight
         clip: true
         layer.enabled: true
         layer.effect: OpacityMask {
@@ -283,30 +272,37 @@ Item {
             }
         }
         implicitWidth: {
+            let baseW = 0;
             if (root.isBluetoothMode)
-                return Config.options.search.clipboard.panelWidth ?? 860;
-            if (root.isClipboardMode)
-                return Config.options.search.clipboard.panelWidth ?? 860;
-            if (root.isTranslatorMode)
-                return Config.options.search.clipboard.panelWidth ?? 860;
-            return gridLayout.implicitWidth;
+                baseW = Config.options.search.clipboard.panelWidth ?? 860;
+            else if (root.isClipboardMode)
+                baseW = Config.options.search.clipboard.panelWidth ?? 860;
+            else if (root.isTranslatorMode)
+                baseW = Config.options.search.clipboard.panelWidth ?? 860;
+            else
+                baseW = gridLayout.implicitWidth;
+
+            if (GlobalStates.searchConnectActive)
+                return baseW + 48;
+            return baseW;
         }
         implicitHeight: {
+            let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
             if (root.isBluetoothMode)
-                return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
+                return bluetoothPanelLoader.item ? bluetoothPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 520;
             if (root.isClipboardMode)
-                return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 560;
+                return clipboardPanelLoader.item ? clipboardPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 560;
             if (root.isTranslatorMode)
-                return translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + 10 : 520;
+                return translatorPanelLoader.item ? translatorPanelLoader.item.implicitHeight + searchBar.height + searchBar.verticalPadding * 2 + bottomMargin : 520;
             return gridLayout.implicitHeight;
         }
-        radius: searchBar.height / 2 + searchBar.verticalPadding
-        color: Appearance.colors.colBackgroundSurfaceContainer
+        radius: Appearance.rounding.windowRounding
+        color: GlobalStates.searchConnectActive ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
             NumberAnimation {
-                duration: 350
+                duration: 250
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
             }
@@ -315,7 +311,7 @@ Item {
         Behavior on implicitHeight {
             id: searchHeightBehavior
             NumberAnimation {
-                duration: 350
+                duration: 250
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
             }
@@ -325,6 +321,8 @@ Item {
             id: gridLayout
             anchors.left: parent.left
             anchors.right: parent.right
+            anchors.leftMargin: GlobalStates.searchConnectActive ? 24 : 0
+            anchors.rightMargin: GlobalStates.searchConnectActive ? 24 : 0
             anchors.top: parent.top
             columns: 1
             clip: true
@@ -337,7 +335,7 @@ Item {
                 Layout.rightMargin: 4
                 Layout.topMargin: verticalPadding
                 Layout.bottomMargin: verticalPadding
-                Layout.row: root.overviewPosition == "bottom" ? 2 : 0
+                Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 animateWidth: true
                 Synchronizer on searchingText {
                     property alias source: root.searchingText
@@ -424,26 +422,18 @@ Item {
                 }
             }
 
-            Rectangle {
-                visible: root.showResults || root.isAnySpecialMode
-                Layout.fillWidth: true
-                height: 1
-                color: Appearance.colors.colOutlineVariant
-                Layout.row: 1
-            }
-
             Item {
                 visible: root.showResults && !root.isAnySpecialMode
                 Layout.fillWidth: true
-                implicitHeight: root.showSkeletons ? searchSkeletons.implicitHeight + 20 : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 2
+                implicitHeight: root.showSkeletons ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 16 : 20) : Math.min(600, appResults.contentHeight + appResults.topMargin + appResults.bottomMargin)
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 Behavior on implicitHeight {
                     // Disabled during active debounce to avoid layout thrashing
                     // while the user is still typing rapidly
                     enabled: !resultsDebounce.running
                     NumberAnimation {
-                        duration: 300
+                        duration: 250
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -462,10 +452,60 @@ Item {
                     }
                     clip: true
                     topMargin: 10
-                    bottomMargin: 10
+                    bottomMargin: GlobalStates.searchConnectActive ? 16 : 10
                     spacing: 2
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
+
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Item {
+                            id: maskRoot
+                            width: appResults.width
+                            height: appResults.height
+
+                            property color topFadeColor: !appResults.atYBeginning ? "transparent" : "white"
+                            property color bottomFadeColor: !appResults.atYEnd ? "transparent" : "white"
+
+                            Behavior on topFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+                            Behavior on bottomFadeColor {
+                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                            }
+
+                            Column {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
+                                        GradientStop { position: 1.0; color: "white" }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                                    color: "white"
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: Math.min(36, parent.height / 2)
+                                    color: "transparent"
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: "white" }
+                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Touchpad and mouse scroll physics adjustments
                     property real scrollTargetY: 0
@@ -617,7 +657,6 @@ Item {
                     id: searchSkeletons
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.top: parent.top
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
                     anchors.topMargin: 10
@@ -704,7 +743,7 @@ Item {
                 active: root.isClipboardMode
                 Layout.fillWidth: true
                 source: "ClipboardPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 2
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isClipboardMode ? 1.0 : 0.0
                 Behavior on opacity {
@@ -729,7 +768,7 @@ Item {
                 active: root.isBluetoothMode
                 Layout.fillWidth: true
                 source: "BluetoothPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 2
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isBluetoothMode ? 1.0 : 0.0
                 Behavior on opacity {
@@ -754,7 +793,7 @@ Item {
                 active: root.isTranslatorMode
                 Layout.fillWidth: true
                 source: "TranslatorPanel.qml"
-                Layout.row: root.overviewPosition == "bottom" ? 0 : 2
+                Layout.row: root.overviewPosition == "bottom" ? 0 : 1
 
                 opacity: root.isTranslatorMode ? 1.0 : 0.0
                 Behavior on opacity {
@@ -790,10 +829,10 @@ Item {
     Rectangle {
         id: nowPlayingFloatingBubble
 
-        readonly property bool bubbleActive: (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
+        readonly property bool bubbleActive: Config.options.search.showNowPlayingBubble && (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
 
         anchors.right: searchWidgetContent.left
-        anchors.rightMargin: 12
+        anchors.rightMargin: -10
         y: searchWidgetContent.y + searchBar.y + (searchBar.height - height) / 2
 
         width: bubbleActive ? 96 : 0
@@ -815,8 +854,8 @@ Item {
 
         Behavior on width {
             NumberAnimation {
-                duration: 350
-                easing.type: Easing.OutQuint
+                duration: 050
+                easing.type: GlobalStates.overviewOpen ? Easing.OutCubic : Easing.InOutCubic
             }
         }
 
@@ -951,4 +990,5 @@ Item {
             }
         }
     }
+
 }

@@ -101,14 +101,67 @@ ContentPage {
                 Config.options.sidebar.ai.showProviderAndModelButtons = checked;
             }
         }
+    }
 
-        ConfigSwitch {
-            buttonIcon: "power_settings_new"
-            text: Translation.tr("Probe for local Ollama models at boot")
-            checked: Config.options.ai.enable
-            onCheckedChanged: {
-                Config.options.ai.enable = checked
+    ContentSection {
+        icon: "phone_android"
+        title: Translation.tr("Connect Mode")
+
+        ContentSubsection {
+            title: Translation.tr("Sidebar style")
+            icon: "style"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.sidebar.sidebarStyle
+                onSelected: newValue => {
+                    Config.options.sidebar.sidebarStyle = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Default"),
+                        icon: "view_sidebar",
+                        value: "default"
+                    },
+                    {
+                        displayName: Translation.tr("Connect"),
+                        icon: "phone_android",
+                        value: "connect"
+                    }
+                ]
             }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Search style")
+            icon: "style"
+            Layout.fillWidth: true
+            tooltip: Translation.tr("Render the search launcher as a concave-corner drop emerging from the bar inside the unified Connect Mode surface. \n Only effective while Connect Mode is active. Not compatible with some Bar styles.")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.search.connectStyle
+                onSelected: newValue => {
+                    Config.options.search.connectStyle = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Default"),
+                        icon: "view_sidebar",
+                        value: "default"
+                    },
+                    {
+                        displayName: Translation.tr("Connect"),
+                        icon: "phone_android",
+                        value: "connect"
+                    }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.autoHide.enable
+            text: Translation.tr("Bar auto-hide is not supported by Search Connect Mode yet. Disable auto-hide to use the drop search.")
         }
     }
 

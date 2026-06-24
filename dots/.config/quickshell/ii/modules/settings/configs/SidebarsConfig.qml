@@ -150,31 +150,6 @@ ContentPage {
         }
 
         ContentSubsection {
-            title: Translation.tr("Sidebar style")
-            icon: "style"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.sidebarStyle
-                onSelected: newValue => {
-                    Config.options.sidebar.sidebarStyle = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Default"),
-                        icon: "view_sidebar",
-                        value: "default"
-                    },
-                    {
-                        displayName: Translation.tr("Connect"),
-                        icon: "phone_android",
-                        value: "connect"
-                    }
-                ]
-            }
-        }
-
-        ContentSubsection {
             title: Translation.tr("Sidebar position")
             icon: "switch_right"
             Layout.fillWidth: true
