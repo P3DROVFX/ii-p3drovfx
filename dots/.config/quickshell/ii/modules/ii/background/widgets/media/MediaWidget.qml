@@ -17,22 +17,22 @@ import qs.modules.ii.background.widgets
 AbstractBackgroundWidget {
     id: root
 
-    signal requestReset()
+    signal requestReset
 
     configEntryName: "media"
 
     readonly property bool useAlbumColors: Config.options.background.widgets.media.useAlbumColors
-    readonly property bool useDynamicColors: root.useAlbumColors && root.currentPlayer != null 
+    readonly property bool useDynamicColors: root.useAlbumColors && root.currentPlayer != null
     readonly property bool showPreviousToggle: Config.options.background.widgets.media.showPreviousToggle
     readonly property bool hideAllButtons: Config.options.background.widgets.media.hideAllButtons
     readonly property bool showRestButtons: hideAllButtons ? hovering : true
 
     readonly property var playerList: MprisController.players
 
-    // not using for now, but could be useful in the future 
+    // not using for now, but could be useful in the future
     property var filteredPlayerList: playerList.filter(player => player != null && player.trackAlbum != "")
-    
-    property MprisPlayer currentPlayer : MprisController.activePlayer
+
+    property MprisPlayer currentPlayer: MprisController.activePlayer
     property var artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
@@ -49,28 +49,25 @@ AbstractBackgroundWidget {
     }
     property var dynamicColors: {
         return {
-            colPrimary: root.useDynamicColors                  ?  blendedColors.colPrimary                  : Appearance.colors.colPrimary,
-            colPrimaryBackground: root.useDynamicColors        ?  blendedColors.colPrimaryContainer         : Appearance.colors.colPrimaryContainer,
-            colPrimaryBackgroundHover: root.useDynamicColors   ?  blendedColors.colPrimaryContainerHover    : Appearance.colors.colPrimaryContainerHover,
-            colPrimaryRipple: root.useDynamicColors            ?  blendedColors.colPrimaryContainerActive   : Appearance.colors.colPrimaryContainerActive,
-
-            colSecondary: root.useDynamicColors                ?  blendedColors.colSecondary                : Appearance.colors.colSecondary,
-            colSecondaryBackground: root.useDynamicColors      ?  blendedColors.colSecondaryContainer       : Appearance.colors.colSecondaryContainer,
-            colSecondaryBackgroundHover: root.useDynamicColors ?  blendedColors.colSecondaryContainerHover  : Appearance.colors.colSecondaryContainerHover,
-            colSecondaryRipple: root.useDynamicColors          ?  blendedColors.colSecondaryContainerActive : Appearance.colors.colSecondaryContainerActive,
-
-            colTertiary: root.useDynamicColors                 ? blendedColors.colTertiary                  : Appearance.colors.colTertiary,
-            colTertiaryBackground: root.useDynamicColors       ? blendedColors.colTertiaryContainer         : Appearance.colors.colTertiaryContainer,
-            colTertiaryBackgroundHover: root.useDynamicColors  ? blendedColors.colTertiaryContainerHover    : Appearance.colors.colTertiaryContainerHover,
-            colTertiaryRipple: root.useDynamicColors           ? blendedColors.colTertiaryContainerActive   : Appearance.colors.colTertiaryContainerActive
-            
-        }
+            colPrimary: root.useDynamicColors ? blendedColors.colPrimary : Appearance.colors.colPrimary,
+            colPrimaryBackground: root.useDynamicColors ? blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer,
+            colPrimaryBackgroundHover: root.useDynamicColors ? blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover,
+            colPrimaryRipple: root.useDynamicColors ? blendedColors.colPrimaryContainerActive : Appearance.colors.colPrimaryContainerActive,
+            colSecondary: root.useDynamicColors ? blendedColors.colSecondary : Appearance.colors.colSecondary,
+            colSecondaryBackground: root.useDynamicColors ? blendedColors.colSecondaryContainer : Appearance.colors.colSecondaryContainer,
+            colSecondaryBackgroundHover: root.useDynamicColors ? blendedColors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainerHover,
+            colSecondaryRipple: root.useDynamicColors ? blendedColors.colSecondaryContainerActive : Appearance.colors.colSecondaryContainerActive,
+            colTertiary: root.useDynamicColors ? blendedColors.colTertiary : Appearance.colors.colTertiary,
+            colTertiaryBackground: root.useDynamicColors ? blendedColors.colTertiaryContainer : Appearance.colors.colTertiaryContainer,
+            colTertiaryBackgroundHover: root.useDynamicColors ? blendedColors.colTertiaryContainerHover : Appearance.colors.colTertiaryContainerHover,
+            colTertiaryRipple: root.useDynamicColors ? blendedColors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainerActive
+        };
     }
 
     property bool downloaded: false
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
-    property list<real> visualizerPoints: [] 
+    property list<real> visualizerPoints: []
 
     implicitHeight: contentItem.implicitHeight
     implicitWidth: contentItem.implicitWidth
@@ -79,31 +76,31 @@ AbstractBackgroundWidget {
     property bool hovering: false
     hoverEnabled: true
     onEntered: {
-        hovering = true
+        hovering = true;
     }
     onExited: {
-        hovering = false
+        hovering = false;
     }
-        
+
     allowMiddleClick: true
-    onClicked: (event) => {
+    onClicked: event => {
         if (event.button === Qt.MiddleButton) {
-            root.requestReset()
+            root.requestReset();
         }
     }
 
     onArtFilePathChanged: updateArt()
 
     function nextPlayer() {
-        root.currentPlayer = root.playerList[(root.playerList.indexOf(root.currentPlayer) + 1) % root.playerList.length]
+        root.currentPlayer = root.playerList[(root.playerList.indexOf(root.currentPlayer) + 1) % root.playerList.length];
     }
 
     function updateArt() {
-        coverArtDownloader.targetFile = root.artUrl 
-        coverArtDownloader.artFilePath = root.artFilePath
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp"
-        root.downloaded = false
-        coverArtDownloader.running = true
+        coverArtDownloader.targetFile = root.artUrl;
+        coverArtDownloader.artFilePath = root.artFilePath;
+        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
+        root.downloaded = false;
+        coverArtDownloader.running = true;
     }
 
     Process { // Cover art downloader
@@ -111,9 +108,9 @@ AbstractBackgroundWidget {
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
-        command: [ "bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')` ]
+        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
         onExited: (exitCode, exitStatus) => {
-            root.downloaded = true
+            root.downloaded = true;
         }
     }
 
@@ -147,7 +144,6 @@ AbstractBackgroundWidget {
         implicitWidth: root.widgetSize
         implicitHeight: root.widgetSize
 
-    
         Image { // using a loader somehow breaks the image
             id: blurredArt
             anchors.fill: parent
@@ -163,14 +159,14 @@ AbstractBackgroundWidget {
             Behavior on opacity {
                 animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
             }
-            
+
             layer.enabled: true
             layer.effect: StyledBlurEffect {
                 source: blurredArt
                 brightness: 0.002 * Config.options.background.widgets.media.glow.brightness
             }
         }
-        
+
         FadeLoader {
             id: loopButtonLoader
             anchors {
@@ -186,7 +182,7 @@ AbstractBackgroundWidget {
                 symbolColor: root.dynamicColors.colSecondary
                 symbolText: "360"
                 onClicked: {
-                    root.nextPlayer()
+                    root.nextPlayer();
                 }
             }
         }
@@ -206,13 +202,13 @@ AbstractBackgroundWidget {
                 colSymbol: Appearance.colors.colPrimaryContainer
             }
         }
-        
+
         MaterialShape { // Art background
             id: artBackground
             anchors.fill: parent
             color: Appearance.colors.colPrimaryContainer
             shapeString: Config.options.background.widgets.media.backgroundShape
-            
+
             layer.enabled: true
             layer.effect: OpacityMask {
                 maskSource: MaterialShape {
@@ -255,12 +251,11 @@ AbstractBackgroundWidget {
                         color: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.9)
                     }
                 }
-            
             }
 
             RadialWaveVisualizer {
-                z: 1
                 id: visualizer
+                z: 1
                 anchors.fill: parent
                 points: root.visualizerPoints
                 live: root.currentPlayer?.isPlaying ?? false
@@ -288,13 +283,12 @@ AbstractBackgroundWidget {
                 colBackgroundHover: root.dynamicColors.colSecondaryBackgroundHover
                 colRipple: root.dynamicColors.colSecondaryRipple
                 symbolText: root.currentPlayer?.isPlaying ? "pause" : "play_arrow"
-                symbolColor: useAlbumColors ?  blendedColors.colTertiary : Appearance.colors.colTertiary
+                symbolColor: useAlbumColors ? blendedColors.colTertiary : Appearance.colors.colTertiary
                 onClicked: {
-                    root.currentPlayer.togglePlaying()
+                    root.currentPlayer.togglePlaying();
                 }
             }
         }
-        
 
         Loader {
             active: root.showRestButtons
@@ -327,13 +321,13 @@ AbstractBackgroundWidget {
                         symbolColor: root.dynamicColors.colSecondary
                         symbolText: "skip_previous"
                         onClicked: {
-                            currentPlayer.previous()
+                            currentPlayer.previous();
                         }
                     }
                 }
 
                 ControlButton {
-                    anchors.right: parent.right 
+                    anchors.right: parent.right
 
                     colBackground: root.dynamicColors.colTertiaryBackground
                     colBackgroundHover: root.dynamicColors.colTertiaryBackgroundHover
@@ -341,20 +335,18 @@ AbstractBackgroundWidget {
                     symbolColor: root.dynamicColors.colSecondary
                     symbolText: "skip_next"
                     onClicked: {
-                        currentPlayer.next()
+                        currentPlayer.next();
                     }
                 }
-
             }
         }
-        
     }
 
-    component ControlButton : RippleButton {
+    component ControlButton: RippleButton {
         id: button
         property string symbolText
         property color symbolColor
-        
+
         z: 2
         implicitWidth: controlsSize
         implicitHeight: implicitWidth

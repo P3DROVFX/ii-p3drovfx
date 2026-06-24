@@ -480,7 +480,7 @@ Singleton {
             }
 
             if (Config.options.search.alwaysListApps) {
-                const appResultObjects = AppSearch.fuzzyQuery("").map(entry => root.createAppResultObject(entry));
+                const appResultObjects = AppSearch.fuzzyQuery("").slice(0, 60).map(entry => root.createAppResultObject(entry));
                 return mprisResults.concat(appResultObjects);
             }
 
@@ -501,7 +501,7 @@ Singleton {
             const fuzzyResults = Cliphist.fuzzyQuery(searchString).filter(e => !Cliphist.isPinned(e));
             const allResults = pinnedMatches.concat(fuzzyResults);
 
-            return allResults.slice(0, 300).map((entry, index, array) => {
+            return allResults.slice(0, 60).map((entry, index, array) => {
                 const isPinned = index < pinnedMatches.length;
                 const mightBlurImage = Cliphist.entryIsImage(entry) && root.clipboardWorkSafetyActive;
                 let shouldBlurImage = mightBlurImage;
@@ -551,7 +551,7 @@ Singleton {
             }).filter(Boolean);
         } else if (root.query.startsWith(Config.options.search.prefix.emojis)) {
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.emojis);
-            return Emojis.fuzzyQuery(searchString).slice(0, 300).map(entry => {
+            return Emojis.fuzzyQuery(searchString).slice(0, 60).map(entry => {
                 const emoji = entry.match(/^\s*(\S+)/)?.[1] || "";
                 const emojiName = entry.replace(/^\s*\S+\s+/, "");
                 return resultComp.createObject(null, {
@@ -732,7 +732,7 @@ Singleton {
 
         // MPRIS handled above (empty query case)
 
-        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => root.createAppResultObject(entry));
+        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).slice(0, 60).map(entry => root.createAppResultObject(entry));
         const commandResultObject = resultComp.createObject(null, {
             key: "cmd:shell",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),

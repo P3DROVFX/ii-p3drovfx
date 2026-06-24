@@ -446,8 +446,9 @@ Item {
                     opacity: root.showSkeletons ? 0.0 : 1.0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 180
-                            easing.type: Easing.OutQuad
+                            duration: 250
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
                     }
                     clip: true
@@ -468,10 +469,10 @@ Item {
                             property color bottomFadeColor: !appResults.atYEnd ? "transparent" : "white"
 
                             Behavior on topFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                                ColorAnimation { duration: 250; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
                             }
                             Behavior on bottomFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
+                                ColorAnimation { duration: 250; easing.type: Easing.BezierSpline; easing.bezierCurve: Appearance.animationCurves.emphasizedDecel }
                             }
 
                             Column {
@@ -666,8 +667,9 @@ Item {
                     opacity: root.showSkeletons ? 1.0 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 180
-                            easing.type: Easing.OutQuad
+                            duration: 250
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
                     }
 
@@ -748,7 +750,7 @@ Item {
                 opacity: root.isClipboardMode ? 1.0 : 0.0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 280
+                        duration: 250
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -773,7 +775,7 @@ Item {
                 opacity: root.isBluetoothMode ? 1.0 : 0.0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 280
+                        duration: 250
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -798,7 +800,7 @@ Item {
                 opacity: root.isTranslatorMode ? 1.0 : 0.0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 280
+                        duration: 250
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -829,7 +831,7 @@ Item {
     Rectangle {
         id: nowPlayingFloatingBubble
 
-        readonly property bool bubbleActive: Config.options.search.showNowPlayingBubble && (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
+        readonly property bool bubbleActive: (root.alwaysListAppsMode || root.searchingText !== "") && MprisController.activePlayer !== null
 
         anchors.right: searchWidgetContent.left
         anchors.rightMargin: -10

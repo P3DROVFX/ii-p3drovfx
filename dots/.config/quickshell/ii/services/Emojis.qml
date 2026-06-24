@@ -36,7 +36,7 @@ Singleton {
         }
 
         return Fuzzy.go(search, preparedEntries, {
-            all: true,
+            limit: 100,
             key: "name"
         }).map(r => {
             return r.obj.entry

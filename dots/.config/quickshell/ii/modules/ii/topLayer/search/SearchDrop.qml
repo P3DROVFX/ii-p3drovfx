@@ -8,29 +8,33 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overview
 
+// ── Animation constants ─────────────────────────────────────────────────────
+// Single source of truth for all SearchDrop timing/easing.
+// Change _animDuration / _animBezier in the Item to tune every animation at once.
+
 Item {
     id: root
     focus: true
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
-            GlobalStates.overviewOpen = false
-            event.accepted = true
-            return
+            GlobalStates.overviewOpen = false;
+            event.accepted = true;
+            return;
         }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             if (root.searchWidgetRef) {
-                root.searchWidgetRef.focusFirstItem()
-                event.accepted = true
+                root.searchWidgetRef.focusFirstItem();
+                event.accepted = true;
             }
-            return
+            return;
         }
         if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             if (root.searchWidgetRef) {
-                root.searchWidgetRef.focusSearchInput()
-                event.accepted = true
+                root.searchWidgetRef.focusSearchInput();
+                event.accepted = true;
             }
-            return
+            return;
         }
     }
     property var screen: null
@@ -68,12 +72,12 @@ Item {
 
     onLauncherContentWidthChanged: {
         if (launcherContentWidth > 0)
-            lastActiveW = launcherContentWidth
+            lastActiveW = launcherContentWidth;
     }
 
     onLauncherContentHeightChanged: {
         if (launcherContentHeight > 0)
-            lastActiveH = launcherContentHeight
+            lastActiveH = launcherContentHeight;
     }
 
     SearchDropState {
@@ -117,6 +121,11 @@ Item {
         }
     }
 
+    // ── Shared animation spec (used by all Behaviors below) ─────────────────
+    readonly property int _animDuration: 250
+    readonly property int _animEasingType: Easing.BezierSpline
+    readonly property var _animBezier: Appearance.animationCurves.emphasizedDecel
+
     property real openProgress: 0.0
     readonly property real animHeight: openProgress * dropState.targetH
 
@@ -141,21 +150,25 @@ Item {
 
     transitions: [
         Transition {
-            from: "closed"; to: "open"
+            from: "closed"
+            to: "open"
             NumberAnimation {
                 target: root
                 property: "openProgress"
-                duration: 350
-                easing.type: Easing.InOutCubic
+                duration: root._animDuration
+                easing.type: root._animEasingType
+                easing.bezierCurve: root._animBezier
             }
         },
         Transition {
-            from: "open"; to: "closed"
+            from: "open"
+            to: "closed"
             NumberAnimation {
                 target: root
                 property: "openProgress"
-                duration: 350
-                easing.type: Easing.InOutCubic
+                duration: root._animDuration
+                easing.type: root._animEasingType
+                easing.bezierCurve: root._animBezier
             }
         }
     ]
@@ -168,6 +181,33 @@ Item {
         height: root.animHeight
         visible: root.animHeight > 0.001
 
+        // ── Notch background (unclipped) ─────────────────────────────────────
+        // Lives outside clippingClip so its convex bottom corners are NEVER
+        // cropped by the reveal mask. Height tracks animHeight directly
+        // (already a smooth value) so corners are always fully rounded.
+        // Flipped for barBottom so the concave attachment edge faces the bar.
+        Notch {
+            id: dropNotch
+            width: dropContainer.width
+            height: dropContainer.height   // = animHeight, always matches clip edge
+            y: barBottom ? (dropContainer.height - height) : 0
+            disableBehaviors: true
+            // Scale corners proportionally, but delay the concave topRadius until
+            // the body height is tall enough to avoid rendering empty gaps outside the curves.
+            // When animHeight is below 30px, topRadius is kept at 0 (flat attachment).
+            readonly property real _wr: Appearance.rounding.windowRounding
+            topRadius: root.animHeight < 30 ? 0 : Math.min(_wr, root.animHeight - 30)
+            bottomRadius: Math.min(_wr, root.animHeight)
+            fillColor: Appearance.colors.colBackgroundSurfaceContainer
+            // Mirror vertically for bottom-bar so concave is at bar attachment
+            transform: Scale {
+                xScale: 1
+                yScale: barBottom ? -1 : 1
+                origin.y: dropNotch.height / 2
+            }
+        }
+
+        // ── Content (clipped to growing height) ──────────────────────────────
         Item {
             id: clippingClip
             x: -200
@@ -182,13 +222,6 @@ Item {
                 height: dropState.targetH
                 y: barBottom ? parent.height - height : 0
 
-                Notch {
-                    anchors.fill: parent
-                    topRadius: Appearance.rounding.windowRounding
-                    bottomRadius: Appearance.rounding.windowRounding
-                    fillColor: Appearance.colors.colBackgroundSurfaceContainer
-                }
-
                 Loader {
                     id: searchWidgetLoader
                     active: root.isWidgetActive
@@ -198,18 +231,18 @@ Item {
                         SearchWidget {
                             id: searchWidget
                             Component.onCompleted: {
-                                root.searchWidgetRef = searchWidget
+                                root.searchWidgetRef = searchWidget;
                                 if (GlobalStates.activeSearchQuery) {
-                                    searchWidget.setSearchingText(GlobalStates.activeSearchQuery)
-                                    GlobalStates.activeSearchQuery = ""
+                                    searchWidget.setSearchingText(GlobalStates.activeSearchQuery);
+                                    GlobalStates.activeSearchQuery = "";
                                 } else {
-                                    searchWidget.cancelSearch()
+                                    searchWidget.cancelSearch();
                                 }
-                                Qt.callLater(() => searchWidget.focusSearchInput())
+                                Qt.callLater(() => searchWidget.focusSearchInput());
                             }
                             Component.onDestruction: {
                                 if (root.searchWidgetRef === searchWidget)
-                                    root.searchWidgetRef = null
+                                    root.searchWidgetRef = null;
                             }
                         }
                     }
@@ -220,7 +253,9 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
-            onPressed: (event) => { event.accepted = false }
+            onPressed: event => {
+                event.accepted = false;
+            }
         }
     }
 
@@ -228,14 +263,14 @@ Item {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen && root.screen.name === GlobalStates.activeSearchMonitor) {
-                GlobalFocusGrab.addDismissable(root)
+                GlobalFocusGrab.addDismissable(root);
                 if (root.searchWidgetRef) {
-                    Qt.callLater(() => root.searchWidgetRef.focusSearchInput())
+                    Qt.callLater(() => root.searchWidgetRef.focusSearchInput());
                 }
             } else {
-                GlobalFocusGrab.removeDismissable(root)
+                GlobalFocusGrab.removeDismissable(root);
                 if (root.searchWidgetRef) {
-                    root.searchWidgetRef.cancelSearch()
+                    root.searchWidgetRef.cancelSearch();
                 }
             }
         }
@@ -245,7 +280,7 @@ Item {
         target: GlobalFocusGrab
         function onDismissed() {
             if (root.isOpen) {
-                GlobalStates.overviewOpen = false
+                GlobalStates.overviewOpen = false;
             }
         }
     }
@@ -255,8 +290,8 @@ Item {
         ignoreUnknownSignals: true
         function onActiveSearchQueryChanged() {
             if (GlobalStates.activeSearchQuery && root.searchWidgetRef) {
-                root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery)
-                GlobalStates.activeSearchQuery = ""
+                root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery);
+                GlobalStates.activeSearchQuery = "";
             }
         }
     }

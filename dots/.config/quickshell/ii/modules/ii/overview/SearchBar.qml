@@ -62,6 +62,31 @@ RowLayout {
 
         property int _prefixType: root.searchPrefixType
         property int _lastPrefixType: root.searchPrefixType
+        property string _lastText: ""
+        property bool _initialized: false
+
+        readonly property real symmetryAngle: {
+            switch(searchIcon._prefixType) {
+                case SearchBar.SearchPrefixType.Action: return 180;        // Pill
+                case SearchBar.SearchPrefixType.App: return 90;            // Clover4Leaf
+                case SearchBar.SearchPrefixType.Clipboard: return 90;      // Gem
+                case SearchBar.SearchPrefixType.Emojis: return 45;         // Sunny
+                case SearchBar.SearchPrefixType.Math: return 90;           // PuffyDiamond
+                case SearchBar.SearchPrefixType.ShellCommand: return 90;   // PixelCircle
+                case SearchBar.SearchPrefixType.WebSearch: return 45;      // SoftBurst
+                case SearchBar.SearchPrefixType.WindowSearch: return 360;  // Arch
+                case SearchBar.SearchPrefixType.FileBrowser: return 90;    // Square
+                case SearchBar.SearchPrefixType.Translator: return 60;     // Cookie6Sided
+                default: return 360 / 7;                                   // Cookie7Sided
+            }
+        }
+
+        Behavior on rotation {
+            NumberAnimation {
+                duration: 200
+                easing.type: Easing.OutBack
+            }
+        }
 
         function triggerTransition() {
             iconFadeOut.stop();
@@ -90,6 +115,7 @@ RowLayout {
             ScriptAction {
                 script: {
                     searchIcon._prefixType = root.searchPrefixType;
+                    searchIcon.rotation = 0; // Reset rotation so new shape starts correctly oriented
                     iconFadeIn.start();
                 }
             }
@@ -121,6 +147,21 @@ RowLayout {
                 if (root.searchPrefixType !== searchIcon._prefixType) {
                     searchIcon.triggerTransition();
                 }
+            }
+            function onSearchingTextChanged() {
+                if (!searchIcon._initialized) {
+                    searchIcon._initialized = true;
+                    searchIcon._lastText = root.searchingText;
+                    searchIcon.rotation = 0;
+                    return;
+                }
+
+                if (root.searchingText === "") {
+                    searchIcon.rotation = 0;
+                } else if (root.searchingText !== searchIcon._lastText) {
+                    searchIcon.rotation += searchIcon.symmetryAngle;
+                }
+                searchIcon._lastText = root.searchingText;
             }
         }
 
@@ -156,20 +197,37 @@ RowLayout {
         id: searchInput
         Layout.topMargin: 4
         Layout.bottomMargin: 4
-        Layout.fillWidth: root.clipboardMode
+        Layout.rightMargin: 4
+        Layout.fillWidth: true
         implicitHeight: 40
-        focus: GlobalStates.overviewOpen
-        font.pixelSize: Appearance.font.pixelSize.small
-        placeholderText: Translation.tr("Search, calculate or run")
         implicitWidth: root.clipboardMode
             ? root.clipboardWidth
             : ((root.searchingText === "" && !Config.options.search.alwaysListApps) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
+        focus: GlobalStates.overviewOpen
+        font.pixelSize: Appearance.font.pixelSize.small
+        placeholderText: Translation.tr("Search, calculate or run")
 
-        Behavior on implicitWidth {
-            id: searchWidthBehavior
-            enabled: !root.clipboardMode
+        // Placeholder fades smoothly when text is entered or mode changes
+        placeholderTextColor: (root.searchingText === "" && !root.clipboardMode)
+            ? Appearance.colors.colSubtext
+            : Qt.rgba(
+                Appearance.colors.colSubtext.r,
+                Appearance.colors.colSubtext.g,
+                Appearance.colors.colSubtext.b,
+                0
+              )
+
+        Behavior on placeholderTextColor {
+            ColorAnimation {
+                duration: 250
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
+        }
+
+        Behavior on implicitHeight {
             NumberAnimation {
-                duration: 350
+                duration: 250
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
             }
@@ -262,75 +320,4 @@ RowLayout {
         }
     }
 
-    IconToolbarButton {
-        Layout.topMargin: 4
-        Layout.bottomMargin: 4
-        onClicked: {
-            GlobalStates.overviewOpen = false;
-            const overviewAnimationEnabled = Config.options.overview.showOpeningAnimation
-
-            if (!overviewAnimationEnabled) {
-                Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "search"]);
-                return
-            }
-            lensDelayTimer.start();
-        }
-        text: "image_search"
-        StyledToolTip {
-            text: Translation.tr("Google Lens")
-            y: parent.height + 3
-        }
-    }
-
-    Timer {
-        id: lensDelayTimer
-        interval: 201
-        onTriggered: {
-            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "search"]);
-        }
-    }
-
-    IconToolbarButton {
-        id: songRecButton
-        Layout.topMargin: 4
-        Layout.bottomMargin: 4
-        Layout.rightMargin: 4
-        toggled: SongRec.running
-        onClicked: SongRec.toggleRunning()
-        text: "music_cast"
-
-        StyledToolTip {
-            text: Translation.tr("Recognize music")
-            y: parent.height + 3
-        }
-
-        colText: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-        background: MaterialShape {
-            RotationAnimation on rotation {
-                running: songRecButton.toggled
-                duration: 12000
-                easing.type: Easing.Linear
-                loops: Animation.Infinite
-                from: 0
-                to: 360
-            }
-            shape: {
-                if (songRecButton.down) {
-                    return songRecButton.toggled ? MaterialShape.Shape.Circle : MaterialShape.Shape.Square
-                } else {
-                    return songRecButton.toggled ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Circle
-                }
-            }
-            color: {
-                if (songRecButton.toggled) {
-                    return songRecButton.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
-                } else {
-                    return songRecButton.hovered ? Appearance.colors.colSurfaceContainerHigh : ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHigh)
-                }
-            }
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-        }
-    }
 }

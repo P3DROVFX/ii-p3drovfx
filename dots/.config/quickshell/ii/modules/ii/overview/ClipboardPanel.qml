@@ -40,23 +40,31 @@ Item {
         let regularFiltered = [];
         if (q === "") {
             for (let i = 0; i < allEntries.length; i++) {
-                if (!Cliphist.isPinned(allEntries[i]))
+                if (!Cliphist.isPinned(allEntries[i])) {
                     regularFiltered.push(allEntries[i]);
+                    if (regularFiltered.length >= 100) {
+                        break;
+                    }
+                }
             }
         } else {
             const fuzzy = Cliphist.fuzzyQuery(q);
             for (let i = 0; i < fuzzy.length; i++) {
-                if (!Cliphist.isPinned(fuzzy[i]))
+                if (!Cliphist.isPinned(fuzzy[i])) {
                     regularFiltered.push(fuzzy[i]);
+                    if (regularFiltered.length >= 100) {
+                        break;
+                    }
+                }
             }
         }
 
         return pinnedFiltered.concat(regularFiltered);
     }
 
-    property int selectedIndex: 0
+    property int selectedIndex: -1
     property int selectedActionIndex: -1
-    property string selectedEntry: filteredEntries.length > 0 ? filteredEntries[Math.min(selectedIndex, filteredEntries.length - 1)] : ""
+    property string selectedEntry: (filteredEntries.length > 0 && selectedIndex >= 0) ? filteredEntries[Math.min(selectedIndex, filteredEntries.length - 1)] : ""
 
     readonly property bool hasSmartAction: {
         if (selectedIsImage)
@@ -81,10 +89,7 @@ Item {
             }
         }
         let targetIndex = Math.min(firstRegularIndex, filteredEntries.length > 0 ? filteredEntries.length - 1 : 0);
-        if (selectedIndex === targetIndex) {
-            // Index didn't change, trigger startDecoding manually since onSelectedEntryChanged won't fire
-            startDecoding(selectedEntry);
-        } else {
+        if (selectedIndex !== targetIndex) {
             selectedIndex = targetIndex;
         }
         if (entryListView) {
@@ -543,39 +548,51 @@ Item {
                         buttonRadius: 0
 
                         opacity: 0
+                        scale: 0.90
                         transform: Translate {
                             id: entrySlide
                             y: -12
                         }
 
+                        SequentialAnimation {
+                            id: entryAnim
+                            running: false
+
+                            PauseAnimation {
+                                duration: Math.max(0, Math.min(6, entryDelegate.index) * 30)
+                            }
+
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: entryDelegate
+                                    property: "opacity"
+                                    to: 1.0
+                                    duration: 200
+                                    easing.type: Easing.OutQuad
+                                }
+                                NumberAnimation {
+                                    target: entryDelegate
+                                    property: "scale"
+                                    to: 1.0
+                                    duration: 250
+                                    easing.type: Easing.OutBack
+                                }
+                                NumberAnimation {
+                                    target: entrySlide
+                                    property: "y"
+                                    to: 0
+                                    duration: 200
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
+                        }
+
                         Component.onCompleted: {
-                            entryRevealOpacity.start();
-                            entryRevealSlide.start();
+                            entryAnim.start();
                         }
 
-                        NumberAnimation {
-                            id: entryRevealOpacity
-                            target: entryDelegate
-                            property: "opacity"
-                            from: 0
-                            to: 1
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            id: entryRevealSlide
-                            target: entrySlide
-                            property: "y"
-                            from: -16
-                            to: 0
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-
-                        colBackground: isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: isSelected ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighest
+                        colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
                         colRipple: Appearance.colors.colPrimaryContainerActive
 
                         background: Rectangle {
@@ -690,7 +707,7 @@ Item {
                                         }
                                     }
                                     iconSize: 18
-                                    color: entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : (entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant)
+                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : (entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                                 }
                             }
                         }
@@ -735,7 +752,7 @@ Item {
                                     text: entryDelegate.isImage ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "") : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     font.family: entryDelegate.contentType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
+                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
@@ -773,7 +790,7 @@ Item {
                                         return lines + " lines";
                                     }
                                     font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                     opacity: 0.8
@@ -792,8 +809,46 @@ Item {
             color: "transparent"
 
             ColumnLayout {
+                id: detailContentLayout
                 anchors.fill: parent
                 spacing: 0
+
+                opacity: 0
+                transform: Translate {
+                    id: detailTranslate
+                    x: 15
+                }
+
+                ParallelAnimation {
+                    id: detailEntryAnim
+                    NumberAnimation {
+                        target: detailContentLayout
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                    NumberAnimation {
+                        target: detailTranslate
+                        property: "x"
+                        from: 20
+                        to: 0
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Connections {
+                    target: root
+                    function onSelectedEntryChanged() {
+                        detailEntryAnim.restart();
+                    }
+                }
+
+                Component.onCompleted: {
+                    detailEntryAnim.start();
+                }
 
                 Loader {
                     id: imagePreviewLoader
@@ -803,47 +858,12 @@ Item {
                     Layout.fillHeight: true
                     Layout.margins: active ? 12 : 0
 
-                    Connections {
-                        target: root
-                        function onSelectedEntryChanged() {
-                            imagePreviewLoader.active = false;
-                            imageReloadTimer.restart();
-                        }
-                    }
-                    Timer {
-                        id: imageReloadTimer
-                        interval: 25
-                        onTriggered: imagePreviewLoader.active = root.selectedIsImage && root.selectedEntry !== ""
-                    }
-
                     sourceComponent: Rectangle {
+                        id: imageRect
                         anchors.fill: parent
                         radius: Appearance.rounding.small
                         color: Appearance.colors.colSurfaceContainerHighest
                         clip: true
-
-                        opacity: 0
-                        transform: Translate {
-                            id: imgSlide
-                            y: -10
-                        }
-                        NumberAnimation on opacity {
-                            from: 0
-                            to: 1
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            target: imgSlide
-                            property: "y"
-                            running: true
-                            from: -10
-                            to: 0
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
 
                         CliphistImage {
                             id: clipImg
@@ -863,47 +883,12 @@ Item {
                     Layout.fillHeight: true
                     Layout.margins: active ? 12 : 0
 
-                    Connections {
-                        target: root
-                        function onSelectedEntryChanged() {
-                            textPreviewLoader.active = false;
-                            textReloadTimer.restart();
-                        }
-                    }
-                    Timer {
-                        id: textReloadTimer
-                        interval: 25
-                        onTriggered: textPreviewLoader.active = !root.selectedIsImage && root.selectedContentType !== "hex-color" && root.selectedContent !== ""
-                    }
-
                     sourceComponent: Rectangle {
+                        id: textRect
                         anchors.fill: parent
                         radius: Appearance.rounding.small
                         color: Appearance.colors.colSurfaceContainerHigh
                         clip: true
-
-                        opacity: 0
-                        transform: Translate {
-                            id: txtSlide
-                            y: -10
-                        }
-                        NumberAnimation on opacity {
-                            from: 0
-                            to: 1
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            target: txtSlide
-                            property: "y"
-                            running: true
-                            from: -10
-                            to: 0
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
 
                         StyledFlickable {
                             anchors.fill: parent
@@ -934,34 +919,12 @@ Item {
                     Layout.margins: active ? 12 : 0
 
                     sourceComponent: Rectangle {
+                        id: hexRect
                         anchors.fill: parent
                         radius: Appearance.rounding.small
                         color: root.formatColor(root.selectedContent)
                         border.width: 1
                         border.color: Appearance.colors.colOutlineVariant
-
-                        opacity: 0
-                        transform: Translate {
-                            id: colorSlide
-                            y: -10
-                        }
-                        NumberAnimation on opacity {
-                            from: 0
-                            to: 1
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            target: colorSlide
-                            property: "y"
-                            running: true
-                            from: -10
-                            to: 0
-                            duration: 350
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
 
                         ColumnLayout {
                             anchors.centerIn: parent

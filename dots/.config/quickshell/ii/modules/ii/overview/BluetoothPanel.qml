@@ -665,35 +665,47 @@ Item {
                         readonly property bool isFirstUnpaired: !dev.paired && (index === 0 || (deviceListView.model[index - 1] && deviceListView.model[index - 1].paired))
 
                         opacity: 0
+                        scale: 0.90
                         transform: Translate {
                             id: devSlide
-                            y: -10
+                            y: -12
+                        }
+
+                        SequentialAnimation {
+                            id: entryAnim
+                            running: false
+
+                            PauseAnimation {
+                                duration: Math.max(0, Math.min(6, delegateContainer.index) * 30)
+                            }
+
+                            ParallelAnimation {
+                                NumberAnimation {
+                                    target: delegateContainer
+                                    property: "opacity"
+                                    to: 1.0
+                                    duration: 200
+                                    easing.type: Easing.OutQuad
+                                }
+                                NumberAnimation {
+                                    target: delegateContainer
+                                    property: "scale"
+                                    to: 1.0
+                                    duration: 250
+                                    easing.type: Easing.OutBack
+                                }
+                                NumberAnimation {
+                                    target: devSlide
+                                    property: "y"
+                                    to: 0
+                                    duration: 200
+                                    easing.type: Easing.OutQuad
+                                }
+                            }
                         }
 
                         Component.onCompleted: {
-                            devRevealOp.start();
-                            devRevealSlide.start();
-                        }
-
-                        NumberAnimation {
-                            id: devRevealOp
-                            target: delegateContainer
-                            property: "opacity"
-                            from: 0
-                            to: 1
-                            duration: 320
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            id: devRevealSlide
-                            target: devSlide
-                            property: "y"
-                            from: -10
-                            to: 0
-                            duration: 320
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            entryAnim.start();
                         }
 
                         // Discover Section Header with line and spacing
@@ -766,8 +778,8 @@ Item {
                             readonly property bool isBelowSelected: root.selectedIndex === delegateContainer.index - 1
                             readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
 
-                            colBackground: isSelected ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
-                            colBackgroundHover: isSelected ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighest
+                            colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                            colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
                             colRipple: Appearance.colors.colPrimaryContainerActive
 
                             background: Rectangle {
@@ -834,7 +846,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: Icons.getBluetoothDeviceMaterialSymbol(deviceDelegate.dev?.icon || "")
                                         iconSize: 20
-                                        color: deviceDelegate.isSelected ? (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSecondaryContainer) : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                                         visible: !iconContainer.isProcessing
                                     }
 
@@ -843,7 +855,7 @@ Item {
                                         width: 18
                                         height: 18
                                         shape: MaterialShape.Shape.Cookie7Sided
-                                        color: deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary
+                                        color: deviceDelegate.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colPrimary
                                         visible: iconContainer.isProcessing
 
                                         RotationAnimator on rotation {
@@ -865,7 +877,7 @@ Item {
                                         text: deviceDelegate.dev?.name || Translation.tr("Unknown device")
                                         font.pixelSize: Appearance.font.pixelSize.smaller
                                         font.weight: Font.Medium
-                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
+                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
                                     }
@@ -891,9 +903,11 @@ Item {
                                             const dev = deviceDelegate.dev;
                                             if (!dev)
                                                 return Appearance.colors.colSubtext;
+                                            if (deviceDelegate.isSelected)
+                                                return Appearance.colors.colOnPrimary;
                                             if (dev.connected)
-                                                return deviceDelegate.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colPrimary;
-                                            return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext;
+                                                return Appearance.colors.colPrimary;
+                                            return Appearance.colors.colSubtext;
                                         }
                                         elide: Text.ElideRight
                                         maximumLineCount: 1
@@ -927,7 +941,7 @@ Item {
                                                 const b = deviceDelegate.dev?.battery ?? 0;
                                                 if (b <= 0.15)
                                                     return Appearance.m3colors.m3error;
-                                                return deviceDelegate.isSelected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant;
+                                                return deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant;
                                             }
                                         }
                                     }

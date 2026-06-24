@@ -10,6 +10,7 @@ Item {
     property real topRadius: 6
     property real bottomRadius: 14
     property color fillColor: Appearance.colors.colLayer0
+    property bool disableBehaviors: false
 
     implicitWidth: bodyWidth
     implicitHeight: bodyHeight
@@ -61,9 +62,9 @@ Item {
         }
     }
 
-    Behavior on bodyWidth     { NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
-    Behavior on bodyHeight    { NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
-    Behavior on topRadius     { NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
-    Behavior on bottomRadius  { NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
-    Behavior on fillColor     { ColorAnimation   { duration: Appearance.animation.elementMoveFast.duration; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+    Behavior on bodyWidth     { enabled: !root.disableBehaviors; NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
+    Behavior on bodyHeight    { enabled: !root.disableBehaviors; NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
+    Behavior on topRadius     { enabled: !root.disableBehaviors; NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
+    Behavior on bottomRadius  { enabled: !root.disableBehaviors; NumberAnimation { duration: Appearance.animation.elementMove.duration; easing.bezierCurve: Appearance.animation.elementMove.bezierCurve } }
+    Behavior on fillColor     { enabled: !root.disableBehaviors; ColorAnimation   { duration: Appearance.animation.elementMoveFast.duration; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 }
