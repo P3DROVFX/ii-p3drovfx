@@ -181,6 +181,10 @@ Scope {
                 // Clock position gets updated after zoom scale is updated
             }
 
+            onPreferredWallpaperScaleChanged: {
+                bgRoot.updateZoomScale();
+            }
+
             // Wallpaper zoom scale
             function updateZoomScale() {
                 getWallpaperSizeProc.path = bgRoot.wallpaperPath;
@@ -471,30 +475,26 @@ Scope {
 
                             Behavior on x {
                                 NumberAnimation {
-                                    duration: 400
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 900
+                                    easing.type: Easing.OutSine
                                 }
                             }
                             Behavior on y {
                                 NumberAnimation {
-                                    duration: 400
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 900
+                                    easing.type: Easing.OutSine
                                 }
                             }
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 500
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 900
+                                    easing.type: Easing.OutSine
                                 }
                             }
                             Behavior on height {
                                 NumberAnimation {
-                                    duration: 500
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 900
+                                    easing.type: Easing.OutSine
                                 }
                             }
 
@@ -507,14 +507,14 @@ Scope {
                                         // In style 1, wallpaper fills the clip rect; no parallax offset needed
                                         return 0;
                                     }
-                                    // Style 0: centered when zoomed out, parallax when zoomed in
-                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableXSpace : wallpaperPlanes.parallaxX;
+                                    // Always follow parallax — no position shift when overview opens
+                                    return wallpaperPlanes.parallaxX;
                                 }
                                 y: {
                                     if (Config.options.background.zoomOutStyle === 1) {
                                         return 0;
                                     }
-                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableYSpace : wallpaperPlanes.parallaxY;
+                                    return wallpaperPlanes.parallaxY;
                                 }
                                 width: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperW : parent.width
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
@@ -560,30 +560,26 @@ Scope {
 
                                 Behavior on x {
                                     NumberAnimation {
-                                        duration: 400
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        duration: 900
+                                        easing.type: Easing.OutSine
                                     }
                                 }
                                 Behavior on y {
                                     NumberAnimation {
-                                        duration: 400
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        duration: 900
+                                        easing.type: Easing.OutSine
                                     }
                                 }
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 500
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        duration: 900
+                                        easing.type: Easing.OutSine
                                     }
                                 }
                                 Behavior on height {
                                     NumberAnimation {
-                                        duration: 500
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        duration: 900
+                                        easing.type: Easing.OutSine
                                     }
                                 }
                             }
@@ -890,7 +886,11 @@ Scope {
 
             readonly property bool animEnabled: Config.options.background.zoomOutEnabled
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
-            readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && !GlobalStates.searchConnectActive && (Hyprland.focusedMonitor?.name == Hyprland.monitorFor(modelData)?.name)
+            readonly property bool isActive: animEnabled && isMirroredStyle && (
+                GlobalStates.searchConnectActive
+                    ? GlobalStates.overviewOpen && Hyprland.monitorFor(modelData)?.name === GlobalStates.activeSearchMonitor
+                    : (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && Hyprland.focusedMonitor?.name == Hyprland.monitorFor(modelData)?.name
+            )
 
             // SearchDrop exclusion geometry (in PanelWindow coordinates)
             readonly property bool hasExclusion: GlobalStates.searchDropActive

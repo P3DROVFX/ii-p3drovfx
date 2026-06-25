@@ -278,20 +278,19 @@ Singleton {
     }
 
     property real ignoreAlpha: Config.options.appearance.ignoreAlpha ?? 0.2
+
     onIgnoreAlphaChanged: {
         if (Config.ready) {
-            let evalScript = "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + ignoreAlpha + " }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0, order = -1 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:bar' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:verticalBar' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:sidebarRight' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:sidebarLeft' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, ignore_alpha = 0.0 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })";
-            Quickshell.execDetached(["hyprctl", "eval", evalScript]);
+            var a = root.ignoreAlpha;
+            var script = "";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
+            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+            script += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
+            Quickshell.execDetached(["hyprctl", "eval", script]);
         }
     }
 
@@ -305,22 +304,19 @@ Singleton {
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.rounding.windowRounding + " } })"]);
             }
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
-            
-            let evalScript = "hl.layer_rule({ match = { namespace = 'quickshell.*' }, ignore_alpha = " + root.ignoreAlpha + " }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, ignore_alpha = 0.0, order = -1 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:bar' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:verticalBar' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:sidebarRight' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:sidebarLeft' }, order = 5 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, ignore_alpha = 0.0 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:session' }, ignore_alpha = 0.0 }) " +
-                             "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, ignore_alpha = 0.0 })";
-            Quickshell.execDetached(["hyprctl", "eval", evalScript]);
-            
+            var a = root.ignoreAlpha;
+            var bs = "";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell.*' }, blur = true, ignore_alpha = " + a + " }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = true, ignore_alpha = 0.0 }) ";
+            bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1 }) ";
+            bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
+            Quickshell.execDetached(["hyprctl", "eval", bs]);
+
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (root.borderless ? "0" : root.borderWidth) + " } })"]);
-            
+
             let colorStr = activeBorderColor.toString();
             let rgb = "";
             if (colorStr.startsWith("#")) {
@@ -331,12 +327,12 @@ Singleton {
                     rgb = hex;
                 }
             }
-            
+
             if (rgb !== "") {
                 let hyprColor = "rgba(" + rgb + "AA)";
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
             }
-            
+
             if (Config.options.appearance.gapsIn !== undefined) {
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
             }

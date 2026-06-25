@@ -1078,6 +1078,7 @@ Singleton {
                     property string windowSearch: "#"
                     property string fileBrowser: "~"
                     property string translator: "@"
+                    property string mediaDownloader: "!"
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url="
@@ -1105,6 +1106,23 @@ Singleton {
                 property bool showNowPlayingBubble: true
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
+            }
+
+            property JsonObject mediaDownloader: JsonObject {
+                property bool enabled: true
+                property string downloadPath: FileUtils.trimFileProtocol(`${Directories.home}/Downloads`)
+                property int maxConcurrent: 2
+                property string defaultFormat: "best"
+                property bool embedMetadata: true
+                property bool writeThumbnail: false
+                property bool addChapters: true
+                property string proxy: ""
+                property int rateLimit: 0
+                property bool throttleBypass: false
+                property bool useAria2c: false
+                property string extraArgs: ""
+                property bool keepHistory: false
+                property string lastUsedFormat: "best"
             }
 
             property JsonObject sidebar: JsonObject {

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -143,6 +144,15 @@ Item {
                     title: qsTr("TickTick Sync")
                     description: qsTr("Credentials and token configuration")
                     onOpenCard: root.openSubPage("widgets/CoreTickTickConfig.qml")
+                }
+
+                ServiceCard {
+                    cardIcon: "download"
+                    cardHue: 312
+                    cardShape: "Cookie7Sided"
+                    title: qsTr("Media Downloader")
+                    description: qsTr("Download videos and audio using yt-dlp")
+                    onOpenCard: root.openSubPage("widgets/MediaDownloaderConfig.qml")
                 }
             }
 

@@ -13,11 +13,13 @@ import qs.modules.ii.sidebarPolicies as Policies
 import qs.modules.ii.sidebarDashboard as Dashboard
 import qs.modules.ii.wrappedFrame as Frame
 import qs.modules.ii.topLayer.search as SearchConnect
+import qs.modules.ii.overview
 
 PanelWindow {
     id: topPanel
     color: "transparent"
     WlrLayershell.namespace: "quickshell:topLayer"
+    WlrLayershell.layer: WlrLayer.Overlay
     exclusionMode: ExclusionMode.Ignore
 
     anchors {
@@ -25,34 +27,6 @@ PanelWindow {
         bottom: true
         left: true
         right: true
-    }
-
-    readonly property int monitorIndex: Quickshell.screens.indexOf(topPanel.screen)
-
-    // Animation timing constants
-    readonly property int animDurationEnter: 480
-    readonly property int animDurationExit: 200
-    readonly property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
-    readonly property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
-
-    property bool exitAnimating: false
-    Timer {
-        id: exitAnimTimer
-        interval: topPanel.animDurationExit + 30
-        onTriggered: topPanel.exitAnimating = false
-    }
-
-    Connections {
-        target: GlobalStates
-        function onOverviewOpenChanged() {
-            if (!GlobalStates.overviewOpen) {
-                topPanel.exitAnimating = true;
-                exitAnimTimer.restart();
-            } else {
-                topPanel.exitAnimating = false;
-                exitAnimTimer.stop();
-            }
-        }
     }
 
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
@@ -564,7 +538,7 @@ PanelWindow {
         layer.enabled: GlobalStates.leftSidebarAnimating
 
         Loader {
-            active: !GlobalStates.policiesDetached
+            active: GlobalStates.connectModeActive && !GlobalStates.policiesDetached
             asynchronous: true
             anchors.fill: parent
             sourceComponent: Policies.SidebarPoliciesContent {
@@ -628,7 +602,7 @@ PanelWindow {
         layer.enabled: GlobalStates.rightSidebarAnimating
 
         Loader {
-            active: topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded
+            active: GlobalStates.connectModeActive && (topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded)
             asynchronous: true
             anchors.fill: parent
             sourceComponent: Dashboard.SidebarDashboardContent {}
@@ -724,8 +698,6 @@ PanelWindow {
             }
         }
     }
-
-
 
     // Static items for input masking to avoid per-frame Region recalculations
     Item {
@@ -885,19 +857,20 @@ PanelWindow {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }
-            if (GlobalStates.overviewOpen && GlobalStates.searchConnectActive && topPanel.screen.name === GlobalStates.activeSearchMonitor) {
-                GlobalStates.overviewOpen = false;
-            }
+
         }
     }
 
     Item {
         id: keyFocusHandler
-        focus: leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor
+        focus: leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 GlobalStates.sidebarRightOpen = false;
                 GlobalStates.sidebarLeftOpen = false;
+                if (searchOpenOnMonitor) {
+                    GlobalStates.overviewOpen = false;
+                }
                 event.accepted = true;
             }
 

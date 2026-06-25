@@ -95,14 +95,12 @@ Scope {
     PanelLoader {
         component: Overview {}
     }
-    // GNOME-like window scale-out during overview (OverviewWindowTransition)
-    // It's a Scope managing its own Variants/PanelWindows — instantiate directly.
-    // Disabled when searchConnectActive to keep workspace captures from
-    // interfering with the drop's emergence animation.
-    Loader {
-        active: !GlobalStates.searchConnectActive
-        sourceComponent: OverviewWindowTransition {}
-    }
+    // GNOME-like window scale-out during overview (OverviewWindowTransition).
+    // Scope com Variants/PanelWindows próprios — instancia direto.
+    // featureEnabled interno (zoomOutEnabled + windowZoomOnOverview + zoomOutStyle===0)
+    // controla auto-disable. TopLayerPanel em WlrLayer.Overlay sempre fica acima
+    // deste (WlrLayer.Top) — sem conflito de z-order em qualquer modo.
+    OverviewWindowTransition {}
     PanelLoader {
         component: Polkit {}
     }

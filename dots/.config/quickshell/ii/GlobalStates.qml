@@ -48,6 +48,7 @@ Singleton {
     property bool settingsOpen: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
+    property string settingsPendingPageName: ""
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
     property string activeSearchMonitor: ""
@@ -409,6 +410,9 @@ Singleton {
         }
         if (!root.overviewOpen && root.searchConnectActive) {
             root.activeSearchMonitor = ""
+            // Overview.qml's PanelWindow (which resets searchOnlyMode) is inactive in
+            // connect mode — reset it here so the next SUPER press opens the full overview.
+            root.searchOnlyMode = false
         }
     }
 

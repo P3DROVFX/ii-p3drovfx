@@ -135,29 +135,82 @@ ContentPage {
 
             Repeater {
                 model: [
-                    { name: Translation.tr("Action"), icon: "bolt", prop: "action" },
-                    { name: Translation.tr("App"), icon: "apps", prop: "app" },
-                    { name: Translation.tr("Clipboard"), icon: "content_paste", prop: "clipboard" },
-                    { name: Translation.tr("Emojis"), icon: "mood", prop: "emojis" },
-                    { name: Translation.tr("Math"), icon: "calculate", prop: "math" },
-                    { name: Translation.tr("Shell command"), icon: "terminal", prop: "shellCommand" },
-                    { name: Translation.tr("Web search"), icon: "public", prop: "webSearch" },
-                    { name: Translation.tr("Window search"), icon: "layers", prop: "windowSearch" },
-                    { name: Translation.tr("File browser"), icon: "folder", prop: "fileBrowser" },
-                    { name: Translation.tr("File search"), icon: "search", prop: "fileSearch" },
-                    { name: Translation.tr("Bluetooth"), icon: "bluetooth", prop: "bluetooth" },
-                    { name: Translation.tr("Translator"), icon: "translate", prop: "translator" }
+                    {
+                        name: Translation.tr("Action"),
+                        icon: "bolt",
+                        prop: "action"
+                    },
+                    {
+                        name: Translation.tr("App"),
+                        icon: "apps",
+                        prop: "app"
+                    },
+                    {
+                        name: Translation.tr("Clipboard"),
+                        icon: "content_paste",
+                        prop: "clipboard"
+                    },
+                    {
+                        name: Translation.tr("Emojis"),
+                        icon: "mood",
+                        prop: "emojis"
+                    },
+                    {
+                        name: Translation.tr("Math"),
+                        icon: "calculate",
+                        prop: "math"
+                    },
+                    {
+                        name: Translation.tr("Shell command"),
+                        icon: "terminal",
+                        prop: "shellCommand"
+                    },
+                    {
+                        name: Translation.tr("Web search"),
+                        icon: "public",
+                        prop: "webSearch"
+                    },
+                    {
+                        name: Translation.tr("Window search"),
+                        icon: "layers",
+                        prop: "windowSearch"
+                    },
+                    {
+                        name: Translation.tr("File browser"),
+                        icon: "folder",
+                        prop: "fileBrowser"
+                    },
+                    {
+                        name: Translation.tr("File search"),
+                        icon: "search",
+                        prop: "fileSearch"
+                    },
+                    {
+                        name: Translation.tr("Bluetooth"),
+                        icon: "bluetooth",
+                        prop: "bluetooth"
+                    },
+                    {
+                        name: Translation.tr("Translator"),
+                        icon: "translate",
+                        prop: "translator"
+                    },
+                    {
+                        name: Translation.tr("Media Downloader"),
+                        icon: "download",
+                        prop: "mediaDownloader"
+                    }
                 ]
                 delegate: Rectangle {
                     ScrollAnimate {}
                     Layout.fillWidth: true
                     height: 52
                     color: Appearance.colors.colSurfaceContainerLow
-                    
+
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 11 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 11 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 12 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 12 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent
@@ -169,7 +222,8 @@ ContentPage {
                         spacing: 12
 
                         Rectangle {
-                            width: 32; height: 32
+                            width: 32
+                            height: 32
                             radius: 16
                             color: Appearance.colors.colSurfaceContainerHigh
                             MaterialSymbol {
@@ -208,7 +262,7 @@ ContentPage {
     ContentSection {
         icon: "label"
         title: Translation.tr("App Aliases")
-        
+
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 2
@@ -223,7 +277,7 @@ ContentPage {
                     Layout.fillWidth: true
                     height: 60
                     color: Appearance.colors.colSurfaceContainerLow
-                    
+
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
@@ -235,11 +289,10 @@ ContentPage {
                         spacing: 8
 
                         Rectangle {
-                            width: 36; height: 36
+                            width: 36
+                            height: 36
                             radius: 18
-                            color: modelData.type === "app" ? Appearance.colors.colPrimaryContainer : 
-                                   modelData.type === "folder" ? Appearance.colors.colSecondaryContainer : 
-                                   Appearance.colors.colTertiaryContainer
+                            color: modelData.type === "app" ? Appearance.colors.colPrimaryContainer : modelData.type === "folder" ? Appearance.colors.colSecondaryContainer : Appearance.colors.colTertiaryContainer
 
                             Loader {
                                 anchors.centerIn: parent
@@ -257,10 +310,8 @@ ContentPage {
                                 id: fallbackIconComp
                                 MaterialSymbol {
                                     iconSize: 20
-                                    text: modelData.type === "folder" ? "folder" : 
-                                          modelData.type === "builtin" ? "explore" : "terminal"
-                                    color: modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : 
-                                           Appearance.colors.colOnTertiaryContainer
+                                    text: modelData.type === "folder" ? "folder" : modelData.type === "builtin" ? "explore" : "terminal"
+                                    color: modelData.type === "folder" ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnTertiaryContainer
                                 }
                             }
                         }
@@ -303,7 +354,8 @@ ContentPage {
                         }
 
                         RippleButton {
-                            implicitWidth: 36; implicitHeight: 36
+                            implicitWidth: 36
+                            implicitHeight: 36
                             buttonRadius: 18
                             colBackground: Appearance.colors.colSurfaceContainerHigh
                             colBackgroundHover: aliasDelegate.isEditing ? Appearance.colors.colSuccessContainer : Appearance.colors.colPrimaryContainer
@@ -338,7 +390,8 @@ ContentPage {
                         }
 
                         RippleButton {
-                            implicitWidth: 36; implicitHeight: 36
+                            implicitWidth: 36
+                            implicitHeight: 36
                             buttonRadius: 18
                             colBackground: Appearance.colors.colSurfaceContainerHigh
                             colBackgroundHover: Appearance.colors.colErrorContainer
@@ -393,15 +446,33 @@ ContentPage {
                     title: Translation.tr("Alias Target Type")
                     icon: "my_location"
                     anchors.fill: parent
-                    
+
                     ConfigSelectionArray {
                         currentValue: addAliasArea.selectedType
-                        onSelected: newValue => { addAliasArea.selectedType = newValue; }
+                        onSelected: newValue => {
+                            addAliasArea.selectedType = newValue;
+                        }
                         options: [
-                            { displayName: Translation.tr("App"), icon: "apps", value: "app" },
-                            { displayName: Translation.tr("Folder"), icon: "folder", value: "folder" },
-                            { displayName: Translation.tr("Command"), icon: "terminal", value: "command" },
-                            { displayName: Translation.tr("Built-in"), icon: "explore", value: "builtin" }
+                            {
+                                displayName: Translation.tr("App"),
+                                icon: "apps",
+                                value: "app"
+                            },
+                            {
+                                displayName: Translation.tr("Folder"),
+                                icon: "folder",
+                                value: "folder"
+                            },
+                            {
+                                displayName: Translation.tr("Command"),
+                                icon: "terminal",
+                                value: "command"
+                            },
+                            {
+                                displayName: Translation.tr("Built-in"),
+                                icon: "explore",
+                                value: "builtin"
+                            }
                         ]
                     }
                 }
@@ -410,7 +481,7 @@ ContentPage {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 2
-                
+
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 48
@@ -424,7 +495,7 @@ ContentPage {
                         anchors.fill: parent
                         anchors.leftMargin: 20
                         anchors.rightMargin: 12
-                        
+
                         TextField {
                             id: newAliasInput
                             Layout.fillWidth: true
@@ -442,7 +513,7 @@ ContentPage {
                     Layout.preferredHeight: 48
                     color: Appearance.colors.colSecondaryContainer
                     radius: Appearance.rounding.verysmall
-                    
+
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
@@ -483,11 +554,13 @@ ContentPage {
                     }
 
                     onClicked: {
-                        if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "") return;
+                        if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
+                            return;
                         let newAliases = Array.from(Config.options.search.aliases || []);
                         // Duplicate alias check
                         let exists = newAliases.some(a => a.alias === newAliasInput.text.trim());
-                        if (exists) return;
+                        if (exists)
+                            return;
 
                         newAliases.push({
                             alias: newAliasInput.text.trim(),
@@ -521,7 +594,7 @@ ContentPage {
                             height: 44
                             color: Appearance.colors.colSurfaceContainerHigh
                             radius: 22
-                            
+
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 16
@@ -607,12 +680,36 @@ ContentPage {
                         spacing: 8
                         visible: addAliasArea.selectedType === "builtin"
                         property var builtins: [
-                            { id: "clipboard", name: Translation.tr("Clipboard"), icon: "content_paste" },
-                            { id: "emojis", name: Translation.tr("Emoji Picker"), icon: "mood" },
-                            { id: "math", name: Translation.tr("Calculator Mode"), icon: "calculate" },
-                            { id: "bluetooth", name: Translation.tr("Bluetooth Manager"), icon: "bluetooth" },
-                            { id: "translator", name: Translation.tr("Translator"), icon: "translate" },
-                            { id: "settings", name: Translation.tr("Settings"), icon: "settings" }
+                            {
+                                id: "clipboard",
+                                name: Translation.tr("Clipboard"),
+                                icon: "content_paste"
+                            },
+                            {
+                                id: "emojis",
+                                name: Translation.tr("Emoji Picker"),
+                                icon: "mood"
+                            },
+                            {
+                                id: "math",
+                                name: Translation.tr("Calculator Mode"),
+                                icon: "calculate"
+                            },
+                            {
+                                id: "bluetooth",
+                                name: Translation.tr("Bluetooth Manager"),
+                                icon: "bluetooth"
+                            },
+                            {
+                                id: "translator",
+                                name: Translation.tr("Translator"),
+                                icon: "translate"
+                            },
+                            {
+                                id: "settings",
+                                name: Translation.tr("Settings"),
+                                icon: "settings"
+                            }
                         ]
                         Repeater {
                             model: parent.builtins
@@ -669,65 +766,69 @@ ContentPage {
                 buttonIcon: "palette"
                 text: Translation.tr("Hex color detector")
                 checked: Config.options.search.clipboard.detectors.hexColor
-                onCheckedChanged: Config.options.search.clipboard.detectors.hexColor = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.hexColor = checked
             }
             ConfigSwitch {
                 buttonIcon: "link"
                 text: Translation.tr("URL detector")
                 checked: Config.options.search.clipboard.detectors.url
-                onCheckedChanged: Config.options.search.clipboard.detectors.url = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.url = checked
             }
             ConfigSwitch {
                 buttonIcon: "alternate_email"
                 text: Translation.tr("Email detector")
                 checked: Config.options.search.clipboard.detectors.email
-                onCheckedChanged: Config.options.search.clipboard.detectors.email = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.email = checked
             }
             ConfigSwitch {
                 buttonIcon: "phone"
                 text: Translation.tr("Phone detector")
                 checked: Config.options.search.clipboard.detectors.phone
-                onCheckedChanged: Config.options.search.clipboard.detectors.phone = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.phone = checked
             }
             ConfigSwitch {
                 buttonIcon: "data_object"
                 text: Translation.tr("JSON detector")
                 checked: Config.options.search.clipboard.detectors.json
-                onCheckedChanged: Config.options.search.clipboard.detectors.json = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.json = checked
             }
             ConfigSwitch {
                 buttonIcon: "notes"
                 text: Translation.tr("Multiline detector")
                 checked: Config.options.search.clipboard.detectors.multiline
-                onCheckedChanged: Config.options.search.clipboard.detectors.multiline = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.multiline = checked
             }
             ConfigSwitch {
                 buttonIcon: "tag"
                 text: Translation.tr("Number detector")
                 checked: Config.options.search.clipboard.detectors.number
-                onCheckedChanged: Config.options.search.clipboard.detectors.number = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.number = checked
             }
             ConfigSwitch {
                 buttonIcon: "markdown"
                 text: Translation.tr("Markdown detector")
                 checked: Config.options.search.clipboard.detectors.markdown
-                onCheckedChanged: Config.options.search.clipboard.detectors.markdown = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.markdown = checked
             }
             ConfigSwitch {
                 buttonIcon: "folder_open"
                 text: Translation.tr("File path detector")
                 checked: Config.options.search.clipboard.detectors.filePath
-                onCheckedChanged: Config.options.search.clipboard.detectors.filePath = checked;
+                onCheckedChanged: Config.options.search.clipboard.detectors.filePath = checked
             }
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
 
-            Item { Layout.preferredHeight: 8 }
+            Item {
+                Layout.preferredHeight: 8
+            }
 
             ConfigSlider {
                 buttonIcon: "width"
@@ -800,7 +901,7 @@ ContentPage {
                     Layout.fillWidth: true
                     text: Config.options.search.engineBaseUrl
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.engineBaseUrl = text;
+                    onTextChanged: Config.options.search.engineBaseUrl = text
                 }
             }
 
@@ -812,8 +913,38 @@ ContentPage {
                     Layout.fillWidth: true
                     text: Config.options.search.fileSearchDirectory
                     wrapMode: TextEdit.NoWrap
-                    onTextChanged: Config.options.search.fileSearchDirectory = text;
+                    onTextChanged: Config.options.search.fileSearchDirectory = text
                 }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "download"
+        title: Translation.tr("Media Downloader")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSwitch {
+                buttonIcon: "download"
+                text: Translation.tr("Enable Media Downloader panel")
+                checked: Config.options.mediaDownloader.enabled
+                onCheckedChanged: Config.options.mediaDownloader.enabled = checked
+                StyledToolTip {
+                    text: Translation.tr("Enables the Media Downloader panel in search, accessible via the '!' prefix (configurable above under Search Prefixes)")
+                }
+            }
+
+            // Shortcut to MediaDownloaderConfig
+            ShortcutBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Looking for Media Downloader settings?")
+                value: Translation.tr("Media Downloader")
+                targetPageIndex: 16
+                targetSectionTitle: Translation.tr("Core Services")
+                materialIcon: "download"
             }
         }
     }

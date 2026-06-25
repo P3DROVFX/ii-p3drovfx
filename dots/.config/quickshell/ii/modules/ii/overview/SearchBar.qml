@@ -19,6 +19,7 @@ RowLayout {
     property string searchingText
     property int currentResultIndex: 0
     property bool isTranslatorPanelFocused: false
+    property bool isMediaDownloaderPanelFocused: false
 
     onSearchingTextChanged: {
         if (searchInput.text !== searchingText) {
@@ -49,6 +50,7 @@ RowLayout {
         WindowSearch,
         FileBrowser,
         Translator,
+        MediaDownloader,
         DefaultSearch
     }
 
@@ -73,6 +75,8 @@ RowLayout {
             return SearchBar.SearchPrefixType.FileBrowser;
         if (root.searchingText.startsWith(Config.options.search.prefix.translator))
             return SearchBar.SearchPrefixType.Translator;
+        if (Config.options.mediaDownloader.enabled && root.searchingText.startsWith(Config.options.search.prefix.mediaDownloader))
+            return SearchBar.SearchPrefixType.MediaDownloader;
         return SearchBar.SearchPrefixType.DefaultSearch;
     }
 
@@ -110,6 +114,8 @@ RowLayout {
                 return 90;    // Square
             case SearchBar.SearchPrefixType.Translator:
                 return 60;     // Cookie6Sided
+            case SearchBar.SearchPrefixType.MediaDownloader:
+                return 40;     // Cookie9Sided
             default:
                 return 360 / 7;                                   // Cookie7Sided
             }
@@ -220,6 +226,8 @@ RowLayout {
             return MaterialShape.Shape.Square;
         case SearchBar.SearchPrefixType.Translator:
             return MaterialShape.Shape.Cookie6Sided;
+        case SearchBar.SearchPrefixType.MediaDownloader:
+            return MaterialShape.Shape.Cookie9Sided;
         default:
             return MaterialShape.Shape.Cookie7Sided;
         }
@@ -244,6 +252,8 @@ RowLayout {
             return "folder_open";
         case SearchBar.SearchPrefixType.Translator:
             return "translate";
+        case SearchBar.SearchPrefixType.MediaDownloader:
+            return "download";
         case SearchBar.SearchPrefixType.DefaultSearch:
             return "search";
         default:
@@ -311,18 +321,20 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (root.clipboardMode) {
-                if (root.searchPrefixType !== SearchBar.SearchPrefixType.Translator || root.isTranslatorPanelFocused) {
-                    if (event.key === Qt.Key_Left) {
-                        root.navigateLeft();
-                        event.accepted = true;
-                        return;
-                    } else if (event.key === Qt.Key_Right) {
-                        root.navigateRight();
-                        event.accepted = true;
-                        return;
+                if (root.clipboardMode) {
+                    const isPanelFocused = root.isTranslatorPanelFocused || root.isMediaDownloaderPanelFocused;
+                    if ((root.searchPrefixType !== SearchBar.SearchPrefixType.Translator && root.searchPrefixType !== SearchBar.SearchPrefixType.MediaDownloader) || isPanelFocused) {
+                        if (event.key === Qt.Key_Left) {
+                            root.navigateLeft();
+                            event.accepted = true;
+                            return;
+                        } else if (event.key === Qt.Key_Right) {
+                            root.navigateRight();
+                            event.accepted = true;
+                            return;
+                        }
                     }
-                }
+
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                     root.activate();
                     event.accepted = true;

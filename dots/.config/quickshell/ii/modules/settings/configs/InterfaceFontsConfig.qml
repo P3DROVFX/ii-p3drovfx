@@ -151,38 +151,6 @@ ContentPage {
             }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Search style")
-            icon: "style"
-            Layout.fillWidth: true
-            tooltip: Translation.tr("Render the search launcher as a concave-corner drop emerging from the bar inside the unified Connect Mode surface. \n Only effective while Connect Mode is active. Not compatible with some Bar styles.")
-
-            ConfigSelectionArray {
-                currentValue: Config.options.search.connectStyle
-                onSelected: newValue => {
-                    Config.options.search.connectStyle = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Default"),
-                        icon: "view_sidebar",
-                        value: "default"
-                    },
-                    {
-                        displayName: Translation.tr("Connect"),
-                        icon: "phone_android",
-                        value: "connect"
-                    }
-                ]
-            }
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: Config.options.search.connectStyle === "connect"
-            text: Translation.tr("Background blur/dim is disabled while Search Connect Mode is active because it cannot be masked cleanly around the drop corners.")
-        }
-
         NoticeBox {
             Layout.fillWidth: true
             visible: Config.options.bar.autoHide.enable
