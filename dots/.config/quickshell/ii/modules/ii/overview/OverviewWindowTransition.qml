@@ -168,10 +168,7 @@ Scope {
 
             Behavior on transitionProgress {
                 enabled: tRoot.slideAnimEnabled
-                NumberAnimation {
-                    duration: 400
-                    easing.type: Easing.OutQuint
-                }
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
 
             onTransitionProgressChanged: {

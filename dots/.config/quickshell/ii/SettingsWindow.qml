@@ -219,6 +219,12 @@ FloatingWindow {
         root.visible = GlobalStates.settingsOpen;
         MaterialThemeLoader.reapplyTheme();
         Config.readWriteDelay = 0; // Settings app always only sets one var at a time so delay isn't needed
+        // Re-apply ignore alpha rule: Settings is lazy-loaded, so the rule fired
+        // in Appearance.onIgnoreAlphaChanged before this window existed. Re-send
+        // now that the xdg-toplevel is mapped and Hyprland can match it.
+        var a = Appearance.ignoreAlpha;
+        Quickshell.execDetached(["hyprctl", "eval",
+            "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " })"]);
     }
 
     Rectangle {

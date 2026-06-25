@@ -181,10 +181,6 @@ Scope {
                 // Clock position gets updated after zoom scale is updated
             }
 
-            onPreferredWallpaperScaleChanged: {
-                bgRoot.updateZoomScale();
-            }
-
             // Wallpaper zoom scale
             function updateZoomScale() {
                 getWallpaperSizeProc.path = bgRoot.wallpaperPath;
@@ -474,27 +470,23 @@ Scope {
                             }
 
                             Behavior on x {
-                                NumberAnimation {
-                                    duration: 900
-                                    easing.type: Easing.OutSine
-                                }
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                             }
                             Behavior on y {
-                                NumberAnimation {
-                                    duration: 900
-                                    easing.type: Easing.OutSine
-                                }
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                             }
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 900
-                                    easing.type: Easing.OutSine
+                                    duration: 500
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                                 }
                             }
                             Behavior on height {
                                 NumberAnimation {
-                                    duration: 900
-                                    easing.type: Easing.OutSine
+                                    duration: 500
+                                    easing.type: Easing.BezierSpline
+                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                                 }
                             }
 
@@ -507,14 +499,14 @@ Scope {
                                         // In style 1, wallpaper fills the clip rect; no parallax offset needed
                                         return 0;
                                     }
-                                    // Always follow parallax — no position shift when overview opens
-                                    return wallpaperPlanes.parallaxX;
+                                    // Style 0: centered when zoomed out, parallax when zoomed in
+                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableXSpace : wallpaperPlanes.parallaxX;
                                 }
                                 y: {
                                     if (Config.options.background.zoomOutStyle === 1) {
                                         return 0;
                                     }
-                                    return wallpaperPlanes.parallaxY;
+                                    return wallpaperItem.wallpaperZoomedOut ? -bgRoot.movableYSpace : wallpaperPlanes.parallaxY;
                                 }
                                 width: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperW : parent.width
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
@@ -559,27 +551,23 @@ Scope {
                                 antialiasing: false
 
                                 Behavior on x {
-                                    NumberAnimation {
-                                        duration: 900
-                                        easing.type: Easing.OutSine
-                                    }
+                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                 }
                                 Behavior on y {
-                                    NumberAnimation {
-                                        duration: 900
-                                        easing.type: Easing.OutSine
-                                    }
+                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                 }
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 900
-                                        easing.type: Easing.OutSine
+                                        duration: 500
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                                     }
                                 }
                                 Behavior on height {
                                     NumberAnimation {
-                                        duration: 900
-                                        easing.type: Easing.OutSine
+                                        duration: 500
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                                     }
                                 }
                             }
@@ -883,116 +871,37 @@ Scope {
             readonly property int wbTop: Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSize : 0)
             readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSize : 0)
 
+            mask: Region {
+                item: overlayDimRect
+            }
 
             readonly property bool animEnabled: Config.options.background.zoomOutEnabled
             readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
-            readonly property bool isActive: animEnabled && isMirroredStyle && (
-                GlobalStates.searchConnectActive
-                    ? GlobalStates.overviewOpen && Hyprland.monitorFor(modelData)?.name === GlobalStates.activeSearchMonitor
-                    : (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && Hyprland.focusedMonitor?.name == Hyprland.monitorFor(modelData)?.name
-            )
+            readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && (Hyprland.focusedMonitor?.name == Hyprland.monitorFor(modelData)?.name)
 
-            // SearchDrop exclusion geometry (in PanelWindow coordinates)
-            readonly property bool hasExclusion: GlobalStates.searchDropActive
-            readonly property real ex: hasExclusion ? GlobalStates.searchDropExclusionX : 0
-            readonly property real ey: hasExclusion ? GlobalStates.searchDropExclusionY : 0
-            readonly property real ew: hasExclusion ? GlobalStates.searchDropExclusionWidth : 0
-            readonly property real eh: hasExclusion ? GlobalStates.searchDropExclusionHeight : 0
-            readonly property real searchDropTopRadius: hasExclusion ? GlobalStates.searchDropTopRadius : 0
-            readonly property real searchDropBottomRadius: hasExclusion ? GlobalStates.searchDropBottomRadius : 0
+            visible: isActive || overlayDimRect.opacity > 0.01
 
-            // Overlay dim bounds (same as before)
-            readonly property real dimX: wbLeft
-            readonly property real dimY: wbTop
-            readonly property real dimW: width - wbLeft - wbRight
-            readonly property real dimH: height - wbTop - wbBottom
-            readonly property real dimR: Config.options.appearance.fakeScreenRounding > 0 ? Appearance.rounding.screenRounding : 0
-
-            visible: isActive || dimTop.opacity > 0.01
-
-            readonly property real dimOpacity: isActive ? 1.0 : 0.0
-            readonly property color dimColor: Qt.rgba(0, 0, 0, 0.25)
-
-            // Top strip: full width, from dimY to top of SearchDrop (or full height if no exclusion).
-            // Only the screen-edge (top) corners are rounded; the drop-edge (bottom) corners stay
-            // square so the dim overlay flushes against the SearchDrop without leaving concave
-            // gaps that match the Notch's concave top corners.
+            // Performance: use a simple Rectangle for dimming
             Rectangle {
-                id: dimTop
-                x: blurOverlayWindow.dimX
-                y: blurOverlayWindow.dimY
-                width: blurOverlayWindow.dimW
-                height: blurOverlayWindow.hasExclusion
-                    ? Math.max(0, blurOverlayWindow.ey - blurOverlayWindow.dimY)
-                    : blurOverlayWindow.dimH
-                color: blurOverlayWindow.dimColor
-                topLeftRadius: blurOverlayWindow.dimR
-                topRightRadius: blurOverlayWindow.dimR
-                bottomLeftRadius: blurOverlayWindow.hasExclusion ? 0 : blurOverlayWindow.dimR
-                bottomRightRadius: blurOverlayWindow.hasExclusion ? 0 : blurOverlayWindow.dimR
-                opacity: blurOverlayWindow.dimOpacity
-                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            }
+                id: overlayDimRect
+                x: blurOverlayWindow.wbLeft
+                y: blurOverlayWindow.wbTop
+                width: parent.width - blurOverlayWindow.wbLeft - blurOverlayWindow.wbRight
+                height: parent.height - blurOverlayWindow.wbTop - blurOverlayWindow.wbBottom
+                color: Qt.rgba(0, 0, 0, 0.25)
+                opacity: blurOverlayWindow.isActive ? 1.0 : 0.0
+                radius: {
+                    if (Config.options.appearance.fakeScreenRounding > 0)
+                        return Appearance.rounding.screenRounding;
+                    return 0;
+                }
 
-            // Bottom strip: full width, from bottom of SearchDrop to dimY+dimH.
-            // Only the screen-edge (bottom) corners are rounded; the drop-edge (top) corners stay
-            // square so the dim overlay flushes against the SearchDrop without leaving convex
-            // gaps that match the Notch's convex bottom corners.
-            Rectangle {
-                id: dimBottom
-                visible: blurOverlayWindow.hasExclusion
-                x: blurOverlayWindow.dimX
-                y: blurOverlayWindow.ey + blurOverlayWindow.eh
-                width: blurOverlayWindow.dimW
-                height: Math.max(0, blurOverlayWindow.dimY + blurOverlayWindow.dimH - (blurOverlayWindow.ey + blurOverlayWindow.eh))
-                color: blurOverlayWindow.dimColor
-                topLeftRadius: 0
-                topRightRadius: 0
-                bottomLeftRadius: blurOverlayWindow.dimR
-                bottomRightRadius: blurOverlayWindow.dimR
-                opacity: blurOverlayWindow.dimOpacity
-                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            }
-
-            // Left strip: from top of SearchDrop to its bottom, left of SearchDrop
-            Rectangle {
-                id: dimLeft
-                visible: blurOverlayWindow.hasExclusion
-                x: blurOverlayWindow.dimX
-                y: blurOverlayWindow.ey
-                width: Math.max(0, blurOverlayWindow.ex - blurOverlayWindow.dimX)
-                height: blurOverlayWindow.eh
-                color: blurOverlayWindow.dimColor
-                opacity: blurOverlayWindow.dimOpacity
-                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            }
-
-            // Right strip: from top of SearchDrop to its bottom, right of SearchDrop
-            Rectangle {
-                id: dimRight
-                visible: blurOverlayWindow.hasExclusion
-                x: blurOverlayWindow.ex + blurOverlayWindow.ew
-                y: blurOverlayWindow.ey
-                width: Math.max(0, blurOverlayWindow.dimX + blurOverlayWindow.dimW - (blurOverlayWindow.ex + blurOverlayWindow.ew))
-                height: blurOverlayWindow.eh
-                color: blurOverlayWindow.dimColor
-                opacity: blurOverlayWindow.dimOpacity
-                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
-            }
-
-            // Concave / convex corner fillers for the Notch silhouette.
-            // The rectangular exclusion above leaves the "negative" areas of the
-            // SearchDrop's concave top corners and convex bottom corners uncovered.
-            // These RoundCorners paint dimColor into those quadrants so the blur+dim
-            // overlay flushes against the actual Notch shape instead of leaving gaps.
-            Item {
-                visible: blurOverlayWindow.hasExclusion
-                x: 0
-                y: 0
-                width: blurOverlayWindow.width
-                height: blurOverlayWindow.height
-
-
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
             }
         }
     }
