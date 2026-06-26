@@ -555,23 +555,27 @@ Scope {
                                 antialiasing: false
 
                                 Behavior on x {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
+                                    }
                                 }
                                 Behavior on y {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
+                                    }
                                 }
                                 Behavior on width {
                                     NumberAnimation {
                                         duration: 500
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        easing.type: Easing.OutCubic
                                     }
                                 }
                                 Behavior on height {
                                     NumberAnimation {
                                         duration: 500
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                        easing.type: Easing.OutCubic
                                     }
                                 }
                             }
