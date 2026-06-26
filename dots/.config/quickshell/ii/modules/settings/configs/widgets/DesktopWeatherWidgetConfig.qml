@@ -60,6 +60,44 @@ ContentPage {
             }
         }
 
+        ContentSubsection {
+            title: Translation.tr("Weather style")
+            icon: "style"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.background.widgets.weather.style
+                onSelected: newValue => {
+                    Config.options.background.widgets.weather.style = newValue;
+                }
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "cloud", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "palette", value: "expressive" }
+                ]
+            }
+        }
+
+        ContentSubsection {
+            visible: Config.options.background.widgets.weather.style === "expressive"
+            title: Translation.tr("Background shape")
+            icon: "category"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.background.widgets.weather.backgroundShape
+                onSelected: newValue => {
+                    Config.options.background.widgets.weather.backgroundShape = newValue;
+                }
+                options: ["Circle", "Pill", "Oval", "SemiCircle", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Puffy", "PuffyDiamond", "Bun", "SoftBurst", "Sunny", "VerySunny"].map(icon => {
+                    return {
+                        displayName: "",
+                        shape: icon,
+                        value: icon
+                    };
+                })
+            }
+        }
+
         ConfigSelectionArray {
             currentValue: Config.options.background.widgets.weather.placementStrategy
             onSelected: newValue => {

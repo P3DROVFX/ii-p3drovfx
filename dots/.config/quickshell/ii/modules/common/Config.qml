@@ -425,6 +425,8 @@ Singleton {
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
+                        property string style: "default" // default, expressive
+                        property string backgroundShape: "Cookie9Sided"
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 400
                         property real y: 100

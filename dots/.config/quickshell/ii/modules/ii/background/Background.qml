@@ -689,12 +689,28 @@ Scope {
 
                                 FadeLoader {
                                     shown: Config.options.background.widgets.weather.enable
-                                    sourceComponent: WeatherWidget {
-                                        screenWidth: bgRoot.screen.width
-                                        screenHeight: bgRoot.screen.height
-                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    sourceComponent: Config.options.background.widgets.weather.style === "expressive" ? expressiveWeatherWidget : defaultWeatherWidget
+
+                                    Component {
+                                        id: defaultWeatherWidget
+                                        WeatherWidget {
+                                            screenWidth: bgRoot.screen.width
+                                            screenHeight: bgRoot.screen.height
+                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                            wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        }
+                                    }
+
+                                    Component {
+                                        id: expressiveWeatherWidget
+                                        ExpressiveWeatherWidget {
+                                            screenWidth: bgRoot.screen.width
+                                            screenHeight: bgRoot.screen.height
+                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                            wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        }
                                     }
                                 }
 
