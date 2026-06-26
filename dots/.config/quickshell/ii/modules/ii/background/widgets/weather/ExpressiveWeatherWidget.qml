@@ -20,11 +20,11 @@ AbstractBackgroundWidget {
     }
 
     implicitWidth: 200
-    implicitHeight: 280
+    implicitHeight: 240
 
     ColumnLayout {
         anchors.centerIn: parent
-        spacing: 8
+        spacing: 4
 
         MaterialShape {
             id: weatherIconShape

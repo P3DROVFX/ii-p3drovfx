@@ -38,7 +38,7 @@ AbstractBackgroundWidget {
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`
 
-    property real widgetSize: 200
+    property real widgetSize: 240
     property real controlsSize: 55
     property real buttonIconSize: 30
     property bool showSwitchButton: false
