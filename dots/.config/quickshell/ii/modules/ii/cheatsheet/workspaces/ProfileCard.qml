@@ -418,10 +418,7 @@ Item {
                 spacing: 4
 
                 Repeater {
-                    model: [
-                        "🗂️","📚","💻","🎮","🎵","🎬","📝","🔬","🎨","🏋️",
-                        "☕","🌙","🚀","🏠","🌊","🔧","📊","✉️","🎓","🧠"
-                    ]
+                    model: WorkspaceProfileService.presetEmojis
                     delegate: RippleButton {
                         required property var modelData
                         implicitWidth: 30; implicitHeight: 30

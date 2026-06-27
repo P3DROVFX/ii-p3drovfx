@@ -52,6 +52,11 @@ Singleton {
     // ── paths ────────────────────────────────────────────────────────────────
     readonly property string scriptPath: `${Directories.scriptPath}/hyprland/workspace_profile_manager`
 
+    readonly property var presetEmojis: [
+        "🗂️","📚","💻","🎮","🎵","🎬","📝","🔬","🎨","🏋️",
+        "☕","🌙","🚀","🏠","🌊","🔧","📊","✉️","🎓","🧠"
+    ]
+
     // ── public API ───────────────────────────────────────────────────────────
 
     function refresh() {

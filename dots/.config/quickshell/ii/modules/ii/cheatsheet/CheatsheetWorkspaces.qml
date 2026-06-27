@@ -87,10 +87,7 @@ Item {
     }
 
     // Preset emojis for the picker
-    readonly property var emojiList: [
-        "🗂️","📚","💻","🎮","🎵","🎬","📝","🔬","🎨","🏋️",
-        "☕","🌙","🚀","🏠","🌊","🔧","📊","✉️","🎓","🧠"
-    ]
+    readonly property var emojiList: WorkspaceProfileService.presetEmojis
 
     Component.onCompleted: {
         WorkspaceProfileService.refresh();
