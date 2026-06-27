@@ -80,7 +80,7 @@ PanelWindow {
         if (!wsId) return false;
         return HyprlandData.windowList.some(w => 
             w.workspace.id === wsId && 
-            (w.fullscreen > 0 || w.fullscreenClient > 0)
+            (w.fullscreen === 2 || w.fullscreenClient === 2)
         );
     }
 
@@ -122,7 +122,7 @@ PanelWindow {
     // 1. Wrapped Frame Visuals
     Loader {
         id: frameLoader
-        active: topPanel.usingWrappedFrame && !GlobalStates.screenLocked && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.usingWrappedFrame && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
         anchors.fill: parent
         sourceComponent: Frame.WrappedFrameVisuals {
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
@@ -139,7 +139,7 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && !topPanel.hasFullscreenWindowOnMonitor
+        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
         anchors.fill: parent
         sourceComponent: Component {
             Item {
@@ -331,7 +331,7 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
         anchors.fill: parent
         sourceComponent: Component {
             Item {
@@ -537,7 +537,7 @@ PanelWindow {
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         radius: GlobalStates.connectModeActive ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-        visible: topPanel.leftSidebarWarmOnMonitor && !topPanel.hasFullscreenWindowOnMonitor
+        visible: topPanel.leftSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarActiveOnMonitor)
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -602,7 +602,7 @@ PanelWindow {
         height: Math.round((!topPanel.barVertical) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: "transparent"
         border.width: 0
-        visible: topPanel.rightSidebarWarmOnMonitor && !topPanel.hasFullscreenWindowOnMonitor
+        visible: topPanel.rightSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor)
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -623,7 +623,7 @@ PanelWindow {
     // Cantos decoradores de Workspace para o modo Hug no Connect Mode
     Loader {
         id: leftSidebarTopCornerLoader
-        active: topPanel.leftSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && topPanel.barBottom && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.leftSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && topPanel.barBottom && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor)
         x: GlobalStates.animatedLeftSidebarWidth
         y: 0
         width: Appearance.rounding.screenRounding
@@ -637,7 +637,7 @@ PanelWindow {
 
     Loader {
         id: leftSidebarBottomCornerLoader
-        active: topPanel.leftSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (topPanel.barVertical === topPanel.barBottom) && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.leftSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (topPanel.barVertical === topPanel.barBottom) && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor)
         x: GlobalStates.animatedLeftSidebarWidth
         anchors.bottom: parent.bottom
         width: Appearance.rounding.screenRounding
@@ -651,7 +651,7 @@ PanelWindow {
 
     Loader {
         id: rightSidebarTopCornerLoader
-        active: topPanel.rightSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (topPanel.barVertical !== topPanel.barBottom) && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.rightSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (topPanel.barVertical !== topPanel.barBottom) && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor)
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
         y: 0
@@ -666,7 +666,7 @@ PanelWindow {
 
     Loader {
         id: rightSidebarBottomCornerLoader
-        active: topPanel.rightSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (!topPanel.barBottom) && !topPanel.hasFullscreenWindowOnMonitor
+        active: topPanel.rightSidebarActiveOnMonitor && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 && (!topPanel.barBottom) && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor)
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
         anchors.bottom: parent.bottom
@@ -685,7 +685,7 @@ PanelWindow {
         z: 10
         active: GlobalStates.searchConnectActive
                 && !GlobalStates.screenLocked
-                && !topPanel.hasFullscreenWindowOnMonitor
+                && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001))
         focus: searchOpenOnMonitor
         sourceComponent: Component {
             SearchConnect.SearchDrop {
