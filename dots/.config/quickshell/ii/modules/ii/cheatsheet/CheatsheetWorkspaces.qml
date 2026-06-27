@@ -56,7 +56,20 @@ Item {
             let nameMatch = (item.name || "").toLowerCase().includes(q);
             let descMatch = (item.description || "").toLowerCase().includes(q);
             if (!q || nameMatch || descMatch) {
-                list.push(item);
+                list.push({
+                    slug: item.slug,
+                    name: item.name,
+                    emoji: item.emoji,
+                    description: item.description,
+                    createdAt: item.createdAt,
+                    windowCount: item.windowCount,
+                    workspaceIdsJson: item.workspaceIdsJson,
+                    windowsJson: item.windowsJson,
+                    hasDuplicateClasses: item.hasDuplicateClasses,
+                    closeOthers: item.closeOthers,
+                    killOthers: item.killOthers,
+                    pinned: item.pinned
+                });
             }
         }
         root.filteredProfiles = list;
@@ -120,6 +133,7 @@ Item {
         function onModelReset() { root.updateFiltered() }
         function onRowsInserted() { root.updateFiltered() }
         function onRowsRemoved() { root.updateFiltered() }
+        function onRowsMoved() { root.updateFiltered() }
         function onDataChanged() { root.updateFiltered() }
     }
 
@@ -241,7 +255,7 @@ Item {
             // loading indicator
             MaterialLoadingIndicator {
                 anchors.centerIn: parent
-                visible: WorkspaceProfileService.loading && WorkspaceProfileService.binaryExists
+                visible: WorkspaceProfileService.loading && WorkspaceProfileService.binaryExists && WorkspaceProfileService.profilesModel.count === 0
                 implicitWidth: 40; implicitHeight: 40
             }
 
@@ -329,6 +343,7 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: parent.radius
+                            visible: Config.options.appearance.transparency.enable
                             gradient: Gradient {
                                 orientation: Gradient.Vertical
                                 GradientStop {

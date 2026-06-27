@@ -218,6 +218,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
+            visible: Config.options.appearance.transparency.enable
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop {
