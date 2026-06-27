@@ -253,13 +253,7 @@ Item {
 
                     readonly property real cardSpacing: 12
                     readonly property real cardWidth: (width - cardSpacing) / 2
-                    property int layoutRevision: 0
                     property int visibleProfileCount: root.filteredProfiles.length
-
-                    implicitHeight: {
-                        var _rev = layoutRevision
-                        return _getTotalHeight()
-                    }
 
                     // ── masonry helpers ───────────────────────────────────────
 
@@ -268,34 +262,24 @@ Item {
                         return root.showNewForm ? (formCard.implicitHeight + cardSpacing) : 0
                     }
 
-                    // Returns {col, y} for profile card item `targetCard`
-                    function getLayout(targetCard) {
-                        // Left column starts seeded with form card height if open
+                    function recalculateLayout() {
                         var heights = [formSlotHeight(), 0]
                         for (var i = 0; i < profileRepeater.count; i++) {
                             var card = profileRepeater.itemAt(i)
-                            if (!card || !card.visible) continue
-                            var minCol = (heights[0] <= heights[1]) ? 0 : 1
-                            if (card === targetCard) return { col: minCol, y: heights[minCol] }
-                            heights[minCol] += card.implicitHeight + cardSpacing
-                        }
-                        return { col: 0, y: 0 }
-                    }
-
-                    function _getTotalHeight() {
-                        var heights = [formSlotHeight(), 0]
-                        for (var i = 0; i < profileRepeater.count; i++) {
-                            var card = profileRepeater.itemAt(i)
-                            if (!card || !card.visible) continue
-                            var minCol = (heights[0] <= heights[1]) ? 0 : 1
-                            heights[minCol] += card.implicitHeight + cardSpacing
+                            if (!card) continue
+                            if (card.visible) {
+                                var minCol = (heights[0] <= heights[1]) ? 0 : 1
+                                card.x = minCol * (cardWidth + cardSpacing)
+                                card.y = heights[minCol]
+                                heights[minCol] += card.implicitHeight + cardSpacing
+                            }
                         }
                         var maxH = Math.max(heights[0], heights[1])
-                        return (maxH > cardSpacing) ? maxH - cardSpacing : 0
+                        gridArea.implicitHeight = (maxH > cardSpacing) ? maxH - cardSpacing : 0
                     }
 
                     function triggerLayout() {
-                        layoutTimer.restart()  // debounce — actual bump in onTriggered
+                        layoutTimer.restart()  // debounce
                     }
 
                     function recountVisible() {
@@ -504,6 +488,7 @@ Item {
                     Repeater {
                         id: profileRepeater
                         model: root.slicedProfiles
+                        onCountChanged: gridArea.triggerLayout()
 
                         delegate: ProfileCard {
                             id: card
@@ -512,7 +497,6 @@ Item {
 
                             shortcutHint: {
                                 var _trigger = gridArea.visibleProfileCount;
-                                var _rev = gridArea.layoutRevision;
                                 if (!card.visible) return "";
                                 var count = 0;
                                 for (var i = 0; i < profileRepeater.count; i++) {
@@ -526,13 +510,6 @@ Item {
                             }
 
                             // ── masonry positioning ─────────────────────────
-                            readonly property var _layout: {
-                                var _rev = gridArea.layoutRevision
-                                return gridArea.getLayout(card)
-                            }
-
-                            x: _layout.col * (gridArea.cardWidth + gridArea.cardSpacing)
-                            y: _layout.y
                             width: gridArea.cardWidth
 
                             Behavior on x {
@@ -581,9 +558,9 @@ Item {
                     // layout debounce timer
                     Timer {
                         id: layoutTimer
-                        interval: 80
+                        interval: 20
                         repeat: false
-                        onTriggered: gridArea.layoutRevision = gridArea.layoutRevision + 1
+                        onTriggered: gridArea.recalculateLayout()
                     }
 
                     // initial settle
