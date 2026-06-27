@@ -24,6 +24,7 @@ Singleton {
     property string restoringSlug: ""
     property string activeMutationSlug: ""
     onBusyChanged: if (!busy) activeMutationSlug = ""
+    property bool binaryExists: true
 
     // Expose a public busy state when any process is active
     readonly property bool busy: (
@@ -511,11 +512,20 @@ Singleton {
         }
     }
 
+    Process {
+        id: checkBinaryProc
+        command: ["test", "-x", root.scriptPath]
+        onExited: (exitCode, exitStatus) => {
+            root.binaryExists = (exitCode === 0);
+        }
+    }
+
     // ── init ─────────────────────────────────────────────────────────────────
     Component.onCompleted: {
         // Ensure profiles directory exists
         Quickshell.execDetached(["mkdir", "-p",
             `${Directories.home}/.config/illogical-impulse/workspace_profiles`]);
+        checkBinaryProc.running = true;
         Qt.callLater(root.refresh);
     }
 }

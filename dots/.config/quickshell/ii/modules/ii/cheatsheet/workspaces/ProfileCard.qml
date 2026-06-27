@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -599,6 +600,15 @@ Item {
                     color: root.colWarnBg
                     implicitWidth: warnRow.implicitWidth + 14
                     implicitHeight: 36
+                    scale: warnHover.hovered ? 1.05 : 1.0
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
 
                     HoverHandler { id: warnHover }
 
@@ -754,8 +764,8 @@ Item {
                 // feedback
                 RowLayout {
                     spacing: 6
-                    visible: root.restoreSuccess || root.restorePartial
-                    opacity: visible ? 1 : 0
+                    visible: root.restoreSuccess || root.restorePartial || opacity > 0.0
+                    opacity: (root.restoreSuccess || root.restorePartial) ? 1.0 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
@@ -866,206 +876,225 @@ Item {
                     }
 
                     // Window rows
-                    Repeater {
-                        model: root.windowsList
-                        delegate: Item {
-                            id: windowRowItem
-                            required property int index
-                            required property var modelData
-                            Layout.fillWidth: true
-                            implicitHeight: windowRow.implicitHeight + 40
+                    // Scrollable window rows container if they exceed height limits
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(windowRowsCol.implicitHeight, 280)
+                        contentHeight: windowRowsCol.implicitHeight
+                        clip: true
+                        interactive: contentHeight > height
 
-                            // alternating row tint
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Appearance.rounding.small
-                                color: Appearance.colors.colLayer2
-                                opacity: windowRowItem.index % 2 === 0 ? 0.45 : 0.0
-                            }
+                        ColumnLayout {
+                            id: windowRowsCol
+                            anchors { left: parent.left; right: parent.right }
+                            spacing: 6
 
-                            RowLayout {
-                                id: windowRow
-                                anchors {
-                                    left: parent.left; right: parent.right
-                                    verticalCenter: parent.verticalCenter
-                                    leftMargin: 6; rightMargin: 4
-                                }
-                                spacing: 10
-
-                                // app avatar circle
-                                Rectangle {
-                                    implicitWidth: 24; implicitHeight: 24
-                                    radius: Appearance.rounding.full
-                                    color: Appearance.colors.colSecondaryContainer
-
-                                    Image {
-                                        id: appIconImg
-                                        anchors.centerIn: parent
-                                        sourceSize: Qt.size(14, 14)
-                                        source: {
-                                            const _ = TaskbarApps.iconThemeRevision;
-                                            return Quickshell.iconPath(AppSearch.guessIcon(windowRowItem.modelData.class || ""), "");
-                                        }
-                                        smooth: true
-                                        visible: source.toString() !== "" && status !== Image.Error
-                                    }
-
-                                    StyledText {
-                                        anchors.centerIn: parent
-                                        visible: !appIconImg.visible
-                                        text: (windowRowItem.modelData.class || "?").charAt(0).toUpperCase()
-                                        font {
-                                            pixelSize: Appearance.font.pixelSize.smaller
-                                            weight: Font.Bold
-                                        }
-                                        color: Appearance.colors.colOnSecondaryContainer
-                                    }
-                                }
-
-                                // class name + floating label
-                                ColumnLayout {
-                                     Layout.alignment: Qt.AlignVCenter
-                                     spacing: 2
-                                     Layout.minimumWidth: 110
-                                     Layout.fillWidth: true
-
-                                    StyledText {
-                                        text: windowRowItem.modelData.class || "unknown"
-                                        font {
-                                            pixelSize: Appearance.font.pixelSize.small
-                                            weight: Font.DemiBold
-                                        }
-                                        color: root.colOnSurface
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                    }
-                                    StyledText {
-                                        visible: windowRowItem.modelData.floating
-                                        text: "Floating"
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        color: root.colSubtle
-                                    }
-                                }
-
-                                // Workspace ID field
-                                RowLayout {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: 6
-                                    StyledText {
-                                        text: "WS"
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        color: root.colSubtle
-                                    }
-                                    MaterialTextField {
-                                        implicitWidth: 55
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        horizontalAlignment: TextInput.AlignHCenter
-                                        verticalAlignment: TextInput.AlignVCenter
-                                        topPadding: 0
-                                        bottomPadding: 0
-                                        text: {
-                                            let ws = windowRowItem.modelData.workspaceId;
-                                            if (typeof ws === "string" && ws.startsWith("special")) return "sp";
-                                            if (typeof ws === "number" && ws < 0) return "sp";
-                                            return ws.toString();
-                                        }
-                                        onEditingFinished: {
-                                            let val = text.trim();
-                                            if (val.toLowerCase() === "sp" || val.toLowerCase() === "special") {
-                                                val = "special:special";
-                                            } else {
-                                                let parsed = parseInt(val);
-                                                if (!isNaN(parsed)) val = parsed;
-                                            }
-                                            if (val !== windowRowItem.modelData.workspaceId) {
-                                                WorkspaceProfileService.updateWindowWorkspace(
-                                                    root.slug,
-                                                    windowRowItem.index,
-                                                    val
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Autolaunch switch
-                                RowLayout {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: 6
-                                    StyledText {
-                                        text: "Autolaunch"
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        color: root.colSubtle
-                                    }
-                                    StyledSwitch {
-                                        checked: windowRowItem.modelData.autolaunch || false
-                                        onCheckedChanged: {
-                                            if (checked !== (windowRowItem.modelData.autolaunch || false)) {
-                                                WorkspaceProfileService.updateWindowOptions(
-                                                    root.slug,
-                                                    windowRowItem.index,
-                                                    checked,
-                                                    cmdField.text || (windowRowItem.modelData.launchCmd || "")
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Launch command
-                                MaterialTextField {
-                                    id: cmdField
-                                    Layout.alignment: Qt.AlignVCenter
+                            Repeater {
+                                model: root.windowsList
+                                delegate: Item {
+                                    id: windowRowItem
+                                    required property int index
+                                    required property var modelData
                                     Layout.fillWidth: true
-                                    Layout.preferredWidth: 180
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    text: windowRowItem.modelData.launchCmd || ""
-                                    placeholderText: "Add arguments..."
-                                    enabled: windowRowItem.modelData.autolaunch || false
+                                    implicitHeight: windowRow.implicitHeight + 40
 
-                                    StyledText {
-                                        text: "Arguments for " + root.cleanAppName(windowRowItem.modelData.initialClass || windowRowItem.modelData.class)
-                                        font.pixelSize: Appearance.font.pixelSize.small - 3
-                                        font.weight: Font.DemiBold
-                                        color: Appearance.m3colors.m3primary
-                                        anchors.bottom: parent.top
-                                        anchors.bottomMargin: 4
-                                        anchors.left: parent.left
-                                        anchors.leftMargin: 8
-                                        anchors.right: parent.right
-                                        elide: Text.ElideRight
+                                    // alternating row tint
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: Appearance.rounding.small
+                                        color: Appearance.colors.colLayer2
+                                        opacity: windowRowItem.index % 2 === 0 ? 0.45 : 0.0
                                     }
 
-                                    onEditingFinished: {
-                                        if (text !== (windowRowItem.modelData.launchCmd || "")) {
-                                            WorkspaceProfileService.updateWindowOptions(
-                                                root.slug,
-                                                windowRowItem.index,
-                                                windowRowItem.modelData.autolaunch || false,
-                                                text
-                                            )
+                                    RowLayout {
+                                        id: windowRow
+                                        anchors {
+                                            left: parent.left; right: parent.right
+                                            verticalCenter: parent.verticalCenter
+                                            leftMargin: 6; rightMargin: 4
+                                        }
+                                        spacing: 10
+
+                                        // app avatar circle
+                                        Rectangle {
+                                            implicitWidth: 24; implicitHeight: 24
+                                            radius: Appearance.rounding.full
+                                            color: Appearance.colors.colSecondaryContainer
+
+                                            Image {
+                                                id: appIconImg
+                                                anchors.centerIn: parent
+                                                sourceSize: Qt.size(14, 14)
+                                                source: {
+                                                    const _ = TaskbarApps.iconThemeRevision;
+                                                    return Quickshell.iconPath(AppSearch.guessIcon(windowRowItem.modelData.class || ""), "");
+                                                }
+                                                smooth: true
+                                                visible: source.toString() !== "" && status !== Image.Error
+                                            }
+
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                visible: !appIconImg.visible
+                                                text: (windowRowItem.modelData.class || "?").charAt(0).toUpperCase()
+                                                font {
+                                                    pixelSize: Appearance.font.pixelSize.smaller
+                                                    weight: Font.Bold
+                                                }
+                                                color: Appearance.colors.colOnSecondaryContainer
+                                            }
+                                        }
+
+                                        // class name + floating label
+                                        ColumnLayout {
+                                             Layout.alignment: Qt.AlignVCenter
+                                             spacing: 2
+                                             Layout.minimumWidth: 110
+                                             Layout.fillWidth: true
+
+                                            StyledText {
+                                                text: windowRowItem.modelData.class || "unknown"
+                                                font {
+                                                    pixelSize: Appearance.font.pixelSize.small
+                                                    weight: Font.DemiBold
+                                                }
+                                                color: root.colOnSurface
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            StyledText {
+                                                visible: windowRowItem.modelData.floating
+                                                text: "Floating"
+                                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                                color: root.colSubtle
+                                            }
+                                        }
+
+                                        // Workspace ID field
+                                        RowLayout {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: 6
+                                            StyledText {
+                                                text: "WS"
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                color: root.colSubtle
+                                            }
+                                            MaterialTextField {
+                                                implicitWidth: 55
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                horizontalAlignment: TextInput.AlignHCenter
+                                                verticalAlignment: TextInput.AlignVCenter
+                                                topPadding: 0
+                                                bottomPadding: 0
+                                                text: {
+                                                    let ws = windowRowItem.modelData.workspaceId;
+                                                    if (typeof ws === "string" && ws.startsWith("special")) return "sp";
+                                                    if (typeof ws === "number" && ws < 0) return "sp";
+                                                    return ws.toString();
+                                                }
+                                                onEditingFinished: {
+                                                    let val = text.trim();
+                                                    if (val.toLowerCase() === "sp" || val.toLowerCase() === "special") {
+                                                        val = "special:special";
+                                                    } else {
+                                                        let parsed = parseInt(val);
+                                                        if (!isNaN(parsed)) val = parsed;
+                                                    }
+                                                    if (val !== windowRowItem.modelData.workspaceId) {
+                                                        WorkspaceProfileService.updateWindowWorkspace(
+                                                            root.slug,
+                                                            windowRowItem.index,
+                                                            val
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Autolaunch switch
+                                        RowLayout {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: 6
+                                            StyledText {
+                                                text: "Autolaunch"
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                color: root.colSubtle
+                                            }
+                                            StyledSwitch {
+                                                checked: windowRowItem.modelData.autolaunch || false
+                                                onCheckedChanged: {
+                                                    if (checked !== (windowRowItem.modelData.autolaunch || false)) {
+                                                        WorkspaceProfileService.updateWindowOptions(
+                                                            root.slug,
+                                                            windowRowItem.index,
+                                                            checked,
+                                                            cmdField.text || (windowRowItem.modelData.launchCmd || "")
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Launch command
+                                        MaterialTextField {
+                                            id: cmdField
+                                            Layout.alignment: Qt.AlignVCenter
+                                            Layout.fillWidth: true
+                                            Layout.preferredWidth: 180
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            text: windowRowItem.modelData.launchCmd || ""
+                                            placeholderText: "Add arguments..."
+                                            enabled: windowRowItem.modelData.autolaunch || false
+
+                                            StyledText {
+                                                text: "Arguments for " + root.cleanAppName(windowRowItem.modelData.initialClass || windowRowItem.modelData.class)
+                                                font.pixelSize: Appearance.font.pixelSize.small - 3
+                                                font.weight: Font.DemiBold
+                                                color: Appearance.m3colors.m3primary
+                                                anchors.bottom: parent.top
+                                                anchors.bottomMargin: 4
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 8
+                                                anchors.right: parent.right
+                                                elide: Text.ElideRight
+                                            }
+
+                                            onEditingFinished: {
+                                                if (text !== (windowRowItem.modelData.launchCmd || "")) {
+                                                    WorkspaceProfileService.updateWindowOptions(
+                                                        root.slug,
+                                                        windowRowItem.index,
+                                                        windowRowItem.modelData.autolaunch || false,
+                                                        text
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // Delete window button
+                                        RippleButton {
+                                            id: delBtn
+                                            Layout.alignment: Qt.AlignVCenter
+                                            implicitWidth: 36; implicitHeight: 36
+                                            buttonRadius: Appearance.rounding.full
+                                            colBackground: "transparent"
+                                            colBackgroundHover: Appearance.colors.colErrorContainer
+                                            onClicked: WorkspaceProfileService.deleteWindow(root.slug, windowRowItem.index)
+                                            StyledToolTip { text: "Delete window entry" }
+                                            MaterialSymbol {
+                                                anchors.centerIn: parent
+                                                text: "delete"
+                                                iconSize: Appearance.font.pixelSize.normal
+                                                color: delBtn.hovered ? Appearance.colors.colOnErrorContainer : root.colSubtle
+                                            }
                                         }
                                     }
                                 }
-
-                                // Delete window button
-                                RippleButton {
-                                    id: delBtn
-                                    Layout.alignment: Qt.AlignVCenter
-                                    implicitWidth: 36; implicitHeight: 36
-                                    buttonRadius: Appearance.rounding.full
-                                    colBackground: "transparent"
-                                    colBackgroundHover: Appearance.colors.colErrorContainer
-                                    onClicked: WorkspaceProfileService.deleteWindow(root.slug, windowRowItem.index)
-                                    StyledToolTip { text: "Delete window entry" }
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "delete"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: delBtn.hovered ? Appearance.colors.colOnErrorContainer : root.colSubtle
-                                    }
-                                }
                             }
+                        }
+
+                        ScrollIndicator.vertical: ScrollIndicator {
+                            anchors.right: parent.right
                         }
                     }
 

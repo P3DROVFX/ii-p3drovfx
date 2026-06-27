@@ -216,6 +216,7 @@ Item {
             // empty state (no profiles at all)
             PagePlaceholder {
                 shown: !WorkspaceProfileService.loading
+                    && WorkspaceProfileService.binaryExists
                     && WorkspaceProfileService.profilesModel.count === 0
                     && !root.showNewForm
                 icon: "dashboard"
@@ -226,6 +227,7 @@ Item {
             // filtered empty state
             PagePlaceholder {
                 shown: !WorkspaceProfileService.loading
+                    && WorkspaceProfileService.binaryExists
                     && WorkspaceProfileService.profilesModel.count > 0
                     && gridArea.visibleProfileCount === 0
                     && root.filter !== ""
@@ -234,10 +236,19 @@ Item {
                 description: "Try a different search term."
             }
 
+            // binary missing empty state
+            PagePlaceholder {
+                shown: !WorkspaceProfileService.loading
+                    && !WorkspaceProfileService.binaryExists
+                icon: "error"
+                title: "Backend not compiled"
+                description: "The workspace manager binary is missing. Please compile it by running 'cargo build --release' in the script directory."
+            }
+
             // loading indicator
             MaterialLoadingIndicator {
                 anchors.centerIn: parent
-                visible: WorkspaceProfileService.loading
+                visible: WorkspaceProfileService.loading && WorkspaceProfileService.binaryExists
                 implicitWidth: 40; implicitHeight: 40
             }
 
@@ -310,7 +321,7 @@ Item {
                         x: 0
                         y: 0
                         width: gridArea.cardWidth
-                        visible: root.showNewForm
+                        visible: root.showNewForm || opacity > 0.0
                         radius: Appearance.rounding.large
                         color: Appearance.colors.colLayer4
                         border.width: Config.options.appearance.borderless ? 0 : 1
@@ -340,27 +351,29 @@ Item {
                             }
                         }
 
-                        // entrance animation
-                        opacity: 0.0
-                        scale: 0.97
-                        onVisibleChanged: {
-                            if (visible) {
-                                formEnterOp.start()
-                                formEnterScale.start()
-                                nameField.forceActiveFocus()
+                        opacity: root.showNewForm ? 1.0 : 0.0
+                        scale: root.showNewForm ? 1.0 : 0.97
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                             }
                         }
-                        NumberAnimation {
-                            id: formEnterOp; target: formCard; property: "opacity"
-                            from: 0.0; to: 1.0; duration: 300
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
                         }
-                        NumberAnimation {
-                            id: formEnterScale; target: formCard; property: "scale"
-                            from: 0.97; to: 1.0; duration: 300
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+
+                        onVisibleChanged: {
+                            if (visible && root.showNewForm) {
+                                nameField.forceActiveFocus();
+                            }
                         }
 
                         ColumnLayout {
