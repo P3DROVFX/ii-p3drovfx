@@ -20,6 +20,7 @@ import qs.modules.ii.background.widgets
 import qs.modules.ii.background.widgets.clock
 import qs.modules.ii.background.widgets.weather
 import qs.modules.ii.background.widgets.media
+import qs.modules.ii.background.widgets.DateWidget
 
 Scope {
     id: backgroundScope
@@ -723,6 +724,17 @@ Scope {
                                         scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
                                         wallpaperScale: bgRoot.effectiveWallpaperScale
                                         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+                                    }
+                                }
+
+                                FadeLoader {
+                                    shown: Config.options.background.widgets.date.enable
+                                    sourceComponent: DateWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
                                     }
                                 }
 

@@ -209,6 +209,68 @@ Item {
                         widgetsConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/DesktopMediaWidgetConfig.qml");
                     }
                 }
+
+                Item { Layout.preferredHeight: 24 } // Long spacing
+
+                // ── Date Widget ───────────────────────────────────────────────
+                ConfigSwitch {
+                    topLeftRadius: Appearance.rounding.full
+                    topRightRadius: Appearance.rounding.full
+                    bottomLeftRadius: Appearance.rounding.full
+                    bottomRightRadius: Appearance.rounding.full
+                    buttonIcon: "calendar_today"
+                    text: Translation.tr("Date Widget")
+                    checked: Config.options.background.widgets.date.enable
+                    onCheckedChanged: {
+                        Config.options.background.widgets.date.enable = checked;
+                    }
+                }
+
+                RippleButton {
+                    id: dateRipple
+                    visible: Config.options.background.widgets.date.enable
+                    Layout.fillWidth: true
+                    implicitHeight: dateRow.implicitHeight + 32
+                    buttonRadius: Appearance.rounding.full
+                    
+                    colBackground: Appearance.colors.colTertiaryContainer
+                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                    colRipple: Appearance.colors.colTertiaryContainerActive
+
+                    contentItem: RowLayout {
+                        id: dateRow
+                        spacing: 12
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        
+                        MaterialShapeWrappedMaterialSymbol {
+                            text: "settings"
+                            shape: MaterialShape.Shape.Circle
+                            iconSize: 18
+                            padding: 6
+                            fill: 1
+                            color: Appearance.colors.colTertiary
+                            colSymbol: Appearance.colors.colOnTertiary
+                        }
+                        
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Date Options")
+                            font.pixelSize: Appearance.font.pixelSize.medium
+                            color: Appearance.colors.colOnTertiaryContainer
+                        }
+                        
+                        MaterialSymbol {
+                            text: "arrow_forward"
+                            iconSize: Appearance.font.pixelSize.large
+                            color: Appearance.colors.colOnTertiaryContainer
+                        }
+                    }
+
+                    onClicked: {
+                        widgetsConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/DateDesktopWIdgetConfig.qml");
+                    }
+                }
             }
         }
     }

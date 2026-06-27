@@ -431,6 +431,12 @@ Singleton {
                         property real x: 400
                         property real y: 100
                     }
+                    property JsonObject date: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
+                        property real x: 100
+                        property real y: 100
+                    }
                 }
                 property bool scaleLargeWallpapers: true
                 property bool animateWallpaperChanges: true
