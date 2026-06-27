@@ -198,6 +198,7 @@ Scope {
                 border.color: Appearance.colors.colLayer0Border
                 radius: Appearance.rounding.windowRounding
                 property real padding: 20
+                property int prevIndex: Persistent.states.cheatsheet.tabIndex
 
                 property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
                 property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
@@ -280,6 +281,11 @@ Scope {
                         Layout.topMargin: 5
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Component.onCompleted: {
+                            if (contentItem) {
+                                contentItem.highlightMoveDuration = 0;
+                            }
+                        }
                         
                         property real calculatedWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.92 : 1700
                         property real calculatedHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.75 : 650
@@ -293,6 +299,9 @@ Scope {
                             if (currentItem && currentItem.status === Loader.Ready && currentItem.item) {
                                 currentItem.item.forceActiveFocus();
                             }
+                            Qt.callLater(() => {
+                                cheatsheetBackground.prevIndex = currentIndex;
+                            });
                         }
 
                         implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
@@ -316,8 +325,51 @@ Scope {
                                 required property var modelData
                                 required property int index
 
-                                // Timetable & Email: lazy — load only when first visited
-                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail"
+                                transform: Translate {
+                                    id: trans
+                                    x: 0
+                                }
+
+                                readonly property bool isCurrent: swipeView.currentIndex === index
+                                onIsCurrentChanged: {
+                                    if (isCurrent) {
+                                        const diff = index - cheatsheetBackground.prevIndex;
+                                        if (diff !== 0) {
+                                            bounceAnim.stop();
+                                            opacityAnim.stop();
+                                            trans.x = diff > 0 ? 150 : -150;
+                                            tabDelegate.opacity = 0;
+                                            bounceAnim.start();
+                                            opacityAnim.start();
+                                        }
+                                    } else {
+                                        tabDelegate.opacity = 1;
+                                        trans.x = 0;
+                                    }
+                                }
+
+                                NumberAnimation {
+                                    id: bounceAnim
+                                    target: trans
+                                    property: "x"
+                                    to: 0
+                                    duration: 400
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 1.5
+                                }
+
+                                NumberAnimation {
+                                    id: opacityAnim
+                                    target: tabDelegate
+                                    property: "opacity"
+                                    from: 0
+                                    to: 1
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+
+                                // Timetable, Email & Workspaces: lazy — load only when first visited
+                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard"
                                 property bool _wasSeen: false
                                 active: !_lazy || swipeView.currentIndex === index || _wasSeen
                                 onActiveChanged: if (active)
