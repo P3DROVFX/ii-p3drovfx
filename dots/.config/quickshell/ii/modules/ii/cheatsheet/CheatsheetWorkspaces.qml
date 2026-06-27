@@ -38,6 +38,14 @@ Item {
     property int    loadedProfilesCount: 10
     readonly property var slicedProfiles: root.filteredProfiles.slice(0, root.loadedProfilesCount)
 
+    readonly property bool isCurrentTab: {
+        try {
+            return swipeView.currentIndex === index;
+        } catch (e) {
+            return true;
+        }
+    }
+
     function updateFiltered() {
         let list = [];
         let q = root.filter.toLowerCase().trim();
@@ -620,27 +628,28 @@ Item {
         }
     }
 
-    Shortcut { sequences: ["Ctrl+1", "Ctrl+&"]; onActivated: root.triggerShortcut(0) }
-    Shortcut { sequences: ["Ctrl+2", "Ctrl+é"]; onActivated: root.triggerShortcut(1) }
-    Shortcut { sequences: ["Ctrl+3", "Ctrl+\""]; onActivated: root.triggerShortcut(2) }
-    Shortcut { sequences: ["Ctrl+4", "Ctrl+'"]; onActivated: root.triggerShortcut(3) }
-    Shortcut { sequences: ["Ctrl+5", "Ctrl+("]; onActivated: root.triggerShortcut(4) }
-    Shortcut { sequences: ["Ctrl+6", "Ctrl+-"]; onActivated: root.triggerShortcut(5) }
-    Shortcut { sequences: ["Ctrl+7", "Ctrl+è"]; onActivated: root.triggerShortcut(6) }
-    Shortcut { sequences: ["Ctrl+8", "Ctrl+_"]; onActivated: root.triggerShortcut(7) }
-    Shortcut { sequences: ["Ctrl+9", "Ctrl+ç"]; onActivated: root.triggerShortcut(8) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+1", "Ctrl+&"]; onActivated: root.triggerShortcut(0) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+2", "Ctrl+é"]; onActivated: root.triggerShortcut(1) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+3", "Ctrl+\""]; onActivated: root.triggerShortcut(2) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+4", "Ctrl+'"]; onActivated: root.triggerShortcut(3) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+5", "Ctrl+("]; onActivated: root.triggerShortcut(4) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+6", "Ctrl+-"]; onActivated: root.triggerShortcut(5) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+7", "Ctrl+è"]; onActivated: root.triggerShortcut(6) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+8", "Ctrl+_"]; onActivated: root.triggerShortcut(7) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+9", "Ctrl+ç"]; onActivated: root.triggerShortcut(8) }
 
-    Shortcut { sequences: ["Ctrl+Alt+1", "Ctrl+Alt+&"]; onActivated: root.triggerDeleteShortcut(0) }
-    Shortcut { sequences: ["Ctrl+Alt+2", "Ctrl+Alt+é"]; onActivated: root.triggerDeleteShortcut(1) }
-    Shortcut { sequences: ["Ctrl+Alt+3", "Ctrl+Alt+\""]; onActivated: root.triggerDeleteShortcut(2) }
-    Shortcut { sequences: ["Ctrl+Alt+4", "Ctrl+Alt+'"]; onActivated: root.triggerDeleteShortcut(3) }
-    Shortcut { sequences: ["Ctrl+Alt+5", "Ctrl+Alt+("]; onActivated: root.triggerDeleteShortcut(4) }
-    Shortcut { sequences: ["Ctrl+Alt+6", "Ctrl+Alt+-"]; onActivated: root.triggerDeleteShortcut(5) }
-    Shortcut { sequences: ["Ctrl+Alt+7", "Ctrl+Alt+è"]; onActivated: root.triggerDeleteShortcut(6) }
-    Shortcut { sequences: ["Ctrl+Alt+8", "Ctrl+Alt+_"]; onActivated: root.triggerDeleteShortcut(7) }
-    Shortcut { sequences: ["Ctrl+Alt+9", "Ctrl+Alt+ç"]; onActivated: root.triggerDeleteShortcut(8) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+1", "Ctrl+Alt+&"]; onActivated: root.triggerDeleteShortcut(0) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+2", "Ctrl+Alt+é"]; onActivated: root.triggerDeleteShortcut(1) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+3", "Ctrl+Alt+\""]; onActivated: root.triggerDeleteShortcut(2) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+4", "Ctrl+Alt+'"]; onActivated: root.triggerDeleteShortcut(3) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+5", "Ctrl+Alt+("]; onActivated: root.triggerDeleteShortcut(4) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+6", "Ctrl+Alt+-"]; onActivated: root.triggerDeleteShortcut(5) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+7", "Ctrl+Alt+è"]; onActivated: root.triggerDeleteShortcut(6) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+8", "Ctrl+Alt+_"]; onActivated: root.triggerDeleteShortcut(7) }
+    Shortcut { enabled: root.isCurrentTab && cheatsheetRoot.visible; sequences: ["Ctrl+Alt+9", "Ctrl+Alt+ç"]; onActivated: root.triggerDeleteShortcut(8) }
 
     Shortcut {
+        enabled: root.isCurrentTab && cheatsheetRoot.visible
         sequence: "Ctrl+N"
         onActivated: {
             if (!root.visible || WorkspaceProfileService.restoring) return;
@@ -659,6 +668,7 @@ Item {
     }
 
     Shortcut {
+        enabled: root.isCurrentTab && cheatsheetRoot.visible
         sequence: "Escape"
         onActivated: {
             if (root.filter !== "") {
