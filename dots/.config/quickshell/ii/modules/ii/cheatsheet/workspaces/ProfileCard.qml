@@ -440,7 +440,7 @@ Item {
                         StyledText {
                             anchors.centerIn: parent
                             text: parent.modelData
-                            font.pixelSize: 15
+                            font.pixelSize: Appearance.font.pixelSize.small
                         }
                     }
                 }
