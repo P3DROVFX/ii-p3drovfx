@@ -563,15 +563,9 @@ Item {
                         onTriggered: gridArea.recalculateLayout()
                     }
 
-                    // initial settle
+                    // initial layout trigger
                     Component.onCompleted: {
-                        settleTimer.start()
-                    }
-                    Timer {
-                        id: settleTimer
-                        interval: 400
-                        repeat: false
-                        onTriggered: gridArea.triggerLayout()
+                        gridArea.triggerLayout()
                     }
                 }
             }
