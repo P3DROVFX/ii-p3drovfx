@@ -11,6 +11,15 @@ import Quickshell
 Item {
     id: root
 
+    readonly property bool isCurrentTab: {
+        try {
+            return swipeView.currentIndex === index;
+        } catch (e) {
+            return true;
+        }
+    }
+    readonly property bool isTabActive: root.visible && root.isCurrentTab
+
     readonly property var rawKeybinds: {
         const defaultKeybinds = HyprlandKeybinds.defaultKeybinds.children ?? [];
         const userKeybinds = HyprlandKeybinds.userKeybinds.children ?? [];
@@ -426,7 +435,7 @@ Item {
                     if (found) minIdx = bestIdx;
                 }
 
-                if (count === targetIndex) return minIdx;
+                if (i === targetIndex) return minIdx;
                 h[minIdx] += childH + root.cardSpacing;
                 count++;
             }
@@ -463,7 +472,7 @@ Item {
                     if (found) minIdx = bestIdx;
                 }
 
-                if (count === targetIndex) return h[minIdx];
+                if (i === targetIndex) return h[minIdx];
                 h[minIdx] += childH + root.cardSpacing;
                 count++;
             }
@@ -497,8 +506,11 @@ Item {
                     return contentArea.getY(index);
                 }
 
-                x: _col * (root.cardWidth + root.cardSpacing)
-                y: _yPos
+                readonly property real targetX: root.isTabActive ? _col * (root.cardWidth + root.cardSpacing) : (contentArea.width - root.cardWidth) / 2
+                readonly property real targetY: root.isTabActive ? _yPos : index * 20
+
+                x: targetX
+                y: targetY
 
                 transform: Translate {
                     x: cardDelegate.isDragged ? root.dragOffsetX : 0
