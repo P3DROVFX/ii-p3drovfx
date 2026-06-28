@@ -20,6 +20,47 @@ fn profiles_dir() -> PathBuf {
     path
 }
 
+fn is_flatpak_installed(app_id: &str) -> bool {
+    if !app_id.contains('.') {
+        return false;
+    }
+    if which("flatpak").is_ok() {
+        let status = Command::new("flatpak")
+            .arg("info")
+            .arg(app_id)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        if let Ok(s) = status {
+            return s.success();
+        }
+    }
+    false
+}
+
+fn get_parent_pids() -> HashSet<i64> {
+    let mut pids = HashSet::new();
+    let mut pid = std::process::id() as i64;
+    pids.insert(pid);
+    while pid > 1 {
+        let stat_path = format!("/proc/{}/stat", pid);
+        if let Ok(stat) = std::fs::read_to_string(&stat_path) {
+            let parts: Vec<&str> = stat.split_whitespace().collect();
+            if parts.len() > 3 {
+                let ppid = parts[3].parse::<i64>().unwrap_or(0);
+                if ppid <= 1 { break; }
+                pids.insert(ppid);
+                pid = ppid;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    pids
+}
+
 fn default_true() -> bool { true }
 fn default_emoji() -> String { "🗂️".to_string() }
 
@@ -345,6 +386,9 @@ fn cmd_snapshot(meta_json: &str) {
                     break;
                 }
             }
+            if launch_cmd.is_empty() && is_flatpak_installed(raw_cmd) {
+                launch_cmd = format!("flatpak run {}", raw_cmd);
+            }
         }
         
         windows.push(SavedWindow {
@@ -478,6 +522,7 @@ fn cmd_restore(slug: &str) {
         return;
     }
     
+    let parent_pids = get_parent_pids();
     let mut errors = 0;
     let clients = live_clients();
     let mut live_by_class: HashMap<String, Vec<Value>> = HashMap::new();
@@ -528,7 +573,13 @@ fn cmd_restore(slug: &str) {
                                     break;
                                 }
                             }
-                            if launch_cmd.is_empty() { launch_cmd = raw_cmd.to_string(); }
+                            if launch_cmd.is_empty() {
+                                if is_flatpak_installed(raw_cmd) {
+                                    launch_cmd = format!("flatpak run {}", raw_cmd);
+                                } else {
+                                    launch_cmd = raw_cmd.to_string();
+                                }
+                            }
                         }
                     }
                     if !launch_cmd.is_empty() {
@@ -541,7 +592,8 @@ fn cmd_restore(slug: &str) {
     }
     
     for cmd in &missing_to_launch {
-        Command::new("sh")
+        Command::new("setsid")
+            .arg("sh")
             .arg("-c")
             .arg(cmd)
             .stdin(Stdio::null())
@@ -562,7 +614,8 @@ fn cmd_restore(slug: &str) {
             }
             let mut all_found = true;
             for (cls, saved_list) in &saved_by_class {
-                if live_by_class.get(cls).map(|v| v.len()).unwrap_or(0) < saved_list.len() {
+                let current_len = live_by_class.get(cls).map(|v| v.len()).unwrap_or(0);
+                if current_len < saved_list.len() {
                     all_found = false;
                     break;
                 }
@@ -677,13 +730,28 @@ fn cmd_restore(slug: &str) {
         let final_clients = live_clients();
         let assigned_clean: HashSet<String> = assigned.into_iter().map(|a| if a.starts_with("0x") { a } else { format!("0x{}", a) }).collect();
         for c in final_clients {
+            let cls = c.get("class").and_then(|v| v.as_str()).unwrap_or("");
+            if cls == "quickshell" || cls == "qs" {
+                continue;
+            }
+            if let Some(pid) = c.get("pid").and_then(|v| v.as_i64()) {
+                if parent_pids.contains(&pid) {
+                    continue;
+                }
+            }
             if let Some(addr) = c.get("address").and_then(|v| v.as_str()) {
                 let addr_clean = if addr.starts_with("0x") { addr.to_string() } else { format!("0x{}", addr) };
                 if !assigned_clean.contains(&addr_clean) {
                     if let Some(ws_id) = c.get("workspace").and_then(|w| w.get("id")).and_then(|v| v.as_i64()) {
                         if ws_id != 0 {
                             if profile.kill_others {
-                                if let Some(pid) = c.get("pid").and_then(|v| v.as_i64()) {
+                                if is_flatpak_installed(cls) {
+                                    Command::new("flatpak")
+                                        .arg("kill")
+                                        .arg(cls)
+                                        .spawn()
+                                        .ok();
+                                } else if let Some(pid) = c.get("pid").and_then(|v| v.as_i64()) {
                                     let top_pid = get_app_root_pid(pid);
                                     let kill_cmd = format!(
                                         "kill -15 {0} 2>/dev/null; for p in $(pstree -p {0} | grep -o '([0-9]*)' | tr -d '()'); do kill -15 $p 2>/dev/null; done; sleep 0.1; kill -9 {0} 2>/dev/null; for p in $(pstree -p {0} | grep -o '([0-9]*)' | tr -d '()'); do kill -9 $p 2>/dev/null; done",
