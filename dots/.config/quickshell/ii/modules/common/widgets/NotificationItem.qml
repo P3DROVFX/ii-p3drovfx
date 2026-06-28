@@ -24,23 +24,27 @@ Item { // Notification item area
     property var parentDragIndex: qmlParent?.dragIndex ?? -1
     property var parentDragDistance: qmlParent?.dragDistance ?? 0
     property var dragIndexDiff: Math.abs(parentDragIndex - index)
-    property real xOffset: dragIndexDiff == 0 ? parentDragDistance : 
-        Math.abs(parentDragDistance) > dragConfirmThreshold ? 0 :
-        dragIndexDiff == 1 ? (parentDragDistance * 0.3) :
-        dragIndexDiff == 2 ? (parentDragDistance * 0.1) : 0
+    property real xOffset: dragIndexDiff == 0 ? parentDragDistance : Math.abs(parentDragDistance) > dragConfirmThreshold ? 0 : dragIndexDiff == 1 ? (parentDragDistance * 0.3) : dragIndexDiff == 2 ? (parentDragDistance * 0.1) : 0
 
     implicitHeight: background.implicitHeight
 
     function destroyWithAnimation(left = undefined) {
         if (left === undefined) {
             const pos = Config?.options.notifications.position ?? "top_right";
-            if (pos.endsWith("left")) left = true;
-            else if (pos.endsWith("right")) left = false;
-            else left = false;
+            if (pos.endsWith("left"))
+                left = true;
+            else if (pos.endsWith("right"))
+                left = false;
+            else
+                left = false;
         }
-        root.qmlParent.resetDrag()
-        background.anchors.leftMargin = background.anchors.leftMargin; // Break binding
+        // Save current xOffset before breaking binding and resetting drag
+        const currentX = root.xOffset;
+        background.anchors.leftMargin = currentX; // Break binding
         background.opacity = background.opacity; // Break binding
+        if (root.qmlParent && typeof root.qmlParent.resetDrag === "function") {
+            root.qmlParent.resetDrag();
+        }
         destroyAnimation.left = left;
         destroyAnimation.running = true;
     }
@@ -84,18 +88,12 @@ Item { // Notification item area
         anchors.fill: root
         anchors.leftMargin: root.expanded ? -notificationIcon.implicitWidth : 0
         interactive: expanded
-        minimumX: {
-            const pos = Config?.options.notifications.position ?? "top_right";
-            return pos.endsWith("left") ? 0 : -Infinity;
-        }
-        maximumX: {
-            const pos = Config?.options.notifications.position ?? "top_right";
-            return pos.endsWith("right") ? 0 : Infinity;
-        }
+        minimumX: -Infinity
+        maximumX: Infinity
         automaticallyReset: false
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
 
-        onClicked: (mouse) => {
+        onClicked: mouse => {
             if (mouse.button === Qt.MiddleButton) {
                 root.destroyWithAnimation();
             }
@@ -112,33 +110,8 @@ Item { // Notification item area
         }
 
         onDragReleased: (diffX, diffY) => {
-            const pos = Config?.options.notifications.position ?? "top_right";
-            const isLeft = pos.endsWith("left");
-            const isRight = pos.endsWith("right");
-            const isCenter = !isLeft && !isRight;
-
-            let shouldDismiss = false;
-            let dismissLeft = false;
-
-            if (isCenter) {
-                if (Math.abs(diffX) > root.dragConfirmThreshold) {
-                    shouldDismiss = true;
-                    dismissLeft = (diffX < 0);
-                }
-            } else if (isLeft) {
-                if (diffX > root.dragConfirmThreshold) {
-                    shouldDismiss = true;
-                    dismissLeft = false;
-                }
-            } else if (isRight) {
-                if (diffX < -root.dragConfirmThreshold) {
-                    shouldDismiss = true;
-                    dismissLeft = true;
-                }
-            }
-
-            if (shouldDismiss) {
-                root.destroyWithAnimation(dismissLeft);
+            if (Math.abs(diffX) > root.dragConfirmThreshold) {
+                root.destroyWithAnimation(diffX < 0);
             } else {
                 dragManager.resetDrag();
             }
@@ -168,7 +141,8 @@ Item { // Notification item area
         anchors.leftMargin: root.xOffset
 
         opacity: {
-            if (!dragManager.dragging) return 1.0;
+            if (!dragManager.dragging)
+                return 1.0;
             var u = root.width > 0 ? Math.min(1.0, Math.abs(root.xOffset) / root.width) : 0.0;
             return (1.0 - u * u * u) * (1.0 - u * u * u);
         }
@@ -190,11 +164,7 @@ Item { // Notification item area
             }
         }
 
-        color: (expanded && !onlyNotification) ? 
-            (notificationObject.urgency == NotificationUrgency.Critical) ? 
-                ColorUtils.mix(Appearance.colors.colSecondaryContainer, Appearance.colors.colLayer2, 0.35) :
-                (Appearance.colors.colLayer3) :
-            ColorUtils.transparentize(Appearance.colors.colLayer3)
+        color: (expanded && !onlyNotification) ? (notificationObject.urgency == NotificationUrgency.Critical) ? ColorUtils.mix(Appearance.colors.colSecondaryContainer, Appearance.colors.colLayer2, 0.35) : (Appearance.colors.colLayer3) : ColorUtils.transparentize(Appearance.colors.colLayer3)
 
         implicitHeight: expanded ? (contentColumn.implicitHeight + padding * 2) : summaryRow.implicitHeight
         Behavior on implicitHeight {
@@ -239,7 +209,7 @@ Item { // Notification item area
                     maximumLineCount: 1
                     textFormat: Text.StyledText
                     text: {
-                        return NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>")
+                        return NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>");
                     }
                 }
             }
@@ -262,15 +232,14 @@ Item { // Notification item area
                     elide: Text.ElideRight
                     textFormat: Text.RichText
                     text: {
-                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>` + 
-                            `${NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>")}`
+                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>` + `${NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>")}`;
                     }
 
-                    onLinkActivated: (link) => {
-                        Qt.openUrlExternally(link)
-                        GlobalStates.sidebarRightOpen = false
+                    onLinkActivated: link => {
+                        Qt.openUrlExternally(link);
+                        GlobalStates.sidebarRightOpen = false;
                     }
-                    
+
                     PointingHandLinkHover {}
                 }
 
@@ -317,18 +286,16 @@ Item { // Notification item area
                                 Layout.fillWidth: true
                                 buttonText: Translation.tr("Close")
                                 urgency: notificationObject.urgency
-                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : 
-                                    (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
 
                                 onClicked: {
-                                    root.destroyWithAnimation()
+                                    root.destroyWithAnimation();
                                 }
 
                                 contentItem: MaterialSymbol {
                                     iconSize: Appearance.font.pixelSize.larger
                                     horizontalAlignment: Text.AlignHCenter
-                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? 
-                                        Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
+                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
                                     text: "close"
                                 }
                             }
@@ -351,13 +318,12 @@ Item { // Notification item area
                             NotificationActionButton {
                                 Layout.fillWidth: true
                                 urgency: notificationObject.urgency
-                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : 
-                                    (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
 
                                 onClicked: {
-                                    Quickshell.clipboardText = notificationObject.body
-                                    copyIcon.text = "inventory"
-                                    copyIconTimer.restart()
+                                    Quickshell.clipboardText = notificationObject.body;
+                                    copyIcon.text = "inventory";
+                                    copyIconTimer.restart();
                                 }
 
                                 Timer {
@@ -365,7 +331,7 @@ Item { // Notification item area
                                     interval: 1500
                                     repeat: false
                                     onTriggered: {
-                                        copyIcon.text = "content_copy"
+                                        copyIcon.text = "content_copy";
                                     }
                                 }
 
@@ -373,12 +339,10 @@ Item { // Notification item area
                                     id: copyIcon
                                     iconSize: Appearance.font.pixelSize.larger
                                     horizontalAlignment: Text.AlignHCenter
-                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? 
-                                        Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
+                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
                                     text: "content_copy"
                                 }
                             }
-                            
                         }
                     }
                 }

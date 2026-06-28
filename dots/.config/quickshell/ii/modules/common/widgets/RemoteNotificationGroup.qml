@@ -30,7 +30,7 @@ Item {
     property var notifications: notificationGroup?.notifications ?? []
     property int notificationCount: notifications.length
     property bool multipleNotifications: notificationCount > 1
-    property bool expanded: true
+    property bool expanded: false
     property real padding: 10
     property int lazyLimit: 2
 
@@ -107,9 +107,11 @@ Item {
         if (left === undefined) {
             left = false
         }
+        // Save current xOffset before breaking binding and resetting drag
+        const currentX = root.xOffset
+        background.anchors.leftMargin = currentX // Break binding
+        background.opacity = background.opacity // Break binding
         root.qmlParent?.resetDrag?.()
-        background.anchors.leftMargin = background.anchors.leftMargin
-        background.opacity = background.opacity
         destroyAnimation.left = left
         destroyAnimation.running = true
     }

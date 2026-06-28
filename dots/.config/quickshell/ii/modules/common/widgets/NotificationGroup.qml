@@ -63,12 +63,17 @@ MouseArea { // Notification group area
             else if (pos.endsWith("right")) left = false;
             else left = false; // default left = false -> animate right
         }
-        root.qmlParent.resetDrag();
-        background.anchors.leftMargin = background.anchors.leftMargin; // Break binding
+        // Save current xOffset before breaking binding and resetting drag
+        const currentX = root.xOffset;
+        background.anchors.leftMargin = currentX; // Break binding
         background.opacity = background.opacity; // Break binding
+        if (root.qmlParent && typeof root.qmlParent.resetDrag === "function") {
+            root.qmlParent.resetDrag();
+        }
         destroyAnimation.left = left;
         destroyAnimation.running = true;
     }
+
 
     hoverEnabled: true
     onContainsMouseChanged: {
@@ -128,14 +133,8 @@ MouseArea { // Notification group area
         id: dragManager
         anchors.fill: parent
         interactive: !expanded
-        minimumX: {
-            const pos = Config?.options.notifications.position ?? "top_right";
-            return pos.endsWith("left") ? 0 : -Infinity;
-        }
-        maximumX: {
-            const pos = Config?.options.notifications.position ?? "top_right";
-            return pos.endsWith("right") ? 0 : Infinity;
-        }
+        minimumX: -Infinity
+        maximumX: Infinity
         automaticallyReset: false
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 

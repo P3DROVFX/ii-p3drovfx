@@ -42,10 +42,7 @@ Item {
     property var parentDragIndex: qmlParent?.dragIndex ?? -1
     property var parentDragDistance: qmlParent?.dragDistance ?? 0
     property var dragIndexDiff: Math.abs(parentDragIndex - index)
-    property real xOffset: dragIndexDiff === 0 ? parentDragDistance :
-        Math.abs(parentDragDistance) > dragConfirmThreshold ? 0 :
-        dragIndexDiff === 1 ? (parentDragDistance * 0.3) :
-        dragIndexDiff === 2 ? (parentDragDistance * 0.1) : 0
+    property real xOffset: dragIndexDiff === 0 ? parentDragDistance : Math.abs(parentDragDistance) > dragConfirmThreshold ? 0 : dragIndexDiff === 1 ? (parentDragDistance * 0.3) : dragIndexDiff === 2 ? (parentDragDistance * 0.1) : 0
 
     // Suppresses onClicked after a real drag (see RemoteNotificationGroup
     // for the same fix). The DragManager fires onClicked even after a
@@ -85,12 +82,15 @@ Item {
     property bool replyJustSent: false
 
     function destroyWithAnimation(left = undefined) {
-        if (left === undefined) left = false
-        root.qmlParent?.resetDrag?.()
-        background.anchors.leftMargin = background.anchors.leftMargin
-        background.opacity = background.opacity
-        destroyAnimation.left = left
-        destroyAnimation.running = true
+        if (left === undefined)
+            left = false;
+        // Save current xOffset before breaking binding and resetting drag
+        const currentX = root.xOffset;
+        background.anchors.leftMargin = currentX; // Break binding
+        background.opacity = background.opacity; // Break binding
+        root.qmlParent?.resetDrag?.();
+        destroyAnimation.left = left;
+        destroyAnimation.running = true;
     }
 
     SequentialAnimation {
@@ -116,7 +116,7 @@ Item {
             }
         }
         onFinished: () => {
-            KdeConnectService.discardNotification(root.publicId)
+            KdeConnectService.discardNotification(root.publicId);
         }
     }
 
@@ -134,40 +134,40 @@ Item {
             // cycle — without this, a slow swipe-to-dismiss on an expanded
             // notification would launch the phone app via ADB.
             if (root._wasDragged) {
-                root._wasDragged = false
-                return
+                root._wasDragged = false;
+                return;
             }
             if (mouse.button === Qt.MiddleButton) {
-                root.destroyWithAnimation()
-                return
+                root.destroyWithAnimation();
+                return;
             }
             // Left-click opens the app on the phone via ADB. This works
             // even without an intent — we extract the package from the
             // internalId and use `adb shell monkey -p <pkg>` to launch it.
             if (mouse.button === Qt.LeftButton) {
-                KdeConnectService.openNotificationIntent(root.publicId)
+                KdeConnectService.openNotificationIntent(root.publicId);
             }
         }
         onDraggingChanged: () => {
             if (dragging) {
-                root._wasDragged = true
-                root.qmlParent.dragIndex = root.index ?? -1
+                root._wasDragged = true;
+                root.qmlParent.dragIndex = root.index ?? -1;
             }
         }
         onDragDiffXChanged: () => {
             if (root.qmlParent)
-                root.qmlParent.dragDistance = dragDiffX
+                root.qmlParent.dragDistance = dragDiffX;
         }
         onDragReleased: (diffX, diffY) => {
             if (!root.dismissable) {
-                dragManager.resetDrag()
-                return
+                dragManager.resetDrag();
+                return;
             }
             // Keep _wasDragged=true so the upcoming onClicked is suppressed.
             if (Math.abs(diffX) > dragConfirmThreshold) {
-                root.destroyWithAnimation(diffX < 0)
+                root.destroyWithAnimation(diffX < 0);
             } else {
-                dragManager.resetDrag()
+                dragManager.resetDrag();
             }
         }
     }
@@ -175,9 +175,7 @@ Item {
     TextMetrics {
         id: summaryTextMetrics
         font.pixelSize: root.fontSize
-        text: root.modelData?.summary
-              || root.modelData?.appName
-              || Translation.tr("Notification")
+        text: root.modelData?.summary || root.modelData?.appName || Translation.tr("Notification")
     }
 
     Rectangle {
@@ -187,9 +185,7 @@ Item {
         anchors.leftMargin: root.xOffset
         radius: Appearance.rounding.small
 
-        color: (root.expanded && !root.onlyNotification) ?
-            Appearance.colors.colLayer3 :
-            ColorUtils.transparentize(Appearance.colors.colLayer3)
+        color: (root.expanded && !root.onlyNotification) ? Appearance.colors.colLayer3 : ColorUtils.transparentize(Appearance.colors.colLayer3)
 
         // Subtle hover/press feedback; suppressed during drag.
         scale: dragManager.dragging ? 1.0 : (dragManager.pressed ? 0.992 : 1.0)
@@ -201,17 +197,16 @@ Item {
         }
 
         border.width: 1
-        border.color: dragManager.containsMouse && !dragManager.dragging
-            ? ColorUtils.transparentize(Appearance.colors.colOutline, 0.6)
-            : "transparent"
+        border.color: dragManager.containsMouse && !dragManager.dragging ? ColorUtils.transparentize(Appearance.colors.colOutline, 0.6) : "transparent"
         Behavior on border.color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
         opacity: {
-            if (!dragManager.dragging) return 1.0
-            const u = root.width > 0 ? Math.min(1.0, Math.abs(root.xOffset) / root.width) : 0.0
-            return (1.0 - u * u * u) * (1.0 - u * u * u)
+            if (!dragManager.dragging)
+                return 1.0;
+            const u = root.width > 0 ? Math.min(1.0, Math.abs(root.xOffset) / root.width) : 0.0;
+            return (1.0 - u * u * u) * (1.0 - u * u * u);
         }
         Behavior on opacity {
             enabled: !dragManager.dragging
@@ -230,8 +225,7 @@ Item {
             }
         }
 
-        implicitHeight: root.expanded ? (contentColumn.implicitHeight + root.padding * 2)
-            : summaryRow.implicitHeight
+        implicitHeight: root.expanded ? (contentColumn.implicitHeight + root.padding * 2) : summaryRow.implicitHeight
 
         Behavior on implicitHeight {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -262,9 +256,7 @@ Item {
                     font.pixelSize: root.fontSize
                     color: Appearance.colors.colOnLayer3
                     elide: Text.ElideRight
-                    text: root.modelData?.summary
-                          || root.modelData?.appName
-                          || Translation.tr("Notification")
+                    text: root.modelData?.summary || root.modelData?.appName || Translation.tr("Notification")
                 }
 
                 StyledText {
@@ -280,9 +272,7 @@ Item {
                     wrapMode: Text.Wrap
                     maximumLineCount: 1
                     textFormat: Text.StyledText
-                    text: NotificationUtils.processNotificationBody(
-                            root.modelData?.body || "",
-                            root.modelData?.appName || "").replace(/\n/g, " ")
+                    text: NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, " ")
                 }
             }
 
@@ -304,17 +294,15 @@ Item {
                     elide: Text.ElideRight
                     textFormat: Text.RichText
                     text: {
-                        const body = NotificationUtils.processNotificationBody(
-                            root.modelData?.body || "",
-                            root.modelData?.appName || "").replace(/\n/g, "<br/>")
-                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>${body}`
+                        const body = NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, "<br/>");
+                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>${body}`;
                     }
 
                     onLinkActivated: link => {
-                        Qt.openUrlExternally(link)
+                        Qt.openUrlExternally(link);
                         // Phone lives in the left sidebar (Policies), not the
                         // right sidebar, so close the correct panel.
-                        GlobalStates.policiesPanelOpen = false
+                        GlobalStates.policiesPanelOpen = false;
                     }
 
                     PointingHandLinkHover {}
@@ -341,8 +329,7 @@ Item {
                         // Only render the side fades when the actions row
                         // actually overflows horizontally — otherwise the
                         // right-side gradient bleeds into the card edge.
-                        visible: actionsFlickable.contentWidth
-                                 > actionsFlickable.width + 2
+                        visible: actionsFlickable.contentWidth > actionsFlickable.width + 2
                         opacity: visible ? 1 : 0
                         Behavior on opacity {
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -390,15 +377,12 @@ Item {
                                         colBackgroundHover: Appearance.colors.colLayer4Hover
                                         buttonText: _label
                                         contentItem: StyledText {
-                            text: notifAction._label
+                                            text: notifAction._label
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             color: Appearance.colors.colOnLayer4
                                         }
                                         onClicked: {
-                                            KdeConnectService.sendAction(
-                                                KdeConnectService.activeDeviceId,
-                                                root.publicId,
-                                                modelData.key)
+                                            KdeConnectService.sendAction(KdeConnectService.activeDeviceId, root.publicId, modelData.key);
                                         }
                                     }
                                 }
@@ -416,13 +400,10 @@ Item {
                                     radius: Appearance.rounding.full
                                     color: Appearance.colors.colLayer4
                                     border.width: replyField.activeFocus ? 2 : 1
-                                    border.color: replyField.activeFocus
-                                        ? Appearance.colors.colPrimary
-                                        : Appearance.colors.colOutlineVariant
+                                    border.color: replyField.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colOutlineVariant
 
                                     Behavior on border.color {
-                                        animation: Appearance.animation.elementMoveFast
-                                            .colorAnimation.createObject(this)
+                                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                                     }
                                     Behavior on border.width {
                                         NumberAnimation {
@@ -442,10 +423,9 @@ Item {
                                         color: Appearance.colors.colOnLayer4
                                         onTextEdited: root.replyDraft = text
                                         Keys.onPressed: event => {
-                                            if (event.key === Qt.Key_Return
-                                                    || event.key === Qt.Key_Enter) {
-                                                sendReplyButton.clicked()
-                                                event.accepted = true
+                                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                                sendReplyButton.clicked();
+                                                event.accepted = true;
                                             }
                                         }
                                     }
@@ -454,11 +434,9 @@ Item {
                                         anchors.fill: parent
                                         anchors.leftMargin: 14
                                         anchors.rightMargin: 14
-                                        visible: !replyField.activeFocus
-                                               && root.replyDraft.length === 0
+                                        visible: !replyField.activeFocus && root.replyDraft.length === 0
                                         verticalAlignment: Text.AlignVCenter
-                                        text: root.modelData?.replyPlaceholder
-                                              || Translation.tr("Send reply…")
+                                        text: root.modelData?.replyPlaceholder || Translation.tr("Send reply…")
                                         color: Appearance.colors.colSubtext
                                         font.pixelSize: Appearance.font.pixelSize.small
                                     }
@@ -480,13 +458,13 @@ Item {
                                         animateChange: true
                                     }
                                     onClicked: {
-                                        if (!root.replyDraft) return
-                                        KdeConnectService.replyNotification(
-                                            root.publicId, root.replyDraft)
-                                        root.replyDraft = ""
-                                        replyField.text = ""
-                                        root.replyJustSent = true
-                                        confirmTimer.restart()
+                                        if (!root.replyDraft)
+                                            return;
+                                        KdeConnectService.replyNotification(root.publicId, root.replyDraft);
+                                        root.replyDraft = "";
+                                        replyField.text = "";
+                                        root.replyJustSent = true;
+                                        confirmTimer.restart();
                                     }
                                     Timer {
                                         id: confirmTimer
@@ -538,9 +516,9 @@ Item {
                                     buttonText: Translation.tr("Copy")
                                     Layout.fillWidth: true
                                     onClicked: {
-                                        Quickshell.clipboardText = root.modelData?.body || ""
-                                        copyIcon.text = "inventory"
-                                        copyIconTimer.restart()
+                                        Quickshell.clipboardText = root.modelData?.body || "";
+                                        copyIcon.text = "inventory";
+                                        copyIconTimer.restart();
                                     }
                                     Timer {
                                         id: copyIconTimer
@@ -570,7 +548,7 @@ Item {
                                     }
                                     buttonText: Translation.tr("Open on phone")
                                     onClicked: {
-                                        KdeConnectService.openNotificationIntent(root.publicId)
+                                        KdeConnectService.openNotificationIntent(root.publicId);
                                     }
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
