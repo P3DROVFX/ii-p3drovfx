@@ -39,6 +39,12 @@ Scope {
                 "name": Translation.tr("Commands")
             });
         }
+        if (Config.options.cheatsheet.enableWorkspaceProfiles) {
+            list.push({
+                "icon": "dashboard",
+                "name": Translation.tr("Workspaces")
+            });
+        }
         if (Config.options.cheatsheet.enableGmail) {
             list.push({
                 "icon": "mail",
@@ -114,7 +120,7 @@ Scope {
             color: "transparent"
 
             mask: Region {
-                item: cheatsheetBackground
+                item: cheatsheetInputMask
             }
 
             Timer {
@@ -160,6 +166,13 @@ Scope {
             }
 
             Item {
+                id: cheatsheetInputMask
+                width: cheatsheetBackground.width
+                height: cheatsheetBackground.height
+                anchors.centerIn: parent
+            }
+
+            Item {
                 id: dialogWrap
                 anchors.fill: parent
                 transformOrigin: Item.Center
@@ -184,6 +197,7 @@ Scope {
                 StyledRectangularShadow {
                     target: cheatsheetBackground
                 }
+
                 Rectangle {
                     id: cheatsheetBackground
                 anchors.centerIn: parent
@@ -362,8 +376,8 @@ Scope {
                                     easing.type: Easing.OutCubic
                                 }
 
-                                // Timetable & Email: lazy — load only when first visited
-                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail"
+                                // Timetable, Email & Workspaces: lazy — load only when first visited
+                                property bool _lazy: modelData.icon === "calendar_month" || modelData.icon === "mail" || modelData.icon === "dashboard"
                                 property bool _wasSeen: false
                                 active: !_lazy || swipeView.currentIndex === index || _wasSeen
                                 onActiveChanged: if (active)
@@ -386,6 +400,8 @@ Scope {
                                         return "CheatsheetPeriodicTable.qml";
                                     case "terminal":
                                         return "commands/CheatsheetCommands.qml";
+                                    case "dashboard":
+                                        return "CheatsheetWorkspaces.qml";
                                     case "mail":
                                         return "CheatsheetEmail.qml";
                                     default:

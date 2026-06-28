@@ -164,6 +164,15 @@ ContentPage {
                     Config.options.cheatsheet.enableCommands = checked;
                 }
             }
+
+            ConfigSwitch {
+                buttonIcon: "dashboard"
+                text: Translation.tr("Enable Workspaces")
+                checked: Config.options.cheatsheet.enableWorkspaceProfiles
+                onCheckedChanged: {
+                    Config.options.cheatsheet.enableWorkspaceProfiles = checked;
+                }
+            }
         }
 
         Item { Layout.preferredHeight: 16 }

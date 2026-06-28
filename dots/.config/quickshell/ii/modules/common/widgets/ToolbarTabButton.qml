@@ -30,6 +30,7 @@ RippleButton {
             anchors.verticalCenter: parent.verticalCenter
             iconSize: 22
             text: root.materialSymbol
+            fill: root.current ? 1.0 : 0.0
         }
         StyledText {
             id: label

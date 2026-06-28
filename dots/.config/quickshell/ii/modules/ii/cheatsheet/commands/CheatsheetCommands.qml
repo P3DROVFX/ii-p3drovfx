@@ -24,6 +24,15 @@ Item {
     property string searchText: ""
     property var allTags: []
 
+    readonly property bool isCurrentTab: {
+        try {
+            return swipeView.currentIndex === index;
+        } catch (e) {
+            return true;
+        }
+    }
+    readonly property bool isTabActive: root.visible && root.isCurrentTab
+
     property bool importSuccess: false
     property bool importError: false
     property string lastImportError: ""
@@ -108,11 +117,7 @@ Item {
         onTriggered: root.importError = false
     }
 
-    Timer {
-        id: searchDebounceTimer
-        interval: 150
-        onTriggered: root.searchText = filterField.text
-    }
+
 
     Component.onCompleted: root.refreshTags()
 
@@ -412,63 +417,204 @@ Item {
                         color: root.colSubtitle
                     }
 
-                    GridView {
-                        id: cardGrid
+                    StyledFlickable {
+                        id: cardFlickable
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         Layout.leftMargin: 16
                         Layout.rightMargin: 16
-                        cellWidth: Math.max(100, width / 2)
-                        cellHeight: 180
-                        model: root.filteredIndices
+                        contentHeight: gridArea.implicitHeight + 100
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
 
-                        delegate: Item {
-                            id: cardDelegate
-                            width: cardGrid.cellWidth
-                            height: cardGrid.cellHeight
+                        Item {
+                            id: gridArea
+                            width: parent.width
 
-                            readonly property var _item: CommandsService.commandsModel.get(modelData)
+                            readonly property real cardSpacing: 10
+                            readonly property real cardWidth: (width - cardSpacing) / 2
+                            property int visibleCardCount: 0
 
-                            CommandCard {
-                                id: commandCard
-                                anchors.fill: parent
-                                anchors.margins: 5
-                                
-                                commandId: cardDelegate._item ? cardDelegate._item.id : ""
-                                command: cardDelegate._item ? cardDelegate._item.command : ""
-                                description: cardDelegate._item ? cardDelegate._item.description : ""
-                                tags: {
-                                    if (!cardDelegate._item || !cardDelegate._item.tags) return [];
-                                    const t = [];
-                                    for (let i = 0; i < cardDelegate._item.tags.count; i++)
-                                        t.push(cardDelegate._item.tags.get(i).modelData);
-                                    return t;
+                            Connections {
+                                target: root
+                                function onIsTabActiveChanged() {
+                                    gridArea.triggerLayout();
                                 }
-
-                                onEditClicked: {
-                                    const item = cardDelegate._item;
-                                    if (!item) return;
-                                    const tagArr = [];
-                                    for (let i = 0; i < item.tags.count; i++)
-                                        tagArr.push(item.tags.get(i).modelData);
-
-                                    commandForm.mode = "edit";
-                                    commandForm.editId = item.id;
-                                    commandForm.editCommand = item.command;
-                                    commandForm.editDescription = item.description;
-                                    commandForm.editTags = tagArr.join(", ");
-                                    commandForm.isOpen = true;
-                                }
-
-                                onDeleteClicked: CommandsService.deleteCommand(commandId)
                             }
-                        }
 
-                        footer: Item {
-                            width: cardGrid.width
-                            height: 100
+                            Connections {
+                                target: CommandsService.commandsModel
+                                function onCountChanged() {
+                                    gridArea.triggerLayout();
+                                }
+                            }
+
+                            function recalculateLayout() {
+                                var heights = [0, 0];
+                                var isActive = root.isTabActive;
+                                for (var i = 0; i < cardRepeater.count; i++) {
+                                    var card = cardRepeater.itemAt(i);
+                                    if (!card)
+                                        continue;
+                                    if (card.visible) {
+                                        if (isActive) {
+                                            var minCol = (heights[0] <= heights[1]) ? 0 : 1;
+                                            card.x = minCol * (cardWidth + cardSpacing);
+                                            card.y = heights[minCol];
+                                            heights[minCol] += card.implicitHeight + cardSpacing;
+                                        } else {
+                                            // Stacked at center and staggered slightly downwards
+                                            card.x = (width - cardWidth) / 2;
+                                            card.y = i * 20;
+                                        }
+                                    }
+                                }
+                                var maxH = Math.max(heights[0], heights[1]);
+                                gridArea.implicitHeight = (maxH > cardSpacing) ? maxH - cardSpacing : 0;
+                            }
+
+                            function triggerLayout() {
+                                layoutTimer.restart();
+                            }
+
+                            function recountVisible() {
+                                var n = 0;
+                                for (var i = 0; i < cardRepeater.count; i++) {
+                                    var item = cardRepeater.itemAt(i);
+                                    if (item && item.visible)
+                                        n++;
+                                }
+                                visibleCardCount = n;
+                            }
+
+                            Repeater {
+                                id: cardRepeater
+                                model: CommandsService.commandsModel
+                                onCountChanged: gridArea.triggerLayout()
+
+                                delegate: Item {
+                                    id: cardDelegate
+                                    width: gridArea.cardWidth
+
+                                    required property string id
+                                    required property string command
+                                    required property string description
+                                    required property var tags
+                                    required property int index
+
+                                    property bool hasMatches: root.filteredIndices.includes(index)
+                                    property bool entered: false
+
+                                    visible: hasMatches || opacity > 0.0
+                                    opacity: entered && hasMatches ? 1.0 : 0.0
+                                    scale: entered && hasMatches ? 1.0 : 0.97
+
+                                    // Height driven by content and filter matching
+                                    height: entered && hasMatches ? implicitHeight : 0
+                                    implicitHeight: entered && hasMatches ? 180 : 0
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on scale {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on height {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on x {
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on y {
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    onImplicitHeightChanged: gridArea.triggerLayout()
+                                    onVisibleChanged: {
+                                        gridArea.triggerLayout();
+                                        gridArea.recountVisible();
+                                    }
+                                    Component.onCompleted: {
+                                        entranceTimer.start();
+                                    }
+                                    Component.onDestruction: Qt.callLater(gridArea.recountVisible)
+
+                                    Timer {
+                                        id: entranceTimer
+                                        interval: (index % 4) * 45
+                                        onTriggered: cardDelegate.entered = true
+                                    }
+
+                                    CommandCard {
+                                        id: commandCard
+                                        anchors.fill: parent
+                                        anchors.margins: 5
+                                        
+                                        commandId: cardDelegate.id
+                                        command: cardDelegate.command
+                                        description: cardDelegate.description
+                                        tags: {
+                                            if (!cardDelegate.tags) return [];
+                                            const t = [];
+                                            for (let i = 0; i < cardDelegate.tags.count; i++)
+                                                t.push(cardDelegate.tags.get(i).modelData);
+                                            return t;
+                                        }
+
+                                        onEditClicked: {
+                                            const tagArr = [];
+                                            for (let i = 0; i < cardDelegate.tags.count; i++)
+                                                tagArr.push(cardDelegate.tags.get(i).modelData);
+
+                                            commandForm.mode = "edit";
+                                            commandForm.editId = cardDelegate.id;
+                                            commandForm.editCommand = cardDelegate.command;
+                                            commandForm.editDescription = cardDelegate.description;
+                                            commandForm.editTags = tagArr.join(", ");
+                                            commandForm.isOpen = true;
+                                        }
+
+                                        onDeleteClicked: CommandsService.deleteCommand(commandId)
+                                    }
+                                }
+                            }
+
+                            // layout debounce timer
+                            Timer {
+                                id: layoutTimer
+                                interval: 20
+                                repeat: false
+                                onTriggered: gridArea.recalculateLayout()
+                            }
+
+                            Component.onCompleted: {
+                                gridArea.triggerLayout();
+                                gridArea.recountVisible();
+                            }
                         }
 
                         ScrollBar.vertical: StyledScrollBar {}
@@ -498,35 +644,24 @@ Item {
         Toolbar {
             id: extraOptions
             z: 5
+            enableShadow: false
             colBackground: Appearance.colors.colSecondaryContainer
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.horizontalCenterOffset: Config.options.cheatsheet.commandsTagsSidebar ? (tagSidebar.width / 2) : 0
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 20
-
-            Behavior on anchors.horizontalCenterOffset {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutCubic
-                }
-            }
+            anchors.bottomMargin: 8
 
             ToolbarTextField {
                 id: filterField
                 placeholderText: focus ? qsTr("Filter commands") : qsTr("Hit \"/\" to filter")
                 clip: true
                 font.pixelSize: Appearance.font.pixelSize.small
-                onTextChanged: searchDebounceTimer.restart()
-                colBackground: Qt.alpha(Appearance.colors.colOnSecondaryContainer, 0.05)
-                color: Appearance.colors.colOnSecondaryContainer
-                placeholderTextColor: Qt.alpha(Appearance.colors.colOnSecondaryContainer, 0.6)
+                 onTextChanged: root.searchText = text
             }
 
             IconToolbarButton {
                 implicitWidth: height
                 onClicked: root.searchText = filterField.text = ''
                 text: "close"
-                colText: Appearance.colors.colOnSecondaryContainer
                 StyledToolTip {
                     text: qsTr("Clear filter")
                 }
