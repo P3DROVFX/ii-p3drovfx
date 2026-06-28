@@ -32,6 +32,33 @@ Item {
     property bool multipleNotifications: notificationCount > 1
     property bool expanded: false
     property real padding: 10
+    property int lazyLimit: 2
+
+    onExpandedChanged: {
+        if (expanded) {
+            lazyLimit = Math.min(8, root.notificationCount)
+            if (lazyLimit < root.notificationCount) {
+                lazyLoadTimer.restart()
+            }
+        } else {
+            lazyLoadTimer.stop()
+            lazyLimit = 2
+        }
+    }
+
+    Timer {
+        id: lazyLoadTimer
+        interval: 50
+        repeat: true
+        running: false
+        onTriggered: {
+            if (root.lazyLimit < root.notificationCount) {
+                root.lazyLimit = Math.min(root.lazyLimit + 8, root.notificationCount)
+            } else {
+                stop()
+            }
+        }
+    }
 
     readonly property bool _validGroup: root.notificationGroup !== null
                                         && root.notificationGroup !== undefined
@@ -136,10 +163,6 @@ Item {
         automaticallyReset: false
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
-        onPressed: mouse => {
-            if (mouse.button === Qt.RightButton)
-                root.toggleExpanded()
-        }
         onClicked: mouse => {
             // Suppress click if a drag actually happened during this press
             // cycle. This prevents the scrcpy/notification-app launch when
@@ -152,10 +175,12 @@ Item {
             }
             if (mouse.button === Qt.MiddleButton)
                 root.destroyWithAnimation()
+            else if (mouse.button === Qt.RightButton)
+                root.toggleExpanded()
             // Left-click opens the latest notification's app on the phone
             // via ADB. This gives the user a quick way to jump to the app
             // without expanding the group first.
-            if (mouse.button === Qt.LeftButton) {
+            else if (mouse.button === Qt.LeftButton) {
                 const latest = root.notifications[0]
                 if (latest && latest.publicId) {
                     KdeConnectService.openNotificationIntent(latest.publicId)
@@ -362,9 +387,7 @@ Item {
                     }
 
                     Repeater {
-                        model: root.expanded
-                            ? root.notifications.slice().reverse()
-                            : root.notifications.slice().reverse().slice(0, 2)
+                        model: root.notifications.slice().reverse().slice(0, root.lazyLimit)
                         delegate: RemoteNotificationItem {
                             required property int index
                             required property var modelData

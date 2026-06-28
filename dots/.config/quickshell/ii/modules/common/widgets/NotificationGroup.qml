@@ -18,6 +18,33 @@ MouseArea { // Notification group area
     property bool multipleNotifications: notificationCount > 1
     property bool expanded: false
     property bool popup: false
+    property int lazyLimit: 2
+
+    onExpandedChanged: {
+        if (expanded) {
+            lazyLimit = Math.min(8, root.notificationCount);
+            if (lazyLimit < root.notificationCount) {
+                lazyLoadTimer.restart();
+            }
+        } else {
+            lazyLoadTimer.stop();
+            lazyLimit = 2;
+        }
+    }
+
+    Timer {
+        id: lazyLoadTimer
+        interval: 50
+        repeat: true
+        running: false
+        onTriggered: {
+            if (root.lazyLimit < root.notificationCount) {
+                root.lazyLimit = Math.min(root.lazyLimit + 8, root.notificationCount);
+            } else {
+                stop();
+            }
+        }
+    }
     property real padding: 10
     implicitHeight: background.implicitHeight
 
@@ -112,14 +139,11 @@ MouseArea { // Notification group area
         automaticallyReset: false
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
-        onPressed: {
-            if (mouse.button === Qt.RightButton)
-                root.toggleExpanded();
-        }
-
         onClicked: mouse => {
             if (mouse.button === Qt.MiddleButton)
                 root.destroyWithAnimation();
+            else if (mouse.button === Qt.RightButton)
+                root.toggleExpanded();
         }
 
         onDraggingChanged: () => {
@@ -271,7 +295,7 @@ MouseArea { // Notification group area
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                     model: ScriptModel {
-                        values: root.expanded ? root.notifications.slice().reverse() : root.notifications.slice().reverse().slice(0, 2)
+                        values: root.notifications.slice().reverse().slice(0, root.lazyLimit)
                     }
                     delegate: NotificationItem {
                         required property int index
