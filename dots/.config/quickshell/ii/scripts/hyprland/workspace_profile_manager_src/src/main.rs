@@ -234,13 +234,39 @@ fn hyprctl(args: &[&str]) -> (i32, String, String) {
     
     (0, response, "".to_string())
 }
+fn should_ignore_client(c: &Value) -> bool {
+    let class = c.get("class").and_then(|v| v.as_str()).unwrap_or("");
+    let class_lower = class.to_lowercase();
+    let init_title = c.get("initialTitle").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+    let title = c.get("title").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+
+    if class_lower == "discord" {
+        // Ignore discord updater window
+        if init_title.contains("updater") || title.contains("updater") {
+            return true;
+        }
+    } else if class_lower == "steam" {
+        // Ignore steam updater, login screen, connecting dialogs, steam guard, etc.
+        if init_title.contains("updating") || title.contains("updating") ||
+           init_title.contains("self updater") || title.contains("self updater") ||
+           init_title == "sign in to steam" || title == "sign in to steam" ||
+           init_title.contains("connecting to") || title.contains("connecting to") ||
+           init_title.contains("steam guard") || title.contains("steam guard") {
+            return true;
+        }
+    }
+    false
+}
 
 fn live_clients() -> Vec<Value> {
     let (rc, stdout, _) = hyprctl(&["clients", "-j"]);
     if rc == 0 {
         if let Ok(json) = serde_json::from_str::<Value>(&stdout) {
             if let Some(arr) = json.as_array() {
-                return arr.clone();
+                return arr.iter()
+                    .filter(|c| !should_ignore_client(c))
+                    .cloned()
+                    .collect();
             }
         }
     }
