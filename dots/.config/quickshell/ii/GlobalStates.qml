@@ -71,6 +71,7 @@ Singleton {
 
     property string osdCurrentIndicator: "volume"
     property string osdProtectionMessage: ""
+    signal osdInteraction()
     property bool policiesExtended: false
     property bool policiesPinned: false
     property bool policiesDetached: false

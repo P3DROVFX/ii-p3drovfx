@@ -11,4 +11,8 @@ OsdConnectValueIndicator {
     name: Translation.tr("Gamma")
     from: Hyprsunset.gammaLowerLimit / 100
     value: Hyprsunset.gamma / 100 ?? 0.5
+
+    onValueUpdateRequested: (newValue) => {
+        Hyprsunset.setGamma(Math.round(newValue * 100));
+    }
 }

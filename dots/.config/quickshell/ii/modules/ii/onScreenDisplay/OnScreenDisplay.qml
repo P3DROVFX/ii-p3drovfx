@@ -59,6 +59,14 @@ Scope {
     }
 
     Connections {
+        target: GlobalStates
+        ignoreUnknownSignals: true
+        function onOsdInteraction() {
+            root.triggerOsd();
+        }
+    }
+
+    Connections {
         target: Brightness
         function onBrightnessChanged() {
             root.protectionMessage = "";

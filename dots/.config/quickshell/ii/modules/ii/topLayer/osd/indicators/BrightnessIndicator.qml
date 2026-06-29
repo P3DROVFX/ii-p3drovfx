@@ -25,4 +25,10 @@ OsdConnectValueIndicator {
     name: Translation.tr("Brightness")
     value: brightnessOsd.brightnessMonitor?.brightness ?? 0.5
     shape: MaterialShape.Shape.Cookie12Sided
+
+    onValueUpdateRequested: (newValue) => {
+        if (brightnessMonitor) {
+            brightnessMonitor.setBrightness(newValue);
+        }
+    }
 }

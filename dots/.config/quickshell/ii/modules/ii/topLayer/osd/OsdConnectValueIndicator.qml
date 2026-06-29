@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
@@ -18,6 +19,8 @@ Item {
     property real maxLimit: 1.0
     property real from: 0.0
     property real to: 1.0
+
+    signal valueUpdateRequested(real newValue)
 
     // Customization Variables
     property int osdWidth: 380
@@ -212,6 +215,57 @@ Item {
                 font.family: Appearance.font.family.main
                 font.bold: true
             }
+        }
+    }
+
+    MouseArea {
+        id: mouseHandler
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+
+        property real dragStartX: 0
+        property real dragStartValue: 0
+
+        onPressed: (mouse) => {
+            let localPos = mapToItem(sliderContainer, mouse.x, mouse.y);
+            if (localPos.x >= 0 && localPos.x <= sliderContainer.width && localPos.y >= 0 && localPos.y <= sliderContainer.height) {
+                // Click inside slider: update value absolutely
+                let pct = localPos.x / sliderContainer.width;
+                let newValue = root.from + pct * (root.to - root.from);
+                newValue = Math.max(root.from, Math.min(root.maxLimit, newValue));
+                root.valueUpdateRequested(newValue);
+                dragStartX = mouse.x;
+                dragStartValue = newValue;
+            } else {
+                // Click outside slider: relative drag from current value
+                dragStartX = mouse.x;
+                dragStartValue = root.value;
+            }
+            GlobalStates.osdInteraction();
+        }
+
+        onPositionChanged: (mouse) => {
+            if (pressed) {
+                let deltaX = mouse.x - dragStartX;
+                let range = root.to - root.from;
+                let newValue = dragStartValue + (deltaX / sliderContainer.width) * range;
+                newValue = Math.max(root.from, Math.min(root.maxLimit, newValue));
+                root.valueUpdateRequested(newValue);
+                GlobalStates.osdInteraction();
+            }
+        }
+
+        onWheel: (event) => {
+            let delta = event.angleDelta.y || event.angleDelta.x;
+            if (delta === 0) return;
+            let step = 0.02 * (root.to - root.from);
+            let newValue = root.value + (delta > 0 ? step : -step);
+            newValue = Math.max(root.from, Math.min(root.maxLimit, newValue));
+            root.valueUpdateRequested(newValue);
+            GlobalStates.osdInteraction();
+            event.accepted = true;
         }
     }
 }

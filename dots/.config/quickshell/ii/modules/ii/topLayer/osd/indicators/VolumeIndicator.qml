@@ -18,5 +18,14 @@ OsdConnectValueIndicator {
     }
     name: Translation.tr("Volume")
     shape: MaterialShape.Shape.Cookie7Sided
-    maxLimit: (Config.options.audio && Config.options.audio.protection) ? Config.options.audio.protection.maxAllowed / 100 : 1.0
+    maxLimit: (Config.options.audio && Config.options.audio.protection && Config.options.audio.protection.enable) ? Config.options.audio.protection.maxAllowed / 100 : 1.5
+
+    onValueUpdateRequested: (newValue) => {
+        if (Audio.sink && Audio.sink.audio) {
+            Audio.sink.audio.volume = newValue;
+            if (Audio.sink.audio.muted && newValue > 0) {
+                Audio.sink.audio.muted = false;
+            }
+        }
+    }
 }
