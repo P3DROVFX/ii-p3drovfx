@@ -29,8 +29,8 @@ Item { // Window
         const monitorHeight = monitorData.transform & 1 ? monitorData.width : monitorData.height;
         return (widgetHeight * monitorData.scale) / (monitorHeight * widgetMonitor.scale);
     }
-    property real initX: Math.max(((windowData ? windowData.at[0] : 0) - (monitorData ? monitorData.x : 0) - (monitorData ? monitorData.reserved[0] : 0)) * widthRatio * root.scale, 0) + xOffset
-    property real initY: Math.max(((windowData ? windowData.at[1] : 0) - (monitorData ? monitorData.y : 0) - (monitorData ? monitorData.reserved[1] : 0)) * heightRatio * root.scale, 0) + yOffset
+    property real initX: Math.max(((windowData ? windowData.at[0] : 0) - (monitorData ? monitorData.x : 0) - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0)) * widthRatio * root.scale, 0) + xOffset
+    property real initY: Math.max(((windowData ? windowData.at[1] : 0) - (monitorData ? monitorData.y : 0) - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0)) * heightRatio * root.scale, 0) + yOffset
     property real xOffset: 0
     property real yOffset: 0
     property var widgetMonitor

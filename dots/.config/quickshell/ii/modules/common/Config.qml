@@ -983,6 +983,7 @@ Singleton {
                 property bool showIcons: true
                 property bool centerIcons: true
                 property bool showOpeningAnimation: true
+                property bool useWorkspaceMap: false
 
                 property JsonObject scrollingStyle: JsonObject {
 

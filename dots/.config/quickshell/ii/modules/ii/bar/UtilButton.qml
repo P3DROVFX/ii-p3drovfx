@@ -19,17 +19,21 @@ Item {
 
     property bool hovered: mouseArea.containsMouse || forceHovered
 
+    readonly property int animDuration: Math.round(120 * Appearance.animMultiplier)
+
     Behavior on implicitWidth {
         NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.easing
+            duration: root.animDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.34, 0.80, 0.34, 1.00, 1, 1]
         }
     }
 
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.easing
+            duration: root.animDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.34, 0.80, 0.34, 1.00, 1, 1]
         }
     }
 
@@ -39,10 +43,10 @@ Item {
         color: root.hovered ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.88)
 
         Behavior on color {
-            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            ColorAnimation { duration: root.animDuration }
         }
         Behavior on opacity {
-            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            NumberAnimation { duration: root.animDuration }
         }
 
         MaterialSymbol {
@@ -52,7 +56,7 @@ Item {
             color: root.hovered ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
 
             Behavior on color {
-                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                ColorAnimation { duration: root.animDuration }
             }
         }
     }

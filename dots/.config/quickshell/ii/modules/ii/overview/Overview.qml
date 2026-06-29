@@ -326,7 +326,7 @@ Scope {
                                 id: overviewLoader
                                 anchors.top: searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                active: root.visible && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
+                                active: (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
 
                                 readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
 
@@ -372,7 +372,7 @@ Scope {
                             Loader { // Scrolling overview
                                 id: scrollingOverviewLoader
                                 anchors.fill: parent
-                                active: root.visible && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
+                                active: (Config?.options.overview.enable ?? true) && root.isScrollingLayout
 
                                 readonly property bool isOverviewVisible: GlobalStates.overviewOpen && (root.searchingText == "") && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
 

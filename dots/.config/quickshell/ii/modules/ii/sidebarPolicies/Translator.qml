@@ -508,6 +508,7 @@ Item {
             titleText: Translation.tr("Select Language")
             items: root.languages
             defaultChoice: root.languageSelectorTarget ? root.targetLanguage : root.sourceLanguage
+            enableSearch: true
             onCanceled: () => {
                 root.showLanguageSelector = false;
             }

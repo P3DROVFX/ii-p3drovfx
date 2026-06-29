@@ -27,26 +27,17 @@ Item {
 
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
+    readonly property int monitorIndex: {
+        if (!monitor || !monitor.name) return 0;
+        let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
+        return idx !== -1 ? idx : 0;
+    }
+    property int workspaceOffset: useWorkspaceMap ? (workspaceMap.length > monitorIndex ? workspaceMap[monitorIndex] : monitorIndex * (Config.options.bar.workspaces.shown || 10)) : 0
 
     property var shapesList: ["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]
     property string currentRandomShape: "Circle"
     property real randomRotation: 0
 
-    readonly property real stableActivePosition: {
-        let basePos = root.visibleActiveIndex * root.iconBoxWrapperSize;
-        let offset = activeIndicator ? activeIndicator.offsetFor(root.workspaceIndexInGroup) : 0;
-        let inset = Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (root.iconBoxWrapperSize - root.individualIconBoxHeight) / 2 : (activeIndicator ? activeIndicator.visualInset : 0);
-        return basePos + offset + inset;
-    }
-    property real animatedStablePosition: stableActivePosition
-    Behavior on animatedStablePosition {
-        NumberAnimation {
-            duration: 350
-            easing.type: Easing.OutBack
-        }
-    }
 
     function updateRandomShape() {
         if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
@@ -302,8 +293,8 @@ Item {
         property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset
         property real indicatorLength: baseIndicatorLength + currentItemOffset - visualInset * 2
 
-        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.animatedStablePosition : indicatorPosition) : 0
-        x: root.vertical ? 0 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.animatedStablePosition : indicatorPosition)
+        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
+        x: root.vertical ? 0 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition)
         width: root.vertical ? individualIconBoxHeight : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength)
         height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength) : individualIconBoxHeight
 
@@ -470,10 +461,13 @@ Item {
                     Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
             } else {
                 let nextId = effectiveActiveWorkspaceId + (event.angleDelta.y < 0 ? 1 : -1);
-                const minId = workspaceOffset + workspaceGroup * workspacesShown + 1;
-                const maxId = workspaceOffset + (workspaceGroup + 1) * workspacesShown;
-                if (nextId < minId || nextId > maxId)
+                if (nextId < 1)
                     return;
+                if (useWorkspaceMap) {
+                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
+                        return;
+                }
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
         }
@@ -853,6 +847,7 @@ Item {
             opacity: showNumbers ? 1 : 0
             anchors.centerIn: parent
             text: Config.options?.bar.workspaces.numberMap[workspaceValue - 1] || workspaceValue
+            font.weight: Font.Black
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight

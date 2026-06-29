@@ -46,7 +46,92 @@ ContentPage {
         }
     }
 
+    ContentSection {
+        icon: "policy"
+        title: Translation.tr("Sidebar Policies Visibility")
 
+        NoticeBox {
+            Layout.fillWidth: true
+            isFirst: true
+            text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
+        }
+
+        ConfigToggleGrid {
+            Layout.fillWidth: true
+            gridColumns: Math.max(1, Math.floor(parent.width / 300))
+            currentValues: {
+                return {
+                    ai: Config.options.policies.ai,
+                    weeb: Config.options.policies.weeb,
+                    wallpapers: Config.options.policies.wallpapers,
+                    translator: Config.options.policies.translator,
+                    player: Config.options.policies.player,
+                    phone: Config.options.policies.phone
+                };
+            }
+            model: [
+                {
+                    key: "ai",
+                    name: Translation.tr("AI"),
+                    icon: "smart_toy",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
+                        { displayName: Translation.tr("Local"), icon: "sync_saved_locally", value: 2 }
+                    ]
+                },
+                {
+                    key: "weeb",
+                    name: Translation.tr("Weeb"),
+                    icon: "face",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
+                        { displayName: Translation.tr("Closet"), icon: "ev_shadow", value: 2 }
+                    ]
+                },
+                {
+                    key: "wallpapers",
+                    name: Translation.tr("Wallpaper browser"),
+                    icon: "wallpaper",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "translator",
+                    name: Translation.tr("Translator"),
+                    icon: "translate",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "player",
+                    name: Translation.tr("Sidebar player"),
+                    icon: "music_note",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                },
+                {
+                    key: "phone",
+                    name: Translation.tr("Phone"),
+                    icon: "smartphone",
+                    options: [
+                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
+                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
+                    ]
+                }
+            ]
+            onItemChanged: (key, value) => {
+                Config.options.policies[key] = value;
+            }
+        }
+    }
 
     ContentSection {
         title: Translation.tr("Sidebar Profile Header Settings")
@@ -389,93 +474,6 @@ ContentPage {
             stepSize: 5
             onValueChanged: {
                 Config.options.sidebar.cornerOpen.cornerRegionHeight = value;
-            }
-        }
-    }
-
-    ContentSection {
-        icon: "policy"
-        title: Translation.tr("Sidebar Policies Visibility")
-
-        NoticeBox {
-            Layout.fillWidth: true
-            isFirst: true
-            text: Translation.tr("Choose which policy tabs are visible in the left sidebar when it is opened.")
-        }
-
-        ConfigToggleGrid {
-            Layout.fillWidth: true
-            gridColumns: Math.max(1, Math.floor(parent.width / 300))
-            currentValues: {
-                return {
-                    ai: Config.options.policies.ai,
-                    weeb: Config.options.policies.weeb,
-                    wallpapers: Config.options.policies.wallpapers,
-                    translator: Config.options.policies.translator,
-                    player: Config.options.policies.player,
-                    phone: Config.options.policies.phone
-                };
-            }
-            model: [
-                {
-                    key: "ai",
-                    name: Translation.tr("AI"),
-                    icon: "smart_toy",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
-                        { displayName: Translation.tr("Local"), icon: "sync_saved_locally", value: 2 }
-                    ]
-                },
-                {
-                    key: "weeb",
-                    name: Translation.tr("Weeb"),
-                    icon: "face",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
-                        { displayName: Translation.tr("Closet"), icon: "ev_shadow", value: 2 }
-                    ]
-                },
-                {
-                    key: "wallpapers",
-                    name: Translation.tr("Wallpaper browser"),
-                    icon: "wallpaper",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "translator",
-                    name: Translation.tr("Translator"),
-                    icon: "translate",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "player",
-                    name: Translation.tr("Sidebar player"),
-                    icon: "music_note",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "phone",
-                    name: Translation.tr("Phone"),
-                    icon: "smartphone",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                }
-            ]
-            onItemChanged: (key, value) => {
-                Config.options.policies[key] = value;
             }
         }
     }

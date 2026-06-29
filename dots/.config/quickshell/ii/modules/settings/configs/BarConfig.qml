@@ -99,6 +99,7 @@ Item {
                 }
             }
             ConfigSpinBox {
+                visible: Config.options.bar.vertical
                 icon: "width"
                 text: Translation.tr("Bar width")
                 value: Config.options.bar.sizes.width

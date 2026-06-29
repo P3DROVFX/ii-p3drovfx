@@ -20,22 +20,28 @@ Item {
     readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
     readonly property string backgroundStyle: Config.options.overview.scrollingStyle.backgroundStyle
 
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
+    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
+    readonly property int hyprlandMonitorIndex: {
+        if (!monitor || !monitor.name) return 0;
+        let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
+        return idx !== -1 ? idx : 0;
+    }
+
+    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap && Config.options.overview.useWorkspaceMap
     readonly property var extendedWorkspaceMap: root.extendWorkspaceMap(workspaceMap)
-    property int workspaceOffset: useWorkspaceMap ? extendedWorkspaceMap[root.monitorIndex] : 0
+    property int workspaceOffset: useWorkspaceMap ? (extendedWorkspaceMap.length > hyprlandMonitorIndex ? extendedWorkspaceMap[hyprlandMonitorIndex] : hyprlandMonitorIndex * (Config.options.bar.workspaces.shown || 10)) : 0
 
     property int windowRounding: Appearance.rounding.normal
     readonly property int rows: 10
     readonly property int columns: 1
     readonly property int workspacesShown: root.rows * root.columns
 
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property int workspaceGroup: {
         let activeId = monitor.activeWorkspace?.id;
         if (!activeId) return 0;
         if (activeId <= workspaceOffset) return 0;
-        if (useWorkspaceMap && extendedWorkspaceMap.length > monitorIndex + 1) {
-            let nextMonitorStart = extendedWorkspaceMap[monitorIndex + 1];
+        if (useWorkspaceMap && extendedWorkspaceMap.length > hyprlandMonitorIndex + 1) {
+            let nextMonitorStart = extendedWorkspaceMap[hyprlandMonitorIndex + 1];
             if (activeId > nextMonitorStart) return 0;
         }
         let group = Math.floor((activeId - workspaceOffset - 1) / workspacesShown);
@@ -54,8 +60,12 @@ Item {
 
     property real normalWindowOffset: root.hyprscrollingEnabled ? 0 : root.workspaceImplicitWidth / 2 // if someone uses default layout with this scrolling overview, we have to add this offset to center the windows
 
-    property real workspaceImplicitWidth: (monitorData?.transform % 2 === 1) ? ((monitor.height - monitorData?.reserved[0] - monitorData?.reserved[2]) * root.scaleRatio) : ((monitor.width - monitorData?.reserved[0] - monitorData?.reserved[2]) * root.scaleRatio)
-    property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) ? ((monitor.width - monitorData?.reserved[1] - monitorData?.reserved[3]) * root.scaleRatio) : ((monitor.height - monitorData?.reserved[1] - monitorData?.reserved[3]) * root.scaleRatio)
+    property real workspaceImplicitWidth: (monitorData?.transform % 2 === 1)
+        ? ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.scaleRatio)
+        : ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.scaleRatio)
+    property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1)
+        ? ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.scaleRatio)
+        : ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.scaleRatio)
 
     implicitWidth: monitor.width
     implicitHeight: monitor.height
@@ -107,8 +117,8 @@ Item {
 
     // We extend the workspaceMap to have at least 10 workspaces
     function extendWorkspaceMap(map) {
-        let arr = map.slice();
-        const step = arr[arr.length - 1] - arr[arr.length - 2];
+        let arr = (map && map.length > 0) ? map.slice() : [0];
+        const step = arr.length > 1 ? (arr[arr.length - 1] - arr[arr.length - 2]) : (Config.options.bar.workspaces.shown || 10);
         while (arr.length < 10) {
             arr.push(arr[arr.length - 1] + step);
         }
@@ -403,8 +413,8 @@ Item {
                     property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
                     xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex - root.normalWindowOffset
                     yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
-                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (monitor?.x ?? 0) - monitorData?.reserved[0]) * root.scaleRatio, 0) - root.workspaceImplicitWidth / 2
-                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (monitor?.y ?? 0) - monitorData?.reserved[1]) * root.scaleRatio, 0)
+                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (monitor?.x ?? 0) - (monitorData?.reserved?.[0] ?? 0)) * root.scaleRatio, 0) - root.workspaceImplicitWidth / 2
+                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (monitor?.y ?? 0) - (monitorData?.reserved?.[1] ?? 0)) * root.scaleRatio, 0)
 
                     property int hoveringDir: 0 // 0: none, 1: right, 2: left
                     property bool hovering: false

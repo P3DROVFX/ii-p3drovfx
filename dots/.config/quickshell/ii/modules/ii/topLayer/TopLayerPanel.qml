@@ -73,15 +73,21 @@ PanelWindow {
     readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.activeRightSidebarMonitor
     readonly property bool searchOpenOnMonitor: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
 
-    // Detect if there's a fullscreen window on this monitor (to hide bar/frame like default mode)
     readonly property bool hasFullscreenWindowOnMonitor: {
-        const monitor = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
-        const wsId = monitor?.activeWorkspace?.id;
-        if (!wsId) return false;
-        return HyprlandData.windowList.some(w => 
-            w.workspace.id === wsId && 
-            (w.fullscreen === 2 || w.fullscreenClient === 2)
-        );
+        const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
+        const specialWsName = monitorData?.specialWorkspace?.name;
+        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === topPanel.screen.name);
+        return workspaces.some(workspace => {
+            const isWorkspaceActive = workspace.active || 
+                (specialWsName && specialWsName !== "" && 
+                 (workspace.name === specialWsName || 
+                  workspace.name === "special:" + specialWsName ||
+                  (specialWsName === "special:special" && workspace.name === "special") ||
+                  (specialWsName === "special" && workspace.name === "special:special")));
+            
+            return isWorkspaceActive && 
+                workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
+        });
     }
 
     readonly property bool leftSidebarWarmOnMonitor: {

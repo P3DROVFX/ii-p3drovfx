@@ -28,18 +28,7 @@ Item {
         implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 4
         implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? Appearance.sizes.baseBarHeight - 8 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.baseBarHeight
 
-        Behavior on implicitWidth {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.easing
-            }
-        }
-        Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.easing
-            }
-        }
+
 
         Flow {
             id: flow

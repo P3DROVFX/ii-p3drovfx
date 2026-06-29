@@ -35,14 +35,7 @@ Item {
     property string currentRandomShape: "Circle"
     property real randomRotation: 0
 
-    readonly property real stableActivePosition: (tabHighlight ? tabHighlight.getPosForIndex(root.getWsIndex(activeWsId)) : 0) + (root.vertical ? mainLayout.y : mainLayout.x)
-    property real animatedStablePosition: stableActivePosition
-    Behavior on animatedStablePosition {
-        NumberAnimation {
-            duration: 350
-            easing.type: Easing.OutCubic
-        }
-    }
+
 
     function updateRandomShape() {
         if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator) return;
@@ -163,8 +156,8 @@ Item {
         readonly property real animX1: getPosForIndex(idxPair.idx1)
         readonly property real animX2: getPosForIndex(idxPair.idx2)
         
-        x: root.vertical ? (parent.width - width) / 2 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.animatedStablePosition : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
-        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.animatedStablePosition : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
+        x: root.vertical ? (parent.width - width) / 2 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.x + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
+        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.y + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
         
         width: root.vertical ? dotSize : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize)
         height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize

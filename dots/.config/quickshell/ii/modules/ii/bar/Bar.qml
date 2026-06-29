@@ -52,7 +52,10 @@ Scope {
                     property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                     property real minZone: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-                    exclusiveZone: (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0))
+                    exclusiveZone: {
+                        if (barRoot && barRoot.hasFullscreenWindowOnMonitor) return 0;
+                        return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0));
+                    }
 
                     implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
                     color: "transparent"
@@ -109,9 +112,25 @@ Scope {
                             }
                         }
                     }
+                    readonly property bool hasFullscreenWindowOnMonitor: {
+                        const monitorData = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
+                        const specialWsName = monitorData?.specialWorkspace?.name;
+                        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === barRoot.screen.name);
+                        return workspaces.some(workspace => {
+                            const isWorkspaceActive = workspace.active || 
+                                (specialWsName && specialWsName !== "" && 
+                                 (workspace.name === specialWsName || 
+                                  workspace.name === "special:" + specialWsName ||
+                                  (specialWsName === "special:special" && workspace.name === "special") ||
+                                  (specialWsName === "special" && workspace.name === "special:special")));
+                            
+                            return isWorkspaceActive && 
+                                workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
+                        });
+                    }
                     property bool superShow: false
-                    property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-                    property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
+                    property bool mustShow: !hasFullscreenWindowOnMonitor && (hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
+                    property real hiddenAmount: (hasFullscreenWindowOnMonitor || (Config?.options.bar.autoHide.enable && !mustShow)) ? Appearance.sizes.barHeight : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
                     }
@@ -146,6 +165,14 @@ Scope {
                     Loader {
                         active: Config.options.appearance.fakeScreenRounding == 3
                         anchors.fill: parent
+                        opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
                         sourceComponent: Component {
                             Item {
                                 anchors.fill: parent
@@ -161,6 +188,14 @@ Scope {
                     MouseArea {
                         id: hoverRegion
                         hoverEnabled: true
+                        opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
                         anchors {
                             left: parent.left
                             right: parent.right

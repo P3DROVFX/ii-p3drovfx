@@ -8,6 +8,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.bar
 
 RowLayout {
     id: root
@@ -20,6 +21,11 @@ RowLayout {
     property int currentResultIndex: 0
     property bool isTranslatorPanelFocused: false
     property bool isMediaDownloaderPanelFocused: false
+
+    BarThemes {
+        id: barThemes
+    }
+    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     onSearchingTextChanged: {
         if (searchInput.text !== searchingText) {

@@ -744,6 +744,7 @@ Item {
             titleText: Translation.tr("Select Language")
             items: root.languages
             defaultChoice: root.languageSelectorTarget ? root.targetLanguage : root.sourceLanguage
+            enableSearch: true
             focus: true
 
             Keys.onPressed: event => {
@@ -763,18 +764,7 @@ Item {
                     }
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    let result = choiceListView.currentIndex === -1 ? null : root.languages[choiceListView.currentIndex];
-                    root.showLanguageSelector = false;
-                    if (result) {
-                        if (root.languageSelectorTarget) {
-                            root.targetLanguage = result;
-                            Config.options.language.translator.targetLanguage = result;
-                        } else {
-                            root.sourceLanguage = result;
-                            Config.options.language.translator.sourceLanguage = result;
-                        }
-                        translateTimer.restart();
-                    }
+                    languageSelectorDialog.selected(languageSelectorDialog.selectedItem);
                     event.accepted = true;
                 }
             }

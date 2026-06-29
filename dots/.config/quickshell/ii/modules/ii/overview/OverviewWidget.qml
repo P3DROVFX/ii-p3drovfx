@@ -14,7 +14,9 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
-    property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) ? ((monitor.height - monitorData?.reserved[0] - monitorData?.reserved[2]) * root.scale) : ((monitor.width - monitorData?.reserved[0] - monitorData?.reserved[2]) * root.scale)
+    property int minWorkspaceWidth: (monitorData?.transform % 2 === 1) 
+        ? ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale) 
+        : ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale)
     required property var panelWindow
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
     readonly property var toplevels: ToplevelManager.toplevels
@@ -25,17 +27,23 @@ Item {
     // readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
     // readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
 
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
+    readonly property int hyprlandMonitorIndex: {
+        if (!monitor || !monitor.name) return 0;
+        let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
+        return idx !== -1 ? idx : 0;
+    }
+
+    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap && Config.options.overview.useWorkspaceMap
     readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
     property int monitorIndex // to be set by parent
-    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
+    property int workspaceOffset: useWorkspaceMap ? (workspaceMap.length > hyprlandMonitorIndex ? workspaceMap[hyprlandMonitorIndex] : hyprlandMonitorIndex * (Config.options.bar.workspaces.shown || 10)) : 0
 
     readonly property int workspaceGroup: {
         let activeId = monitor.activeWorkspace?.id;
         if (!activeId) return 0;
         if (activeId <= workspaceOffset) return 0;
-        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
-            let nextMonitorStart = workspaceMap[monitorIndex + 1];
+        if (useWorkspaceMap && workspaceMap.length > hyprlandMonitorIndex + 1) {
+            let nextMonitorStart = workspaceMap[hyprlandMonitorIndex + 1];
             if (activeId > nextMonitorStart) return 0;
         }
         let group = Math.floor((activeId - workspaceOffset - 1) / workspacesShown);
@@ -57,7 +65,9 @@ Item {
     property color activeBorderColor: Appearance.colors.colSecondary
 
     property real workspaceImplicitWidth: minWorkspaceWidth
-    property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) ? ((monitor.width - monitorData?.reserved[1] - monitorData?.reserved[3]) * root.scale) : ((monitor.height - monitorData?.reserved[1] - monitorData?.reserved[3]) * root.scale)
+    property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1) 
+        ? ((monitor.width - (monitorData ? (monitorData.reserved?.[0] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[2] ?? 0) : 0)) * root.scale) 
+        : ((monitor.height - (monitorData ? (monitorData.reserved?.[1] ?? 0) : 0) - (monitorData ? (monitorData.reserved?.[3] ?? 0) : 0)) * root.scale)
     property real largeWorkspaceRadius: Appearance.rounding.large
     property real smallWorkspaceRadius: Appearance.rounding.verysmall
 
@@ -351,8 +361,8 @@ Item {
                     property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
                     xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex
                     yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
-                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (windowMonitorData?.x ?? 0) - monitorData?.reserved[0]) * root.scale, 0)
-                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (windowMonitorData?.y ?? 0) - monitorData?.reserved[1]) * root.scale, 0)
+                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (windowMonitorData?.x ?? 0) - (monitorData?.reserved?.[0] ?? 0)) * root.scale, 0)
+                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (windowMonitorData?.y ?? 0) - (monitorData?.reserved?.[1] ?? 0)) * root.scale, 0)
 
                     // Radius
                     property real minRadius: Appearance.rounding.small
@@ -549,10 +559,19 @@ Item {
 
                 x: root.hyprscrollingEnabled ? root.activeWindowData?.x ?? 0 : (root.workspaceImplicitWidth + workspaceSpacing) * colIndex
                 y: root.hyprscrollingEnabled ? root.activeWindowData?.y ?? 0 : (root.workspaceImplicitHeight + workspaceSpacing) * rowIndex
-                width: root.hyprscrollingEnabled ? root.activeWindowData?.width ?? 0 : root.workspaceImplicitWidth + 4
+                width: root.hyprscrollingEnabled ? root.activeWindowData?.width ?? 0 : root.workspaceImplicitWidth
                 height: root.hyprscrollingEnabled ? root.activeWindowData?.height ?? 0 : root.workspaceImplicitHeight
 
-                radius: Appearance.rounding.small
+                property bool workspaceAtLeft: colIndex === 0
+                property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
+                property bool workspaceAtTop: rowIndex === 0
+                property bool workspaceAtBottom: rowIndex === Config.options.overview.rows - 1
+
+                topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                bottomRightRadius: (workspaceAtRight && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+
                 color: "transparent"
                 border.width: 2
                 border.color: root.activeBorderColor

@@ -72,6 +72,18 @@ ContentPage {
                 Layout.leftMargin: 12
                 spacing: 4
 
+                ConfigSwitch {
+                    buttonIcon: "sync"
+                    text: Translation.tr("Sync overview map")
+                    checked: Config.options.overview.useWorkspaceMap
+                    onCheckedChanged: {
+                        Config.options.overview.useWorkspaceMap = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Apply the same workspace map constraints to the Overview screen")
+                    }
+                }
+
                 Repeater {
                     model: HyprlandData.monitors
                     delegate: ConfigSpinBox {
