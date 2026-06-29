@@ -51,6 +51,38 @@ Singleton {
     property string settingsPendingPageName: ""
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
+
+    readonly property string effectiveLeftMonitor: {
+        if (!Config.ready) return "";
+        switch (Config.options.sidebar.position) {
+        case "default":
+            return activeLeftSidebarMonitor;
+        case "inverted":
+            return activeRightSidebarMonitor;
+        case "left":
+            return policiesPanelOpen ? activeLeftSidebarMonitor : activeRightSidebarMonitor;
+        case "right":
+            return "";
+        default:
+            return activeLeftSidebarMonitor;
+        }
+    }
+
+    readonly property string effectiveRightMonitor: {
+        if (!Config.ready) return "";
+        switch (Config.options.sidebar.position) {
+        case "default":
+            return activeRightSidebarMonitor;
+        case "inverted":
+            return activeLeftSidebarMonitor;
+        case "left":
+            return "";
+        case "right":
+            return policiesPanelOpen ? activeLeftSidebarMonitor : activeRightSidebarMonitor;
+        default:
+            return activeRightSidebarMonitor;
+        }
+    }
     property string activeSearchMonitor: ""
     property string activeSearchQuery: ""
     property bool searchDropActive: false

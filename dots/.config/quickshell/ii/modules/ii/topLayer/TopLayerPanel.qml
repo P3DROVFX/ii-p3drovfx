@@ -35,6 +35,19 @@ PanelWindow {
     Bar.BarThemes {
         id: barThemes
     }
+
+    Component {
+        id: policiesContentComponent
+        Policies.SidebarPoliciesContent {
+            scopeRoot: topPanel
+        }
+    }
+
+    Component {
+        id: dashboardContentComponent
+        Dashboard.SidebarDashboardContent {}
+    }
+
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
     readonly property bool barVertical: Config.options.bar.vertical
     readonly property bool barBottom: Config.options.bar.bottom
@@ -68,10 +81,10 @@ PanelWindow {
         }
     }
 
-    readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.activeLeftSidebarMonitor
-    readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.activeRightSidebarMonitor
-    readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.activeLeftSidebarMonitor && !GlobalStates.policiesDetached
-    readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.activeRightSidebarMonitor
+    readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
+    readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
+    readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.effectiveLeftMonitor && !GlobalStates.policiesDetached
+    readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool searchOpenOnMonitor: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
     readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name
 
@@ -89,14 +102,14 @@ PanelWindow {
     readonly property bool leftSidebarWarmOnMonitor: {
         if (GlobalStates.policiesDetached)
             return false;
-        if (GlobalStates.activeLeftSidebarMonitor !== "") {
-            return screen.name === GlobalStates.activeLeftSidebarMonitor;
+        if (GlobalStates.effectiveLeftMonitor !== "") {
+            return screen.name === GlobalStates.effectiveLeftMonitor;
         }
         return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
     }
     readonly property bool rightSidebarWarmOnMonitor: {
-        if (GlobalStates.activeRightSidebarMonitor !== "") {
-            return screen.name === GlobalStates.activeRightSidebarMonitor;
+        if (GlobalStates.effectiveRightMonitor !== "") {
+            return screen.name === GlobalStates.effectiveRightMonitor;
         }
         return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
     }
@@ -555,8 +568,19 @@ PanelWindow {
             active: GlobalStates.connectModeActive && !GlobalStates.policiesDetached
             asynchronous: true
             anchors.fill: parent
-            sourceComponent: Policies.SidebarPoliciesContent {
-                scopeRoot: topPanel
+            sourceComponent: {
+                const pos = Config.options.sidebar.position;
+                if (pos === "inverted") {
+                    return dashboardContentComponent;
+                } else if (pos === "left") {
+                    if (GlobalStates.dashboardPanelOpen) {
+                        return dashboardContentComponent;
+                    } else {
+                        return policiesContentComponent;
+                    }
+                } else {
+                    return policiesContentComponent;
+                }
             }
         }
     }
@@ -619,7 +643,20 @@ PanelWindow {
             active: GlobalStates.connectModeActive && (topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded)
             asynchronous: true
             anchors.fill: parent
-            sourceComponent: Dashboard.SidebarDashboardContent {}
+            sourceComponent: {
+                const pos = Config.options.sidebar.position;
+                if (pos === "inverted") {
+                    return policiesContentComponent;
+                } else if (pos === "right") {
+                    if (GlobalStates.sidebarLeftOpen) {
+                        return policiesContentComponent;
+                    } else {
+                        return dashboardContentComponent;
+                    }
+                } else {
+                    return dashboardContentComponent;
+                }
+            }
         }
     }
 
@@ -882,14 +919,14 @@ PanelWindow {
             }
         }
         function onSidebarRightOpenChanged() {
-            if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.activeRightSidebarMonitor) {
+            if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalFocusGrab.addDismissable(topPanel);
             } else {
                 GlobalFocusGrab.removeDismissable(topPanel);
             }
         }
         function onSidebarLeftOpenChanged() {
-            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.activeLeftSidebarMonitor) {
+            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
                 if (!GlobalStates.policiesPinned) {
                     GlobalFocusGrab.addDismissable(topPanel);
                 }
@@ -902,10 +939,10 @@ PanelWindow {
     Connections {
         target: GlobalFocusGrab
         function onDismissed() {
-            if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.activeRightSidebarMonitor) {
+            if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalStates.sidebarRightOpen = false;
             }
-            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.activeLeftSidebarMonitor) {
+            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
                 if (!GlobalStates.policiesPinned) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
