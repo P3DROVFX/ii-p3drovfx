@@ -229,20 +229,8 @@ Item {
         property real dragStartValue: 0
 
         onPressed: (mouse) => {
-            let localPos = mapToItem(sliderContainer, mouse.x, mouse.y);
-            if (localPos.x >= 0 && localPos.x <= sliderContainer.width && localPos.y >= 0 && localPos.y <= sliderContainer.height) {
-                // Click inside slider: update value absolutely
-                let pct = localPos.x / sliderContainer.width;
-                let newValue = root.from + pct * (root.to - root.from);
-                newValue = Math.max(root.from, Math.min(root.maxLimit, newValue));
-                root.valueUpdateRequested(newValue);
-                dragStartX = mouse.x;
-                dragStartValue = newValue;
-            } else {
-                // Click outside slider: relative drag from current value
-                dragStartX = mouse.x;
-                dragStartValue = root.value;
-            }
+            dragStartX = mouse.x;
+            dragStartValue = root.value;
             GlobalStates.osdInteraction();
         }
 

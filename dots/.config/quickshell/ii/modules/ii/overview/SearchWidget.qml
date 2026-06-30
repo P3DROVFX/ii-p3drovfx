@@ -69,6 +69,10 @@ Item {
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
                 root.loadedResultsCount = 50;
+                root.focusSearchInput();
+                Qt.callLater(() => {
+                    root.focusSearchInput();
+                });
                 if (root.alwaysListAppsMode) {
                     Qt.callLater(() => {
                         // Show first 15 immediately for instant response,
@@ -308,6 +312,12 @@ Item {
                 onCtrlKPressed: {
                     if (appResults.visible) {
                         root.requestToggleActions();
+                    }
+                }
+
+                onCopySvgPressed: {
+                    if (root.isMaterialSymbolsMode && materialSymbolsPanelLoader.item) {
+                        materialSymbolsPanelLoader.item.copyFocusedIconSvg();
                     }
                 }
 

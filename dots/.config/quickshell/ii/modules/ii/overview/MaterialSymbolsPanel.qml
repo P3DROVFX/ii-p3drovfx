@@ -229,6 +229,15 @@ Item {
         copyFeedbackTimer.restart();
     }
 
+    function copyFocusedIconSvg() {
+        if (focusedControlIndex >= 0 && focusedControlIndex < filteredIcons.length) {
+            copyIconSvg(filteredIcons[focusedControlIndex]);
+        } else if (filteredIcons.length > 0) {
+            copyIconSvg(filteredIcons[0]);
+        }
+        GlobalStates.overviewOpen = false;
+    }
+
     function recalculateLayout() {
         const cols = root.gridColumns;
         const cw = root.cellWidth;

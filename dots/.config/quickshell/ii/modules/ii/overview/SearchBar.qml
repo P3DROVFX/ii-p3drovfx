@@ -41,6 +41,7 @@ RowLayout {
     signal activate
     signal deleteSelected
     signal ctrlKPressed
+    signal copySvgPressed
 
     function forceFocus() {
         searchInput.forceActiveFocus();
@@ -338,6 +339,11 @@ RowLayout {
                 return;
             }
                 if (root.clipboardMode) {
+                    if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+                        root.copySvgPressed();
+                        event.accepted = true;
+                        return;
+                    }
                     const isPanelFocused = root.isTranslatorPanelFocused || root.isMediaDownloaderPanelFocused || root.isMaterialSymbolsPanelFocused;
                     if ((root.searchPrefixType !== SearchBar.SearchPrefixType.Translator && root.searchPrefixType !== SearchBar.SearchPrefixType.MediaDownloader && root.searchPrefixType !== SearchBar.SearchPrefixType.MaterialSymbols) || isPanelFocused) {
                         if (event.key === Qt.Key_Left) {

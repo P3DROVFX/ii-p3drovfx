@@ -165,6 +165,9 @@ Scope {
                                 if (!grab.canBeActive)
                                     return;
                                 grab.active = GlobalStates.overviewOpen;
+                                if (grab.active) {
+                                    searchWidget.focusSearchInput();
+                                }
                             }
                         }
 

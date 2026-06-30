@@ -3,6 +3,7 @@ pragma Singleton
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
+import qs.services
 import QtQuick
 import Qt.labs.folderlistmodel
 import Quickshell
@@ -177,6 +178,12 @@ Singleton {
                 }
                 KeyringStorage.setNestedField(["apiKeys", "genius"], args.trim());
                 Quickshell.execDetached(["notify-send", "Genius API", Translation.tr("API key saved!"), "-a", "Shell"]);
+            }
+        },
+        {
+            action: "songrec",
+            execute: () => {
+                SongRec.toggleRunning(true);
             }
         },
     ]
