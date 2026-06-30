@@ -69,6 +69,29 @@ Scope {
                     running = true;
                 }
             }
+            // Tracks whether the linux-wallpaperengine process is actually running.
+            // Used only to drive the widgets-overlay visibility (Bug 3 fix) so that desktop
+            // widgets reappear above the WPE surface. Does NOT touch wallpaperItem.opacity
+            // or PanelWindow.color, preserving blur / GNOME-Like animations on the static
+            // wallpaper (no regression for the default, non-WPE case).
+            property bool wpeRunning: false
+            Timer {
+                id: wpeCheckTimer
+                interval: 1500
+                repeat: true
+                running: Config.options.background.useWallpaperEngine
+                onTriggered: wpeRunningCheckProc.running = true
+            }
+            Process {
+                id: wpeRunningCheckProc
+                command: ["bash", "-c", "pgrep -f '[l]inux-wallpaperengine' | wc -l"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        const count = parseInt(text.trim())
+                        bgRoot.wpeRunning = !isNaN(count) && count > 0
+                    }
+                }
+            }
             // Deferred to avoid Wayland dispatch reentrancy crash in PanelWindow visibility
             property bool deferredFullscreen: false
             Timer {
@@ -202,7 +225,9 @@ Scope {
                 right: true
             }
             color: {
-                if (Config.options.background.useWallpaperEngine || !bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
+                if (Config.options.background.useWallpaperEngine && bgRoot.wpeRunning)
+                    return "transparent";
+                if (!bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
                     return "transparent";
                 return CF.ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colPrimary, 0.75);
             }
@@ -264,14 +289,14 @@ Scope {
 
             property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
             onMediaModeOpenChanged: {
-                if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
+                if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
                     LyricsService.shellColorChanged = false;
                 }
             }
 
             Component.onCompleted: {
-                if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
+                if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
                 }
             }
@@ -285,7 +310,7 @@ Scope {
                     id: wallpaperItem
                     anchors.fill: parent
                     clip: true
-                    scale: showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout ? zoomedRatio : defaultRatio
+                    scale: (!Config.options.background.useWallpaperEngine && showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout) ? zoomedRatio : defaultRatio
                     opacity: (Config.options.background.useWallpaperEngine || mediaModeOpen) ? 0 : 1
 
                     Behavior on opacity {
@@ -344,7 +369,7 @@ Scope {
                             return false;
                         return HyprlandData.monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
                     }
-                    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && bgRoot.isMonitorFocused
+                    readonly property bool wallpaperZoomedOut: !Config.options.background.useWallpaperEngine && Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && bgRoot.isMonitorFocused
 
                     // Animated clip radius — drives both the border-radius clip and tile visibility
                     property real wallpaperClipRadius: wallpaperZoomedOut ? Appearance.rounding.windowRounding : 0
@@ -665,6 +690,7 @@ Scope {
 
                             WidgetCanvas {
                                 id: widgetCanvas
+                                visible: !Config.options.background.useWallpaperEngine
                                 scale: 1 - (defaultRatio - 1)
                                 Behavior on scale {
                                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -983,6 +1009,195 @@ Scope {
                     NumberAnimation {
                         duration: 200
                         easing.type: Easing.OutCubic
+                    }
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // WPE widgets overlay — Bug 3 fix.
+    //
+    // linux-wallpaperengine binds its own wlr-layer-shell surface ABOVE
+    // quickshell:background (WlrLayer.Bottom). The desktop widgets (clock,
+    // weather, date, media) live inside wallpaperItem on the Bottom panel
+    // and were being occluded by the WPE surface.
+    //
+    // To restore them without regressing blur / GNOME-Like animations on
+    // the static wallpaper (which depend on wallpaperItem.opacity and the
+    // windowBlurEffect pipeline), we spawn a SECOND, transparent
+    // PanelWindow on WlrLayer.Top that reproduces the same widgets layout
+    // only while the WPE process is confirmed alive. The Bottom widgetCanvas
+    // hides itself in the same window so we do not double-render.
+    // ─────────────────────────────────────────────────────────────────────
+    Variants {
+        id: wpeWidgetsOverlay
+        model: Quickshell.screens
+
+        PanelWindow {
+            id: wpeWidgetsRoot
+
+            required property var modelData
+            screen: modelData
+
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "quickshell:bgwidgetsoverlay"
+            color: "transparent"
+
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+
+            readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
+            readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
+            
+            // Widgets só aparecem quando NÃO há janelas no workspace ativo (mesma lógica do wallpaper estático)
+            property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && workspace.monitor.name == monitor?.name)
+            property var activeWorkspace: workspacesForMonitor.filter(workspace => workspace.active)[0]
+            property bool hasWindowsInActiveWorkspace: activeWorkspace != undefined && HyprlandData.windowList.some(w => w.workspace.id === activeWorkspace.id)
+
+            // Mirror the Bottom panel's wpeRunning state by polling the same
+            // process independently of bgRoot (each monitor has its own bgRoot).
+            property bool wpeRunning: false
+            Timer {
+                id: wpeOverlayCheckTimer
+                interval: 1500
+                repeat: true
+                running: Config.options.background.useWallpaperEngine
+                onTriggered: wpeOverlayCheckProc.running = true
+            }
+            Process {
+                id: wpeOverlayCheckProc
+                command: ["bash", "-c", "pgrep -f '[l]inux-wallpaperengine' | wc -l"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        const count = parseInt(text.trim())
+                        wpeWidgetsRoot.wpeRunning = !isNaN(count) && count > 0
+                    }
+                }
+            }
+
+            visible: false
+            property bool deferredFullscreen: false
+            Timer {
+                id: wpeOverlayFullscreenDefer
+                interval: 50
+                repeat: false
+                onTriggered: wpeWidgetsRoot.deferredFullscreen = wpeWidgetsRoot.fullscreenActive
+            }
+            readonly property bool fullscreenActive: {
+                const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name == wpeWidgetsRoot.monitor?.name)
+                return workspaces.some(w => w.active && w.toplevels.values.some(t => t.wayland?.fullscreen))
+            }
+            onFullscreenActiveChanged: wpeOverlayFullscreenDefer.restart()
+
+            // Hide when a fullscreen app is active on this monitor (matches Bottom panel behavior)
+            Item {
+                id: wpeOverlayContent
+                anchors.fill: parent
+                visible: wpeWidgetsRoot.visible
+
+                WidgetCanvas {
+                    id: wpeWidgetCanvas
+                    anchors.fill: parent
+                    width: parent.width
+                    height: parent.height
+
+                    FadeLoader {
+                        shown: Config.options.background.widgets.weather.enable && wpeWidgetsRoot.visible
+                        sourceComponent: Config.options.background.widgets.weather.style === "expressive" ? wpeExpressiveWeatherWidget : wpeDefaultWeatherWidget
+
+                        Component {
+                            id: wpeDefaultWeatherWidget
+                            WeatherWidget {
+                                screenWidth: wpeWidgetsRoot.screen.width
+                                screenHeight: wpeWidgetsRoot.screen.height
+                                scaledScreenWidth: wpeWidgetsRoot.screen.width
+                                scaledScreenHeight: wpeWidgetsRoot.screen.height
+                                wallpaperScale: 1
+                            }
+                        }
+
+                        Component {
+                            id: wpeExpressiveWeatherWidget
+                            ExpressiveWeatherWidget {
+                                screenWidth: wpeWidgetsRoot.screen.width
+                                screenHeight: wpeWidgetsRoot.screen.height
+                                scaledScreenWidth: wpeWidgetsRoot.screen.width
+                                scaledScreenHeight: wpeWidgetsRoot.screen.height
+                                wallpaperScale: 1
+                            }
+                        }
+                    }
+
+                    FadeLoader {
+                        shown: Config.options.background.widgets.clock.enable && wpeWidgetsRoot.visible
+                        sourceComponent: ClockWidget {
+                            screenWidth: wpeWidgetsRoot.screen.width
+                            screenHeight: wpeWidgetsRoot.screen.height
+                            scaledScreenWidth: wpeWidgetsRoot.screen.width
+                            scaledScreenHeight: wpeWidgetsRoot.screen.height
+                            wallpaperScale: 1
+                            wallpaperSafetyTriggered: false
+                        }
+                    }
+
+                    FadeLoader {
+                        shown: Config.options.background.widgets.date.enable && wpeWidgetsRoot.visible
+                        sourceComponent: DateWidget {
+                            screenWidth: wpeWidgetsRoot.screen.width
+                            screenHeight: wpeWidgetsRoot.screen.height
+                            scaledScreenWidth: wpeWidgetsRoot.screen.width
+                            scaledScreenHeight: wpeWidgetsRoot.screen.height
+                            wallpaperScale: 1
+                        }
+                    }
+
+                    Timer {
+                        id: wpeMediaTimer
+                        interval: 200
+                        onTriggered: wpeMediaLoader.enableLoading = true
+                    }
+
+                    FadeLoader {
+                        id: wpeMediaLoader
+                        property bool enableLoading: true
+                        shown: Config.options.background.widgets.media.enable && enableLoading && wpeWidgetsRoot.visible
+                        sourceComponent: Config.options.background.widgets.media.style === "expressive" ? wpeExpressiveMediaWidget : wpeCircularMediaWidget
+
+                        Component {
+                            id: wpeCircularMediaWidget
+                            MediaWidget {
+                                screenWidth: wpeWidgetsRoot.screen.width
+                                screenHeight: wpeWidgetsRoot.screen.height
+                                scaledScreenWidth: wpeWidgetsRoot.screen.width
+                                scaledScreenHeight: wpeWidgetsRoot.screen.height
+                                wallpaperScale: 1
+                            }
+                        }
+
+                        Component {
+                            id: wpeExpressiveMediaWidget
+                            ExpressiveMediaWidget {
+                                screenWidth: wpeWidgetsRoot.screen.width
+                                screenHeight: wpeWidgetsRoot.screen.height
+                                scaledScreenWidth: wpeWidgetsRoot.screen.width
+                                scaledScreenHeight: wpeWidgetsRoot.screen.height
+                                wallpaperScale: 1
+                            }
+                        }
+                        onLoaded: {
+                            if (item && item.requestReset) {
+                                item.requestReset.connect(() => {
+                                    wpeMediaLoader.enableLoading = false;
+                                    wpeMediaTimer.running = true;
+                                });
+                            }
+                        }
                     }
                 }
             }

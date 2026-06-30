@@ -89,6 +89,32 @@ Item { // Window
     property bool initialized: false
     Component.onCompleted: Qt.callLater(() => root.initialized = true)
 
+    // Re-capture the frozen ScreencopyView whenever HyprlandData refetches
+    // client list and assigns a fresh windowData object (different reference
+    // after every `hyprctl clients -j` parse). This is the live recapture hook
+    // for retiles that don't emit a movewindowv2 event — e.g. when a sibling
+    // window lands on our workspace and Hyprland silently shrinks us to half
+    // width. Without this the live:false texture stays letterboxed at the old
+    // aspect, producing the "empty space above/below" bug after drops.
+    onWindowDataChanged: {
+        if (root.initialized && root.toplevel)
+            recaptureDebounce.restart()
+    }
+
+    function requestRecapture() {
+        recaptureDebounce.restart()
+    }
+
+    Timer {
+        id: recaptureDebounce
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (root.toplevel && windowPreview.captureSource)
+                windowPreview.captureFrame()
+        }
+    }
+
     Behavior on x {
         enabled: root.initialized
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)

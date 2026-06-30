@@ -1268,6 +1268,7 @@ Singleton {
             property JsonObject sounds: JsonObject {
                 property bool battery: false
                 property bool pomodoro: false
+                property bool alarm: true
                 property string theme: "freedesktop"
             }
 
@@ -1293,6 +1294,13 @@ Singleton {
                 }
                 property list<var> worldClocks: []
                 property bool secondPrecision: false
+
+                property JsonObject alarms: JsonObject {
+                    property bool useFullscreenPopup: true
+                    property bool showAnalogClock: true
+                    property bool showWorldClocks: true
+                    property bool showAlarmsSection: true
+                }
             }
 
             property JsonObject updates: JsonObject {

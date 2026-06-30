@@ -258,6 +258,7 @@ Singleton {
                     property list<var> laps: []
                 }
             }
+            property list<var> alarms: []
             property JsonObject media: JsonObject {
             }
 
