@@ -15,6 +15,10 @@ MouseArea {
     required property SystemTrayItem item
     property bool targetMenuOpen: false
 
+    property real dragStartX: 0
+    property real dragStartY: 0
+    property bool dragged: false
+
     Rectangle {
         anchors.centerIn: parent
         width: parent.width + 12
@@ -34,17 +38,39 @@ MouseArea {
     implicitWidth: 20
     implicitHeight: 20
     onPressed: event => {
-        switch (event.button) {
-        case Qt.LeftButton:
-            item.activate();
-            break;
-        case Qt.RightButton:
-            if (item.hasMenu)
+        if (event.button === Qt.LeftButton) {
+            dragStartX = event.x;
+            dragStartY = event.y;
+            dragged = false;
+        } else if (event.button === Qt.RightButton) {
+            if (item.hasMenu) {
                 if (menu.active && menu.item && typeof menu.item.close === "function")
                     menu.item.close();
                 else
                     menu.open();
-            break;
+            }
+        }
+        event.accepted = true;
+    }
+
+    onPositionChanged: event => {
+        if (pressed && (pressedButtons & Qt.LeftButton)) {
+            var dx = event.x - dragStartX;
+            var dy = event.y - dragStartY;
+            var dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 25 && !dragged) {
+                dragged = true;
+                TrayService.togglePin(root.item.id);
+            }
+        }
+    }
+
+    onReleased: event => {
+        if (event.button === Qt.LeftButton) {
+            if (!dragged) {
+                item.activate();
+            }
+            dragged = false;
         }
         event.accepted = true;
     }
