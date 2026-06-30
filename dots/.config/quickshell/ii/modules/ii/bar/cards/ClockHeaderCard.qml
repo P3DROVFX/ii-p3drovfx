@@ -197,7 +197,8 @@ Rectangle {
     // Inner shadow mask canvas to create a solid frame with a rounded rectangle cutout matching the card
     Canvas {
         id: shadowMaskCanvas
-        anchors.centerIn: parent
+        x: -80
+        y: -80
         // Expand the canvas bounds significantly to prevent the drop shadow blur from being clipped
         width: root.width + 160
         height: root.height + 160
@@ -240,9 +241,10 @@ Rectangle {
     // DropShadow casting inward from the mask frame, creating the inner shadow effect
     DropShadow {
         id: innerShadow
+        x: -80
+        y: -80
         width: shadowMaskCanvas.width
         height: shadowMaskCanvas.height
-        anchors.centerIn: parent
         source: shadowMaskCanvas
         radius: 40 // high radius for soft blur
         samples: 81 // high samples for smooth blur

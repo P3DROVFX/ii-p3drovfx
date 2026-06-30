@@ -101,12 +101,29 @@ Item {
         z: 2
         acceptedButtons: Qt.NoButton
         cursorShape: Qt.PointingHandCursor
+
+        property bool throttleActive: false
+
+        Timer {
+            id: coalesceTimer
+            interval: 300
+            repeat: false
+            onTriggered: parent.throttleActive = false
+        }
+
         onWheel: event => {
-            if (event.angleDelta.y < 0) {
-                root.incrementCurrentIndex();
-            } else {
-                root.decrementCurrentIndex();
+            event.accepted = true;
+
+            if (!throttleActive) {
+                if (event.angleDelta.y < 0) {
+                    root.incrementCurrentIndex();
+                } else if (event.angleDelta.y > 0) {
+                    root.decrementCurrentIndex();
+                }
+                throttleActive = true;
             }
+
+            coalesceTimer.restart();
         }
     }
 

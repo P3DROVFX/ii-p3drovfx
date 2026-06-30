@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
+import Qt5Compat.GraphicalEffects
 
 AbstractBackgroundWidget {
     id: root
@@ -32,7 +33,25 @@ AbstractBackgroundWidget {
             Layout.preferredHeight: 200
             Layout.alignment: Qt.AlignHCenter
             shapeString: Config.options.background.widgets.weather.backgroundShape
-            color: Appearance.colors.colPrimaryContainer
+            color: "transparent"
+
+            // Background shape matching main shape to serve as source for InnerShadow
+            MaterialShape {
+                id: bgShape
+                anchors.fill: parent
+                shapeString: parent.shapeString
+                color: Appearance.colors.colPrimaryContainer
+                visible: false
+            }
+
+            InnerShadow {
+                id: innerShadow
+                anchors.fill: parent
+                radius: 32 // reduced to 24 for clean tight look
+                samples: 49 // reduced to 49 for optimized smooth blur
+                color: Qt.rgba(0, 0, 0, 0.25) // deep soft shadow
+                source: bgShape
+            }
 
             MaterialSymbol {
                 anchors.centerIn: parent

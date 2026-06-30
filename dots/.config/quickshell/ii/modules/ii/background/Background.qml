@@ -1044,6 +1044,11 @@ Scope {
             WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.namespace: "quickshell:bgwidgetsoverlay"
             color: "transparent"
+            // Empty mask: make this overlay fully click-through so mouse events
+            // reach the linux-wallpaperengine surface underneath (WlrLayer.Bottom).
+            // Without this, the Top-layer surface swallows all pointer events,
+            // breaking WPE mouse interactivity (parallax, hover, clicks).
+            mask: Region {}
 
             anchors {
                 top: true
