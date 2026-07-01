@@ -61,6 +61,7 @@ Item { // Bar content region
         sourceComponent: StyledRectangularShadow {
             anchors.fill: undefined // The loader's anchors act on this, and this should not have any anchor
             target: barBackground
+            shadowOffset: Qt.vector2d(Config.options.bar.bottom ? 1.0 : -1.0, 0.0)
         }
     }
     Bar.BarThemes {
@@ -133,6 +134,7 @@ Item { // Bar content region
 
             color: Qt.rgba(backgroundGroup.actualColor.r, backgroundGroup.actualColor.g, backgroundGroup.actualColor.b, 1.0)
             property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.windowRounding : 0)
+            radius: baseRadius
 
             // In vertical mode (Left/Right), the edges touching the screen are left/right.
             // For Left bar (bottom: false): left edges are 0.
