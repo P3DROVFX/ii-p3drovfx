@@ -108,8 +108,8 @@ RippleButton {
     }
 
     property int listIndex: 0
-    property int listCount: ListView.view ? ListView.view.count : 1
-    property int listCurrentIndex: ListView.view ? ListView.view.currentIndex : -1
+    property int listCount: 1
+    property int listCurrentIndex: -1
 
     readonly property bool isFirst: listIndex === 0
     readonly property bool isLast: listIndex === listCount - 1
@@ -1018,6 +1018,13 @@ RippleButton {
         }
     }
 
+    function replayEntryAnimation() {
+        entryOpacity = 0.0;
+        entryScale = 0.94;
+        entryTranslateY = -20;
+        entryAnim.restart();
+    }
+
     onClicked: {
         if (root.actionPanelOpen) {
             root.actionPanelOpen = false;
@@ -1107,6 +1114,6 @@ RippleButton {
     }
 
     Component.onCompleted: {
-        entryAnim.start();
+        // Delegate will trigger replayEntryAnimation() when data is assigned
     }
 }

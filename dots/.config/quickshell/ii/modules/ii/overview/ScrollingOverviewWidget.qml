@@ -221,9 +221,8 @@ Item {
             color = Qt.rgba(0, 0, 0, opacity);
         }
         onOverviewOpenChanged: {
-            if (overviewOpen)
-                return;
-            color = "transparent";
+            const opacity = backgroundStyle == "dim" ? Config.options.overview.scrollingStyle.dimPercentage / 100 : backgroundStyle == "blur" ? 0.8 : 0;
+            color = overviewOpen ? Qt.rgba(0, 0, 0, opacity) : "transparent";
         }
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)

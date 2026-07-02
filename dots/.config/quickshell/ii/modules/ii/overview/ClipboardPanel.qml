@@ -24,7 +24,7 @@ Item {
     readonly property int detailColumnWidth: panelWidth - listColumnWidth
 
     implicitWidth: panelWidth
-    implicitHeight: Math.min(560, Math.max(320, entryListView.contentHeight + 40))
+    implicitHeight: Math.min(560, Math.max(320, entriesContentArea.height + 40))
     property var filteredEntries: {
         const q = root.searchQuery;
         const allEntries = Cliphist.entries;
@@ -98,6 +98,14 @@ Item {
         }
     }
 
+    // Debounce for position recalculation after height animations settle
+    Timer {
+        id: clipboardPosDebounce
+        interval: 260
+        repeat: false
+        onTriggered: root.updateClipboardPositions()
+    }
+
     Timer {
         id: selectTimer
         interval: 50
@@ -107,10 +115,121 @@ Item {
 
     onFilteredEntriesChanged: {
         selectTimer.restart();
+        Qt.callLater(() => {
+            root.updateClipboardSlots();
+        });
+    }
+
+    // Slot management for persistent reordering animation
+    property var clipboardEntryMap: ({})
+    property bool clipboardSlotsInitialized: false
+    readonly property int maxClipboardItems: 120
+
+    function updateClipboardSlots() {
+        const newUids = root.filteredEntries.slice();
+
+        const map = {};
+        for (let i = 0; i < newUids.length; i++) {
+            map[newUids[i]] = newUids[i];
+        }
+        clipboardEntryMap = map;
+
+        const slots = [];
+        if (typeof clipboardRepeater !== "undefined" && clipboardRepeater && clipboardRepeater.count > 0) {
+            for (let i = 0; i < clipboardRepeater.count; i++) {
+                slots.push(clipboardRepeater.itemAt(i));
+            }
+        }
+
+        const isInitial = !root.clipboardSlotsInitialized;
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i]) slots[i].positionAnimationEnabled = !isInitial;
+        }
+
+        const oldUids = [];
+        for (let i = 0; i < slots.length; i++) {
+            oldUids.push(slots[i] ? slots[i].uniqueId : "");
+        }
+
+        const slotToNewPos = {};
+        const usedNewPositions = new Set();
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const oldUid = oldUids[slotIdx];
+            if (!oldUid) continue;
+            const newPos = newUids.indexOf(oldUid);
+            if (newPos >= 0) {
+                slotToNewPos[slotIdx] = newPos;
+                usedNewPositions.add(newPos);
+            }
+        }
+
+        for (let newPos = 0; newPos < newUids.length; newPos++) {
+            if (usedNewPositions.has(newPos)) continue;
+            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+                if (!(slotIdx in slotToNewPos)) {
+                    slotToNewPos[slotIdx] = newPos;
+                    usedNewPositions.add(newPos);
+                    break;
+                }
+            }
+        }
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const slot = slots[slotIdx];
+            if (!slot) continue;
+            const newPos = slotToNewPos[slotIdx];
+            if (newPos === undefined) {
+                slot.currentPosition = -1;
+                slot.uniqueId = "";
+                slot.hasData = false;
+            } else {
+                const uid = newUids[newPos];
+                const isPreserved = oldUids[slotIdx] === uid && oldUids[slotIdx] !== "";
+                slot.currentPosition = newPos;
+                if (!isPreserved) {
+                    slot.uniqueId = uid;
+                    slot.hasData = true;
+                }
+            }
+        }
+
+        if (isInitial) {
+            root.clipboardSlotsInitialized = true;
+        }
+
+        root.updateClipboardPositions();
+        clipboardPosDebounce.restart();
+    }
+
+    function updateClipboardPositions() {
+        const slotEntries = [];
+        if (typeof clipboardRepeater === "undefined" || !clipboardRepeater) return;
+        for (let i = 0; i < clipboardRepeater.count; i++) {
+            const slot = clipboardRepeater.itemAt(i);
+            if (slot && slot.hasData) {
+                slotEntries.push({slot: slot, pos: slot.currentPosition});
+            }
+        }
+
+        entryListView.count = slotEntries.length;
+
+        slotEntries.sort(function(a, b) { return a.pos - b.pos; });
+
+        const SPACING = 2;
+        let yPos = entryListView.topMargin;
+        for (let i = 0; i < slotEntries.length; i++) {
+            slotEntries[i].slot.yPos = yPos;
+            yPos += slotEntries[i].slot.implicitHeight + SPACING;
+        }
+        entriesContentArea.height = yPos + entryListView.bottomMargin - SPACING;
     }
 
     Component.onCompleted: {
         selectTimer.restart();
+        Qt.callLater(() => {
+            root.updateClipboardSlots();
+        });
     }
 
     property string selectedDecodedContent: ""
@@ -416,384 +535,511 @@ Item {
                     }
                 }
 
-                ListView {
+                Item {
                     id: entryListView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    topMargin: 4
-                    bottomMargin: 4
-                    spacing: 2
 
-                    model: root.filteredEntries
-
-                    currentIndex: root.selectedIndex
-                    highlightMoveDuration: 80
-
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Item {
-                            id: maskRoot
-                            width: entryListView.width
-                            height: entryListView.height
-
-                            property color topFadeColor: !entryListView.atYBeginning ? "transparent" : "white"
-                            property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
-
-                            Behavior on topFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-                            Behavior on bottomFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-
-                            Column {
-                                anchors.fill: parent
-                                spacing: 0
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
-                                        GradientStop { position: 1.0; color: "white" }
-                                    }
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
-                                    color: "white"
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: "white" }
-                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    ScrollBar.vertical: StyledScrollBar {}
-
-                    // Touchpad and mouse scroll physics adjustments
+                    // Backward-compatible properties (replaces ListView API)
+                    property int currentIndex: root.selectedIndex
+                    property int count: 0
+                    readonly property real contentHeight: entriesContentArea.height
+                    readonly property real topMargin: 4
+                    readonly property real bottomMargin: 4
+                    readonly property real contentY: entryFlick.contentY
+                    readonly property bool atYBeginning: entryFlick.contentY <= 0
+                    readonly property bool atYEnd: entryFlick.contentY + entryFlick.height >= entriesContentArea.height
                     property real scrollTargetY: 0
                     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
                     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
                     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
-                    maximumFlickVelocity: 3500
+                    function positionViewAtIndex(idx, mode) {
+                        if (idx < 0 || idx >= count)
+                            return;
+                        const slots = [];
+                        for (let i = 0; i < clipboardRepeater.count; i++) {
+                            const s = clipboardRepeater.itemAt(i);
+                            if (s && s.hasData && s.currentPosition === idx) {
+                                slots.push(s);
+                                break;
+                            }
+                        }
+                        if (slots.length === 0)
+                            return;
+                        const target = slots[0];
+                        let y = target.yPos;
+                        const itemHeight = target.implicitHeight;
+                        if (mode === ListView.Contain) {
+                            if (y < entryFlick.contentY) {
+                                entryFlick.contentY = y - topMargin;
+                            } else if (y + itemHeight > entryFlick.contentY + entryFlick.height) {
+                                entryFlick.contentY = y + itemHeight - entryFlick.height + bottomMargin;
+                            }
+                        } else if (mode === ListView.Visible) {
+                            if (y < entryFlick.contentY || y + itemHeight > entryFlick.contentY + entryFlick.height) {
+                                entryFlick.contentY = y - topMargin;
+                            }
+                        } else {
+                            entryFlick.contentY = y - topMargin;
+                        }
+                    }
 
-                    MouseArea {
-                        z: 99
-                        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+                    Flickable {
+                        id: entryFlick
                         anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        onWheel: function (wheelEvent) {
-                            const delta = wheelEvent.angleDelta.y / entryListView.mouseScrollDeltaThreshold;
-                            var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= entryListView.mouseScrollDeltaThreshold ? entryListView.mouseScrollFactor : entryListView.touchpadScrollFactor;
+                        clip: true
+                        contentY: 0
+                        contentHeight: entriesContentArea.height
+                        maximumFlickVelocity: 3500
+                        boundsBehavior: Flickable.DragOverBounds
+                        pixelAligned: true
 
-                            const maxY = Math.max(0, entryListView.contentHeight - entryListView.height);
-                            const base = scrollAnim.running ? entryListView.scrollTargetY : entryListView.contentY;
-                            var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-
-                            entryListView.scrollTargetY = targetY;
-                            entryListView.contentY = targetY;
-                            wheelEvent.accepted = true;
-                        }
-                    }
-
-                    Behavior on contentY {
-                        NumberAnimation {
-                            id: scrollAnim
-                            alwaysRunToEnd: true
-                            duration: Appearance.animation.scroll.duration
-                            easing.type: Appearance.animation.scroll.type
-                            easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                        }
-                    }
-
-                    onContentYChanged: {
-                        if (!scrollAnim.running) {
-                            entryListView.scrollTargetY = entryListView.contentY;
-                        }
-                    }
-
-                    delegate: RippleButton {
-                        id: entryDelegate
-                        required property var modelData
-                        required property int index
-
-                        readonly property string rawEntry: modelData
-                        readonly property string cleanContent: StringUtils.cleanCliphistEntry(rawEntry)
-                        readonly property bool isImage: Cliphist.entryIsImage(rawEntry)
-                        readonly property bool isPinned: Cliphist.isPinned(rawEntry)
-                        readonly property bool isFirst: index === 0
-                        readonly property bool isLast: index === entryListView.count - 1
-                        readonly property bool isSelected: index === root.selectedIndex
-                        readonly property bool isCurrentClipboard: cleanContent === Quickshell.clipboardText
-                        readonly property bool isAboveSelected: root.selectedIndex === index + 1 && root.selectedIndex !== -1
-                        readonly property bool isBelowSelected: root.selectedIndex === index - 1 && root.selectedIndex !== -1
-                        readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
-                        readonly property string contentType: Cliphist.classifyEntry(rawEntry)
-
-                        width: entryListView.width
-                        implicitHeight: 52
-                        buttonRadius: 0
-
-                        opacity: 0
-                        scale: 0.90
-                        transform: Translate {
-                            id: entrySlide
-                            y: -12
-                        }
-
-                        SequentialAnimation {
-                            id: entryAnim
-                            running: false
-
-                            PauseAnimation {
-                                duration: Math.max(0, Math.min(6, entryDelegate.index) * 30)
-                            }
-
-                            ParallelAnimation {
-                                NumberAnimation {
-                                    target: entryDelegate
-                                    property: "opacity"
-                                    to: 1.0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                                NumberAnimation {
-                                    target: entryDelegate
-                                    property: "scale"
-                                    to: 1.0
-                                    duration: 250
-                                    easing.type: Easing.OutBack
-                                }
-                                NumberAnimation {
-                                    target: entrySlide
-                                    property: "y"
-                                    to: 0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                        }
-
-                        Component.onCompleted: {
-                            entryAnim.start();
-                        }
-
-                        colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
-                        colRipple: Appearance.colors.colPrimaryContainerActive
-
-                        background: Rectangle {
+                        MouseArea {
+                            z: 99
+                            visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
                             anchors.fill: parent
-                            anchors.leftMargin: 4
-                            anchors.rightMargin: 4
-                            color: entryDelegate.colBackground
-                            antialiasing: true
+                            acceptedButtons: Qt.NoButton
+                            onWheel: function (wheelEvent) {
+                                const delta = wheelEvent.angleDelta.y / entryListView.mouseScrollDeltaThreshold;
+                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= entryListView.mouseScrollDeltaThreshold ? entryListView.mouseScrollFactor : entryListView.touchpadScrollFactor;
 
-                            topLeftRadius: entryDelegate.isFirst ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isBelowSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
-                            topRightRadius: topLeftRadius
-                            bottomLeftRadius: entryDelegate.isLast ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isAboveSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
-                            bottomRightRadius: bottomLeftRadius
+                                const maxY = Math.max(0, entryFlick.contentHeight - entryFlick.height);
+                                const base = scrollAnim.running ? entryListView.scrollTargetY : entryFlick.contentY;
+                                var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
 
-                            Behavior on topLeftRadius {
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on topRightRadius {
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on bottomLeftRadius {
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on bottomRightRadius {
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on color {
-                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                entryListView.scrollTargetY = targetY;
+                                entryFlick.contentY = targetY;
+                                wheelEvent.accepted = true;
                             }
                         }
 
-                        onClicked: {
-                            root.selectedIndex = index;
-                        }
-                        onDoubleClicked: {
-                            root.selectedIndex = index;
-                            root.activateSelected();
+                        Behavior on contentY {
+                            NumberAnimation {
+                                id: scrollAnim
+                                alwaysRunToEnd: true
+                                duration: Appearance.animation.scroll.duration
+                                easing.type: Appearance.animation.scroll.type
+                                easing.bezierCurve: Appearance.animation.scroll.bezierCurve
+                            }
                         }
 
-                        PointingHandInteraction {}
+                        onContentYChanged: {
+                            if (!scrollAnim.running) {
+                                entryListView.scrollTargetY = contentY;
+                            }
+                        }
 
-                        Component {
-                            id: listImageComponent
-                            Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                radius: Appearance.rounding.verysmall
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                clip: true
-                                CliphistImage {
-                                    entry: entryDelegate.rawEntry
-                                    maxWidth: 32
-                                    maxHeight: 32
-                                    anchors.centerIn: parent
+                        layer.enabled: entryListView.count > 0
+                        layer.effect: OpacityMask {
+                            maskSource: Item {
+                                id: maskRoot
+                                width: entryFlick.width
+                                height: entryFlick.height
+
+                                property color topFadeColor: !entryListView.atYBeginning ? "transparent" : "white"
+                                property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
+
+                                Behavior on topFadeColor {
+                                    ColorAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
-                            }
-                        }
+                                Behavior on bottomFadeColor {
+                                    ColorAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
 
-                        Component {
-                            id: listColorComponent
-                            Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                radius: Appearance.rounding.full
-                                color: root.formatColor(entryDelegate.cleanContent)
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                            }
-                        }
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 0
 
-                        Component {
-                            id: listIconComponent
-                            Item {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        if (entryDelegate.isCurrentClipboard)
-                                            return "check_circle";
-                                        switch (entryDelegate.contentType) {
-                                        case "url":
-                                            return "link";
-                                        case "email":
-                                            return "alternate_email";
-                                        case "phone":
-                                            return "phone";
-                                        case "json":
-                                            return "data_object";
-                                        case "filepath":
-                                            return "folder_open";
-                                        case "markdown":
-                                            return "markdown";
-                                        case "number":
-                                            return "tag";
-                                        case "multiline":
-                                            return "notes";
-                                        default:
-                                            return "content_paste";
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(36, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: maskRoot.topFadeColor
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: "white"
+                                            }
                                         }
                                     }
-                                    iconSize: 18
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : (entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                                        color: "white"
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(36, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: "white"
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: maskRoot.bottomFadeColor
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 8
+                        ScrollBar.vertical: StyledScrollBar {}
 
-                            Loader {
-                                active: entryDelegate.isPinned
-                                visible: active
-                                Layout.preferredWidth: active ? 14 : 0
-                                Layout.preferredHeight: active ? 14 : 0
-                                sourceComponent: MaterialSymbol {
-                                    text: "keep"
-                                    iconSize: 14
-                                    color: Appearance.colors.colPrimary
-                                }
-                            }
+                        Item {
+                            id: entriesContentArea
+                            width: entryFlick.width
+                            height: 0
 
-                            Loader {
-                                id: visualLoader
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                sourceComponent: {
-                                    if (entryDelegate.isImage)
-                                        return listImageComponent;
-                                    if (entryDelegate.contentType === "hex-color")
-                                        return listColorComponent;
-                                    return listIconComponent;
-                                }
-                            }
+                            Repeater {
+                                id: clipboardRepeater
+                                model: root.maxClipboardItems
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
+                                delegate: Item {
+                                    id: slotDelegate
+                                    required property int index
 
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: entryDelegate.isImage ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "") : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.family: entryDelegate.contentType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
+                                    property bool positionAnimationEnabled: false
+                                    property string uniqueId: ""
+                                    property int currentPosition: -1
+                                    property bool hasData: false
+                                    property real yPos: 0
 
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    visible: {
-                                        if (entryDelegate.isImage)
-                                            return true;
-                                        if (entryDelegate.contentType && entryDelegate.contentType !== "clipboard")
-                                            return true;
-                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length;
-                                        return lines >= 1;
+                                    readonly property string rawEntry: hasData ? uniqueId : ""
+
+                                    y: yPos
+                                    x: 0
+                                    width: entriesContentArea.width
+                                    implicitHeight: hasData ? 52 : 0
+                                    height: implicitHeight
+                                    visible: hasData
+                                    opacity: hasData ? 1.0 : 0.0
+
+                                    Behavior on y {
+                                        enabled: slotDelegate.positionAnimationEnabled
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
                                     }
-                                    text: {
-                                        if (entryDelegate.isImage)
-                                            return "Image";
-                                        if (entryDelegate.contentType === "url")
-                                            return StringUtils.getDomain(entryDelegate.cleanContent) || "URL";
-                                        if (entryDelegate.contentType === "json")
-                                            return "JSON";
-                                        if (entryDelegate.contentType === "email")
-                                            return "Email";
-                                        if (entryDelegate.contentType === "phone")
-                                            return "Phone";
-                                        if (entryDelegate.contentType === "filepath")
-                                            return "File path";
-                                        if (entryDelegate.contentType === "hex-color")
-                                            return "Color";
-                                        if (entryDelegate.contentType === "markdown")
-                                            return "Markdown";
-                                        if (entryDelegate.contentType === "number")
-                                            return "Number";
-                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length + 1;
-                                        return lines + " lines";
+
+                                    Behavior on height {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
                                     }
-                                    font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                    opacity: 0.8
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    onHeightChanged: {
+                                        if (hasData)
+                                            clipboardPosDebounce.restart();
+                                    }
+
+                                    RippleButton {
+                                        id: entryDelegate
+                                        anchors.fill: parent
+                                        visible: slotDelegate.hasData
+
+                                        readonly property string rawEntry: slotDelegate.rawEntry
+                                        readonly property string cleanContent: StringUtils.cleanCliphistEntry(rawEntry)
+                                        readonly property bool isImage: Cliphist.entryIsImage(rawEntry)
+                                        readonly property bool isPinned: Cliphist.isPinned(rawEntry)
+                                        readonly property bool isFirst: slotDelegate.currentPosition === 0
+                                        readonly property bool isLast: slotDelegate.currentPosition === entryListView.count - 1
+                                        readonly property bool isSelected: slotDelegate.currentPosition === root.selectedIndex
+                                        readonly property bool isCurrentClipboard: cleanContent === Quickshell.clipboardText
+                                        readonly property bool isAboveSelected: root.selectedIndex === slotDelegate.currentPosition + 1 && root.selectedIndex !== -1
+                                        readonly property bool isBelowSelected: root.selectedIndex === slotDelegate.currentPosition - 1 && root.selectedIndex !== -1
+                                        readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
+                                        readonly property string contentType: Cliphist.classifyEntry(rawEntry)
+
+                                        implicitHeight: 52
+                                        buttonRadius: 0
+
+                                        opacity: 0
+                                        scale: 0.90
+                                        transform: Translate {
+                                            id: entrySlide
+                                            y: -12
+                                        }
+
+                                        SequentialAnimation {
+                                            id: entryAnim
+                                            running: false
+
+                                            PauseAnimation {
+                                                duration: Math.max(0, Math.min(6, slotDelegate.currentPosition) * 30)
+                                            }
+
+                                            ParallelAnimation {
+                                                NumberAnimation {
+                                                    target: entryDelegate
+                                                    property: "opacity"
+                                                    to: 1.0
+                                                    duration: 200
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                                NumberAnimation {
+                                                    target: entryDelegate
+                                                    property: "scale"
+                                                    to: 1.0
+                                                    duration: 250
+                                                    easing.type: Easing.OutBack
+                                                }
+                                                NumberAnimation {
+                                                    target: entrySlide
+                                                    property: "y"
+                                                    to: 0
+                                                    duration: 200
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                        }
+
+                                        Component.onCompleted: {
+                                            entryAnim.start();
+                                        }
+
+                                        Connections {
+                                            target: slotDelegate
+                                            function onHasDataChanged() {
+                                                if (slotDelegate.hasData)
+                                                    entryAnim.restart();
+                                            }
+                                        }
+
+                                        colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                                        colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
+                                        colRipple: Appearance.colors.colPrimaryContainerActive
+
+                                        background: Rectangle {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 4
+                                            anchors.rightMargin: 4
+                                            color: entryDelegate.colBackground
+                                            antialiasing: true
+
+                                            topLeftRadius: entryDelegate.isFirst ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isBelowSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                                            topRightRadius: topLeftRadius
+                                            bottomLeftRadius: entryDelegate.isLast ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isAboveSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                                            bottomRightRadius: bottomLeftRadius
+
+                                            Behavior on topLeftRadius {
+                                                NumberAnimation {
+                                                    duration: 350
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                            Behavior on topRightRadius {
+                                                NumberAnimation {
+                                                    duration: 350
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                            Behavior on bottomLeftRadius {
+                                                NumberAnimation {
+                                                    duration: 350
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                            Behavior on bottomRightRadius {
+                                                NumberAnimation {
+                                                    duration: 350
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                            Behavior on color {
+                                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                            }
+                                        }
+
+                                        onClicked: {
+                                            root.selectedIndex = slotDelegate.currentPosition;
+                                        }
+                                        onDoubleClicked: {
+                                            root.selectedIndex = slotDelegate.currentPosition;
+                                            root.activateSelected();
+                                        }
+
+                                        PointingHandInteraction {}
+
+                                        Component {
+                                            id: listImageComponent
+                                            Rectangle {
+                                                implicitWidth: 32
+                                                implicitHeight: 32
+                                                radius: Appearance.rounding.verysmall
+                                                color: Appearance.colors.colSurfaceContainerHighest
+                                                clip: true
+                                                CliphistImage {
+                                                    entry: entryDelegate.rawEntry
+                                                    maxWidth: 32
+                                                    maxHeight: 32
+                                                    anchors.centerIn: parent
+                                                }
+                                            }
+                                        }
+
+                                        Component {
+                                            id: listColorComponent
+                                            Rectangle {
+                                                implicitWidth: 32
+                                                implicitHeight: 32
+                                                radius: Appearance.rounding.full
+                                                color: root.formatColor(entryDelegate.cleanContent)
+                                                border.width: 1
+                                                border.color: Appearance.colors.colOutlineVariant
+                                            }
+                                        }
+
+                                        Component {
+                                            id: listIconComponent
+                                            Item {
+                                                implicitWidth: 32
+                                                implicitHeight: 32
+                                                MaterialSymbol {
+                                                    anchors.centerIn: parent
+                                                    text: {
+                                                        if (entryDelegate.isCurrentClipboard)
+                                                            return "check_circle";
+                                                        switch (entryDelegate.contentType) {
+                                                        case "url":
+                                                            return "link";
+                                                        case "email":
+                                                            return "alternate_email";
+                                                        case "phone":
+                                                            return "phone";
+                                                        case "json":
+                                                            return "data_object";
+                                                        case "filepath":
+                                                            return "folder_open";
+                                                        case "markdown":
+                                                            return "markdown";
+                                                        case "number":
+                                                            return "tag";
+                                                        case "multiline":
+                                                            return "notes";
+                                                        default:
+                                                            return "content_paste";
+                                                        }
+                                                    }
+                                                    iconSize: 18
+                                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : (entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                                                }
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            spacing: 8
+
+                                            Loader {
+                                                active: entryDelegate.isPinned
+                                                visible: active
+                                                Layout.preferredWidth: active ? 14 : 0
+                                                Layout.preferredHeight: active ? 14 : 0
+                                                sourceComponent: MaterialSymbol {
+                                                    text: "keep"
+                                                    iconSize: 14
+                                                    color: Appearance.colors.colPrimary
+                                                }
+                                            }
+
+                                            Loader {
+                                                id: visualLoader
+                                                Layout.preferredWidth: 32
+                                                Layout.preferredHeight: 32
+                                                sourceComponent: {
+                                                    if (entryDelegate.isImage)
+                                                        return listImageComponent;
+                                                    if (entryDelegate.contentType === "hex-color")
+                                                        return listColorComponent;
+                                                    return listIconComponent;
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    text: entryDelegate.isImage ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "") : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
+                                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                                    font.family: entryDelegate.contentType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
+                                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
+                                                    elide: Text.ElideRight
+                                                    maximumLineCount: 1
+                                                }
+
+                                                StyledText {
+                                                    Layout.fillWidth: true
+                                                    visible: {
+                                                        if (entryDelegate.isImage)
+                                                            return true;
+                                                        if (entryDelegate.contentType && entryDelegate.contentType !== "clipboard")
+                                                            return true;
+                                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length;
+                                                        return lines >= 1;
+                                                    }
+                                                    text: {
+                                                        if (entryDelegate.isImage)
+                                                            return "Image";
+                                                        if (entryDelegate.contentType === "url")
+                                                            return StringUtils.getDomain(entryDelegate.cleanContent) || "URL";
+                                                        if (entryDelegate.contentType === "json")
+                                                            return "JSON";
+                                                        if (entryDelegate.contentType === "email")
+                                                            return "Email";
+                                                        if (entryDelegate.contentType === "phone")
+                                                            return "Phone";
+                                                        if (entryDelegate.contentType === "filepath")
+                                                            return "File path";
+                                                        if (entryDelegate.contentType === "hex-color")
+                                                            return "Color";
+                                                        if (entryDelegate.contentType === "markdown")
+                                                            return "Markdown";
+                                                        if (entryDelegate.contentType === "number")
+                                                            return "Number";
+                                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length + 1;
+                                                        return lines + " lines";
+                                                    }
+                                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                                                    elide: Text.ElideRight
+                                                    maximumLineCount: 1
+                                                    opacity: 0.8
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

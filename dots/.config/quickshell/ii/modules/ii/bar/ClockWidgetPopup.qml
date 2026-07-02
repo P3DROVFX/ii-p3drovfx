@@ -196,13 +196,13 @@ StyledPopup {
     contentItem: ColumnLayout {
         id: columnLayout
         anchors.centerIn: parent
-        implicitWidth: root.compact ? 380 : 420
+        implicitWidth: 400
         spacing: 12
 
         ClockHeaderCard {
             id: clockHero
             Layout.fillWidth: true
-            Layout.minimumWidth: root.compact ? 320 : 360
+            Layout.minimumWidth: 400
             visible: Config.options.time.alarms.showAnalogClock
         }
 

@@ -143,7 +143,7 @@ MouseArea {
         Rectangle {
             id: iconCircleVert
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 4
+            anchors.bottomMargin: 2
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width - 4
             height: width
@@ -152,7 +152,7 @@ MouseArea {
 
             MaterialSymbol {
                 anchors.centerIn: parent
-                fill: 0
+                fill: 1
                 text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
                 iconSize: Appearance.font.pixelSize.normal
                 color: Appearance.colors.colOnPrimary

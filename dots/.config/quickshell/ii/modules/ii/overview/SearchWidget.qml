@@ -33,6 +33,10 @@ Item {
     readonly property bool showSkeletons: false
 
     property int loadedResultsCount: 50
+    property int maxSearchItems: 50
+    property var allSearchResults: []
+    property var searchResultMap: ({})
+    property bool searchSlotsInitialized: false
 
     function getFilteredResultsCount() {
         const results = LauncherSearch.results;
@@ -50,7 +54,10 @@ Item {
         const total = root.getFilteredResultsCount();
         if (loadedResultsCount < total) {
             loadedResultsCount = Math.min(total, loadedResultsCount + 50);
-            resultModel.values = root.processResults(LauncherSearch.results);
+            root.maxSearchItems = loadedResultsCount;
+            Qt.callLater(() => {
+                root.rebuildSearchResults();
+            });
         }
     }
 
@@ -78,7 +85,8 @@ Item {
                         // Show first 15 immediately for instant response,
                         // then load the rest after a short delay
                         const allResults = LauncherSearch.results;
-                        resultModel.values = allResults.slice(0, 15);
+                        root.allSearchResults = allResults.slice(0, 15);
+                        root.updateSearchSlots();
                         root.focusFirstItem();
                         resultsDebounce.restart();
                     });
@@ -88,6 +96,7 @@ Item {
             }
         }
     }
+
 
     Connections {
         target: LauncherSearch
@@ -146,6 +155,111 @@ Item {
                 out.push(item);
         }
         return out;
+    }
+
+    function updateSearchSlots() {
+        const newUids = [];
+        for (let i = 0; i < allSearchResults.length; i++) {
+            newUids.push(allSearchResults[i].key);
+        }
+
+        const map = {};
+        for (let i = 0; i < allSearchResults.length; i++) {
+            map[allSearchResults[i].key] = allSearchResults[i];
+        }
+        searchResultMap = map;
+
+        const slots = [];
+        for (let i = 0; i < appResultsRepeater.count; i++) {
+            slots.push(appResultsRepeater.itemAt(i));
+        }
+
+        const isInitial = !root.searchSlotsInitialized;
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i]) slots[i].positionAnimationEnabled = !isInitial;
+        }
+
+        const oldUids = [];
+        for (let i = 0; i < slots.length; i++) {
+            oldUids.push(slots[i] ? slots[i].uniqueId : "");
+        }
+
+        const slotToNewPos = {};
+        const usedNewPositions = new Set();
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const oldUid = oldUids[slotIdx];
+            if (!oldUid) continue;
+            const newPos = newUids.indexOf(oldUid);
+            if (newPos >= 0) {
+                slotToNewPos[slotIdx] = newPos;
+                usedNewPositions.add(newPos);
+            }
+        }
+
+        for (let newPos = 0; newPos < newUids.length; newPos++) {
+            if (usedNewPositions.has(newPos)) continue;
+            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+                if (!(slotIdx in slotToNewPos)) {
+                    slotToNewPos[slotIdx] = newPos;
+                    usedNewPositions.add(newPos);
+                    break;
+                }
+            }
+        }
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const slot = slots[slotIdx];
+            if (!slot) continue;
+            const newPos = slotToNewPos[slotIdx];
+            if (newPos === undefined) {
+                slot.currentPosition = -1;
+                slot.uniqueId = "";
+                slot.hasData = false;
+            } else {
+                const uid = newUids[newPos];
+                const isPreserved = oldUids[slotIdx] === uid && oldUids[slotIdx] !== "";
+                slot.currentPosition = newPos;
+                if (!isPreserved) {
+                    slot.uniqueId = uid;
+                    slot.hasData = true;
+                }
+            }
+        }
+
+        if (isInitial) {
+            root.searchSlotsInitialized = true;
+        }
+
+        updateSearchPositions();
+        posDebounceTimer.restart();
+    }
+
+    function updateSearchPositions() {
+        const slotEntries = [];
+        for (let i = 0; i < appResultsRepeater.count; i++) {
+            const slot = appResultsRepeater.itemAt(i);
+            if (slot && slot.hasData) {
+                slotEntries.push({slot: slot, pos: slot.currentPosition});
+            }
+        }
+
+        appResults.count = slotEntries.length;
+
+        slotEntries.sort(function(a, b) { return a.pos - b.pos; });
+
+        const SPACING = 2;
+        let yPos = appResults.topMargin;
+        for (let i = 0; i < slotEntries.length; i++) {
+            slotEntries[i].slot.yPos = yPos;
+            yPos += slotEntries[i].slot.implicitHeight + SPACING;
+        }
+        appResults._contentAreaHeight = yPos + appResults.bottomMargin - SPACING;
+    }
+
+    function rebuildSearchResults() {
+        allSearchResults = processResults(LauncherSearch.results);
+        updateSearchSlots();
     }
 
     Keys.onPressed: event => {
@@ -436,7 +550,7 @@ Item {
                     }
                 }
 
-                ListView {
+                Item {
                     id: appResults
                     anchors.fill: parent
                     visible: opacity > 0
@@ -449,139 +563,18 @@ Item {
                         }
                     }
                     clip: true
-                    topMargin: 10
-                    bottomMargin: GlobalStates.searchConnectActive ? 16 : 10
-                    spacing: 2
-                    KeyNavigation.up: searchBar
-                    highlightMoveDuration: 100
 
-                    layer.enabled: root.searchingText != "" && appResults.count > 0
-                    layer.effect: OpacityMask {
-                        maskSource: Item {
-                            id: maskRoot
-                            width: appResults.width
-                            height: appResults.height
-
-                            property color topFadeColor: {
-                                if (appResults.currentItem) {
-                                    const visY = appResults.currentItem.y - appResults.contentY;
-                                    if (visY <= appResults.topMargin + 36) return "white";
-                                }
-                                return appResults.atYBeginning ? "white" : "transparent";
-                            }
-                            property color bottomFadeColor: {
-                                if (appResults.currentItem) {
-                                    const visBottom = appResults.currentItem.y - appResults.contentY + appResults.currentItem.height;
-                                    if (visBottom >= appResults.height - appResults.bottomMargin - 36) return "white";
-                                }
-                                return appResults.atYEnd ? "white" : "transparent";
-                            }
-
-                            Behavior on topFadeColor {
-                                ColorAnimation {
-                                    duration: Appearance.animation.elementMoveFast.duration
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                                }
-                            }
-                            Behavior on bottomFadeColor {
-                                ColorAnimation {
-                                    duration: Appearance.animation.elementMoveFast.duration
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                                }
-                            }
-
-                            Column {
-                                anchors.fill: parent
-                                spacing: 0
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(46, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop {
-                                            position: 0.0
-                                            color: maskRoot.topFadeColor
-                                        }
-                                        GradientStop {
-                                            position: 1.0
-                                            color: "white"
-                                        }
-                                    }
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
-                                    color: "white"
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(56, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop {
-                                            position: 0.0
-                                            color: "white"
-                                        }
-                                        GradientStop {
-                                            position: 1.0
-                                            color: maskRoot.bottomFadeColor
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Touchpad and mouse scroll physics adjustments
-                    property real scrollTargetY: 0
-                    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-                    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-                    property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
-
-                    maximumFlickVelocity: 3500
-
-                    MouseArea {
-                        z: 99
-                        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        onWheel: function (wheelEvent) {
-                            const delta = wheelEvent.angleDelta.y / appResults.mouseScrollDeltaThreshold;
-                            var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= appResults.mouseScrollDeltaThreshold ? appResults.mouseScrollFactor : appResults.touchpadScrollFactor;
-
-                            const maxY = Math.max(0, appResults.contentHeight - appResults.height);
-                            const base = scrollAnim.running ? appResults.scrollTargetY : appResults.contentY;
-                            var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-
-                            appResults.scrollTargetY = targetY;
-                            appResults.contentY = targetY;
-                            wheelEvent.accepted = true;
-                        }
-                    }
-
-                    Behavior on contentY {
-                        NumberAnimation {
-                            id: scrollAnim
-                            alwaysRunToEnd: true
-                            duration: Appearance.animation.scroll.duration
-                            easing.type: Appearance.animation.scroll.type
-                            easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                        }
-                    }
-
-                    onContentYChanged: {
-                        if (contentHeight > 0 && contentY + height > contentHeight - 150) {
-                            root.loadMoreResults();
-                        }
-                        if (!scrollAnim.running) {
-                            appResults.scrollTargetY = appResults.contentY;
-                        }
-                    }
+                    // Backward-compatible properties (replaces ListView API)
+                    property int currentIndex: 0
+                    property int count: 0
+                    readonly property real contentHeight: _contentAreaHeight
+                    readonly property real topMargin: 10
+                    readonly property real bottomMargin: GlobalStates.searchConnectActive ? 16 : 10
+                    readonly property bool atYBeginning: appResultsFlick.contentY <= 0
+                    readonly property bool atYEnd: appResultsFlick.contentY + appResultsFlick.height >= _contentAreaHeight
+                    property real contentY: appResultsFlick.contentY
+                    property real _contentAreaHeight: 0
+                    property real _scrollTargetY: 0
 
                     onCurrentIndexChanged: {
                         if (currentIndex >= count - 5 && count < root.getFilteredResultsCount()) {
@@ -589,23 +582,318 @@ Item {
                         }
                     }
 
+                    readonly property Item currentItem: {
+                        if (currentIndex < 0) return null;
+                        for (var i = 0; i < appResultsRepeater.count; i++) {
+                            var s = appResultsRepeater.itemAt(i);
+                            if (s && s.currentPosition === currentIndex && s.hasData) {
+                                return s.searchItemRef;
+                            }
+                        }
+                        return null;
+                    }
+
+                    function itemAtIndex(idx) {
+                        for (var i = 0; i < appResultsRepeater.count; i++) {
+                            var s = appResultsRepeater.itemAt(i);
+                            if (s && s.currentPosition === idx && s.hasData) {
+                                return s.searchItemRef;
+                            }
+                        }
+                        return null;
+                    }
+
+                    Flickable {
+                        id: appResultsFlick
+                        anchors.fill: parent
+                        clip: true
+
+                        contentY: 0
+                        contentHeight: appResults._contentAreaHeight
+
+                        maximumFlickVelocity: 3500
+                        boundsBehavior: Flickable.DragOverBounds
+                        pixelAligned: true
+
+                        // Touchpad and mouse scroll physics adjustments
+                        property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
+                        property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
+                        property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
+
+                        MouseArea {
+                            z: 99
+                            visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            onWheel: function (wheelEvent) {
+                                const delta = wheelEvent.angleDelta.y / appResultsFlick.mouseScrollDeltaThreshold;
+                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= appResultsFlick.mouseScrollDeltaThreshold ? appResultsFlick.mouseScrollFactor : appResultsFlick.touchpadScrollFactor;
+
+                                const maxY = Math.max(0, appResultsFlick.contentHeight - appResultsFlick.height);
+                                const base = scrollAnim.running ? appResults._scrollTargetY : appResultsFlick.contentY;
+                                var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
+
+                                appResults._scrollTargetY = targetY;
+                                appResultsFlick.contentY = targetY;
+                                wheelEvent.accepted = true;
+                            }
+                        }
+
+                        Behavior on contentY {
+                            NumberAnimation {
+                                id: scrollAnim
+                                alwaysRunToEnd: true
+                                duration: Appearance.animation.scroll.duration
+                                easing.type: Appearance.animation.scroll.type
+                                easing.bezierCurve: Appearance.animation.scroll.bezierCurve
+                            }
+                        }
+
+                        onContentYChanged: {
+                            if (contentHeight > 0 && contentY + height > contentHeight - 150) {
+                                root.loadMoreResults();
+                            }
+                            if (!scrollAnim.running) {
+                                appResults._scrollTargetY = contentY;
+                            }
+                        }
+
+                        layer.enabled: root.searchingText != "" && appResults.count > 0
+                        layer.effect: OpacityMask {
+                            maskSource: Item {
+                                id: maskRoot
+                                width: appResultsFlick.width
+                                height: appResultsFlick.height
+
+                                property color topFadeColor: {
+                                    var ci = appResults.currentItem;
+                                    if (ci) {
+                                        var parentSlot = ci.parent;
+                                        if (parentSlot) {
+                                            var visY = parentSlot.y - appResultsFlick.contentY;
+                                            if (visY <= appResults.topMargin + 36) return "white";
+                                        }
+                                    }
+                                    return appResults.atYBeginning ? "white" : "transparent";
+                                }
+                                property color bottomFadeColor: {
+                                    var ci = appResults.currentItem;
+                                    if (ci) {
+                                        var parentSlot = ci.parent;
+                                        if (parentSlot) {
+                                            var visBottom = parentSlot.y - appResultsFlick.contentY + parentSlot.height;
+                                            if (visBottom >= appResultsFlick.height - appResults.bottomMargin - 36) return "white";
+                                        }
+                                    }
+                                    return appResults.atYEnd ? "white" : "transparent";
+                                }
+
+                                Behavior on topFadeColor {
+                                    ColorAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    }
+                                }
+                                Behavior on bottomFadeColor {
+                                    ColorAnimation {
+                                        duration: Appearance.animation.elementMoveFast.duration
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    }
+                                }
+
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 0
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(46, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: maskRoot.topFadeColor
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: "white"
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
+                                        color: "white"
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(56, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: "white"
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: maskRoot.bottomFadeColor
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Debounce timer: delivers full results 150ms after the last
+                        // results change, avoiding per-keystroke full list recomputation
+                        Timer {
+                            id: resultsDebounce
+                            interval: 150
+                            repeat: false
+                            onTriggered: {
+                                root.rebuildSearchResults();
+                            }
+                        }
+
+                        // Debounce timer for position recalculation after height animations settle
+                        Timer {
+                            id: posDebounceTimer
+                            interval: 260
+                            repeat: false
+                            onTriggered: {
+                                root.updateSearchPositions();
+                            }
+                        }
+
+                        Item {
+                            id: appResultsContainer
+                            width: parent.width
+                            height: appResults._contentAreaHeight
+
+                            Repeater {
+                                id: appResultsRepeater
+                                model: root.maxSearchItems
+
+                                delegate: Item {
+                                    id: slotDelegate
+                                    required property int index
+
+                                    property bool positionAnimationEnabled: false
+                                    property string uniqueId: ""
+                                    property int currentPosition: -1
+                                    property bool hasData: false
+                                    property real yPos: 0
+
+                                    readonly property var slotData: root.searchResultMap[uniqueId] || null
+
+                                    y: yPos
+                                    width: parent.width
+                                    implicitHeight: hasData && searchItem ? searchItem.implicitHeight : 0
+                                    height: implicitHeight
+                                    visible: hasData
+                                    opacity: hasData ? 1.0 : 0.0
+
+                                    Behavior on y {
+                                        enabled: slotDelegate.positionAnimationEnabled
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    onUniqueIdChanged: {
+                                        if (uniqueId !== "" && searchItem) {
+                                            searchItem.replayEntryAnimation();
+                                        }
+                                    }
+
+                                    readonly property Item searchItemRef: searchItem
+
+                                    SearchItem {
+                                        id: searchItem
+                                        visible: slotDelegate.hasData
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+
+                                        entry: slotDelegate.slotData
+                                        query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
+                                        listIndex: slotDelegate.currentPosition
+                                        listCount: appResults.count
+                                        listCurrentIndex: appResults.currentIndex
+
+                                        Connections {
+                                            target: searchItem
+                                            function onImplicitHeightChanged() {
+                                                if (slotDelegate.hasData) {
+                                                    posDebounceTimer.restart();
+                                                }
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: root
+                                            function onRequestToggleActions() {
+                                                if (searchItem.listIndex === appResults.currentIndex) {
+                                                    searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                                    searchItem.actionSelectedIndex = 0;
+                                                    if (searchItem.actionPanelOpen) {
+                                                        searchItem.forceActiveFocus();
+                                                    } else {
+                                                        root.focusSearchInput();
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Keys.onPressed: event => {
+                                            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+                                                searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
+                                                searchItem.actionSelectedIndex = 0;
+                                                if (searchItem.actionPanelOpen) {
+                                                    searchItem.forceActiveFocus();
+                                                } else {
+                                                    root.focusSearchInput();
+                                                }
+                                                event.accepted = true;
+                                            } else if (event.key === Qt.Key_Tab) {
+                                                if (searchItem.actionPanelOpen)
+                                                    return;
+                                                if (LauncherSearch.results.length === 0)
+                                                    return;
+                                                const tabbedText = searchItem.entry ? searchItem.entry.name : "";
+                                                LauncherSearch.query = tabbedText;
+                                                searchBar.searchInput.text = tabbedText;
+                                                event.accepted = true;
+                                                root.focusSearchInput();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
                             root.loadedResultsCount = 50;
+                            root.maxSearchItems = 50;
+                            appResultsFlick.contentY = 0;
                             if (appResults.count > 0)
                                 appResults.currentIndex = 0;
-                        }
-                    }
-
-                    // Debounce timer: delivers full results 150ms after the last
-                    // results change, avoiding per-keystroke full list recomputation
-                    Timer {
-                        id: resultsDebounce
-                        interval: 150
-                        repeat: false
-                        onTriggered: {
-                            resultModel.values = root.processResults(LauncherSearch.results);
                         }
                     }
 
@@ -613,75 +901,20 @@ Item {
                         target: LauncherSearch
                         function onResultsChanged() {
                             root.loadedResultsCount = 50;
+                            root.maxSearchItems = 50;
                             // Immediately show first 15 results for snappy visual feedback
                             const immediate = root.processResults(LauncherSearch.results);
                             const quickSlice = immediate.length > 15 ? immediate.slice(0, 15) : immediate;
-                            resultModel.values = quickSlice;
+                            root.allSearchResults = quickSlice;
+                            root.updateSearchSlots();
                             root.focusFirstItem();
                             // Schedule full result delivery after debounce
                             if (immediate.length > 15)
                                 resultsDebounce.restart();
                         }
                     }
-
-                    model: ScriptModel {
-                        id: resultModel
-                        objectProp: "key"
-                        Component.onCompleted: {
-                            values = root.processResults(LauncherSearch.results);
-                        }
-                    }
-
-                    delegate: SearchItem {
-                        id: searchItem
-                        required property int index
-                        listIndex: index
-                        listCurrentIndex: appResults.currentIndex
-                        required property var modelData
-                        anchors.left: parent?.left
-                        anchors.right: parent?.right
-                        entry: modelData
-                        query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.emojis, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
-
-                        Connections {
-                            target: root
-                            function onRequestToggleActions() {
-                                if (searchItem.listIndex === appResults.currentIndex) {
-                                    searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                    searchItem.actionSelectedIndex = 0;
-                                    if (searchItem.actionPanelOpen) {
-                                        searchItem.forceActiveFocus();
-                                    } else {
-                                        root.focusSearchInput();
-                                    }
-                                }
-                            }
-                        }
-
-                        Keys.onPressed: event => {
-                            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
-                                searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
-                                searchItem.actionSelectedIndex = 0;
-                                if (searchItem.actionPanelOpen) {
-                                    searchItem.forceActiveFocus();
-                                } else {
-                                    root.focusSearchInput();
-                                }
-                                event.accepted = true;
-                            } else if (event.key === Qt.Key_Tab) {
-                                if (searchItem.actionPanelOpen)
-                                    return;
-                                if (LauncherSearch.results.length === 0)
-                                    return;
-                                const tabbedText = searchItem.modelData.name;
-                                LauncherSearch.query = tabbedText;
-                                searchBar.searchInput.text = tabbedText;
-                                event.accepted = true;
-                                root.focusSearchInput();
-                            }
-                        }
-                    }
                 }
+
 
                 ColumnLayout {
                     id: searchSkeletons

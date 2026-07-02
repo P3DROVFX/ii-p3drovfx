@@ -105,11 +105,6 @@ Item {
         }
     }
 
-    onDeviceListChanged: {
-        if (selectedIndex >= deviceList.length && deviceList.length > 0)
-            selectedIndex = deviceList.length - 1;
-    }
-
     property var deviceList: {
         const q = root.searchQuery.toLowerCase();
         let all = Array.from(BluetoothStatus.friendlyDeviceList);
@@ -134,6 +129,136 @@ Item {
 
     readonly property var selectedDevice: deviceList.length > 0 && selectedIndex >= 0 ? deviceList[Math.min(selectedIndex, deviceList.length - 1)] : null
     property bool isScanning: false
+
+    // Slot management for persistent reordering animation
+    property var bluetoothDeviceMap: ({})
+    property bool bluetoothSlotsInitialized: false
+    readonly property int maxBluetoothItems: 80
+
+    function updateBluetoothSlots() {
+        const newUids = [];
+        for (let i = 0; i < deviceList.length; i++) {
+            newUids.push(deviceList[i].address);
+        }
+
+        const map = {};
+        for (let i = 0; i < deviceList.length; i++) {
+            map[deviceList[i].address] = deviceList[i];
+        }
+        bluetoothDeviceMap = map;
+
+        const slots = [];
+        if (typeof bluetoothRepeater !== "undefined" && bluetoothRepeater && bluetoothRepeater.count > 0) {
+            for (let i = 0; i < bluetoothRepeater.count; i++) {
+                slots.push(bluetoothRepeater.itemAt(i));
+            }
+        }
+
+        const isInitial = !root.bluetoothSlotsInitialized;
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i]) slots[i].positionAnimationEnabled = !isInitial;
+        }
+
+        const oldUids = [];
+        for (let i = 0; i < slots.length; i++) {
+            oldUids.push(slots[i] ? slots[i].uniqueId : "");
+        }
+
+        const slotToNewPos = {};
+        const usedNewPositions = new Set();
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const oldUid = oldUids[slotIdx];
+            if (!oldUid) continue;
+            const newPos = newUids.indexOf(oldUid);
+            if (newPos >= 0) {
+                slotToNewPos[slotIdx] = newPos;
+                usedNewPositions.add(newPos);
+            }
+        }
+
+        for (let newPos = 0; newPos < newUids.length; newPos++) {
+            if (usedNewPositions.has(newPos)) continue;
+            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+                if (!(slotIdx in slotToNewPos)) {
+                    slotToNewPos[slotIdx] = newPos;
+                    usedNewPositions.add(newPos);
+                    break;
+                }
+            }
+        }
+
+        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
+            const slot = slots[slotIdx];
+            if (!slot) continue;
+            const newPos = slotToNewPos[slotIdx];
+            if (newPos === undefined) {
+                slot.currentPosition = -1;
+                slot.uniqueId = "";
+                slot.hasData = false;
+            } else {
+                const uid = newUids[newPos];
+                const isPreserved = oldUids[slotIdx] === uid && oldUids[slotIdx] !== "";
+                slot.currentPosition = newPos;
+                if (!isPreserved) {
+                    slot.uniqueId = uid;
+                    slot.hasData = true;
+                }
+            }
+        }
+
+        if (isInitial) {
+            root.bluetoothSlotsInitialized = true;
+        }
+
+        root.updateBluetoothPositions();
+        bluetoothPosDebounce.restart();
+    }
+
+    function updateBluetoothPositions() {
+        const slotEntries = [];
+        if (typeof bluetoothRepeater === "undefined" || !bluetoothRepeater) return;
+        for (let i = 0; i < bluetoothRepeater.count; i++) {
+            const slot = bluetoothRepeater.itemAt(i);
+            if (slot && slot.hasData) {
+                slotEntries.push({slot: slot, pos: slot.currentPosition});
+            }
+        }
+
+        deviceListView.count = slotEntries.length;
+
+        slotEntries.sort(function(a, b) { return a.pos - b.pos; });
+
+        const SPACING = 2;
+        let yPos = deviceListView.topMargin;
+        for (let i = 0; i < slotEntries.length; i++) {
+            slotEntries[i].slot.yPos = yPos;
+            yPos += slotEntries[i].slot.implicitHeight + SPACING;
+        }
+        devicesContentArea.height = yPos + deviceListView.bottomMargin - SPACING;
+    }
+
+    // Debounce for position recalculation after height animations settle
+    Timer {
+        id: bluetoothPosDebounce
+        interval: 260
+        repeat: false
+        onTriggered: root.updateBluetoothPositions()
+    }
+
+    onDeviceListChanged: {
+        if (selectedIndex >= deviceList.length && deviceList.length > 0)
+            selectedIndex = deviceList.length - 1;
+        Qt.callLater(() => {
+            root.updateBluetoothSlots();
+        });
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(() => {
+            root.updateBluetoothSlots();
+        });
+    }
 
     // Random shape and custom image properties
     property list<int> detailShapes: [MaterialShape.Shape.Cookie7Sided, MaterialShape.Shape.SoftBurst, MaterialShape.Shape.Cookie9Sided, MaterialShape.Shape.Pentagon, MaterialShape.Shape.Sunny, MaterialShape.Shape.Cookie4Sided, MaterialShape.Shape.Arch, MaterialShape.Shape.Fan, MaterialShape.Shape.SemiCircle]
@@ -586,362 +711,517 @@ Item {
                     }
                 }
 
-                ListView {
+                Item {
                     id: deviceListView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    topMargin: 4
-                    bottomMargin: 4
-                    spacing: 2
                     visible: root.btAvailable && root.btEnabled && !root.isEnabling && root.deviceList.length > 0
 
-                    model: root.deviceList
+                    // Backward-compatible properties (replaces ListView API)
+                    property int currentIndex: root.selectedIndex
+                    property int count: 0
+                    readonly property real contentHeight: devicesContentArea.height
+                    readonly property real topMargin: 4
+                    readonly property real bottomMargin: 4
+                    readonly property real contentY: deviceFlick.contentY
+                    readonly property bool atYBeginning: deviceFlick.contentY <= 0
+                    readonly property bool atYEnd: deviceFlick.contentY + deviceFlick.height >= devicesContentArea.height
+                    property real scrollTargetY: 0
+                    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
+                    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
+                    property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
-                    currentIndex: root.selectedIndex
-                    highlightMoveDuration: 80
-
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Item {
-                            id: maskRoot
-                            width: deviceListView.width
-                            height: deviceListView.height
-
-                            property color topFadeColor: !deviceListView.atYBeginning ? "transparent" : "white"
-                            property color bottomFadeColor: !deviceListView.atYEnd ? "transparent" : "white"
-
-                            Behavior on topFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-                            Behavior on bottomFadeColor {
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-
-                            Column {
-                                anchors.fill: parent
-                                spacing: 0
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
-                                        GradientStop { position: 1.0; color: "white" }
+                    function positionViewAtIndex(idx, mode) {
+                        if (idx < 0 || idx >= count)
+                            return;
+                        for (let i = 0; i < bluetoothRepeater.count; i++) {
+                            const s = bluetoothRepeater.itemAt(i);
+                            if (s && s.hasData && s.currentPosition === idx) {
+                                let y = s.yPos;
+                                const itemHeight = s.implicitHeight;
+                                if (mode === ListView.Contain) {
+                                    if (y < deviceFlick.contentY) {
+                                        deviceFlick.contentY = y - topMargin;
+                                    } else if (y + itemHeight > deviceFlick.contentY + deviceFlick.height) {
+                                        deviceFlick.contentY = y + itemHeight - deviceFlick.height + bottomMargin;
                                     }
+                                } else {
+                                    deviceFlick.contentY = y - topMargin;
                                 }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
-                                    color: "white"
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: "white" }
-                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
-                                    }
-                                }
+                                return;
                             }
                         }
                     }
 
-                    ScrollBar.vertical: StyledScrollBar {}
+                    Flickable {
+                        id: deviceFlick
+                        anchors.fill: parent
+                        clip: true
+                        contentY: 0
+                        contentHeight: devicesContentArea.height
+                        maximumFlickVelocity: 3500
+                        boundsBehavior: Flickable.DragOverBounds
+                        pixelAligned: true
 
-                    delegate: Column {
-                        id: delegateContainer
-                        required property var modelData
-                        required property int index
+                        MouseArea {
+                            z: 99
+                            visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            onWheel: function (wheelEvent) {
+                                const delta = wheelEvent.angleDelta.y / deviceListView.mouseScrollDeltaThreshold;
+                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= deviceListView.mouseScrollDeltaThreshold ? deviceListView.mouseScrollFactor : deviceListView.touchpadScrollFactor;
 
-                        width: deviceListView.width
-                        spacing: 0
+                                const maxY = Math.max(0, deviceFlick.contentHeight - deviceFlick.height);
+                                const base = scrollAnim.running ? deviceListView.scrollTargetY : deviceFlick.contentY;
+                                var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
 
-                        readonly property var dev: modelData
-                        readonly property bool isFirstUnpaired: !dev.paired && (index === 0 || (deviceListView.model[index - 1] && deviceListView.model[index - 1].paired))
-
-                        opacity: 0
-                        scale: 0.90
-                        transform: Translate {
-                            id: devSlide
-                            y: -12
-                        }
-
-                        SequentialAnimation {
-                            id: entryAnim
-                            running: false
-
-                            PauseAnimation {
-                                duration: Math.max(0, Math.min(6, delegateContainer.index) * 30)
-                            }
-
-                            ParallelAnimation {
-                                NumberAnimation {
-                                    target: delegateContainer
-                                    property: "opacity"
-                                    to: 1.0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
-                                NumberAnimation {
-                                    target: delegateContainer
-                                    property: "scale"
-                                    to: 1.0
-                                    duration: 250
-                                    easing.type: Easing.OutBack
-                                }
-                                NumberAnimation {
-                                    target: devSlide
-                                    property: "y"
-                                    to: 0
-                                    duration: 200
-                                    easing.type: Easing.OutQuad
-                                }
+                                deviceListView.scrollTargetY = targetY;
+                                deviceFlick.contentY = targetY;
+                                wheelEvent.accepted = true;
                             }
                         }
 
-                        Component.onCompleted: {
-                            entryAnim.start();
-                        }
-
-                        // Discover Section Header with line and spacing
-                        Item {
-                            width: parent.width
-                            height: 64
-                            visible: delegateContainer.isFirstUnpaired
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                anchors.topMargin: 30
-                                spacing: 8
-
-                                MaterialSymbol {
-                                    text: "search"
-                                    iconSize: 16
-                                    color: Appearance.colors.colPrimary
-                                }
-
-                                StyledText {
-                                    text: Translation.tr("DISCOVER")
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.weight: Font.Bold
-                                    font.letterSpacing: 1.5
-                                    color: Appearance.colors.colPrimary
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 1
-                                    color: Appearance.colors.colOutlineVariant
-                                    opacity: 0.4
-                                }
+                        Behavior on contentY {
+                            NumberAnimation {
+                                id: scrollAnim
+                                alwaysRunToEnd: true
+                                duration: Appearance.animation.scroll.duration
+                                easing.type: Appearance.animation.scroll.type
+                                easing.bezierCurve: Appearance.animation.scroll.bezierCurve
                             }
                         }
 
-                        RippleButton {
-                            id: deviceDelegate
-                            width: parent.width
-                            implicitHeight: 56
-                            buttonRadius: 0
-
-                            readonly property var dev: delegateContainer.dev
-                            readonly property bool isDevConnected: dev ? dev.connected : false
-                            onIsDevConnectedChanged: {
-                                if (dev && dev.address) {
-                                    let tempCon = Object.assign({}, root.connectingDevices);
-                                    let tempDis = Object.assign({}, root.disconnectingDevices);
-                                    let changed = false;
-                                    if (tempCon[dev.address]) {
-                                        delete tempCon[dev.address];
-                                        changed = true;
-                                    }
-                                    if (tempDis[dev.address]) {
-                                        delete tempDis[dev.address];
-                                        changed = true;
-                                    }
-                                    if (changed) {
-                                        root.connectingDevices = tempCon;
-                                        root.disconnectingDevices = tempDis;
-                                    }
-                                }
+                        onContentYChanged: {
+                            if (!scrollAnim.running) {
+                                deviceListView.scrollTargetY = contentY;
                             }
-                            readonly property bool isSelected: delegateContainer.index === root.selectedIndex
-                            readonly property bool isFirst: delegateContainer.index === 0
-                            readonly property bool isLast: delegateContainer.index === deviceListView.count - 1
-                            readonly property bool isAboveSelected: root.selectedIndex === delegateContainer.index + 1
-                            readonly property bool isBelowSelected: root.selectedIndex === delegateContainer.index - 1
-                            readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
+                        }
 
-                            colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                            colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
-                            colRipple: Appearance.colors.colPrimaryContainerActive
+                        layer.enabled: deviceListView.count > 0
+                        layer.effect: OpacityMask {
+                            maskSource: Item {
+                                id: maskRoot
+                                width: deviceFlick.width
+                                height: deviceFlick.height
 
-                            background: Rectangle {
-                                anchors.fill: parent
-                                anchors.leftMargin: 4
-                                anchors.rightMargin: 4
-                                color: deviceDelegate.colBackground
-                                antialiasing: true
-                                topLeftRadius: deviceDelegate.isFirst ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isBelowSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
-                                topRightRadius: topLeftRadius
-                                bottomLeftRadius: deviceDelegate.isLast ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isAboveSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
-                                bottomRightRadius: bottomLeftRadius
+                                property color topFadeColor: !deviceListView.atYBeginning ? "transparent" : "white"
+                                property color bottomFadeColor: !deviceListView.atYEnd ? "transparent" : "white"
 
-                                Behavior on topLeftRadius {
-                                    NumberAnimation {
-                                        duration: 300
+                                Behavior on topFadeColor {
+                                    ColorAnimation {
+                                        duration: 200
                                         easing.type: Easing.OutQuad
                                     }
                                 }
-                                Behavior on topRightRadius {
-                                    NumberAnimation {
-                                        duration: 300
+                                Behavior on bottomFadeColor {
+                                    ColorAnimation {
+                                        duration: 200
                                         easing.type: Easing.OutQuad
                                     }
                                 }
-                                Behavior on bottomLeftRadius {
-                                    NumberAnimation {
-                                        duration: 300
-                                        easing.type: Easing.OutQuad
-                                    }
-                                }
-                                Behavior on bottomRightRadius {
-                                    NumberAnimation {
-                                        duration: 300
-                                        easing.type: Easing.OutQuad
-                                    }
-                                }
-                                Behavior on color {
-                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                                }
-                            }
 
-                            onClicked: root.selectedIndex = delegateContainer.index
-                            onDoubleClicked: {
-                                root.selectedIndex = delegateContainer.index;
-                                root.activateSelected();
-                            }
+                                Column {
+                                    anchors.fill: parent
+                                    spacing: 0
 
-                            PointingHandInteraction {}
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                spacing: 10
-                                Item {
-                                    id: iconContainer
-                                    implicitWidth: 32
-                                    implicitHeight: 32
-
-                                    readonly property bool isProcessing: deviceDelegate.dev ? (deviceDelegate.dev.state === 3 || deviceDelegate.dev.state === 2 || !!root.connectingDevices[deviceDelegate.dev.address] || !!root.disconnectingDevices[deviceDelegate.dev.address]) : false
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: Icons.getBluetoothDeviceMaterialSymbol(deviceDelegate.dev?.icon || "")
-                                        iconSize: 20
-                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
-                                        visible: !iconContainer.isProcessing
-                                    }
-
-                                    MaterialShape {
-                                        anchors.centerIn: parent
-                                        width: 18
-                                        height: 18
-                                        shape: MaterialShape.Shape.Cookie7Sided
-                                        color: deviceDelegate.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colPrimary
-                                        visible: iconContainer.isProcessing
-
-                                        RotationAnimator on rotation {
-                                            from: 0
-                                            to: 360
-                                            duration: 2000
-                                            loops: Animation.Infinite
-                                            running: iconContainer.isProcessing
-                                        }
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 1
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: deviceDelegate.dev?.name || Translation.tr("Unknown device")
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
-                                        font.weight: Font.Medium
-                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: {
-                                            const dev = deviceDelegate.dev;
-                                            if (!dev)
-                                                return "";
-                                            if (dev.connected)
-                                                return Translation.tr("Connected");
-                                            if (dev.address && (dev.state === 3 || root.connectingDevices[dev.address]))
-                                                return Translation.tr("Connecting...");
-                                            if (dev.address && (dev.state === 2 || root.disconnectingDevices[dev.address]))
-                                                return Translation.tr("Disconnecting...");
-                                            if (dev.paired)
-                                                return Translation.tr("Paired");
-                                            return Translation.tr("Available");
-                                        }
-                                        font.pixelSize: Appearance.font.pixelSize.smallest
-                                        color: {
-                                            const dev = deviceDelegate.dev;
-                                            if (!dev)
-                                                return Appearance.colors.colSubtext;
-                                            if (deviceDelegate.isSelected)
-                                                return Appearance.colors.colOnPrimary;
-                                            if (dev.connected)
-                                                return Appearance.colors.colPrimary;
-                                            return Appearance.colors.colSubtext;
-                                        }
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                        opacity: 0.85
-                                    }
-                                }
-
-                                Loader {
-                                    active: deviceDelegate.dev?.batteryAvailable ?? false
-                                    visible: active
-                                    Layout.preferredWidth: active ? 28 : 0
-
-                                    sourceComponent: RowLayout {
-                                        spacing: 2
-
-                                        MaterialSymbol {
-                                            text: {
-                                                const b = deviceDelegate.dev?.battery ?? 0;
-                                                if (b <= 0.15)
-                                                    return "battery_1_bar";
-                                                if (b <= 0.35)
-                                                    return "battery_3_bar";
-                                                if (b <= 0.60)
-                                                    return "battery_5_bar";
-                                                if (b <= 0.85)
-                                                    return "battery_6_bar";
-                                                return "battery_full";
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(36, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: maskRoot.topFadeColor
                                             }
-                                            iconSize: 14
-                                            color: {
-                                                const b = deviceDelegate.dev?.battery ?? 0;
-                                                if (b <= 0.15)
-                                                    return Appearance.m3colors.m3error;
-                                                return deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant;
+                                            GradientStop {
+                                                position: 1.0
+                                                color: "white"
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
+                                        color: "white"
+                                    }
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: Math.min(36, parent.height / 2)
+                                        color: "transparent"
+                                        gradient: Gradient {
+                                            GradientStop {
+                                                position: 0.0
+                                                color: "white"
+                                            }
+                                            GradientStop {
+                                                position: 1.0
+                                                color: maskRoot.bottomFadeColor
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        ScrollBar.vertical: StyledScrollBar {}
+
+                        Item {
+                            id: devicesContentArea
+                            width: deviceFlick.width
+                            height: 0
+
+                            Repeater {
+                                id: bluetoothRepeater
+                                model: root.maxBluetoothItems
+
+                                delegate: Item {
+                                    id: slotDelegate
+                                    required property int index
+
+                                    property bool positionAnimationEnabled: false
+                                    property string uniqueId: ""
+                                    property int currentPosition: -1
+                                    property bool hasData: false
+                                    property real yPos: 0
+
+                                    readonly property var slotData: hasData ? (root.bluetoothDeviceMap[uniqueId] || null) : null
+
+                                    y: yPos
+                                    x: 0
+                                    width: devicesContentArea.width
+                                    implicitHeight: hasData ? delegateContainer.implicitHeight : 0
+                                    height: implicitHeight
+                                    visible: hasData
+                                    opacity: hasData ? 1.0 : 0.0
+
+                                    Behavior on y {
+                                        enabled: slotDelegate.positionAnimationEnabled
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on height {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 180
+                                            easing.type: Easing.BezierSpline
+                                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                                        }
+                                    }
+
+                                    onHeightChanged: {
+                                        if (hasData)
+                                            bluetoothPosDebounce.restart();
+                                    }
+
+                                    Column {
+                                        id: delegateContainer
+                                        anchors.fill: parent
+                                        spacing: 0
+
+                                        readonly property var dev: slotDelegate.slotData
+                                        readonly property bool isFirstUnpaired: dev && !dev.paired && (slotDelegate.currentPosition === 0 || (root.deviceList[slotDelegate.currentPosition - 1] && root.deviceList[slotDelegate.currentPosition - 1].paired))
+
+                                        opacity: 0
+                                        scale: 0.90
+                                        transform: Translate {
+                                            id: devSlide
+                                            y: -12
+                                        }
+
+                                        SequentialAnimation {
+                                            id: entryAnim
+                                            running: false
+
+                                            PauseAnimation {
+                                                duration: Math.max(0, Math.min(6, slotDelegate.currentPosition) * 30)
+                                            }
+
+                                            ParallelAnimation {
+                                                NumberAnimation {
+                                                    target: delegateContainer
+                                                    property: "opacity"
+                                                    to: 1.0
+                                                    duration: 200
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                                NumberAnimation {
+                                                    target: delegateContainer
+                                                    property: "scale"
+                                                    to: 1.0
+                                                    duration: 250
+                                                    easing.type: Easing.OutBack
+                                                }
+                                                NumberAnimation {
+                                                    target: devSlide
+                                                    property: "y"
+                                                    to: 0
+                                                    duration: 200
+                                                    easing.type: Easing.OutQuad
+                                                }
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: slotDelegate
+                                            function onHasDataChanged() {
+                                                if (slotDelegate.hasData)
+                                                    entryAnim.restart();
+                                            }
+                                        }
+
+                                        // Discover Section Header with line and spacing
+                                        Item {
+                                            width: parent.width
+                                            height: 64
+                                            visible: delegateContainer.isFirstUnpaired
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                anchors.topMargin: 30
+                                                spacing: 8
+
+                                                MaterialSymbol {
+                                                    text: "search"
+                                                    iconSize: 16
+                                                    color: Appearance.colors.colPrimary
+                                                }
+
+                                                StyledText {
+                                                    text: Translation.tr("DISCOVER")
+                                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                                    font.weight: Font.Bold
+                                                    font.letterSpacing: 1.5
+                                                    color: Appearance.colors.colPrimary
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    height: 1
+                                                    color: Appearance.colors.colOutlineVariant
+                                                    opacity: 0.4
+                                                }
+                                            }
+                                        }
+
+                                        RippleButton {
+                                            id: deviceDelegate
+                                            width: parent.width
+                                            implicitHeight: 56
+                                            buttonRadius: 0
+
+                                            readonly property var dev: delegateContainer.dev
+                                            readonly property bool isDevConnected: dev ? dev.connected : false
+                                            onIsDevConnectedChanged: {
+                                                if (dev && dev.address) {
+                                                    let tempCon = Object.assign({}, root.connectingDevices);
+                                                    let tempDis = Object.assign({}, root.disconnectingDevices);
+                                                    let changed = false;
+                                                    if (tempCon[dev.address]) {
+                                                        delete tempCon[dev.address];
+                                                        changed = true;
+                                                    }
+                                                    if (tempDis[dev.address]) {
+                                                        delete tempDis[dev.address];
+                                                        changed = true;
+                                                    }
+                                                    if (changed) {
+                                                        root.connectingDevices = tempCon;
+                                                        root.disconnectingDevices = tempDis;
+                                                    }
+                                                }
+                                            }
+                                            readonly property bool isSelected: slotDelegate.currentPosition === root.selectedIndex
+                                            readonly property bool isFirst: slotDelegate.currentPosition === 0
+                                            readonly property bool isLast: slotDelegate.currentPosition === deviceListView.count - 1
+                                            readonly property bool isAboveSelected: root.selectedIndex === slotDelegate.currentPosition + 1
+                                            readonly property bool isBelowSelected: root.selectedIndex === slotDelegate.currentPosition - 1
+                                            readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
+
+                                            colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                                            colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
+                                            colRipple: Appearance.colors.colPrimaryContainerActive
+
+                                            background: Rectangle {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 4
+                                                anchors.rightMargin: 4
+                                                color: deviceDelegate.colBackground
+                                                antialiasing: true
+                                                topLeftRadius: deviceDelegate.isFirst ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isBelowSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
+                                                topRightRadius: topLeftRadius
+                                                bottomLeftRadius: deviceDelegate.isLast ? Appearance.rounding.large : (deviceDelegate.isSelected || deviceDelegate.isAboveSelected ? deviceDelegate.pillRadius : Appearance.rounding.small)
+                                                bottomRightRadius: bottomLeftRadius
+
+                                                Behavior on topLeftRadius {
+                                                    NumberAnimation {
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                                Behavior on topRightRadius {
+                                                    NumberAnimation {
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                                Behavior on bottomLeftRadius {
+                                                    NumberAnimation {
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                                Behavior on bottomRightRadius {
+                                                    NumberAnimation {
+                                                        duration: 300
+                                                        easing.type: Easing.OutQuad
+                                                    }
+                                                }
+                                                Behavior on color {
+                                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                                }
+                                            }
+
+                                            onClicked: root.selectedIndex = slotDelegate.currentPosition
+                                            onDoubleClicked: {
+                                                root.selectedIndex = slotDelegate.currentPosition;
+                                                root.activateSelected();
+                                            }
+
+                                            PointingHandInteraction {}
+
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 12
+                                                anchors.rightMargin: 12
+                                                spacing: 10
+                                                Item {
+                                                    id: iconContainer
+                                                    implicitWidth: 32
+                                                    implicitHeight: 32
+
+                                                    readonly property bool isProcessing: deviceDelegate.dev ? (deviceDelegate.dev.state === 3 || deviceDelegate.dev.state === 2 || !!root.connectingDevices[deviceDelegate.dev.address] || !!root.disconnectingDevices[deviceDelegate.dev.address]) : false
+
+                                                    MaterialSymbol {
+                                                        anchors.centerIn: parent
+                                                        text: Icons.getBluetoothDeviceMaterialSymbol(deviceDelegate.dev?.icon || "")
+                                                        iconSize: 20
+                                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : (deviceDelegate.dev?.connected ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
+                                                        visible: !iconContainer.isProcessing
+                                                    }
+
+                                                    MaterialShape {
+                                                        anchors.centerIn: parent
+                                                        width: 18
+                                                        height: 18
+                                                        shape: MaterialShape.Shape.Cookie7Sided
+                                                        color: deviceDelegate.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colPrimary
+                                                        visible: iconContainer.isProcessing
+
+                                                        RotationAnimator on rotation {
+                                                            from: 0
+                                                            to: 360
+                                                            duration: 2000
+                                                            loops: Animation.Infinite
+                                                            running: iconContainer.isProcessing
+                                                        }
+                                                    }
+                                                }
+
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 1
+
+                                                    StyledText {
+                                                        Layout.fillWidth: true
+                                                        text: deviceDelegate.dev?.name || Translation.tr("Unknown device")
+                                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                                        font.weight: Font.Medium
+                                                        color: deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 1
+                                                    }
+
+                                                    StyledText {
+                                                        Layout.fillWidth: true
+                                                        text: {
+                                                            const dev = deviceDelegate.dev;
+                                                            if (!dev)
+                                                                return "";
+                                                            if (dev.connected)
+                                                                return Translation.tr("Connected");
+                                                            if (dev.address && (dev.state === 3 || root.connectingDevices[dev.address]))
+                                                                return Translation.tr("Connecting...");
+                                                            if (dev.address && (dev.state === 2 || root.disconnectingDevices[dev.address]))
+                                                                return Translation.tr("Disconnecting...");
+                                                            if (dev.paired)
+                                                                return Translation.tr("Paired");
+                                                            return Translation.tr("Available");
+                                                        }
+                                                        font.pixelSize: Appearance.font.pixelSize.smallest
+                                                        color: {
+                                                            const dev = deviceDelegate.dev;
+                                                            if (!dev)
+                                                                return Appearance.colors.colSubtext;
+                                                            if (deviceDelegate.isSelected)
+                                                                return Appearance.colors.colOnPrimary;
+                                                            if (dev.connected)
+                                                                return Appearance.colors.colPrimary;
+                                                            return Appearance.colors.colSubtext;
+                                                        }
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 1
+                                                        opacity: 0.85
+                                                    }
+                                                }
+
+                                                Loader {
+                                                    active: deviceDelegate.dev?.batteryAvailable ?? false
+                                                    visible: active
+                                                    Layout.preferredWidth: active ? 28 : 0
+
+                                                    sourceComponent: RowLayout {
+                                                        spacing: 2
+
+                                                        MaterialSymbol {
+                                                            text: {
+                                                                const b = deviceDelegate.dev?.battery ?? 0;
+                                                                if (b <= 0.15)
+                                                                    return "battery_1_bar";
+                                                                if (b <= 0.35)
+                                                                    return "battery_3_bar";
+                                                                if (b <= 0.60)
+                                                                    return "battery_5_bar";
+                                                                if (b <= 0.85)
+                                                                    return "battery_6_bar";
+                                                                return "battery_full";
+                                                            }
+                                                            iconSize: 14
+                                                            color: {
+                                                                const b = deviceDelegate.dev?.battery ?? 0;
+                                                                if (b <= 0.15)
+                                                                    return Appearance.m3colors.m3error;
+                                                                return deviceDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant;
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
