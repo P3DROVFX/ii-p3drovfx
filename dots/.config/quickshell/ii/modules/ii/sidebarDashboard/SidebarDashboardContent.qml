@@ -57,7 +57,7 @@ Item {
     implicitWidth: sidebarRightBackground.implicitWidth
 
     Loader {
-        active: !GlobalStates.connectModeActive
+        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         sourceComponent: Component {
             StyledRectangularShadow {
                 target: sidebarRightBackground
@@ -71,9 +71,9 @@ Item {
         implicitHeight: parent.height - Appearance.sizes.hyprlandGapsOut * 2
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-        border.width: GlobalStates.connectModeActive ? 0 : 1
-        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
-        radius: GlobalStates.connectModeActive ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        border.width: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? 0 : 1
+        border.color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : Appearance.colors.colLayer0Border
+        radius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
         ColumnLayout {
             anchors.fill: parent

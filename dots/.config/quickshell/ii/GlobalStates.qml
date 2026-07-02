@@ -217,9 +217,14 @@ Singleton {
         if (Config.options.appearance.fakeScreenRounding === 4)
             return false;
 
-        // Works with cornerStyle 0 (Hug), 2 (Rect), or 3 (Dynamic Island)
-        const cs = Config.options.bar.cornerStyle;
-        return cs === 0 || cs === 2 || cs === 3;
+        // All corner styles now supported: 0 (Hug), 1 (Float), 2 (Rect), 3 (Dynamic Island)
+        return true;
+    }
+
+    // In Float mode (cornerStyle 1), sidebars remain as separate PanelWindows
+    // rather than being embedded in the TopLayer. Only search/OSD are integrated.
+    readonly property bool connectSidebarsSeparate: {
+        return connectModeActive && Config.options.bar.cornerStyle === 1;
     }
 
     readonly property bool searchConnectActive: {
@@ -228,11 +233,7 @@ Singleton {
         if (Config.options.search.connectStyle !== "connect")
             return false;
 
-        // Float mode (cornerStyle 1) excluded — bar disconnected from edges
-        if (Config.options.bar.cornerStyle === 1)
-            return false;
-
-        // All other corner styles (Hug, Rect, Dynamic Island) supported
+        // All corner styles supported
         return true;
     }
 
@@ -240,10 +241,7 @@ Singleton {
         if (!connectModeActive)
             return false;
 
-        // Float mode (cornerStyle 1) excluded — bar disconnected from edges
-        if (Config.options.bar.cornerStyle === 1)
-            return false;
-
+        // All corner styles supported
         return true;
     }
 

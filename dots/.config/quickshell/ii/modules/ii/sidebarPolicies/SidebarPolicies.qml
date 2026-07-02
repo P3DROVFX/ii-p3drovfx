@@ -25,7 +25,7 @@ Scope { // Scope
     }
 
     function toggleDetach() {
-        if (GlobalStates.connectModeActive) return;
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         root.detach = !root.detach;
     }
 
@@ -64,13 +64,13 @@ Scope { // Scope
     }
 
     function togglePin() {
-        if (GlobalStates.connectModeActive) return;
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         if (!GlobalStates.policiesPinned) pinWithFunnyHyprlandWorkaroundProc.doIt()
         else GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
     }
 
     Component.onCompleted: {
-        if (GlobalStates.connectModeActive) return;
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root,
         });
@@ -78,7 +78,7 @@ Scope { // Scope
     }
 
     onDetachChanged: {
-        if (GlobalStates.connectModeActive) return;
+        if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
         if (root.detach) {
             GlobalFocusGrab.removeDismissable(sidebarLoader.item) // Remove sidebar from the focus grab system
             sidebarContent.parent = null; // Detach content from sidebar
@@ -103,7 +103,7 @@ Scope { // Scope
 
     Loader {
         id: sidebarLoader
-        active: !GlobalStates.connectModeActive
+        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         
         sourceComponent: PanelWindow {
             id: panelWindow
@@ -369,7 +369,7 @@ Scope { // Scope
         description: "Detach left sidebar into a window/Attach it back"
 
         onPressed: {
-            if (GlobalStates.connectModeActive) return;
+            if (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) return;
             root.detach = !root.detach;
         }
     }

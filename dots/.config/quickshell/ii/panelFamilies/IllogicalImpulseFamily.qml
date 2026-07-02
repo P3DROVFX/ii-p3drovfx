@@ -121,11 +121,11 @@ Scope {
         component: SessionScreen {}
     }
     PanelLoader {
-        extraCondition: !GlobalStates.connectModeActive
+        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         component: SidebarPolicies {}
     }
     PanelLoader {
-        extraCondition: !GlobalStates.connectModeActive
+        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         component: SidebarDashboard {}
     }
     PanelLoader {

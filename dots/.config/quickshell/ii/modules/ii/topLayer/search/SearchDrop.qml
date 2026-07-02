@@ -58,6 +58,7 @@ Item {
     property int frameThickness: 0
     property int barHeight: Appearance.sizes.barHeight
     property int verticalBarWidth: Appearance.sizes.verticalBarWidth
+    property real barMargin: 0
     property real hBarHiddenAmount: 0
     property real vBarHiddenAmount: 0
     property real animatedLeftSidebarWidth: 0
@@ -116,6 +117,7 @@ Item {
         frameThickness: root.frameThickness
         barHeight: root.barHeight
         verticalBarWidth: root.verticalBarWidth
+        barMargin: root.barMargin
         hBarHiddenAmount: root.hBarHiddenAmount
         vBarHiddenAmount: root.vBarHiddenAmount
         screenWidth: root.screenWidth

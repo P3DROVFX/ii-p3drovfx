@@ -133,7 +133,11 @@ PanelWindow {
     readonly property real hBarHiddenAmount: horizontalBarLoader.item ? horizontalBarLoader.item.hiddenAmount : 0
     readonly property real vBarHiddenAmount: verticalBarLoader.item ? verticalBarLoader.item.hiddenAmount : 0
 
-    WlrLayershell.keyboardFocus: (leftSidebarOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Float bar gaps: the bar is visually offset from screen edges by hyprlandGapsOut.
+    // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
+    readonly property real barMargin: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
+
+    WlrLayershell.keyboardFocus: (searchOpenOnMonitor || (leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate)) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     // 1. Wrapped Frame Visuals
     Loader {
@@ -527,12 +531,13 @@ PanelWindow {
     }
 
     // Space reserver for pinned sidebar in Connect Mode
+    // Disabled in Float+Connect mode — sidebars remain separate PanelWindows with own space
     PanelWindow {
         id: pinSpaceReserver
         WlrLayershell.namespace: "quickshell:pinReserver"
         exclusionMode: ExclusionMode.Normal
         color: "transparent"
-        visible: GlobalStates.connectModeActive && GlobalStates.policiesPinned && topPanel.leftSidebarActiveOnMonitor
+        visible: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesPinned && topPanel.leftSidebarActiveOnMonitor
         anchors {
             top: true
             bottom: true
@@ -543,6 +548,7 @@ PanelWindow {
     }
 
     // Left Sidebar Policies Content
+    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
     Rectangle {
         id: leftSidebar
         x: -(width - GlobalStates.animatedLeftSidebarWidth)
@@ -553,7 +559,7 @@ PanelWindow {
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         radius: GlobalStates.connectModeActive ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-        visible: topPanel.leftSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarActiveOnMonitor)
+        visible: topPanel.leftSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -565,7 +571,7 @@ PanelWindow {
         layer.enabled: GlobalStates.leftSidebarAnimating
 
         Loader {
-            active: GlobalStates.connectModeActive && !GlobalStates.policiesDetached
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached
             asynchronous: true
             anchors.fill: parent
             sourceComponent: {
@@ -586,8 +592,9 @@ PanelWindow {
     }
 
     // Detached Sidebar Policies Window
+    // Disabled in Float+Connect mode — sidebars remain separate PanelWindows
     Loader {
-        active: GlobalStates.connectModeActive && GlobalStates.policiesDetached
+        active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesDetached
         sourceComponent: FloatingWindow {
             color: "transparent"
             visible: true
@@ -621,6 +628,7 @@ PanelWindow {
     }
 
     // Right Sidebar Dashboard Content
+    // Disabled in Float+Connect mode (cornerStyle 1) — sidebars remain separate PanelWindows
     Rectangle {
         id: rightSidebar
         x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
@@ -629,7 +637,7 @@ PanelWindow {
         height: Math.round((!topPanel.barVertical && Config.options.bar.cornerStyle === 0) ? (parent.height - Appearance.sizes.barHeight) : parent.height)
         color: "transparent"
         border.width: 0
-        visible: topPanel.rightSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor)
+        visible: topPanel.rightSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -640,7 +648,7 @@ PanelWindow {
         layer.enabled: GlobalStates.rightSidebarAnimating
 
         Loader {
-            active: GlobalStates.connectModeActive && (topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded)
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && (topPanel.rightSidebarActiveOnMonitor || Config?.options.sidebar.keepRightSidebarLoaded)
             asynchronous: true
             anchors.fill: parent
             sourceComponent: {
@@ -739,6 +747,7 @@ PanelWindow {
                 frameThickness: Config.options.appearance.wrappedFrameThickness
                 barHeight: Appearance.sizes.barHeight
                 verticalBarWidth: Appearance.sizes.verticalBarWidth
+                barMargin: topPanel.barMargin
                 hBarHiddenAmount: topPanel.hBarHiddenAmount
                 vBarHiddenAmount: topPanel.vBarHiddenAmount
                 animatedLeftSidebarWidth: GlobalStates.animatedLeftSidebarWidth
@@ -766,6 +775,7 @@ PanelWindow {
                 frameThickness: Config.options.appearance.wrappedFrameThickness
                 barHeight: Appearance.sizes.barHeight
                 verticalBarWidth: Appearance.sizes.verticalBarWidth
+                barMargin: topPanel.barMargin
                 hBarHiddenAmount: topPanel.hBarHiddenAmount
                 vBarHiddenAmount: topPanel.vBarHiddenAmount
                 animatedLeftSidebarWidth: GlobalStates.animatedLeftSidebarWidth
@@ -878,24 +888,24 @@ PanelWindow {
             regions: frameLoader.item ? [frameLoader.item.frameMask] : []
         }
         Region {
-            // Left sidebar
-            item: leftSidebarMaskItem
+            // Left sidebar (disabled in Float+Connect mode)
+            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarMaskItem : null
         }
         Region {
-            // Right sidebar
-            item: rightSidebarMaskItem
+            // Right sidebar (disabled in Float+Connect mode)
+            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarMaskItem : null
         }
         Region {
-            item: leftSidebarTopCornerMaskItem
+            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarTopCornerMaskItem : null
         }
         Region {
-            item: leftSidebarBottomCornerMaskItem
+            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarBottomCornerMaskItem : null
         }
         Region {
-            item: rightSidebarTopCornerMaskItem
+            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarTopCornerMaskItem : null
         }
         Region {
-            item: rightSidebarBottomCornerMaskItem
+            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarBottomCornerMaskItem : null
         }
         Region {
             // Search drop
@@ -919,6 +929,8 @@ PanelWindow {
             }
         }
         function onSidebarRightOpenChanged() {
+            // In Float+Connect mode, sidebars handle their own dismissal
+            if (GlobalStates.connectSidebarsSeparate) return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalFocusGrab.addDismissable(topPanel);
             } else {
@@ -926,6 +938,8 @@ PanelWindow {
             }
         }
         function onSidebarLeftOpenChanged() {
+            // In Float+Connect mode, sidebars handle their own dismissal
+            if (GlobalStates.connectSidebarsSeparate) return;
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
                 if (!GlobalStates.policiesPinned) {
                     GlobalFocusGrab.addDismissable(topPanel);
@@ -939,6 +953,8 @@ PanelWindow {
     Connections {
         target: GlobalFocusGrab
         function onDismissed() {
+            // In Float+Connect mode, sidebars handle their own dismissal
+            if (GlobalStates.connectSidebarsSeparate) return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalStates.sidebarRightOpen = false;
             }

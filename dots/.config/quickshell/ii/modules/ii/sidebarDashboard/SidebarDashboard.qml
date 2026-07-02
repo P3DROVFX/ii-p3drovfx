@@ -16,13 +16,11 @@ Scope {
         return pos === "default" || pos === "right"; 
     }
 
-    // Loader guard: PanelWindow (Wayland surface) is never created in connect mode.
-    // The parent PanelLoader (IllogicalImpulseFamily) also guards at the Scope level,
-    // but this inner Loader provides an extra defensive layer to prevent any
-    // surface creation during mode-switch transitions.
+    // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
+    // except in Float+Connect mode (cornerStyle 1) where sidebars remain separate.
     Loader {
         id: panelLoader
-        active: !GlobalStates.connectModeActive
+        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         sourceComponent: panelWindowComponent
     }
 
