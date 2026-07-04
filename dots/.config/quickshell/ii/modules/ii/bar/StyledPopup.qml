@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 LazyLoader {
     id: root
@@ -36,8 +37,11 @@ LazyLoader {
     property bool _popupHovered: false
     property bool _stickyActive: false
     property bool _targetHovered: hoverTarget ? hoverTarget.containsMouse : false
+    property bool _clickActive: false
 
-    active: stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse)
+    readonly property bool _computedActive: Config.options.bar.tooltips.clickToShow ? _clickActive : (stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse))
+
+    active: _computedActive
 
     // I have NO FUCKING IDEA why we cant use a normal timer here
     // Because if we do, we FUCKING cannot reference the timer from anywhere
@@ -63,7 +67,17 @@ LazyLoader {
         }
     }
 
-    on_TargetHoveredChanged: _evaluateStickyState()
+    on_TargetHoveredChanged: {
+        if (Config.options.bar.tooltips.clickToShow) {
+            // Guard against the same dismiss click reopening the popup:
+            // only a press while it's currently closed opens it.
+            if (_targetHovered && !root._clickActive) {
+                root._clickActive = true;
+            }
+        } else {
+            _evaluateStickyState();
+        }
+    }
 
     onActiveChanged: {
         if (!active) {
@@ -128,6 +142,28 @@ LazyLoader {
 
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
+
+        HyprlandFocusGrab {
+            id: dismissGrab
+            windows: [popupWindow]
+            active: false
+            onCleared: () => {
+                root._clickActive = false;
+            }
+        }
+
+        Component.onCompleted: {
+            if (Config.options.bar.tooltips.clickToShow) {
+                // Delayed so the grab doesn't clear itself on the very click that opened the popup.
+                grabDelayTimer.start();
+            }
+        }
+
+        Timer {
+            id: grabDelayTimer
+            interval: Appearance.animation.elementMoveFast.duration
+            onTriggered: dismissGrab.active = true
+        }
 
         StyledRectangularShadow {
             target: popupBackground

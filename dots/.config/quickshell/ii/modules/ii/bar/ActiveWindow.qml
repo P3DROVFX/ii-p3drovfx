@@ -39,8 +39,7 @@ Item {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
     }
 
     ActiveWindowPopup {
