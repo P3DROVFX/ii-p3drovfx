@@ -1,34 +1,36 @@
-import qs.services
-import qs.modules.common
-import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
+import qs.modules.common
+import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
+import qs.services
 
 MouseArea {
     id: root
+
     property bool alwaysShowAllResources: false
-
-    implicitWidth: mainCol.implicitWidth
-    implicitHeight: mainCol.implicitHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
-
     readonly property color capsuleColor: {
         try {
             return rootItem.colBackground;
-        } catch(e) {
+        } catch (e) {
             return Appearance.colors.colLayer1;
         }
     }
 
+    implicitWidth: Appearance.sizes.verticalBarWidth
+    implicitHeight: mainCol.implicitHeight
+    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+
     ColumnLayout {
         id: mainCol
+
         spacing: 6
         anchors.centerIn: parent
 
         // 1. Resources Capsule
         Rectangle {
             id: resourcesCapsule
+
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: colLayout.implicitHeight + 10
             color: Config.options.bar.resources.showDocker ? root.capsuleColor : "transparent"
@@ -36,6 +38,7 @@ MouseArea {
 
             ColumnLayout {
                 id: colLayout
+
                 spacing: 6
                 anchors.centerIn: parent
 
@@ -76,26 +79,23 @@ MouseArea {
                     percentage: ResourceUsage.swapUsedPercentage
                     warningThreshold: Config.options.bar.resources.swapWarningThreshold
                 }
+
             }
+
         }
 
         // 2. Standalone Docker Vertical Capsule
         Rectangle {
             id: dockerCapsuleCol
+
             property bool shown: Config.options.bar.resources.showDocker && DockerService.dockerRunning
+
             visible: shown
             clip: true
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: shown ? 40 : 0
             color: root.capsuleColor
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
-
-            Behavior on implicitHeight {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                }
-            }
 
             ColumnLayout {
                 spacing: 2
@@ -117,18 +117,30 @@ MouseArea {
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnSurface
                 }
+
             }
+
+            Behavior on implicitHeight {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                }
+
+            }
+
         }
+
     }
 
     Bar.ExpressiveResourcesPopup {
         hoverTarget: root
         Component.onCompleted: {
             activeChanged.connect(() => {
-                if (active) {
+                if (active)
                     DockerService.refreshForPopup();
-                }
+
             });
         }
     }
+
 }
