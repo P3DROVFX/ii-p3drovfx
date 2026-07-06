@@ -294,7 +294,6 @@ Item {
 
         anchors.fill: parent
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
     }
 
     Behavior on implicitHeight {

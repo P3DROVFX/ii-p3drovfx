@@ -15,18 +15,20 @@ MouseArea {
     implicitWidth: rowLayout.implicitWidth + 10 * 2.5
     implicitHeight: rowLayout.implicitHeight + 10 * 2
 
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-    onPressed: {
-        if (mouse.button === Qt.RightButton) {
+    // Separate right-click-only area so a right click never latches root.containsMouse
+    // (which would otherwise open the popup in click-to-show mode)
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onPressed: {
             Weather.getData();
-            Quickshell.execDetached(["notify-send", 
-                Translation.tr("Weather"), 
+            Quickshell.execDetached(["notify-send",
+                Translation.tr("Weather"),
                 Translation.tr("Refreshing (manually triggered)")
                 , "-a", "Shell"
             ])
-            mouse.accepted = false
         }
     }
 
