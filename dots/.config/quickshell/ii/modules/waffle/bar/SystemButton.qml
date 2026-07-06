@@ -102,6 +102,6 @@ BarButton {
         extraVisibleCondition: root.shouldShowTooltip && batteryHoverArea.containsMouse
         text: Translation.tr("Battery: %1%2") //
             .arg(`${Math.round(Battery.percentage * 100) || 0}%`) //
-            .arg(Battery.isPluggedIn ? (" " + Translation.tr("(Plugged in)")) : "")
+            .arg(Battery.chargeLimitReached ? (" " + Translation.tr("(Charge limit reached)")) : Battery.isPluggedIn ? (" " + Translation.tr("(Plugged in)")) : "")
     }
 }

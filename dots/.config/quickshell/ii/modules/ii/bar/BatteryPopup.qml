@@ -16,18 +16,28 @@ StyledPopup {
     }
 
     readonly property bool hasTimeData: {
-        const timeValue = Battery.isCharging ? Battery.timeToFull : Battery.timeToEmpty;
+        const timeValue = Battery.isCharging ? Battery.timeToFullEffective : Battery.timeToEmpty;
         const power = Battery.energyRate;
-        return !(Battery.chargeState === 4 || timeValue <= 0 || power <= 0.01);
+        return !(Battery.chargeState === 4 || Battery.chargeLimitReached || timeValue <= 0 || power <= 0.01);
     }
+
+    // Hide the limit label when it would collide with the fixed 0/50/100 labels
+    readonly property bool showLimitLabel: Battery.chargeLimitActive && Battery.chargeLimit >= 8
+        && Battery.chargeLimit <= 92 && Math.abs(Battery.chargeLimit - 50) >= 8
 
     // Hero card glow color logic:
     readonly property color heroGlowColor: {
         if (Battery.percentage <= 0.15 && !Battery.isCharging)
             return Appearance.m3colors.m3error;
-        if (Battery.isCharging)
+        if (Battery.isCharging || Battery.chargeLimitReached)
             return "#10E055"; //using manually defined green
         return Appearance.colors.colPrimary;
+    }
+
+    component AxisLabel: StyledText {
+        font.pixelSize: Appearance.font.pixelSize.small
+        font.family: "Monospace"
+        color: Appearance.colors.colOnSurfaceVariant
     }
 
     ColumnLayout {
@@ -53,6 +63,7 @@ StyledPopup {
                     StyledText {
                         text: {
                             if (Battery.chargeState === 4) return Translation.tr("Fully Charged");
+                            if (Battery.chargeLimitReached) return Translation.tr("Charge limit reached");
                             if (Battery.isCharging) return Translation.tr("Charging...");
                             return Translation.tr("Discharging...");
                         }
@@ -82,13 +93,15 @@ StyledPopup {
 
                     StyledText {
                         text: {
-                            if (!root.hasTimeData && Battery.chargeState !== 4)
+                            if (!root.hasTimeData && Battery.chargeState !== 4 && !Battery.chargeLimitReached)
                                 return Translation.tr("Calculating...");
-                            if (Battery.chargeState === 4)
+                            if (Battery.chargeState === 4 || Battery.chargeLimitReached)
                                 return "";
                             const time = root.formatTime(
-                                Battery.isCharging ? Battery.timeToFull : Battery.timeToEmpty
+                                Battery.isCharging ? Battery.timeToFullEffective : Battery.timeToEmpty
                             );
+                            if (Battery.isCharging && Battery.chargeLimitActive)
+                                return Translation.tr("%1 until %2%").arg(time).arg(Battery.chargeLimit);
                             return Translation.tr("%1 left").arg(time);
                         }
                         font.pixelSize: Appearance.font.pixelSize.large
@@ -100,32 +113,33 @@ StyledPopup {
 
                 Item { Layout.fillHeight: true }
 
-                RowLayout {
+                Item {
+                    id: axisLabels
                     Layout.fillWidth: true
+                    implicitHeight: axisLabelZero.implicitHeight
 
-                    StyledText {
+                    AxisLabel {
+                        id: axisLabelZero
                         text: "0"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.left: parent.left
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    StyledText {
+                    AxisLabel {
                         text: "50"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.horizontalCenter: parent.horizontalCenter
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    StyledText {
+                    AxisLabel {
                         text: "100"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.right: parent.right
+                    }
+
+                    Loader {
+                        active: root.showLimitLabel
+                        x: axisLabels.width * (Battery.chargeLimit / 100) - width / 2
+                        sourceComponent: AxisLabel {
+                            text: Battery.chargeLimit
+                        }
                     }
                 }
 
@@ -164,6 +178,19 @@ StyledPopup {
                         radius: 1
                         color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.9)
                         z: 1  // to stay above the fill
+                    }
+
+                    Loader {
+                        active: Battery.chargeLimitActive
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: batteryBarContainer.width * (Battery.chargeLimit / 100) - width / 2
+                        z: 1  // to stay above the fill, same as the center marker
+                        sourceComponent: Rectangle {
+                            implicitWidth: 2
+                            implicitHeight: batteryBarContainer.height / 3
+                            radius: 1
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.9)
+                        }
                     }
                 }
             }
@@ -370,6 +397,8 @@ StyledPopup {
                             text: {
                                 if (Battery.chargeState === 4)
                                     return Translation.tr("Full");
+                                if (Battery.chargeLimitReached)
+                                    return Translation.tr("Limit reached");
                                 if (Battery.isCharging)
                                     return Translation.tr("Charging");
                                 return Translation.tr("Discharging");
