@@ -325,6 +325,11 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            if (event.key === Qt.Key_Escape) {
+                GlobalStates.overviewOpen = false;
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
                 root.ctrlKPressed();
                 event.accepted = true;

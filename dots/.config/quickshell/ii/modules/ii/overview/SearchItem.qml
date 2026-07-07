@@ -1065,8 +1065,12 @@ RippleButton {
                 root.clicked();
             }
             event.accepted = true;
-        } else if (event.key === Qt.Key_Escape && root.actionPanelOpen) {
-            root.actionPanelOpen = false;
+        } else if (event.key === Qt.Key_Escape) {
+            if (root.actionPanelOpen) {
+                root.actionPanelOpen = false;
+            } else {
+                GlobalStates.overviewOpen = false;
+            }
             event.accepted = true;
         } else if (root.actionPanelOpen && event.key === Qt.Key_Left) {
             root.actionSelectedIndex = Math.max(0, root.actionSelectedIndex - 1);

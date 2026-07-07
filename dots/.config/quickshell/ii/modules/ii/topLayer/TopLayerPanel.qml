@@ -901,7 +901,7 @@ PanelWindow {
     Loader {
         id: searchDropLoader
         z: 10
-        active: GlobalStates.searchConnectActive && !GlobalStates.screenLocked && !(Config.ready && Config.options.bar.floatingNotch.enable) && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001))
+        active: !GlobalStates.screenLocked && !(Config.ready && Config.options.bar.floatingNotch.enable)
         focus: searchOpenOnMonitor
         sourceComponent: Component {
             SearchConnect.SearchDrop {

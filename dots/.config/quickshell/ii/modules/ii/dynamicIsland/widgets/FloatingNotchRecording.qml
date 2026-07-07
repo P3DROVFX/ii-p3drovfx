@@ -83,71 +83,125 @@ Item {
     ColumnLayout {
         id: expandedLayout
         anchors.fill: parent
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.topMargin: 8
-        anchors.bottomMargin: 8
-        spacing: 6
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.topMargin: 12
+        anchors.bottomMargin: 12
+        spacing: 12
         visible: root.isExpanded
 
-        // Dot + label centered
+        // Header Row: Icon/Title + Timer
         RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 6
+            Layout.fillWidth: true
+            spacing: 10
 
+            // Static badge for recording state
             Rectangle {
-                Layout.alignment: Qt.AlignVCenter
-                width: 8
-                height: 8
-                radius: 4
-                color: root.paused ? Appearance.colors.colWarning : Appearance.colors.colError
+                width: 36
+                height: 36
+                radius: 18
+                color: Appearance.colors.colError
 
-                SequentialAnimation on opacity {
-                    running: root.active && !root.paused
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1.0; to: 0.3; duration: 600; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 0.3; to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.paused ? "pause" : "videocam"
+                    iconSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnError
                 }
             }
 
+            // Title and Status
+            ColumnLayout {
+                spacing: 2
+                Layout.fillWidth: true
+
+                StyledText {
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnSurface
+                    text: Translation.tr("Screen Record")
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: root.paused ? Appearance.colors.colWarning : Appearance.colors.colError
+                    text: root.paused ? Translation.tr("Paused") : Translation.tr("Recording...")
+                }
+            }
+
+            // High-contrast digital timer
             StyledText {
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.bold: true
-                font.letterSpacing: 60
-                color: root.paused ? Appearance.colors.colWarning : Appearance.colors.colError
-                text: root.paused ? Translation.tr("PAUSED") : Translation.tr("RECORDING")
+                font.pixelSize: Appearance.font.pixelSize.large
+                font.family: Appearance.font.family.numbers
+                font.weight: Font.Bold
+                font.features: ({
+                        "tnum": 1
+                    })
+                color: Appearance.colors.colOnSurface
+                text: root.timeText
             }
         }
 
-        // Timer centered (big)
-        StyledText {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.fillWidth: true
-            font.pixelSize: Appearance.font.pixelSize.huge
-            font.family: Appearance.font.family.numbers
-            font.weight: Font.Bold
-            font.features: ({ "tnum": 1 })
-            color: Appearance.colors.colOnSurface
-            horizontalAlignment: Text.AlignHCenter
-            text: root.timeText
-        }
-
+        // Live Audio/Activity soundwave visualization
         Item {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.preferredHeight: 20
+            clip: true
+
+            Row {
+                id: waveRow
+                spacing: 4
+                anchors.centerIn: parent
+
+                property var heights: [6, 12, 18, 14, 8, 16, 10, 14, 6]
+
+                Repeater {
+                    model: 9
+                    delegate: Rectangle {
+                        width: 3
+                        height: root.paused ? 4 : waveRow.heights[index]
+                        radius: 1.5
+                        color: root.paused ? Appearance.colors.colWarning : Appearance.colors.colError
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 80
+                            }
+                        }
+                    }
+                }
+
+                Timer {
+                    interval: 80
+                    running: root.active && !root.paused && root.isExpanded
+                    repeat: true
+                    onTriggered: {
+                        let newH = [];
+                        for (let i = 0; i < 9; i++) {
+                            newH.push(Math.floor(Math.random() * 16) + 4);
+                        }
+                        waveRow.heights = newH;
+                    }
+                }
+            }
         }
 
-        // Controls row — two compact buttons filling width
+        // Sleek circular action buttons
         RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            spacing: 8
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredHeight: 36
+            spacing: 20
 
             RippleButton {
                 id: stopBtn
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                buttonRadius: Appearance.rounding.full
+                width: 36
+                height: 36
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                buttonRadius: 18
                 colBackground: Appearance.colors.colErrorContainer
                 colBackgroundHover: Appearance.colors.colErrorContainerHover
                 colRipple: Appearance.colors.colErrorContainerActive
@@ -155,38 +209,25 @@ Item {
                 onClicked: Quickshell.execDetached([Directories.recordScriptPath])
 
                 contentItem: Item {
-                    implicitWidth: stopContent.implicitWidth
-                    implicitHeight: stopContent.implicitHeight
-
-                    Row {
-                        id: stopContent
+                    implicitWidth: 36
+                    implicitHeight: 36
+                    MaterialSymbol {
+                        text: "stop"
+                        iconSize: Appearance.font.pixelSize.medium
+                        color: Appearance.colors.colOnErrorContainer
+                        fill: 1
                         anchors.centerIn: parent
-                        spacing: 4
-
-                        MaterialSymbol {
-                            text: "stop"
-                            iconSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnErrorContainer
-                            fill: 1
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        StyledText {
-                            text: Translation.tr("Stop")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.bold: true
-                            color: Appearance.colors.colOnErrorContainer
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
                     }
                 }
             }
 
             RippleButton {
                 id: pauseBtn
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                buttonRadius: Appearance.rounding.full
+                width: 36
+                height: 36
+                Layout.preferredWidth: 36
+                Layout.preferredHeight: 36
+                buttonRadius: 18
                 colBackground: Appearance.colors.colSecondaryContainer
                 colBackgroundHover: Appearance.colors.colSecondaryContainerHover
                 colRipple: Appearance.colors.colSecondaryContainerActive
@@ -194,29 +235,14 @@ Item {
                 onClicked: Quickshell.execDetached([Directories.recordScriptPath, "--pause"])
 
                 contentItem: Item {
-                    implicitWidth: pauseContent.implicitWidth
-                    implicitHeight: pauseContent.implicitHeight
-
-                    Row {
-                        id: pauseContent
+                    implicitWidth: 36
+                    implicitHeight: 36
+                    MaterialSymbol {
+                        text: root.paused ? "play_arrow" : "pause"
+                        iconSize: Appearance.font.pixelSize.medium
+                        color: Appearance.colors.colOnSecondaryContainer
+                        fill: 1
                         anchors.centerIn: parent
-                        spacing: 4
-
-                        MaterialSymbol {
-                            text: root.paused ? "play_arrow" : "pause"
-                            iconSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSecondaryContainer
-                            fill: 1
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        StyledText {
-                            text: root.paused ? Translation.tr("Resume") : Translation.tr("Pause")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.bold: true
-                            color: Appearance.colors.colOnSecondaryContainer
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
                     }
                 }
             }

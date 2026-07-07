@@ -214,7 +214,7 @@ Item {
         // ── Island layout (placed directly inside background to handle hover natively) ─
         RowLayout {
             id: islandSections
-            width: parent.width - 32
+            width: parent.width - 10
             height: root.height
             anchors.centerIn: parent
             spacing: 0

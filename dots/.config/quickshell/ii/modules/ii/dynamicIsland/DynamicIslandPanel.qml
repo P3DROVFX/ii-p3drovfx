@@ -10,6 +10,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overview
 import qs.modules.common.functions
+import qs.modules.ii.bar
+import qs.modules.ii.bar.shared
 
 Scope {
     id: root
@@ -35,6 +37,12 @@ Scope {
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical)
+    readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom
+
+    BarThemes {
+        id: barThemes
+    }
+    readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     property var searchWidgetRef: null
     property var workspaceWidgetRef: null
@@ -297,7 +305,7 @@ Scope {
                 contractedH: Config.options.bar.floatingNotch.heightRecording,
                 expandedH: 140,
                 contractedW: 125,
-                expandedW: 200
+                expandedW: 240
             };
         }
         if (type === "media") {
@@ -476,6 +484,7 @@ Scope {
 
     // Determine if the island should be physically hidden (slid up out of bounds)
     readonly property bool idleHidden: {
+        if (searchActive) return false;
         if (fullscreenActive) return true;
         if (rightClickHidden) return true;
         
@@ -556,7 +565,7 @@ Scope {
             right: true
         }
 
-        implicitHeight: isOverviewVisible ? (win.screen ? win.screen.height : 1080) : (targetH + 60 + (root.usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0))
+        implicitHeight: (searchActive || isOverviewVisible) ? (win.screen ? win.screen.height : 1080) : 240
 
         // Dynamic click/hover mask to prevent blocking the screen
         mask: Region {
@@ -622,7 +631,12 @@ Scope {
             }
 
             // Slide vertically out of screen when idleHidden is true
-            y: idleHidden ? -targetH - 10 : (root.usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0)
+            y: {
+                if (idleHidden) return -targetH - 10;
+                if (root.hasTopBar) return Appearance.sizes.barHeight;
+                if (root.usingWrappedFrame) return Config.options.appearance.wrappedFrameThickness;
+                return 0;
+            }
 
             Behavior on y {
                 NumberAnimation {
@@ -640,10 +654,13 @@ Scope {
                 bodyHeight: parent.height
                 topRadius: ((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? 32 : 24 // Increased concave corners
                 bottomRadius: root.mode === "search" ? Appearance.rounding.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20)
-                fillColor: Appearance.colors.colSurfaceContainer
+                fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
                 disableBehaviors: true
 
                 layer.enabled: Config.options.bar.floatingNotch.dropShadow && !idleHidden
+                layer.samples: 8
+                layer.smooth: true
+                antialiasing: true
                 layer.effect: MultiEffect {
                     shadowEnabled: true
                     shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -682,12 +699,8 @@ Scope {
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    transform: Translate {
-                        y: searchWidgetLoader.shown ? 0 : -10
-                        Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-                    }
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
+                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
 
                     onVisibleChanged: {
                         if (visible && item) {
@@ -725,12 +738,8 @@ Scope {
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    transform: Translate {
-                        y: osdWidgetLoader.shown ? 0 : -10
-                        Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-                    }
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
+                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
 
                     sourceComponent: Component {
                         Item {
@@ -816,12 +825,8 @@ Scope {
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    transform: Translate {
-                        y: homeWidget.shown ? 0 : -6
-                        Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-                    }
-                    Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
+                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
 
                     RowLayout {
                         anchors.centerIn: parent

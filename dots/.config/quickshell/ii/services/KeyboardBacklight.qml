@@ -61,7 +61,7 @@ Singleton {
 
     Process {
         id: detectProc
-        command: ["sh", "-c", "ls /sys/class/leds/ 2>/dev/null | grep kbd_backlight | head -1"]
+        command: ["sh", "-c", "ls /sys/class/leds/ 2>/dev/null | grep -E 'kbd_backlight|chromeos::kbd_backlight|cros_ec::kbd_backlight' | head -1"]
         stdout: SplitParser {
             onRead: data => {
                 const device = data.trim()
@@ -105,6 +105,7 @@ Singleton {
     }
 
     Timer {
+        id: pollTimer
         interval: 150
         running: root.available && root.deviceName !== ""
         repeat: true
@@ -116,6 +117,13 @@ Singleton {
                 if (!isNaN(val) && val !== root.currentValue) {
                     root.currentValue = val
                 }
+            } else {
+                // If direct read fails (e.g. permission issue), fallback to brightnessctl via refresh()
+                // and slow down the polling to 2 seconds to save CPU.
+                if (pollTimer.interval === 150) {
+                    pollTimer.interval = 2000
+                }
+                root.refresh()
             }
         }
     }

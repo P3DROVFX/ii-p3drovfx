@@ -312,9 +312,8 @@ Item {
 
                 Loader {
                     id: searchWidgetLoader
-                    active: root.isWidgetActive && !Config.options.bar.dynamicIsland.notchMode.enable
+                    active: !Config.options.bar.dynamicIsland.notchMode.enable
                     focus: root.isOpen && !Config.options.bar.dynamicIsland.notchMode.enable
-                    asynchronous: true
                     anchors.fill: parent
                     sourceComponent: Component {
                         SearchWidget {
@@ -390,7 +389,7 @@ Item {
         anchors.top: dropContainer.bottom
         anchors.topMargin: 10
         anchors.horizontalCenter: parent.horizontalCenter
-        active: root.isWidgetActive && !root.isScrollingLayout
+        active: !root.isScrollingLayout
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
@@ -425,7 +424,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        active: root.isWidgetActive && root.isScrollingLayout
+        active: root.isScrollingLayout
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
