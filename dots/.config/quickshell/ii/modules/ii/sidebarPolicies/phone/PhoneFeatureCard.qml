@@ -81,6 +81,7 @@ Item {
     readonly property bool _isConnecting: state === "connecting"
     readonly property bool _isUnavailable: state === "unavailable"
     readonly property bool _isOffline: state === "offline"
+    readonly property color _foreground: (root._isUnavailable || root._isOffline) ? Appearance.colors.colOnLayer3 : Appearance.colors.colOnPrimaryContainer
 
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -177,8 +178,8 @@ Item {
                     : root._isOffline ? "cast"
                     : root.iconName
                 shape: root.iconShape
-                color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.82)
-                colSymbol: Appearance.colors.colOnPrimaryContainer
+                color: ColorUtils.transparentize(root._foreground, 0.82)
+                colSymbol: root._foreground
                 animateChange: true
                 SequentialAnimation on opacity {
                     loops: Animation.Infinite
@@ -206,7 +207,7 @@ Item {
                     text: root.title
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: root._foreground
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
@@ -214,7 +215,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.subtitle
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: root._foreground
                     opacity: 0.7
                     elide: Text.ElideRight
                     maximumLineCount: 1
@@ -235,7 +236,7 @@ Item {
                     visible: !root._isConnecting && !root._isActive
                     text: "arrow_forward"
                     iconSize: 18
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: root._foreground
                     opacity: 0.4
                 }
 

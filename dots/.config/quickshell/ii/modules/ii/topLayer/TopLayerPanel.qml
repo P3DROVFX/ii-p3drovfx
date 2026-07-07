@@ -172,7 +172,7 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
+        active: !topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && (!Config.options.bar.onlyShowOnSingleMonitor || (topPanel.screen && topPanel.screen.name === Config.options.bar.singleMonitorName))
         anchors.fill: parent
         sourceComponent: Component {
             Item {
@@ -364,7 +364,7 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
+        active: topPanel.barVertical && GlobalStates.barOpen && !GlobalStates.screenLocked && (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && (!Config.options.bar.onlyShowOnSingleMonitor || (topPanel.screen && topPanel.screen.name === Config.options.bar.singleMonitorName))
         anchors.fill: parent
         sourceComponent: Component {
             Item {

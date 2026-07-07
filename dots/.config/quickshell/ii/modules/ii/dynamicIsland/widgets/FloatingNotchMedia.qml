@@ -422,7 +422,7 @@ Item {
         Rectangle {
             id: maskRect
             anchors.fill: parent
-            radius: Appearance.rounding.windowRounding
+            radius: Appearance.rounding.windowRounding + 4
             visible: false
         }
 
@@ -570,7 +570,7 @@ Item {
                     font.family: Appearance.font.family.main
                     font.pixelSize: Appearance.font.pixelSize.large
                     font.bold: true
-                    color: Appearance.colors.colOnSurface
+                    color: root.artUrl !== "" ? "#FFFFFF" : Appearance.colors.colOnSurface
                     text: root.activeLyricText
                     opacity: root.lyricOpacity
                     transform: Translate {
@@ -585,7 +585,7 @@ Item {
                     Layout.fillWidth: true
                     font.family: Appearance.font.family.main
                     font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colSubtext
+                    color: root.artUrl !== "" ? "#B0B0B0" : Appearance.colors.colSubtext
                     text: root.artist
                     maximumLineCount: 1
                     elide: Text.ElideRight

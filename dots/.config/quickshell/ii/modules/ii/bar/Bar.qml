@@ -20,10 +20,16 @@ Scope {
         id: barVariant
 
         readonly property var variantModel: {
-            const screens = Quickshell.screens;
-            const list = Config.options.bar.screenList;
-            if (!list || list.length === 0) return screens;
-            return screens.filter(screen => list.includes(screen.name));
+            let screens = Quickshell.screens;
+            if (Config.options.bar.onlyShowOnSingleMonitor) {
+                screens = screens.filter(screen => screen.name === Config.options.bar.singleMonitorName);
+            } else {
+                const list = Config.options.bar.screenList;
+                if (list && list.length > 0) {
+                    screens = screens.filter(screen => list.includes(screen.name));
+                }
+            }
+            return screens;
         }
 
         model: variantModel

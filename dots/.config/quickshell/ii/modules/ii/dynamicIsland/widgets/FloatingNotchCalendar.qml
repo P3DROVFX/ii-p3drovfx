@@ -224,8 +224,9 @@ Item {
                     implicitHeight: 26
                     buttonRadius: 13
                     buttonRadiusPressed: 13
-                    colBackground: Appearance.colors.colSecondaryContainer
-                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colBackground: "transparent"
+                    colBackgroundHover: "transparent"
+                    colRipple: "transparent"
                     enabled: root.eventIndex > 0
 
                     contentItem: Item {
@@ -235,8 +236,8 @@ Item {
                             anchors.centerIn: parent
                             text: "chevron_left"
                             iconSize: 14
-                            color: backBtn.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                            opacity: backBtn.enabled ? 1.0 : 0.3
+                            color: backBtn.enabled ? Appearance.colors.colOnSurface : Appearance.colors.colSubtext
+                            opacity: backBtn.enabled ? (backBtn.hovered ? 1.0 : 0.6) : 0.25
                         }
                     }
 
@@ -282,8 +283,9 @@ Item {
                     implicitHeight: 26
                     buttonRadius: 13
                     buttonRadiusPressed: 13
-                    colBackground: Appearance.colors.colSecondaryContainer
-                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colBackground: "transparent"
+                    colBackgroundHover: "transparent"
+                    colRipple: "transparent"
                     enabled: root.eventIndex < root.todayEvents.length - 1
 
                     contentItem: Item {
@@ -293,8 +295,8 @@ Item {
                             anchors.centerIn: parent
                             text: "chevron_right"
                             iconSize: 14
-                            color: forwardBtn.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                            opacity: forwardBtn.enabled ? 1.0 : 0.3
+                            color: forwardBtn.enabled ? Appearance.colors.colOnSurface : Appearance.colors.colSubtext
+                            opacity: forwardBtn.enabled ? (forwardBtn.hovered ? 1.0 : 0.6) : 0.25
                         }
                     }
 

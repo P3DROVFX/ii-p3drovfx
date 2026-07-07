@@ -347,8 +347,8 @@ Item {
             return "unknown"
         }
         headerTitle: root._installGuideTitle
-        onVisibleChanged: {
-            if (!visible) root._installGuideVisible = false
+        onCloseRequested: {
+            root._installGuideVisible = false
         }
         onRefreshRequested: {
             // Re-check all 3 services — the user may have installed deps
