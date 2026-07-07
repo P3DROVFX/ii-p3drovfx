@@ -65,7 +65,7 @@ Scope {
 
                     property int monitorIndex: barLoader.monitorIndex
                     property bool hasActiveWindows: false
-                    property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+                    property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
                     BarThemes {
                         id: barThemes
@@ -73,7 +73,7 @@ Scope {
                     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
                     Connections {
-                        enabled: Config.options.bar.barBackgroundStyle === 2
+                        enabled: Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 3
                         target: HyprlandData
                         function onWindowListChanged() {
                             const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);

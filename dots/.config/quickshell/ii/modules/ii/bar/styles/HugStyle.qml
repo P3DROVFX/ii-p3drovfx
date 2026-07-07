@@ -75,7 +75,7 @@ Item {
     Item {
         id: middleSection
         anchors { top: parent.top; bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-        width: Math.max(middleLeft.width, middleRight.width) * 2 + centerCenter.width + 8
+        width: middleLeft.width + centerCenter.width + middleRight.width + 8
 
         RowLayout {
             id: middleLeft

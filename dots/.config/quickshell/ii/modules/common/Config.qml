@@ -598,7 +598,7 @@ Singleton {
                 property bool expressiveGroupColor: false
                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
                 property bool useMaterialSymbolForTopLeftIcon: false
-                property int barBackgroundStyle: 1 // 0: Transparent | 1: Visible | 2: Adaptive
+                property int barBackgroundStyle: 1 // 0: Transparent | 1: Visible | 2: Adaptive | 3: Islands
                 property bool expressiveColors: false
                 property string expressiveColorTheme: "content"
                 property bool verbose: true
@@ -1193,7 +1193,7 @@ Singleton {
                         property bool multiline: true
                     }
                 }
-                property bool showNowPlayingBubble: true
+                property bool showNowPlayingBubble: false
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
             }

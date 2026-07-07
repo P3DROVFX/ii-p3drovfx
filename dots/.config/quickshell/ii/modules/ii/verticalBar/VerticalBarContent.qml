@@ -19,10 +19,10 @@ Item { // Bar content region
     property int monitorIndex
     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
     property bool hasActiveWindows: false
-    property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+    property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
     Connections {
-        enabled: Config.options.bar.barBackgroundStyle === 2
+        enabled: Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 3
         target: HyprlandData
         function onWindowListChanged() {
             const monitorName = root.screen ? root.screen.name : "";
@@ -62,8 +62,13 @@ Item { // Bar content region
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
+    readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
+
+    property color islandFillColor: Config.options.bar.expressiveColors
+        ? root.activeTheme.barBackground
+        : Appearance.colors.colLayer0
 
     // === Transparent bar background: soft vignette gradient ===
     // Subtle tint at the screen edge that fades smoothly over ~35% of the
@@ -131,7 +136,7 @@ Item { // Bar content region
         width: parent.width
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
-        color: barBackground.actualColor
+        color: root.isIslandMode ? "transparent" : barBackground.actualColor
         property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
 
         // In vertical mode (Left/Right), the edges touching the screen are left/right.
@@ -153,7 +158,7 @@ Item { // Bar content region
             }
         }
 
-        layer.enabled: Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -187,6 +192,58 @@ Item { // Bar content region
         visible: root.isDynamicIsland && root.showBarBackground
         anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
         anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+    }
+
+    // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
+    Rectangle {
+        id: topIsland
+        z: -9
+        visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: topSection.top; topMargin: -6
+            bottom: topSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(topIsland)
+        }
+    }
+
+    Rectangle {
+        id: middleIsland
+        z: -9
+        visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: middleSection.top; topMargin: -6
+            bottom: middleSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(middleIsland)
+        }
+    }
+
+    Rectangle {
+        id: bottomIsland
+        z: -9
+        visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: bottomSection.top; topMargin: -6
+            bottom: bottomSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(bottomIsland)
+        }
     }
 
     ColumnLayout { // Combined Island section
@@ -314,8 +371,19 @@ Item { // Bar content region
             horizontalCenter: parent.horizontalCenter
             verticalCenter: parent.verticalCenter
         }
+        readonly property real middleChildrenHeight: {
+            const ch = centerCenter.implicitHeight;
+            const lh = middleLeftColumn.implicitHeight;
+            const rh = middleRightColumn.implicitHeight;
+            let total = ch;
+            if (lh > 0) total += lh + 4;
+            if (rh > 0) total += rh + 4;
+            return Math.max(1, total);
+        }
+        height: middleChildrenHeight
 
         ColumnLayout {
+            id: middleLeftColumn
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 bottom: centerCenter.top
@@ -351,6 +419,7 @@ Item { // Bar content region
         }
 
         ColumnLayout {
+            id: middleRightColumn
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 top: centerCenter.bottom

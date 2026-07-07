@@ -32,6 +32,8 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
     }
 
+    readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
+
     Rectangle {
         id: barBackground
         anchors {
@@ -40,18 +42,68 @@ Item {
             margins: Appearance.sizes.hyprlandGapsOut
         }
 
-        color: root.actualColor
+        color: root.isIslandMode ? "transparent" : root.actualColor
 
         radius: Appearance.rounding.full
 
         Behavior on radius { NumberAnimation { duration: 450; easing.type: Easing.OutExpo } }
 
-        layer.enabled: Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
             shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
             shadowBlur: 1.0
+        }
+    }
+
+    // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
+    property color islandFillColor: Config.options.bar.expressiveColors
+        ? root.activeTheme.barBackground
+        : Appearance.colors.colLayer0
+
+    Rectangle {
+        id: leftIsland
+        visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
+        anchors {
+            left: leftSection.left; leftMargin: -6
+            right: leftSection.right; rightMargin: -6
+            top: barBackground.top; bottom: barBackground.bottom
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(leftIsland)
+        }
+    }
+
+    Rectangle {
+        id: middleIsland
+        visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
+        anchors {
+            left: middleSection.left; leftMargin: -6
+            right: middleSection.right; rightMargin: -6
+            top: barBackground.top; bottom: barBackground.bottom
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(middleIsland)
+        }
+    }
+
+    Rectangle {
+        id: rightIsland
+        visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
+        anchors {
+            left: rightSection.left; leftMargin: -6
+            right: rightSection.right; rightMargin: -6
+            top: barBackground.top; bottom: barBackground.bottom
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(rightIsland)
         }
     }
 
@@ -77,7 +129,7 @@ Item {
     Item {
         id: middleSection
         anchors { top: barBackground.top; bottom: barBackground.bottom; horizontalCenter: barBackground.horizontalCenter }
-        width: Math.max(middleLeft.width, middleRight.width) * 2 + centerCenter.width + 8
+        width: middleLeft.width + centerCenter.width + middleRight.width + 8
 
         RowLayout {
             id: middleLeft

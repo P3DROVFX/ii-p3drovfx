@@ -19,7 +19,8 @@ QtObject {
 
     // ── Background ────────────────────────────────────────────────────────────
     readonly property bool showBarBackground: {
-        return (root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2)
+        return (root.hasActiveWindows && (Config.options.bar.barBackgroundStyle === 2
+            || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1)))
             || Config.options.bar.barBackgroundStyle === 1;
     }
 

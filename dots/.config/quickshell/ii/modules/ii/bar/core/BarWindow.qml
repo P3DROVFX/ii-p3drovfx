@@ -66,7 +66,8 @@ Scope {
                 && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false)
                 && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
-        property bool showBarBackground: hasActiveWindows && Config.options.bar.barBackgroundStyle === 2
+        property bool showBarBackground: hasActiveWindows && (Config.options.bar.barBackgroundStyle === 2
+            || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1))
             || Config.options.bar.barBackgroundStyle === 1
 
         BarThemes { id: barThemes }
@@ -74,7 +75,7 @@ Scope {
 
         // ── Window tracking (for showBarBackground) ──────────────────────────
         Connections {
-            enabled: Config.options.bar.barBackgroundStyle === 2
+            enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1)
             target: HyprlandData
             function onWindowListChanged() {
                 const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);

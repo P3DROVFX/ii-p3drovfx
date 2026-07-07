@@ -20,22 +20,28 @@ Item {
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
 
+    // ── Exposed Properties ────────────────────────────────────────────────────
     property bool vertical: Config.options.bar.vertical
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
+    property bool activated: false
+    property color onActivatedColor: Appearance.colors.colOnPrimary
+    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
+    property var workspaceOccupied: ({})
+    property bool showNumbersByMs: false
 
+    // ── Monitor State ─────────────────────────────────────────────────────────
+    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
 
+    // ── Workspace Config ──────────────────────────────────────────────────────
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
     readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
 
-    // Pagination/Offset logic to match screens/monitor mapping
+    // ── Pagination / Monitor Offset ───────────────────────────────────────────
     readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
     readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
     readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
-
     readonly property int startWsId: {
         if (dynamicWorkspaces) return workspaceOffset + 1;
         let activeVal = activeWsId;
@@ -48,15 +54,64 @@ Item {
         return Math.max(0, page) * workspacesShown + 1 + workspaceOffset;
     }
 
-    // Sizing system responsive to the bar size (padding, thickness, and diameters)
+    // ── Sizing ────────────────────────────────────────────────────────────────
     readonly property real barDimension: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight
     readonly property real containerThickness: Math.max(16, barDimension - 16)
     readonly property real shapeDiameter: Math.max(6, containerThickness - 10)
-    // Compact pill size (2x the diameter of a circle)
-    readonly property real pillLength: shapeDiameter * 2
+    readonly property real pillLength: shapeDiameter * 1.5
 
-    property var workspaceOccupied: ({})
+    // ── Computed Model ────────────────────────────────────────────────────────
+    // Stable model — only updates when content actually changes,
+    // NOT when activeWsId changes within the same page.
+    // This prevents ListView from recreating delegates on every workspace switch,
+    // allowing Behavior on width/height to animate smoothly.
+    property var visibleWsModel: []
+    property string _prevModelKey: ""
+    function rebuildModel() {
+        let list;
+        if (!dynamicWorkspaces) {
+            list = Array.from({ length: workspacesShown }, (_, i) => startWsId + i);
+        } else {
+            let l = [];
+            for (let ws of Hyprland.workspaces.values) {
+                if (ws.id < 1) continue;
+                if (useWorkspaceMap) {
+                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                    if (ws.id < workspaceOffset + 1 || ws.id > nextMonitorStart) continue;
+                }
+                if (!l.includes(ws.id)) l.push(ws.id);
+            }
+            if (activeWsId > 0 && !l.includes(activeWsId)) {
+                if (useWorkspaceMap) {
+                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                    if (activeWsId >= workspaceOffset + 1 && activeWsId <= nextMonitorStart) l.push(activeWsId);
+                } else {
+                    l.push(activeWsId);
+                }
+            }
+            l.sort((a, b) => a - b);
+            list = l;
+        }
+        let key = JSON.stringify(list);
+        if (key !== root._prevModelKey) {
+            root.visibleWsModel = list;
+            root._prevModelKey = key;
+        }
+    }
+    readonly property bool showNumbers: Config.options.bar.workspaces.alwaysShowNumbers || root.showNumbersByMs
 
+    // ── Implicit Size ─────────────────────────────────────────────────────────
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : container.implicitWidth
+    implicitHeight: vertical ? container.implicitHeight : Appearance.sizes.baseBarHeight
+
+    Behavior on implicitWidth {
+        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+    }
+    Behavior on implicitHeight {
+        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+    }
+
+    // ── Functions ─────────────────────────────────────────────────────────────
     function updateOccupied() {
         let occupied = {};
         for (let ws of Hyprland.workspaces.values) {
@@ -65,72 +120,65 @@ Item {
         workspaceOccupied = occupied;
     }
 
-    Component.onCompleted: updateOccupied()
+    // ── Color Resolvers ────────────────────────────────────────────────────────
+    function resolveCircleColor(isActive, isShowingScratchpad, hovered, isOccupied) {
+        if (isActive) {
+            if (isShowingScratchpad)
+                return hovered ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiary;
+            return hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+        }
+        if (hovered) {
+            let baseColor = isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+            let mixTarget = scratchpadOpen ? Appearance.colors.colTertiary : Appearance.colors.colPrimary;
+            return ColorUtils.mix(baseColor, mixTarget, 0.25);
+        }
+        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+    }
+    function resolveCircleOpacity(isActive, isShowingScratchpad, hovered, isOccupied) {
+        if (isActive) return 1.0;
+        if (scratchpadOpen) return hovered ? 0.5 : 0.15;
+        if (hovered) return 0.9;
+        return isOccupied ? 0.7 : 0.2;
+    }
+    function resolveTextColor(isActive, isShowingScratchpad, isOccupied) {
+        if (isActive)
+            return isShowingScratchpad ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary;
+        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+    }
+
+    // ── Connections / Signals ─────────────────────────────────────────────────
+    Component.onCompleted: {
+        updateOccupied();
+        rebuildModel();
+    }
+
     Connections {
         target: Hyprland.workspaces
         function onValuesChanged() {
             updateOccupied();
+            rebuildModel();
         }
     }
     Connections {
         target: Hyprland
         function onFocusedWorkspaceChanged() {
             updateOccupied();
+            rebuildModel();
         }
     }
 
-    readonly property var visibleWsModel: {
-        if (!dynamicWorkspaces) {
-            return Array.from({
-                length: workspacesShown
-            }, (_, i) => startWsId + i);
-        }
-        let list = [];
-        for (let ws of Hyprland.workspaces.values) {
-            // Ignore special/scratchpad workspaces with negative or 0 IDs
-            if (ws.id < 1)
-                continue;
+    onStartWsIdChanged: rebuildModel()
 
-            // Only show workspaces belonging to this monitor if using workspace maps
-            if (useWorkspaceMap) {
-                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                if (ws.id < workspaceOffset + 1 || ws.id > nextMonitorStart) {
-                    continue;
-                }
-            }
-            if (!list.includes(ws.id))
-                list.push(ws.id);
-        }
-        if (activeWsId > 0 && !list.includes(activeWsId)) {
-            // Check if activeWsId falls within this monitor's range
-            if (useWorkspaceMap) {
-                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                if (activeWsId >= workspaceOffset + 1 && activeWsId <= nextMonitorStart) {
-                    list.push(activeWsId);
-                }
-            } else {
-                list.push(activeWsId);
-            }
-        }
-        list.sort((a, b) => a - b);
-        return list;
-    }
-
-    // Number pressing/holding Super key logic
-    property bool showNumbersByMs: false
     Timer {
         id: showNumbersTimer
         interval: (Config.options.bar.workspaces.showNumberDelay ?? 100)
         repeat: false
-        onTriggered: {
-            root.showNumbersByMs = true;
-        }
+        onTriggered: { root.showNumbersByMs = true; }
     }
     Connections {
         target: GlobalStates
         function onSuperDownChanged() {
-            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
-                return;
+            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
             if (GlobalStates.superDown)
                 showNumbersTimer.restart();
             else {
@@ -138,29 +186,10 @@ Item {
                 root.showNumbersByMs = false;
             }
         }
-        function onSuperReleaseMightTriggerChanged() {
-            showNumbersTimer.stop();
-        }
-    }
-    readonly property bool showNumbers: Config.options.bar.workspaces.alwaysShowNumbers || root.showNumbersByMs
-
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : container.implicitWidth
-    implicitHeight: vertical ? container.implicitHeight : Appearance.sizes.baseBarHeight
-
-    Behavior on implicitWidth {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
-    }
-    Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
+        function onSuperReleaseMightTriggerChanged() { showNumbersTimer.stop(); }
     }
 
-    // Handle scroll wheel anywhere on the widget to switch workspaces
+    // ── Scroll Wheel ──────────────────────────────────────────────────────────
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
@@ -174,103 +203,93 @@ Item {
                     Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
             } else {
                 let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1)
-                    return;
-                // Bound check if using workspace maps
+                if (nextId < 1) return;
                 if (useWorkspaceMap) {
                     const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
-                        return;
+                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart) return;
                 }
                 Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
             }
         }
     }
 
+    // ── Container Pill ────────────────────────────────────────────────────────
     Rectangle {
         id: container
         anchors.centerIn: parent
 
-        color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.4)
+        color: "transparent"
         radius: vertical ? width / 2 : height / 2
 
-        implicitWidth: vertical ? containerThickness : (listView.contentWidth + 16)
-        implicitHeight: vertical ? (listView.contentHeight + 16) : containerThickness
+        implicitWidth: vertical ? containerThickness : (listView.contentWidth + 10)
+        implicitHeight: vertical ? (listView.contentHeight + 10) : containerThickness
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
         }
 
         ListView {
             id: listView
             anchors.centerIn: parent
 
-            // Align dimensions to exactly wrap the child delegates
             width: root.vertical ? shapeDiameter : contentWidth
             height: root.vertical ? contentHeight : shapeDiameter
 
             orientation: root.vertical ? ListView.Vertical : ListView.Horizontal
             model: root.visibleWsModel
-            spacing: 8
+            spacing: 4
             interactive: false
             boundsBehavior: Flickable.StopAtBounds
 
-            // Entry transition (fade and scale in)
             add: Transition {
                 NumberAnimation {
                     property: "scale"
-                    from: 0
-                    to: 1.0
-                    duration: 250
-                    easing.type: Easing.OutQuint
+                    from: 0; to: 1.0
+                    duration: Appearance.animation.elementMoveEnter.duration
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
                 }
                 NumberAnimation {
                     property: "opacity"
-                    from: 0
-                    to: 1.0
-                    duration: 250
+                    from: 0; to: 1.0
+                    duration: Appearance.animation.elementMoveEnter.duration
+                    easing.type: Appearance.animation.elementMoveEnter.type
+                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
                 }
             }
-
-            // Exit transition (fade and scale out)
             remove: Transition {
                 NumberAnimation {
                     property: "scale"
                     to: 0
-                    duration: 250
-                    easing.type: Easing.OutQuint
+                    duration: Appearance.animation.elementMoveExit.duration
+                    easing.type: Appearance.animation.elementMoveExit.type
+                    easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
                 }
                 NumberAnimation {
                     property: "opacity"
                     to: 0
-                    duration: 250
+                    duration: Appearance.animation.elementMoveExit.duration
+                    easing.type: Appearance.animation.elementMoveExit.type
+                    easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
                 }
             }
-
-            // Smoothly slide remaining items when layout changes
             displaced: Transition {
                 NumberAnimation {
                     properties: "x,y"
-                    duration: 250
-                    easing.type: Easing.OutQuint
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                 }
             }
-
-            // Smoothly slide items when they are reordered in the model
             move: Transition {
                 NumberAnimation {
                     properties: "x,y"
-                    duration: 250
-                    easing.type: Easing.OutQuint
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                 }
             }
 
@@ -278,6 +297,7 @@ Item {
                 id: wsDelegate
                 required property int index
                 required property var modelData
+
                 readonly property int wsId: modelData
                 readonly property bool isActive: wsId === root.activeWsId
                 readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
@@ -290,16 +310,10 @@ Item {
                 height: targetHeight
 
                 Behavior on width {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutQuint
-                    }
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
                 }
                 Behavior on height {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutQuint
-                    }
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
                 }
 
                 HoverHandler {
@@ -312,42 +326,14 @@ Item {
                     anchors.fill: parent
                     radius: root.vertical ? (width / 2) : (height / 2)
 
-                    color: {
-                        if (isActive) {
-                            if (isShowingScratchpad) {
-                                return hover.hovered ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiary;
-                            } else {
-                                return hover.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
-                            }
-                        }
-                        if (hover.hovered) {
-                            let baseColor = isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                            let mixTarget = root.scratchpadOpen ? Appearance.colors.colTertiary : Appearance.colors.colPrimary;
-                            return ColorUtils.mix(baseColor, mixTarget, 0.25);
-                        }
-                        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                    }
-
-                    opacity: {
-                        if (isActive)
-                            return 1.0;
-                        if (root.scratchpadOpen)
-                            return hover.hovered ? 0.5 : 0.25;
-                        if (hover.hovered)
-                            return 0.9;
-                        return isOccupied ? 0.7 : 0.4;
-                    }
+                    color: root.resolveCircleColor(isActive, isShowingScratchpad, hover.hovered, isOccupied)
+                    opacity: root.resolveCircleOpacity(isActive, isShowingScratchpad, hover.hovered, isOccupied)
 
                     Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                        }
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
-
                     Behavior on opacity {
-                        NumberAnimation {
-                            duration: 200
-                        }
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
                     StyledText {
@@ -356,23 +342,14 @@ Item {
                         font.pixelSize: Math.max(7, shapeDiameter - 4)
                         font.weight: isActive ? Font.Bold : Font.Normal
                         font.family: Appearance.font.family.numbers
-                        color: {
-                            if (isActive) {
-                                return isShowingScratchpad ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary;
-                            }
-                            return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                        }
+                        color: root.resolveTextColor(isActive, isShowingScratchpad, isOccupied)
                         opacity: root.showNumbers ? 1.0 : 0.0
 
                         Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
-                            }
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                         Behavior on color {
-                            ColorAnimation {
-                                duration: 200
-                            }
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                         }
                     }
                 }

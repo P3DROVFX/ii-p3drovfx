@@ -83,7 +83,7 @@ QtObject {
     }
 
     // Resolved background for BarGroup (transparent when expressive, highlight when active)
-    readonly property color resolvedBackground: (isExpressive || (widgetId === "system_monitor" && Config.options.bar.resources.showDocker))
+    readonly property color resolvedBackground: ((isExpressive && widgetId !== "workspaces") || (widgetId === "system_monitor" && Config.options.bar.resources.showDocker))
         ? "transparent"
         : ((activated || highlighted) ? colBackgroundHighlight : colBackground)
 }

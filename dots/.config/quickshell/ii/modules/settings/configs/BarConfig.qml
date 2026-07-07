@@ -231,7 +231,8 @@ Item {
                     options: [
                         { displayName: Translation.tr("Visible"),     icon: "visibility",        value: 1 },
                         { displayName: Translation.tr("Adaptive"),    icon: "masked_transitions", value: 2 },
-                        { displayName: Translation.tr("Transparent"), icon: "opacity",            value: 0 }
+                        { displayName: Translation.tr("Transparent"), icon: "opacity",            value: 0 },
+                        { displayName: Translation.tr("Islands"),     icon: "grid_view",         value: 3 }
                     ]
                 }
             }
