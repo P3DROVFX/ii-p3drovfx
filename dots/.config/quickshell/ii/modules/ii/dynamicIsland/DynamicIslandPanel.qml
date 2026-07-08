@@ -32,7 +32,14 @@ Scope {
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
-    readonly property bool mediaActive: MprisController.activePlayer !== null
+    readonly property bool mediaActive: {
+        if (MprisController.activePlayer === null) return false;
+        const t = (MprisController.activeTrack && MprisController.activeTrack.title) ? MprisController.activeTrack.title : "";
+        const a = (MprisController.activeTrack && MprisController.activeTrack.artist) ? MprisController.activeTrack.artist : "";
+        // Block browser noise: no title + unknown artist combo
+        if ((t === "" || t === "No title") && (a === "" || a === "Unknown Artist")) return false;
+        return true;
+    }
 
     readonly property bool isOverviewVisible: root.searchActive && LauncherSearch.query === "" && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config && Config.options && Config.options.overview && Config.options.overview.enable !== undefined ? Config.options.overview.enable : true)
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
@@ -233,9 +240,9 @@ Scope {
             return {
                 type: "localsend",
                 source: "widgets/FloatingNotchLocalSend.qml",
-                contractedH: Config.options.bar.floatingNotch.heightLocalSend,
+                contractedH: root.isDragOverNotch ? 140 : Config.options.bar.floatingNotch.heightLocalSend,
                 expandedH: 140,
-                contractedW: LocalSend.droppedFiles.length > 0 ? 220 : 180,
+                contractedW: root.isDragOverNotch ? 360 : (LocalSend.droppedFiles.length > 0 ? 220 : 180),
                 expandedW: 360
             };
         }
@@ -333,9 +340,9 @@ Scope {
             return {
                 type: "calendar",
                 source: "widgets/FloatingNotchCalendar.qml",
-                contractedH: Config.options.bar.floatingNotch.heightCalendar ?? 36,
+                contractedH: Config.options.bar.floatingNotch.heightCalendar ?? 48,
                 expandedH: 140,
-                contractedW: 100,
+                contractedW: 220,
                 expandedW: 340
             };
         }
@@ -377,7 +384,7 @@ Scope {
         let showChecklist = !Config.options.bar.floatingNotch.disableChecklist &&
             (Config.options.bar.floatingNotch.checklistAlwaysVisible ||
              (root.isHoverExpanded && Config.options.bar.floatingNotch.checklistOnlyExpanded));
-        let showCalendar = !Config.options.bar.floatingNotch.disableCalendar && root.isHoverExpanded;
+        let showCalendar = !Config.options.bar.floatingNotch.disableCalendar;
         let showAudio = !Config.options.bar.floatingNotch.disableAudio && root.isHoverExpanded;
 
         if (notificationActive && !Config.options.bar.floatingNotch.disableNotification)
@@ -414,15 +421,18 @@ Scope {
             }
         }
 
-        if (showCalendar) {
-            list.push(getWidgetDetails("calendar"));
-        }
-
         if (showAudio) {
             list.push(getWidgetDetails("audio"));
         }
 
+        if (showCalendar && root.isHoverExpanded) {
+            list.push(getWidgetDetails("calendar"));
+        }
+
         if (list.length === 0) {
+            if (showCalendar) {
+                return [getWidgetDetails("calendar")];
+            }
             return [getWidgetDetails("home")];
         }
         return list;
@@ -617,17 +627,17 @@ Scope {
 
             Behavior on width {
                 NumberAnimation {
-                    duration: 350
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    duration: 500
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.2
                 }
             }
 
             Behavior on height {
                 NumberAnimation {
-                    duration: 350
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    duration: 500
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.2
                 }
             }
 
@@ -641,8 +651,9 @@ Scope {
 
             Behavior on y {
                 NumberAnimation {
-                    duration: 300
-                    easing.type: Easing.OutCubic
+                    duration: 350
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 0.4
                 }
             }
 
@@ -701,7 +712,7 @@ Scope {
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
                     Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                    Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
 
                     onVisibleChanged: {
                         if (visible && item) {
@@ -740,7 +751,7 @@ Scope {
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
                     Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                    Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
 
                     sourceComponent: Component {
                         Item {
@@ -780,7 +791,7 @@ Scope {
                             Rectangle {
                                 id: widgetBg
                                 anchors.fill: parent
-                                anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 4 : 0
+                                anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 2 : 2
                                 radius: Appearance.rounding.windowRounding
                                 color: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? Appearance.colors.colSurfaceContainerLow : "transparent"
 
@@ -803,7 +814,7 @@ Scope {
                                         NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
                                     }
                                     Behavior on scale {
-                                        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                                        NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
                                     }
 
                                     // Bind isExpanded property
@@ -818,7 +829,7 @@ Scope {
                     }
                 }
 
-                // Idle home display (Relógio minimalista compactado no centro)
+                // Idle home display 
                 Item {
                     id: homeWidget
                     anchors.fill: parent
@@ -827,7 +838,7 @@ Scope {
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
                     Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutCubic } }
+                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
 
                     RowLayout {
                         anchors.centerIn: parent

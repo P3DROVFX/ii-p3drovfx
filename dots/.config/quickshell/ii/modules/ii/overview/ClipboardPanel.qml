@@ -798,6 +798,41 @@ Item {
                             }
                         }
                     }
+
+                    displaced: Transition {
+                        NumberAnimation {
+                            properties: "y"
+                            duration: 220
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasized
+                        }
+                    }
+
+                    add: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "opacity"
+                                from: 0.0; to: 1.0
+                                duration: 180
+                                easing.type: Easing.OutQuad
+                            }
+                            NumberAnimation {
+                                property: "y"
+                                duration: 220
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            }
+                        }
+                    }
+
+                    remove: Transition {
+                        NumberAnimation {
+                            property: "opacity"
+                            to: 0.0
+                            duration: 120
+                            easing.type: Easing.OutQuad
+                        }
+                    }
                 }
             }
         }
