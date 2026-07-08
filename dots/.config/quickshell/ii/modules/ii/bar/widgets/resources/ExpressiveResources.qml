@@ -59,7 +59,7 @@ Item {
                 active: Config.options.bar.resources.alwaysShowCpu
                 visible: active
                 sourceComponent: ResourceShape {
-                    iconName: "memory_alt"
+                    iconName: "memory"
                     percentage: ResourceUsage.cpuUsage
                     baseColor: Appearance.colors.colPrimary
                     onBaseColor: Appearance.colors.colOnPrimary
@@ -75,7 +75,7 @@ Item {
                 active: Config.options.bar.resources.alwaysShowRam
                 visible: active
                 sourceComponent: ResourceShape {
-                    iconName: "memory"
+                    iconName: "memory_alt"
                     percentage: ResourceUsage.memoryUsedPercentage
                     baseColor: Appearance.colors.colSecondary
                     onBaseColor: Appearance.colors.colOnSecondary

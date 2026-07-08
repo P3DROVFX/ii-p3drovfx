@@ -20,7 +20,7 @@ Item {
         anchors.centerIn: parent
         color: Appearance.colors.colSecondaryContainer
         radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
-        implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : (tray.implicitWidth > 0 ? tray.implicitWidth + 12 : 0)
+        implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : (tray.implicitWidth > 0 ? tray.implicitWidth : 0)
         implicitHeight: vertical ? (tray.implicitHeight > 0 ? tray.implicitHeight + 12 : 0) : Appearance.sizes.baseBarHeight - 8
         visible: tray.implicitWidth > 0
 

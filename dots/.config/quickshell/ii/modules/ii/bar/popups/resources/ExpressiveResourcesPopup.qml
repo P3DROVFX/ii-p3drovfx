@@ -365,7 +365,7 @@ StyledPopup {
 
                     MaterialSymbol {
                         anchors.centerIn: parent
-                        text: "memory"
+                        text: "memory_alt"
                         iconSize: 22
                         color: Appearance.colors.colOnLayer4
                     }

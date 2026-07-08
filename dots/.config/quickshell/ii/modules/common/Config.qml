@@ -505,7 +505,7 @@ Singleton {
                     property string media: "expressive"
                     property string notification: "default"
                     property string utilButtons: "expressive"
-                    property string workspaces: "minimal"
+                    property string workspaces: "minimal" // default, expressive, minimal, dock
                     property string weather: "expressive"
                     property string dashboard: "expressive"
                     property string resources: "expressive"

@@ -33,25 +33,28 @@ WindowDialog {
             colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.2)
             implicitHeight: 36
             implicitWidth: detailsText.implicitWidth + 48
-            
+
             Rectangle {
                 anchors.fill: parent
                 color: "transparent"
                 border.width: 1
                 border.color: Appearance.colors.colPrimary
                 radius: parent.buttonEffectiveRadius
-                
+
                 Behavior on radius {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }
-            
+
             contentItem: StyledText {
                 id: detailsText
                 text: Translation.tr("Details")
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
                 color: Appearance.colors.colPrimary
             }
             onClicked: {
@@ -73,13 +76,16 @@ WindowDialog {
             colRipple: Appearance.colors.colPrimaryActive
             implicitHeight: 36
             implicitWidth: doneText.implicitWidth + 48
-            
+
             contentItem: StyledText {
                 id: doneText
                 text: Translation.tr("Done")
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
                 color: Appearance.colors.colOnPrimary
             }
             onClicked: root.dismiss()
