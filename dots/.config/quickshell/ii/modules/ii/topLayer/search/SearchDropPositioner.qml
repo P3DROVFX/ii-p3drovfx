@@ -46,10 +46,11 @@ QtObject {
             return (usingWrappedFrame ? frameThickness : 0)
         }
         if (barBottom) {
-            return screenHeight - (usingWrappedFrame ? frameThickness : Math.max(0, barHeight - hBarHiddenAmount)) + barMargin - dropHeight
+            return screenHeight - (usingWrappedFrame ? frameThickness : Math.max(0, barHeight - hBarHiddenAmount)) - dropHeight - root.margin
         }
         return Math.max(0, barHeight - hBarHiddenAmount - barMargin)
     }
+    property real margin: 0
 
     readonly property real scaleYOrigin: barBottom ? dropHeight : 0
 }

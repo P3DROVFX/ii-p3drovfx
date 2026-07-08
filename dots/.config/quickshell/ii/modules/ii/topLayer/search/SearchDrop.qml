@@ -52,6 +52,7 @@ Item {
     property var panelWindow: null
     property bool barVertical: false
     property bool barBottom: false
+    readonly property bool effectiveBarBottom: barBottom && !barVertical
     property bool barOnLeft: false
     property bool barOnRight: false
     property bool usingWrappedFrame: false
@@ -128,6 +129,7 @@ Item {
         animatedRightSidebarWidth: root.animatedRightSidebarWidth
         leftSidebarActiveOnMonitor: root.leftSidebarActiveOnMonitor
         rightSidebarActiveOnMonitor: root.rightSidebarActiveOnMonitor
+        margin: root.effectiveBarBottom ? 30 : 0
     }
 
     HyprlandFocusGrab {
@@ -201,7 +203,7 @@ Item {
     Item {
         id: dropContainer
         x: positioner.anchorX
-        y: positioner.anchorY
+        y: (root.effectiveBarBottom) ? (positioner.anchorY + (dropState.targetH - height)) : positioner.anchorY
         width: dropState.targetW
         height: root.animHeight
         visible: root.animHeight > 0.001
@@ -217,7 +219,7 @@ Item {
             id: dropNotch
             width: dropContainer.width
             height: dropContainer.height   // = animHeight, always matches clip edge
-            y: barBottom ? (dropContainer.height - height) : 0
+            y: effectiveBarBottom ? (dropContainer.height - height) : 0
             disableBehaviors: true
             readonly property real _wr: Appearance.rounding.windowRounding
             // Grow topRadius from 0 immediately — no dead zone threshold.
@@ -227,7 +229,7 @@ Item {
             fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             transform: Scale {
                 xScale: 1
-                yScale: barBottom ? -1 : 1
+                yScale: effectiveBarBottom ? -1 : 1
                 origin.y: dropNotch.height / 2
             }
         }
@@ -248,20 +250,24 @@ Item {
 
         RoundCorner {
             id: topLeftCorner
-            visible: false
+            visible: dropContainer._showCorners && !root.effectiveBarBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomRight
+            extendHorizontal: true
+            extendVertical: true
             anchors.right: parent.left
             anchors.top: parent.top
         }
 
         RoundCorner {
             id: topRightCorner
-            visible: false
+            visible: dropContainer._showCorners && !root.effectiveBarBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomLeft
+            extendHorizontal: true
+            extendVertical: true
             anchors.left: parent.right
             anchors.top: parent.top
         }
@@ -269,25 +275,27 @@ Item {
         // barBottom variant: corners at the BOTTOM edge (drop grows upward)
         RoundCorner {
             id: bottomLeftCorner
-            visible: dropContainer._showCorners && root.barBottom
+            visible: dropContainer._showCorners && root.effectiveBarBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
-            corner: RoundCorner.CornerEnum.TopRight
+            corner: RoundCorner.CornerEnum.BottomRight
             extendHorizontal: true
             extendVertical: true
             anchors.right: parent.left
+            anchors.rightMargin: -24
             anchors.bottom: parent.bottom
         }
 
         RoundCorner {
             id: bottomRightCorner
-            visible: dropContainer._showCorners && root.barBottom
+            visible: dropContainer._showCorners && root.effectiveBarBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
-            corner: RoundCorner.CornerEnum.TopLeft
+            corner: RoundCorner.CornerEnum.BottomLeft
             extendHorizontal: true
             extendVertical: true
             anchors.left: parent.right
+            anchors.leftMargin: -24
             anchors.bottom: parent.bottom
         }
 
@@ -304,7 +312,7 @@ Item {
                 x: 200
                 width: dropContainer.width
                 height: dropState.targetH
-                y: barBottom ? parent.height - height : 0
+                y: effectiveBarBottom ? parent.height - height : 0
 
                 Loader {
                     id: searchWidgetLoader
@@ -334,13 +342,6 @@ Item {
             }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.NoButton
-            onPressed: event => {
-                event.accepted = false;
-            }
-        }
     }
 
     Connections {
@@ -382,8 +383,10 @@ Item {
 
     Loader { // Classic overview
         id: overviewLoader
-        anchors.top: dropContainer.bottom
-        anchors.topMargin: 10
+        anchors.top: root.effectiveBarBottom ? undefined : dropContainer.bottom
+        anchors.topMargin: root.effectiveBarBottom ? 0 : 10
+        anchors.bottom: root.effectiveBarBottom ? dropContainer.top : undefined
+        anchors.bottomMargin: root.effectiveBarBottom ? 10 : 0
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
         visible: opacity > 0.01
@@ -416,10 +419,10 @@ Item {
 
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
-        anchors.top: dropContainer.bottom
+        anchors.top: root.effectiveBarBottom ? parent.top : dropContainer.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: root.effectiveBarBottom ? dropContainer.top : parent.bottom
         active: root.isWidgetActive && root.isScrollingLayout
         visible: opacity > 0.01
 

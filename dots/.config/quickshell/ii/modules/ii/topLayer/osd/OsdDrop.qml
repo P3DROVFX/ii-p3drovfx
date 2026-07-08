@@ -94,6 +94,7 @@ Item {
         dropWidth: dropState.targetW
         dropHeight: dropState.targetH
         hasFullscreenWindow: root.hasFullscreenWindow
+        margin: 30
     }
 
     readonly property int _animDurationOpen: Math.round(450 * Appearance.animMultiplier)
@@ -183,20 +184,24 @@ Item {
 
         RoundCorner {
             id: topLeftCorner
-            visible: false
+            visible: dropContainer._showCorners && !root.barBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomRight
+            extendHorizontal: true
+            extendVertical: true
             anchors.right: parent.left
             anchors.top: parent.top
         }
 
         RoundCorner {
             id: topRightCorner
-            visible: false
+            visible: dropContainer._showCorners && !root.barBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
             corner: RoundCorner.CornerEnum.BottomLeft
+            extendHorizontal: true
+            extendVertical: true
             anchors.left: parent.right
             anchors.top: parent.top
         }
@@ -206,10 +211,11 @@ Item {
             visible: dropContainer._showCorners && root.barBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
-            corner: RoundCorner.CornerEnum.TopRight
+            corner: RoundCorner.CornerEnum.BottomRight
             extendHorizontal: true
             extendVertical: true
             anchors.right: parent.left
+            anchors.rightMargin: -34
             anchors.bottom: parent.bottom
         }
 
@@ -218,10 +224,11 @@ Item {
             visible: dropContainer._showCorners && root.barBottom
             implicitSize: dropContainer._cornerRadius
             color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
-            corner: RoundCorner.CornerEnum.TopLeft
+            corner: RoundCorner.CornerEnum.BottomLeft
             extendHorizontal: true
             extendVertical: true
             anchors.left: parent.right
+            anchors.leftMargin: -34
             anchors.bottom: parent.bottom
         }
 
@@ -293,13 +300,6 @@ Item {
             }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.NoButton
-            onPressed: event => {
-                event.accepted = false;
-            }
-        }
     }
 
     readonly property var maskItem: dropContainer
