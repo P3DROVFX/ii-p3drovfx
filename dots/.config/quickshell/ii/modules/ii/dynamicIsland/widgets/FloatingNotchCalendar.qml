@@ -91,6 +91,121 @@ Item {
         return m.charAt(0).toUpperCase() + m.slice(1);
     }
 
+    // ── Contracted Layout: Time pill + Date block + Weather icon ──────────────
+    Item {
+        id: contractedLayout
+        anchors.fill: parent
+        visible: !root.isExpanded
+
+        readonly property bool is12h: /a/i.test(Config.options.time.format)
+        readonly property string hours: is12h ? ("0" + (DateTime.clock.date.getHours() % 12 || 12)).slice(-2) : Qt.formatDateTime(DateTime.clock.date, "HH")
+        readonly property string minutes: Qt.formatDateTime(DateTime.clock.date, "mm")
+        readonly property string ampm: is12h ? Qt.formatDateTime(DateTime.clock.date, Config.options.time.format.includes("AP") ? "AP" : "ap").trim() : ""
+        readonly property bool showAMPM: is12h && ampm.length > 0
+        readonly property string dateStr: Qt.formatDateTime(DateTime.clock.date, Config.options.time.dateFormat)
+        readonly property string dayStr: Qt.formatDateTime(DateTime.clock.date, "dddd")
+        readonly property string weatherIcon: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
+
+        readonly property real timeFontSize: Math.max(14, Math.min(28, root.height * 0.44))
+        readonly property real dateFontSize: Math.max(10, Math.min(16, root.height * 0.3))
+        readonly property real dayFontSize: Math.max(9, Math.min(13, root.height * 0.22))
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: Math.max(4, root.height * 0.15)
+
+            // Time Pill
+            Rectangle {
+                id: timeRect
+                Layout.fillHeight: true
+                implicitWidth: timeContent.implicitWidth + (root.height * 0.6)
+                radius: height / 2
+                color: Appearance.colors.colPrimaryContainer
+
+                RowLayout {
+                    id: timeContent
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        text: contractedLayout.hours + ":" + contractedLayout.minutes
+                        font.pixelSize: contractedLayout.timeFontSize
+                        font.bold: true
+                        font.features: {
+                            "tnum": 1
+                        }
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        visible: contractedLayout.showAMPM
+                        text: contractedLayout.ampm
+                        font.pixelSize: contractedLayout.timeFontSize * 0.55
+                        font.bold: true
+                        font.letterSpacing: 0
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                }
+            }
+
+            // Date Block
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Appearance.rounding.verysmall
+                color: Appearance.colors.colSurfaceContainerHighest
+
+                ColumnLayout {
+                    anchors.left: parent.left
+                    anchors.leftMargin: root.height * 0.25
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 0
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignLeft
+                        text: contractedLayout.dateStr
+                        font.pixelSize: contractedLayout.dateFontSize
+                        font.bold: true
+                        font.features: {
+                            "tnum": 1
+                        }
+                        color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignLeft
+                        text: contractedLayout.dayStr.charAt(0).toUpperCase() + contractedLayout.dayStr.slice(1)
+                        font.pixelSize: contractedLayout.dayFontSize
+                        font.weight: Font.Thin
+                        font.features: {
+                            "tnum": 1
+                        }
+                        color: Appearance.colors.colOnSurface
+                        opacity: 0.65
+                    }
+                }
+            }
+
+            // Weather Icon
+            MaterialShape {
+                Layout.preferredWidth: height
+                Layout.fillHeight: true
+                shapeString: "Cookie9Sided"
+                color: Appearance.colors.colSurfaceContainerHighest
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: contractedLayout.weatherIcon
+                    iconSize: Math.max(10, (parent ? parent.height : 24) * 0.5)
+                    fill: 1
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+            }
+        }
+    }
+
     // Expanded Layout containing Header Row (Month + 7 days) and Events Row below
     ColumnLayout {
         id: expandedLayout
