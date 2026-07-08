@@ -23,6 +23,10 @@ Item {
     property bool smooth: true
     property bool mipmap: true
 
+    // Expose internal images for external shader transitions
+    readonly property Item fromImage: imgAIsBack ? imgB : imgA
+    readonly property Item toImage: imgAIsBack ? imgA : imgB
+
     onImageSourceChanged: fadeTo(imageSource)
     Component.onCompleted: imgA.source = imageSource
 
@@ -77,6 +81,7 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 
     Image {
@@ -90,5 +95,6 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 }

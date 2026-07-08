@@ -109,6 +109,67 @@ ContentPage {
             }
         }
 
+        ContentSubsection {
+            visible: Config.options.background.animateWallpaperChanges
+            title: Translation.tr("Transition style")
+            icon: "style"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.background.wallpaperAnimation
+                onSelected: newValue => {
+                    Config.options.background.wallpaperAnimation = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Random"),
+                        icon: "shuffle",
+                        value: "random"
+                    },
+                    {
+                        displayName: Translation.tr("Crossfade"),
+                        icon: "blur_on",
+                        value: ""
+                    },
+                    {
+                        displayName: Translation.tr("Circle Pit"),
+                        icon: "circle",
+                        value: "circlePit"
+                    },
+                    {
+                        displayName: Translation.tr("Circle Select"),
+                        icon: "radio_button_checked",
+                        value: "circleSelect"
+                    },
+                    {
+                        displayName: Translation.tr("Magic"),
+                        icon: "auto_awesome",
+                        value: "magic"
+                    },
+                    {
+                        displayName: Translation.tr("Peel"),
+                        icon: "sticky_note_2",
+                        value: "Peel"
+                    },
+                    {
+                        displayName: Translation.tr("Transition"),
+                        icon: "swap_horiz",
+                        value: "transition"
+                    },
+                    {
+                        displayName: Translation.tr("Pixelate"),
+                        icon: "grid_on",
+                        value: "pixelate"
+                    },
+                    {
+                        displayName: Translation.tr("Stripes"),
+                        icon: "view_column",
+                        value: "stripes"
+                    }
+                ]
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "blur_circular"
             text: Translation.tr("Blur wallpaper when a window is open")

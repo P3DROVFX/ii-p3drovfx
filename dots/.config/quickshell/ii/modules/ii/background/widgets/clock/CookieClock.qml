@@ -87,9 +87,10 @@ Item {
 
     readonly property bool enableShadows: Config.options.background.widgets.enableShadows ?? true
     property string backgroundStyle: Config.options.background.widgets.clock.cookie.backgroundStyle
-    StyledDropShadow {
-        target: backgroundStyle === "sine" ? sineCookieLoader : backgroundStyle === "shape" ? materialShapeCookieLoader : roundedPolygonCookieLoader
-        visible: root.enableShadows
+
+    Item {
+        id: clockShapeContainer
+        anchors.fill: parent
 
         RotationAnimation on rotation {
             running: Config.options.background.widgets.clock.cookie.constantlyRotate
@@ -99,38 +100,43 @@ Item {
             from: 360
             to: 0
         }
-    }
-    Loader {
-        id: sineCookieLoader
-        z: 0
-        visible: !root.enableShadows // Show target directly when shadows are disabled
-        active: backgroundStyle === "sine"
-        sourceComponent: SineCookie {
-            implicitSize: root.implicitSize
-            sides: Config.options.background.widgets.clock.cookie.sides
-            color: root.colBackground
+
+        StyledDropShadow {
+            target: backgroundStyle === "sine" ? sineCookieLoader : backgroundStyle === "shape" ? materialShapeCookieLoader : roundedPolygonCookieLoader
+            visible: root.enableShadows
         }
-    }
-    Loader {
-        id: roundedPolygonCookieLoader
-        z: 0
-        visible: !root.enableShadows // Show target directly when shadows are disabled
-        active: backgroundStyle === "cookie"
-        sourceComponent: MaterialCookie {
-            implicitSize: root.implicitSize
-            sides: Config.options.background.widgets.clock.cookie.sides
-            color: root.colBackground
+        Loader {
+            id: sineCookieLoader
+            z: 0
+            visible: !root.enableShadows
+            active: backgroundStyle === "sine"
+            sourceComponent: SineCookie {
+                implicitSize: root.implicitSize
+                sides: Config.options.background.widgets.clock.cookie.sides
+                color: root.colBackground
+            }
         }
-    }
-    Loader {
-        id: materialShapeCookieLoader
-        z: 0
-        visible: !root.enableShadows // Show target directly when shadows are disabled
-        active: backgroundStyle === "shape"
-        sourceComponent: MaterialShape {
-            implicitSize: root.implicitSize
-            color: root.colBackground
-            shapeString: Config.options.background.widgets.clock.cookie.backgroundShape
+        Loader {
+            id: roundedPolygonCookieLoader
+            z: 0
+            visible: !root.enableShadows
+            active: backgroundStyle === "cookie"
+            sourceComponent: MaterialCookie {
+                implicitSize: root.implicitSize
+                sides: Config.options.background.widgets.clock.cookie.sides
+                color: root.colBackground
+            }
+        }
+        Loader {
+            id: materialShapeCookieLoader
+            z: 0
+            visible: !root.enableShadows
+            active: backgroundStyle === "shape"
+            sourceComponent: MaterialShape {
+                implicitSize: root.implicitSize
+                color: root.colBackground
+                shapeString: Config.options.background.widgets.clock.cookie.backgroundShape
+            }
         }
     }
 

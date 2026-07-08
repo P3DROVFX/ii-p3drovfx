@@ -154,6 +154,13 @@ Scope {
                 const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
                 return enabled && sensitiveWallpaper && sensitiveNetwork;
             }
+
+            // Wallpaper transition / animation properties
+            property var shaderList: ["circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"]
+            property string currentShader: "pixelate"
+            property real transitionProgress: 1.0
+            property bool transitionEverStarted: false
+
             property real wallpaperToScreenRatio: {
                 if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || screen.width <= 0 || screen.height <= 0 || isNaN(wallpaperWidth) || isNaN(wallpaperHeight))
                     return 1.0;
@@ -237,7 +244,36 @@ Scope {
 
             onWallpaperPathChanged: {
                 bgRoot.updateZoomScale();
-                // Clock position gets updated after zoom scale is updated
+                if (wallpaperSafetyTriggered || Config.options.background.wallpaperAnimation === "" || !Config.options.background.animateWallpaperChanges || wallpaperIsVideo) {
+                    bgRoot.transitionProgress = 1.0
+                    return
+                }
+                // Start new transition only when not already in one
+                // Mid-transition changes: TransitionImage.fadeTo swaps images automatically,
+                // shader seamlessly continues blending the new pair at current progress
+                if (bgRoot.transitionProgress >= 1.0) {
+                    bgRoot.transitionEverStarted = true
+                    if (Config.options.background.wallpaperAnimation === "random") {
+                        bgRoot.currentShader = bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
+                    } else {
+                        bgRoot.currentShader = Config.options.background.wallpaperAnimation
+                    }
+                    bgRoot.transitionProgress = 0.0
+                    transitionAnim.restart()
+                }
+            }
+
+            NumberAnimation {
+                id: transitionAnim
+                target: bgRoot
+                property: "transitionProgress"
+                from: 0.0
+                to: 1.0
+                duration: 1200
+                easing.type: Easing.InOutCubic
+                onFinished: {
+                    bgRoot.transitionProgress = 1.0
+                }
             }
 
             // Wallpaper zoom scale
@@ -299,6 +335,7 @@ Scope {
                 if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
                 }
+                bgRoot.transitionProgress = 1.0
             }
 
             Item {
@@ -589,7 +626,7 @@ Scope {
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
 
                                 visible: opacity > 0 && !bgRoot.wallpaperIsVideo
-                                opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+                                opacity: (!bgRoot.wallpaperIsVideo ? 1 : 0)
                                 sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
 
                                 property int chunkSize: bgRoot.chunkSize
@@ -621,7 +658,7 @@ Scope {
                                 property real effectiveValueY: Math.max(0, Math.min(1, valueY))
 
                                 imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
-                                animated: Config.options.background.animateWallpaperChanges
+                                animated: Config.options.background.animateWallpaperChanges && Config.options.background.wallpaperAnimation === ""
                                 fillMode: Image.PreserveAspectCrop
                                 // Performance: disable mipmapping on the central wallpaper
                                 mipmap: false
@@ -651,6 +688,25 @@ Scope {
                                         easing.type: Easing.OutCubic
                                     }
                                 }
+
+                            }
+
+                            // Shader-based wallpaper transition overlay
+                            // Anchored to wallpaper to share its position/size/clipping
+                            ShaderEffect {
+                                id: transitionShaderEffect
+                                anchors.fill: wallpaper
+                                visible: (bgRoot.transitionProgress < 1.0 || (bgRoot.transitionEverStarted && wallpaper.status !== Image.Ready)) && Config.options.background.wallpaperAnimation !== "" && !bgRoot.wallpaperSafetyTriggered && !bgRoot.wallpaperIsVideo
+                                property var fromImage: wallpaper.fromImage
+                                property var toImage: wallpaper.toImage
+                                property real progress: bgRoot.transitionProgress
+                                property real aspectX: width / height
+                                property real aspectY: 1.0
+                                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+                                property vector2d origin: Qt.vector2d(0.5, 0.5)
+                                fragmentShader: Config.options.background.wallpaperAnimation !== ""
+                                    ? Qt.resolvedUrl(`shaders/${bgRoot.currentShader}.frag.qsb`)
+                                    : ""
                             }
 
                             Loader {
@@ -853,6 +909,8 @@ Scope {
                                         }
                                     }
                                 }
+
+
                             }
                         }
 

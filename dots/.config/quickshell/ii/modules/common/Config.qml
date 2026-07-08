@@ -443,6 +443,7 @@ Singleton {
                 }
                 property bool scaleLargeWallpapers: true
                 property bool animateWallpaperChanges: true
+                property string wallpaperAnimation: "random"
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
                 property bool windowZoomOnOverview: false // fake window scale-out during overview (GNOME-like)
                 property bool cheatsheetZoomOut: true
