@@ -3,6 +3,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.models
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Shapes
 import Quickshell
@@ -15,7 +16,8 @@ Item {
     
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
-    
+    property real blur: scratchpadOpen ? 1 : 0
+
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int activeWsId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
     readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
@@ -136,33 +138,197 @@ Item {
         return true;
     }
 
-    // The animated highlight (pill)
-    Loader {
-        id: tabHighlight
-        z: 1
-        
-        readonly property real dotSize: 18
-        readonly property real spacing: 6
-        
-        function getPosForIndex(i) {
-            return i * (dotSize + spacing)
-        }
-        
-        AnimatedTabIndexPair {
-            id: idxPair
-            index: Math.max(0, root.getWsIndex(activeWsId))
-        }
-        
-        readonly property real animX1: getPosForIndex(idxPair.idx1)
-        readonly property real animX2: getPosForIndex(idxPair.idx2)
-        
-        x: root.vertical ? (parent.width - width) / 2 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.x + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
-        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.y + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
-        
-        width: root.vertical ? dotSize : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize)
-        height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize
+    // Content container that blurs/scales/fades when scratchpad is open
+    Item {
+        id: contentContainer
+        anchors.fill: parent
 
-        opacity: root.scratchpadOpen || !root.isActiveWsInRange ? 0.0 : 1.0
+        opacity: root.scratchpadOpen ? 0.65 : 1
+
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
+
+        // The animated highlight (pill)
+        Loader {
+            id: tabHighlight
+            z: 1
+
+            readonly property real dotSize: 18
+            readonly property real spacing: 6
+
+            function getPosForIndex(i) {
+                return i * (dotSize + spacing)
+            }
+
+            AnimatedTabIndexPair {
+                id: idxPair
+                index: Math.max(0, root.getWsIndex(activeWsId))
+            }
+
+            readonly property real animX1: getPosForIndex(idxPair.idx1)
+            readonly property real animX2: getPosForIndex(idxPair.idx2)
+
+            x: root.vertical ? (parent.width - width) / 2 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.x + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
+            y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.y + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
+
+            width: root.vertical ? dotSize : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize)
+            height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize
+
+            opacity: !root.isActiveWsInRange || root.scratchpadOpen ? 0.0 : 1.0
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
+            sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator) ? materialShapeComponent : rectangleComponent
+
+            Component {
+                id: rectangleComponent
+                Rectangle {
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimary
+                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                }
+            }
+
+            Component {
+                id: materialShapeComponent
+                MaterialShape {
+                    anchors.fill: parent
+                    transformOrigin: Item.Center
+                    shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.currentRandomShape : Config.options.bar.workspaces.activeIndicatorShape
+                    color: Appearance.colors.colPrimary
+                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                    rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
+                    Behavior on rotation {
+                        RotationAnimation {
+                            duration: 350
+                            direction: RotationAnimation.Clockwise
+                            easing.type: Easing.OutBack
+                        }
+                    }
+                }
+            }
+        }
+
+        // Position reference for the scratchpad overlay
+        Item {
+            id: scratchpadPositionHelper
+            readonly property real dotSize: 18
+            readonly property Item activeItem: mainLayout.children[root.getWsIndex(root.activeWsId)]
+
+            x: activeItem ? root.vertical ? mainLayout.x + (mainLayout.width - dotSize) / 2 : activeItem.x + mainLayout.x + (activeItem.width - dotSize) / 2 : 0
+            y: activeItem ? root.vertical ? activeItem.y + mainLayout.y + (activeItem.height - dotSize) / 2 : mainLayout.y + (mainLayout.height - dotSize) / 2 : 0
+            width: dotSize
+            height: dotSize
+            visible: false
+        }
+
+        GridLayout {
+            id: mainLayout
+            anchors.centerIn: parent
+            columns: root.vertical ? 1 : visibleWsModel.length
+            rows: root.vertical ? visibleWsModel.length : 1
+            columnSpacing: 6
+            rowSpacing: 6
+
+            Repeater {
+                model: root.visibleWsModel
+                delegate: Rectangle {
+                    id: dot
+                    required property int index
+                    required property var modelData
+                    readonly property int wsId: modelData
+                    readonly property bool isActive: wsId === root.activeWsId
+                    readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                    readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
+
+                    width: 18
+                    height: 18
+                    radius: Appearance.rounding.full
+                    color: "transparent"
+                    z: 2 // Above the highlight
+
+                    HoverHandler {
+                        id: hover
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    Item {
+                        id: normalContentWrapper
+                        anchors.fill: parent
+
+                        opacity: dot.isShowingScratchpad ? 0.0 : 1.0
+                        scale: dot.isShowingScratchpad ? 0.8 : 1.0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: isOccupied ? 8 : 4
+                            height: width
+                            radius: width / 2
+                            color: {
+                                if (isActive) return "transparent";
+                                if (hover.hovered) return Appearance.colors.colPrimary;
+                                return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+                            }
+                            opacity: (isOccupied || hover.hovered) ? 1.0 : 0.4
+
+                            Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                        }
+
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = '" + dot.wsId + "' })")
+                    }
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.NoButton
+            onWheel: (wheel) => {
+                wheel.accepted = true;
+                if (dynamicWorkspaces) {
+                    // In dynamic mode, scroll through existing workspaces (skipping empty)
+                    if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
+                    else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
+                } else {
+                    // In pagination mode, scroll through all IDs (1, 2, 3...)
+                    let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
+                    if (nextId < 1) return;
+                    Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
+                }
+            }
+        }
+
         Behavior on opacity {
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
@@ -170,208 +336,75 @@ Item {
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
         }
+    }
 
-        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator) ? materialShapeComponent : rectangleComponent
+    // Scratchpad indicator overlay (unblurred, positioned at the active dot)
+    Item {
+        id: scratchpadOverlay
+        z: 10
 
-        Component {
-            id: rectangleComponent
-            Rectangle {
-                radius: Appearance.rounding.full
-                color: Appearance.colors.colPrimary
-                opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+        x: scratchpadPositionHelper.x
+        y: scratchpadPositionHelper.y
+        width: scratchpadPositionHelper.width
+        height: scratchpadPositionHelper.height
+
+        readonly property bool _show: root.scratchpadOpen && root.isActiveWsInRange
+
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+        scale: root.scratchpadOpen ? 1.0 : 0.7
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
         }
 
-        Component {
-            id: materialShapeComponent
-            MaterialShape {
-                anchors.fill: parent
-                transformOrigin: Item.Center
-                shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.currentRandomShape : Config.options.bar.workspaces.activeIndicatorShape
-                color: Appearance.colors.colPrimary
-                opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
-                Behavior on rotation {
-                    RotationAnimation {
-                        duration: 350
-                        direction: RotationAnimation.Clockwise
-                        easing.type: Easing.OutBack
-                    }
+        MaterialShape {
+            anchors.fill: parent
+            shapeString: "Flower"
+            color: Appearance.colors.colTertiary
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 4
+            height: 4
+            radius: 2
+            color: Appearance.colors.colOnTertiary
+            opacity: 1.0
+
+            SequentialAnimation on opacity {
+                loops: Animation.Infinite
+                running: root.scratchpadOpen
+                NumberAnimation {
+                    to: 0.3
+                    duration: 1500
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    to: 1.0
+                    duration: 1500
+                    easing.type: Easing.InOutQuad
                 }
             }
         }
     }
 
-    GridLayout {
-        id: mainLayout
-        anchors.centerIn: parent
-        columns: root.vertical ? 1 : visibleWsModel.length
-        rows: root.vertical ? visibleWsModel.length : 1
-        columnSpacing: 6
-        rowSpacing: 6
-
-        Repeater {
-            model: root.visibleWsModel
-            delegate: Rectangle {
-                id: dot
-                required property int index
-                required property var modelData
-                readonly property int wsId: modelData
-                readonly property bool isActive: wsId === root.activeWsId
-                readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
-
-                readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
-
-                opacity: root.scratchpadOpen && !isShowingScratchpad ? 0.35 : 1.0
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
-                }
-                
-                width: 18
-                height: 18
-                radius: Appearance.rounding.full
-                color: "transparent"
-                z: 2 // Above the highlight
-
-                HoverHandler {
-                    id: hover
-                    cursorShape: Qt.PointingHandCursor
-                }
-                
-                Item {
-                    id: normalContentWrapper
-                    anchors.fill: parent
-
-                    opacity: dot.isShowingScratchpad ? 0.0 : 1.0
-                    scale: dot.isShowingScratchpad ? 0.8 : 1.0
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: isOccupied ? 8 : 4
-                        height: width
-                        radius: width / 2
-                        color: {
-                            if (isActive) return "transparent";
-                            if (hover.hovered) return Appearance.colors.colPrimary;
-                            return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                        }
-                        opacity: (isOccupied || hover.hovered) ? 1.0 : 0.4
-
-                        Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                    }
-
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: isActive ? "-" : (dot.wsId).toString()
-                        font.pixelSize: isActive ? 14 : 10
-                        font.weight: isActive ? Font.Bold : Font.Normal
-                        font.family: Appearance.font.family.numbers
-                        color: Appearance.colors.colOnPrimary
-                        opacity: isActive ? 1.0 : 0.0
-
-                        Behavior on opacity { NumberAnimation { duration: 150 } }
-                    }
-                }
-
-                Item {
-                    id: scratchpadIndicator
-                    anchors.fill: parent
-
-                    visible: opacity > 0.0
-                    opacity: dot.isShowingScratchpad ? 1.0 : 0.0
-                    scale: dot.isShowingScratchpad ? 1.0 : 0.7
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
-                    }
-
-                    Rectangle {
-                        id: scratchpadIndicatorBg
-                        anchors.fill: parent
-                        radius: width / 2
-                        color: Appearance.colors.colLayer4
-
-                        Shape {
-                            anchors.fill: parent
-                            layer.enabled: true
-                            layer.smooth: true
-
-                            ShapePath {
-                                strokeColor: Appearance.colors.colTertiary
-                                strokeWidth: 1.5
-                                strokeStyle: ShapePath.DashLine
-                                dashPattern: [3, 3]
-                                fillColor: "transparent"
-
-                                PathAngleArc {
-                                    centerX: scratchpadIndicatorBg.width / 2
-                                    centerY: scratchpadIndicatorBg.height / 2
-                                    radiusX: scratchpadIndicatorBg.width / 2 - 0.75
-                                    radiusY: scratchpadIndicatorBg.height / 2 - 0.75
-                                    startAngle: 0
-                                    sweepAngle: 360
-                                }
-                            }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = '" + dot.wsId + "' })")
-                }
-            }
-        }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        acceptedButtons: Qt.NoButton
-        onWheel: (wheel) => {
-            wheel.accepted = true;
-            if (dynamicWorkspaces) {
-                // In dynamic mode, scroll through existing workspaces (skipping empty)
-                if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-            } else {
-                // In pagination mode, scroll through all IDs (1, 2, 3...)
-                let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1) return;
-                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
-            }
+    Behavior on blur {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
     }
 }

@@ -21,6 +21,7 @@ Item {
 
     readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
     readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
+    property real blur: scratchpadOpen ? 1 : 0
 
     readonly property int workspacesShown: Config.options.bar.workspaces.shown
     readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
@@ -140,6 +141,9 @@ Item {
     }
     readonly property bool showNumbers: Config.options.bar.workspaces.alwaysShowNumbers || root.showNumbersByMs
 
+    readonly property int _activeIndex: root.visibleWsModel.indexOf(root.activeWsId)
+    readonly property bool _activeInRange: root._activeIndex >= 0
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : container.implicitWidth
     implicitHeight: vertical ? container.implicitHeight : Appearance.sizes.baseBarHeight
 
@@ -156,232 +160,310 @@ Item {
         }
     }
 
-    // Handle scroll wheel anywhere on the widget to switch workspaces
-    MouseArea {
+    // Content container that blurs/scales/fades when scratchpad is open
+    Item {
+        id: contentContainer
         anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        acceptedButtons: Qt.NoButton
-        onWheel: wheel => {
-            wheel.accepted = true;
-            if (dynamicWorkspaces) {
-                if (wheel.angleDelta.y > 0)
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                else
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-            } else {
-                let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1)
-                    return;
-                // Bound check if using workspace maps
-                if (useWorkspaceMap) {
-                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
+
+        opacity: root.scratchpadOpen ? 0.65 : 1
+
+        layer.enabled: root.blur > 0
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 32
+            blur: root.blur
+        }
+
+        // Handle scroll wheel anywhere on the widget to switch workspaces
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.NoButton
+            onWheel: wheel => {
+                wheel.accepted = true;
+                if (dynamicWorkspaces) {
+                    if (wheel.angleDelta.y > 0)
+                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
+                    else
+                        Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
+                } else {
+                    let nextId = activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
+                    if (nextId < 1)
                         return;
+                    // Bound check if using workspace maps
+                    if (useWorkspaceMap) {
+                        const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
+                        if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
+                            return;
+                    }
+                    Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
                 }
-                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
-            }
-        }
-    }
-
-    Rectangle {
-        id: container
-        anchors.centerIn: parent
-
-        color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.4)
-        radius: vertical ? width / 2 : height / 2
-
-        implicitWidth: vertical ? containerThickness : (listView.contentWidth + 16)
-        implicitHeight: vertical ? (listView.contentHeight + 16) : containerThickness
-
-        Behavior on implicitWidth {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
-        }
-        Behavior on implicitHeight {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
             }
         }
 
-        ListView {
-            id: listView
+        Rectangle {
+            id: container
             anchors.centerIn: parent
 
-            // Align dimensions to exactly wrap the child delegates
-            width: root.vertical ? shapeDiameter : contentWidth
-            height: root.vertical ? contentHeight : shapeDiameter
+            color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.4)
+            radius: vertical ? width / 2 : height / 2
 
-            orientation: root.vertical ? ListView.Vertical : ListView.Horizontal
-            model: root.visibleWsModel
-            spacing: 8
-            interactive: false
-            boundsBehavior: Flickable.StopAtBounds
+            implicitWidth: vertical ? containerThickness : (listView.contentWidth + 16)
+            implicitHeight: vertical ? (listView.contentHeight + 16) : containerThickness
 
-            // Entry transition (fade and scale in)
-            add: Transition {
+            Behavior on implicitWidth {
                 NumberAnimation {
-                    property: "scale"
-                    from: 0
-                    to: 1.0
                     duration: 250
                     easing.type: Easing.OutQuint
                 }
-                NumberAnimation {
-                    property: "opacity"
-                    from: 0
-                    to: 1.0
-                    duration: 250
-                }
             }
-
-            // Exit transition (fade and scale out)
-            remove: Transition {
+            Behavior on implicitHeight {
                 NumberAnimation {
-                    property: "scale"
-                    to: 0
-                    duration: 250
-                    easing.type: Easing.OutQuint
-                }
-                NumberAnimation {
-                    property: "opacity"
-                    to: 0
-                    duration: 250
-                }
-            }
-
-            // Smoothly slide remaining items when layout changes
-            displaced: Transition {
-                NumberAnimation {
-                    properties: "x,y"
                     duration: 250
                     easing.type: Easing.OutQuint
                 }
             }
 
-            // Smoothly slide items when they are reordered in the model
-            move: Transition {
-                NumberAnimation {
-                    properties: "x,y"
-                    duration: 250
-                    easing.type: Easing.OutQuint
-                }
-            }
+            ListView {
+                id: listView
+                anchors.centerIn: parent
 
-            delegate: Item {
-                id: wsDelegate
-                required property int index
-                required property var modelData
-                readonly property int wsId: modelData
-                readonly property bool isActive: wsId === root.activeWsId
-                readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
-                readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
+                // Align dimensions to exactly wrap the child delegates
+                width: root.vertical ? shapeDiameter : contentWidth
+                height: root.vertical ? contentHeight : shapeDiameter
 
-                readonly property real targetWidth: root.vertical ? shapeDiameter : (isActive ? pillLength : shapeDiameter)
-                readonly property real targetHeight: root.vertical ? (isActive ? pillLength : shapeDiameter) : shapeDiameter
+                orientation: root.vertical ? ListView.Vertical : ListView.Horizontal
+                model: root.visibleWsModel
+                spacing: 8
+                interactive: false
+                boundsBehavior: Flickable.StopAtBounds
 
-                width: targetWidth
-                height: targetHeight
-
-                Behavior on width {
+                // Entry transition (fade and scale in)
+                add: Transition {
                     NumberAnimation {
+                        property: "scale"
+                        from: 0
+                        to: 1.0
                         duration: 250
                         easing.type: Easing.OutQuint
                     }
-                }
-                Behavior on height {
                     NumberAnimation {
+                        property: "opacity"
+                        from: 0
+                        to: 1.0
+                        duration: 250
+                    }
+                }
+
+                // Exit transition (fade and scale out)
+                remove: Transition {
+                    NumberAnimation {
+                        property: "scale"
+                        to: 0
+                        duration: 250
+                        easing.type: Easing.OutQuint
+                    }
+                    NumberAnimation {
+                        property: "opacity"
+                        to: 0
+                        duration: 250
+                    }
+                }
+
+                // Smoothly slide remaining items when layout changes
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
                         duration: 250
                         easing.type: Easing.OutQuint
                     }
                 }
 
-                HoverHandler {
-                    id: hover
-                    cursorShape: Qt.PointingHandCursor
+                // Smoothly slide items when they are reordered in the model
+                move: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: 250
+                        easing.type: Easing.OutQuint
+                    }
                 }
 
-                Rectangle {
-                    id: innerShape
-                    anchors.fill: parent
-                    radius: root.vertical ? (width / 2) : (height / 2)
+                delegate: Item {
+                    id: wsDelegate
+                    required property int index
+                    required property var modelData
+                    readonly property int wsId: modelData
+                    readonly property bool isActive: wsId === root.activeWsId
+                    readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                    readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
 
-                    color: {
-                        if (isActive) {
-                            if (isShowingScratchpad) {
-                                return hover.hovered ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiary;
-                            } else {
-                                return hover.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
-                            }
-                        }
-                        if (hover.hovered) {
-                            let baseColor = isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                            let mixTarget = root.scratchpadOpen ? Appearance.colors.colTertiary : Appearance.colors.colPrimary;
-                            return ColorUtils.mix(baseColor, mixTarget, 0.25);
-                        }
-                        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-                    }
+                    readonly property real targetWidth: root.vertical ? shapeDiameter : (isActive ? pillLength : shapeDiameter)
+                    readonly property real targetHeight: root.vertical ? (isActive ? pillLength : shapeDiameter) : shapeDiameter
 
-                    opacity: {
-                        if (isActive)
-                            return 1.0;
-                        if (root.scratchpadOpen)
-                            return hover.hovered ? 0.5 : 0.25;
-                        if (hover.hovered)
-                            return 0.9;
-                        return isOccupied ? 0.7 : 0.4;
-                    }
+                    width: targetWidth
+                    height: targetHeight
 
-                    Behavior on color {
-                        ColorAnimation {
-                            duration: 200
-                        }
-                    }
-
-                    Behavior on opacity {
+                    Behavior on width {
                         NumberAnimation {
-                            duration: 200
+                            duration: 250
+                            easing.type: Easing.OutQuint
+                        }
+                    }
+                    Behavior on height {
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutQuint
                         }
                     }
 
-                    StyledText {
-                        anchors.centerIn: parent
-                        text: (Config.options?.bar.workspaces.numberMap[wsDelegate.wsId - 1] || wsDelegate.wsId).toString()
-                        font.pixelSize: Math.max(7, shapeDiameter - 4)
-                        font.weight: isActive ? Font.Bold : Font.Normal
-                        font.family: Appearance.font.family.numbers
+                    HoverHandler {
+                        id: hover
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    Rectangle {
+                        id: innerShape
+                        anchors.fill: parent
+                        radius: root.vertical ? (width / 2) : (height / 2)
+
                         color: {
                             if (isActive) {
-                                return isShowingScratchpad ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary;
+                                if (isShowingScratchpad) {
+                                    return hover.hovered ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiary;
+                                } else {
+                                    return hover.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+                                }
+                            }
+                            if (hover.hovered) {
+                                let baseColor = isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+                                let mixTarget = root.scratchpadOpen ? Appearance.colors.colTertiary : Appearance.colors.colPrimary;
+                                return ColorUtils.mix(baseColor, mixTarget, 0.25);
                             }
                             return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
                         }
-                        opacity: root.showNumbers ? 1.0 : 0.0
 
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 150
-                            }
-                        }
+                        opacity: isShowingScratchpad ? 0.0 : (isActive ? 1.0 : (hover.hovered ? 0.9 : (isOccupied ? 0.7 : 0.4)))
+
                         Behavior on color {
                             ColorAnimation {
                                 duration: 200
                             }
                         }
-                    }
-                }
 
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: {
-                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsDelegate.wsId + "' })");
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 200
+                            }
+                        }
+
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: (Config.options?.bar.workspaces.numberMap[wsDelegate.wsId - 1] || wsDelegate.wsId).toString()
+                            font.pixelSize: Math.max(7, shapeDiameter - 4)
+                            font.weight: isActive ? Font.Bold : Font.Normal
+                            font.family: Appearance.font.family.numbers
+                            color: {
+                                if (isActive) {
+                                    return isShowingScratchpad ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary;
+                                }
+                                return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+                            }
+                            opacity: root.showNumbers ? 1.0 : 0.0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 150
+                                }
+                            }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 200
+                                }
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        acceptedButtons: Qt.LeftButton
+                        onClicked: {
+                            Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsDelegate.wsId + "' })");
+                        }
                     }
                 }
             }
+        }
+
+        // Position reference for the active indicator overlay
+        Item {
+            id: activePositionHelper
+            readonly property real _index: root._activeIndex
+            readonly property real indicatorWidth: root.pillLength
+            readonly property real indicatorHeight: root.shapeDiameter
+
+            x: root._activeInRange ? (root.vertical ? container.x + (container.width - indicatorWidth) / 2 : container.x + listView.x + _index * (root.shapeDiameter + listView.spacing)) : 0
+            y: root._activeInRange ? (root.vertical ? container.y + listView.y + _index * (root.shapeDiameter + listView.spacing) : container.y + (container.height - indicatorHeight) / 2) : 0
+            width: indicatorWidth
+            height: indicatorHeight
+            visible: false
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.OutQuint
+            }
+        }
+    }
+
+    // Unblurred active workspace indicator overlay
+    Rectangle {
+        id: activeOverlay
+        z: 10
+
+        x: activePositionHelper.x
+        y: activePositionHelper.y
+        width: activePositionHelper.width
+        height: activePositionHelper.height
+
+        radius: root.vertical ? width / 2 : height / 2
+
+        readonly property bool _show: root.scratchpadOpen && root._activeInRange
+
+        visible: _show
+        opacity: _show ? 1.0 : 0.0
+
+        color: Appearance.colors.colTertiary
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.OutQuint
+            }
+        }
+
+        StyledText {
+            anchors.centerIn: parent
+            text: root._activeInRange ? (Config.options?.bar.workspaces.numberMap[root.activeWsId - 1] || root.activeWsId).toString() : ""
+            font.pixelSize: Math.max(7, root.shapeDiameter - 4)
+            font.weight: Font.Bold
+            font.family: Appearance.font.family.numbers
+            color: Appearance.colors.colOnTertiary
+            opacity: root.showNumbers ? 1.0 : 0.0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 150
+                }
+            }
+        }
+    }
+
+    Behavior on blur {
+        NumberAnimation {
+            duration: 250
+            easing.type: Easing.OutQuint
         }
     }
 }
