@@ -15,13 +15,21 @@ Item {
     Loader {
         id: loader
         anchors.centerIn: parent
-        scale: root.isExpanded ? 1.15 : 1.0
 
-        Behavior on scale {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutCubic
-            }
+        // Instead of scale (causes aliasing), use explicit width/height
+        // expanding widget fills more space when expanded
+        width: root.isExpanded
+            ? (loaderBaseWidth * 1.15)
+            : loaderBaseWidth
+        height: root.isExpanded ? 80 : (root.height > 0 ? root.height : 40)
+
+        readonly property real loaderBaseWidth: root.implicitWidth - 20
+
+        Behavior on width {
+            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+        }
+        Behavior on height {
+            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
         }
 
         source: {

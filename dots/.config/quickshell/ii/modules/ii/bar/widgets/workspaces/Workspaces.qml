@@ -294,7 +294,9 @@ Item {
         readonly property real baseIndicatorPosition: pairMin * root.iconBoxWrapperSize
         readonly property real baseIndicatorLength: (pairAbs + 1) * root.iconBoxWrapperSize
 
-        property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset
+        readonly property real contentLayoutOffset: contentLayout ? (root.vertical ? (root.height - contentLayout.implicitHeight) / 2 : (root.width - contentLayout.implicitWidth) / 2) : 0
+
+        property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset + contentLayoutOffset
         property real indicatorLength: baseIndicatorLength + currentItemOffset - visualInset * 2
 
         y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
@@ -387,7 +389,7 @@ Item {
 
         readonly property real accumulatedPreviousOffsets: offsetFor(hoverIdx)
 
-        property real indicatorPosition: hoverIdx * root.iconBoxWrapperSize + accumulatedPreviousOffsets + root.iconBoxWrapperSize * 0.05
+        property real indicatorPosition: hoverIdx * root.iconBoxWrapperSize + accumulatedPreviousOffsets + root.iconBoxWrapperSize * 0.05 + (root.activeIndicator?.contentLayoutOffset ?? 0)
         property real indicatorLength: root.iconBoxWrapperSize + currentItemOffset - root.iconBoxWrapperSize * 0.1
 
         y: root.vertical ? indicatorPosition : 0
