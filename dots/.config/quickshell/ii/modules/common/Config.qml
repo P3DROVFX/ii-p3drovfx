@@ -570,6 +570,7 @@ Singleton {
                     property bool disableTimer: false
                     property bool disableClipboard: false
                     property bool disableLocalSend: false
+                    property bool disableKdeConnectInLocalSend: false
                     property bool disableChecklist: true
                     property bool checklistAlwaysVisible: false
                     property bool checklistOnlyExpanded: false
@@ -590,7 +591,7 @@ Singleton {
                     property int heightClipboard: 36
                     property int heightLocalSend: 42
                     property int heightChecklist: 36
-                    property int heightCalendar: 36
+                    property int heightCalendar: 48
                     property int heightAudio: 36
                     property int heightProgress: 48
                 }

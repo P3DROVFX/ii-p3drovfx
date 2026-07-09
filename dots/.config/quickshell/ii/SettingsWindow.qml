@@ -61,7 +61,7 @@ FloatingWindow {
             icon: "auto_awesome",
             component: "modules/settings/configs/PresetsConfig.qml"
         },
-        // Group 2 – Modules (indices 5..9)
+        // Group 2 – Modules (indices 5..10)
         {
             name: Translation.tr("Sidebars & Panels"),
             icon: "side_navigation",
@@ -92,7 +92,7 @@ FloatingWindow {
             icon: "water_drop",
             component: "modules/settings/configs/DynamicIslandConfig.qml"
         },
-        // Group 3 – Tools & Overlays (indices 11..14)
+        // Group 3 – Tools & Overlays (indices 11..15)
         {
             name: Translation.tr("System Overlays"),
             icon: "picture_in_picture",
@@ -113,12 +113,12 @@ FloatingWindow {
             icon: "help",
             component: "modules/settings/configs/CheatSheetConfig.qml"
         },
-        // Group 4 – System & Services (indices 16..20)
         {
             name: Translation.tr("Hyprland Rules"),
             icon: "rule",
             component: "modules/settings/configs/HyprlandRulesConfig.qml"
         },
+        // Group 4 – System & Services (indices 16..20)
         {
             name: Translation.tr("Monitors"),
             icon: "monitor",
@@ -179,7 +179,7 @@ FloatingWindow {
         },
         {
             name: Translation.tr("System & Services"),
-            pages: [16, 17, 18, 19, 20].map(i => ({
+            pages: [16, 17, 18, 19].map(i => ({
                         name: pages[i].name,
                         icon: pages[i].icon,
                         pageIndex: i
@@ -276,8 +276,8 @@ FloatingWindow {
                 id: userHeader
                 Layout.preferredWidth: 230
                 Layout.fillHeight: true
-                isActive: root.currentPage === 19
-                onClicked: root.currentPage = 19
+                isActive: root.currentPage === 20
+                onClicked: root.currentPage = 20
             }
 
             SearchBar {
@@ -290,7 +290,7 @@ FloatingWindow {
 
                 onTextChanged: text => {
                     if (text === "") {
-                        if (root.currentPage === 20) {
+                        if (root.currentPage === 21) {
                             root.currentPage = root.previousPage;
                         }
                         root.activeSearchQuery = "";
@@ -307,7 +307,7 @@ FloatingWindow {
                         root.activeSearchQuery = "";
                         root.resultsCount = 0;
                         root.lastSearchIndex = -1;
-                        if (root.currentPage === 20) {
+                        if (root.currentPage === 21) {
                             root.currentPage = root.previousPage;
                         }
                         return;
@@ -324,12 +324,12 @@ FloatingWindow {
                     root.resultsCount = totalWidgets;
                     root.lastSearchIndex = 0;
 
-                    if (root.currentPage !== 20) {
+                    if (root.currentPage !== 21) {
                         root.previousPage = root.currentPage;
                     }
                     root.activeSearchQuery = text;
                     SearchRegistry.currentSearch = text;
-                    root.currentPage = 20;
+                    root.currentPage = 21;
                 }
 
                 onCloseRequested: GlobalStates.settingsOpen = false

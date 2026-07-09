@@ -64,10 +64,23 @@ Item {
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
     property string overviewPosition: Config.options.overview?.position ?? ""
+    
+
+    // Suppress item transitions during panel open/close to avoid flicker
+    property bool suppressItemTransitions: true
+
+
+
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
+                // Cancel pending clear — open before timer fired
+                clearModelTimer.stop();
+                // Suppress transitions while panel is animating open
+                root.suppressItemTransitions = true;
+                // Wipe stale results immediately so panel opens empty
+                resultModel.clear();
                 root.loadedResultsCount = 50;
                 if (root.alwaysListAppsMode) {
                     Qt.callLater(() => {
@@ -79,8 +92,14 @@ Item {
                         resultsDebounce.restart();
                     });
                 }
+                // Re-enable transitions after open animation
+                enableTransitionsTimer.restart();
             } else {
                 resultsDebounce.stop();
+                // Suppress transitions while panel animates closed
+                root.suppressItemTransitions = true;
+                // Delay clear until after close animation to avoid remove-transition flicker
+                clearModelTimer.restart();
             }
         }
     }
@@ -647,6 +666,9 @@ Item {
                             root.loadedResultsCount = 50;
                             if (appResults.count > 0)
                                 appResults.currentIndex = 0;
+                            // User is typing — enable item transitions now
+                            if (root.searchingText !== "")
+                                root.suppressItemTransitions = false;
                         }
                     }
 
@@ -748,7 +770,7 @@ Item {
                     move: Transition {
                         NumberAnimation {
                             properties: "y"
-                            duration: 220
+                            duration: root.suppressItemTransitions ? 0 : 220
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
@@ -757,7 +779,7 @@ Item {
                     displaced: Transition {
                         NumberAnimation {
                             properties: "y"
-                            duration: 220
+                            duration: root.suppressItemTransitions ? 0 : 220
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
@@ -768,12 +790,12 @@ Item {
                             NumberAnimation {
                                 property: "opacity"
                                 from: 0.0; to: 1.0
-                                duration: 180
+                                duration: root.suppressItemTransitions ? 0 : 180
                                 easing.type: Easing.OutQuad
                             }
                             NumberAnimation {
                                 property: "y"
-                                duration: 220
+                                duration: root.suppressItemTransitions ? 0 : 220
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
@@ -784,7 +806,7 @@ Item {
                         NumberAnimation {
                             property: "opacity"
                             to: 0.0
-                            duration: 120
+                            duration: root.suppressItemTransitions ? 0 : 120
                             easing.type: Easing.OutQuad
                         }
                     }
