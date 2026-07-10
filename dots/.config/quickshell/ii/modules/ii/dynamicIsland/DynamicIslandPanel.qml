@@ -33,11 +33,13 @@ Scope {
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
     readonly property bool mediaActive: {
-        if (MprisController.activePlayer === null) return false;
+        if (MprisController.activePlayer === null)
+            return false;
         const t = (MprisController.activeTrack && MprisController.activeTrack.title) ? MprisController.activeTrack.title : "";
         const a = (MprisController.activeTrack && MprisController.activeTrack.artist) ? MprisController.activeTrack.artist : "";
         // Block browser noise: no title + unknown artist combo
-        if ((t === "" || t === "No title") && (a === "" || a === "Unknown Artist")) return false;
+        if ((t === "" || t === "No title") && (a === "" || a === "Unknown Artist"))
+            return false;
         return true;
     }
 
@@ -63,6 +65,12 @@ Scope {
     property string lastClipboardItem: ""
     property bool isDragOverNotch: false
     property bool rightClickHidden: false
+    // Reference to the currently loaded FloatingNotchLocalSend widget
+    // (or null).  Used to push the drop-side choice into the widget so
+    // the expanded picker opens on the right service tab.
+    property var _localSendWidget: null
+    property int _lsServiceChoice: 0
+    property var _lsQueueFiles: []
     readonly property var _cliphistRef: Cliphist
 
     Component.onCompleted: {
@@ -81,6 +89,9 @@ Scope {
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "connected";
             root.btNotifActive = true;
+            GlobalStates.floatingNotchBtDevice = device;
+            GlobalStates.floatingNotchBtAction = "connected";
+            GlobalStates.floatingNotchBtNotifActive = true;
             btTimer.restart();
         }
         function onDeviceDisconnected(device) {
@@ -88,6 +99,9 @@ Scope {
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "disconnected";
             root.btNotifActive = true;
+            GlobalStates.floatingNotchBtDevice = device;
+            GlobalStates.floatingNotchBtAction = "disconnected";
+            GlobalStates.floatingNotchBtNotifActive = true;
             btTimer.restart();
         }
     }
@@ -101,6 +115,9 @@ Scope {
                 btTimer.restart();
             } else {
                 root.btNotifActive = false;
+                GlobalStates.floatingNotchBtDevice = null;
+                GlobalStates.floatingNotchBtAction = "connected";
+                GlobalStates.floatingNotchBtNotifActive = false;
                 btTimer.interval = 3000;
             }
         }
@@ -146,6 +163,17 @@ Scope {
         running: true
         interval: 2000
         onTriggered: root.isStartup = false
+    }
+
+    // Clear LocalSend service choice when files are removed
+    Connections {
+        target: LocalSend
+        function onDroppedFilesChanged() {
+            if (LocalSend.droppedFiles.length === 0 && root._lsServiceChoice === 1) {
+                root._lsServiceChoice = 0;
+                root._lsQueueFiles = [];
+            }
+        }
     }
 
     Connections {
@@ -232,7 +260,7 @@ Scope {
                 source: "widgets/FloatingNotchNotification.qml",
                 contractedH: Config.options.bar.floatingNotch.heightNotification,
                 expandedH: 140,
-                contractedW: 320,
+                contractedW: 380,
                 expandedW: 460
             };
         }
@@ -241,9 +269,9 @@ Scope {
                 type: "localsend",
                 source: "widgets/FloatingNotchLocalSend.qml",
                 contractedH: root.isDragOverNotch ? 140 : Config.options.bar.floatingNotch.heightLocalSend,
-                expandedH: 140,
-                contractedW: root.isDragOverNotch ? 360 : (LocalSend.droppedFiles.length > 0 ? 220 : 180),
-                expandedW: 360
+                expandedH: 160,
+                contractedW: root.isDragOverNotch ? 360 : ((LocalSend.droppedFiles.length > 0 || root._lsServiceChoice === 2) ? 220 : 180),
+                expandedW: 340
             };
         }
         if (type === "clipboard") {
@@ -291,9 +319,9 @@ Scope {
                 type: "bluetooth",
                 source: "widgets/FloatingNotchBluetooth.qml",
                 contractedH: Config.options.bar.floatingNotch.heightBluetooth,
-                expandedH: 140,
-                contractedW: 250,
-                expandedW: 320
+                expandedH: 160,
+                contractedW: 320,
+                expandedW: 360
             };
         }
         if (type === "pomodoro" || type === "stopwatch") {
@@ -376,20 +404,41 @@ Scope {
         };
     }
 
+    // ── Search-persistent widgets ──────────────────────────────────────────
+    // These widgets remain visible at the bottom of the DI when search is open.
+    // Add/remove types here to control persistence.
+    readonly property var searchPersistentWidgets: {
+        if (!root.searchActive)
+            return [];
+        let list = [];
+        if (notificationActive && !Config.options.bar.floatingNotch.disableNotification)
+            list.push(getWidgetDetails("notification"));
+        if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
+            list.push(getWidgetDetails("bluetooth"));
+        if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
+            list.push(getWidgetDetails("recording"));
+        if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer)
+            list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
+        return list;
+    }
+
+    // Height of the persistent strip (contracted height + vertical padding), 0 when empty
+    readonly property real searchPersistentStripHeight: searchPersistentWidgets.length > 0 ? 52 : 0
+
     readonly property var activeWidgetsList: {
-        if (searchActive) return [getWidgetDetails("search")];
-        if (osdActive && !Config.options.bar.floatingNotch.disableOsd) return [getWidgetDetails("osd")];
+        if (searchActive)
+            return [getWidgetDetails("search")];
+        if (osdActive && !Config.options.bar.floatingNotch.disableOsd)
+            return [getWidgetDetails("osd")];
 
         let list = [];
-        let showChecklist = !Config.options.bar.floatingNotch.disableChecklist &&
-            (Config.options.bar.floatingNotch.checklistAlwaysVisible ||
-             (root.isHoverExpanded && Config.options.bar.floatingNotch.checklistOnlyExpanded));
+        let showChecklist = !Config.options.bar.floatingNotch.disableChecklist && (Config.options.bar.floatingNotch.checklistAlwaysVisible || (root.isHoverExpanded && Config.options.bar.floatingNotch.checklistOnlyExpanded));
         let showCalendar = !Config.options.bar.floatingNotch.disableCalendar;
         let showAudio = !Config.options.bar.floatingNotch.disableAudio && root.isHoverExpanded;
 
         if (notificationActive && !Config.options.bar.floatingNotch.disableNotification)
             list.push(getWidgetDetails("notification"));
-        if ((LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root.isDragOverNotch) && !Config.options.bar.floatingNotch.disableLocalSend)
+        if ((LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root.isDragOverNotch || root._lsServiceChoice !== 0) && !Config.options.bar.floatingNotch.disableLocalSend)
             list.push(getWidgetDetails("localsend"));
         if (ProgressService.hasActiveJobs && !Config.options.bar.floatingNotch.disableProgress)
             list.push(getWidgetDetails("progress"));
@@ -401,7 +450,7 @@ Scope {
             list.push(getWidgetDetails("keyboard"));
         if (wifiNotifActive && !Config.options.bar.floatingNotch.disableWifi)
             list.push(getWidgetDetails("wifi"));
-        if (btNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
+        if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
             list.push(getWidgetDetails("bluetooth"));
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer) {
             list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
@@ -439,8 +488,10 @@ Scope {
     }
 
     readonly property string mode: {
-        if (searchActive) return "search";
-        if (osdActive && !Config.options.bar.floatingNotch.disableOsd) return "osd";
+        if (searchActive)
+            return "search";
+        if (osdActive && !Config.options.bar.floatingNotch.disableOsd)
+            return "osd";
 
         let activeList = root.activeWidgetsList;
         if (activeList.length > 0 && activeList[0].type !== "home") {
@@ -450,20 +501,42 @@ Scope {
     }
 
     readonly property bool hasExpandedVersion: {
-        if (mode === "search" || mode === "osd" || mode === "home") return false;
+        if (mode === "search" || mode === "osd" || mode === "home")
+            return false;
         return true;
     }
 
     // Hover state for general expanding on hover
     property bool hoverActive: hoverHandler.hovered
+    // Expanded when hovering OR when localsend/KDE ready state is active
     property bool isHoverExpanded: false
 
     onHoverActiveChanged: {
         if (hoverActive) {
             hoverCollapseTimer.stop();
+            if (root._lsServiceChoice !== 0) {
+                lsReadyCollapseTimer.restart();
+            }
             isHoverExpanded = true;
         } else {
-            hoverCollapseTimer.restart();
+            if (root._lsServiceChoice !== 0) {
+                lsReadyCollapseTimer.restart();
+            } else {
+                hoverCollapseTimer.restart();
+            }
+        }
+    }
+
+    // Auto-expand when a service is chosen; auto-collapse after delay
+    on_LsServiceChoiceChanged: {
+        if (root._lsServiceChoice !== 0) {
+            lsReadyCollapseTimer.restart();
+            isHoverExpanded = true;
+        } else {
+            lsReadyCollapseTimer.stop();
+            if (!hoverActive) {
+                hoverCollapseTimer.restart();
+            }
         }
     }
 
@@ -471,6 +544,18 @@ Scope {
         id: hoverCollapseTimer
         interval: 1500
         onTriggered: isHoverExpanded = false
+    }
+
+    property Timer lsReadyCollapseTimer: Timer {
+        id: lsReadyCollapseTimer
+        interval: 3000
+        running: false
+        onTriggered: {
+            const lsWidget = root._localSendWidget;
+            if (!hoverActive && !(lsWidget && lsWidget.kdeSent)) {
+                isHoverExpanded = false;
+            }
+        }
     }
 
     // Trigger state for autohide top screen hover sensor
@@ -495,24 +580,30 @@ Scope {
 
     // Determine if the island should be physically hidden (slid up out of bounds)
     readonly property bool idleHidden: {
-        if (searchActive) return false;
-        if (fullscreenActive) return true;
-        if (rightClickHidden) return true;
-        
+        if (searchActive)
+            return false;
+        if (fullscreenActive)
+            return true;
+        if (rightClickHidden)
+            return true;
+
         // Hide if auto-hide is enabled AND user is not hovering either the top trigger or the container itself
         if (Config.options.bar.floatingNotch.autoHide) {
             return !showOnTopHover && !hoverActive;
         }
-        
+
         return false;
     }
 
     // Layout configuration
     // Layout configuration
     readonly property real targetW: {
-        if (mode === "search") return searchWidgetRef ? searchWidgetRef.implicitWidth : 420;
-        if (mode === "osd") return 380;
-        if (mode === "home") return 180;
+        if (mode === "search")
+            return searchWidgetRef ? searchWidgetRef.implicitWidth : 420;
+        if (mode === "osd")
+            return 380;
+        if (mode === "home")
+            return 180;
 
         if (isHoverExpanded) {
             let list = activeWidgetsList;
@@ -543,14 +634,33 @@ Scope {
     }
 
     readonly property real targetH: {
-        if (mode === "search") return searchWidgetRef ? Math.min(win.screen.height * 0.7, searchWidgetRef.implicitHeight) : 54;
-        if (mode === "osd") return 72;
-        if (mode === "home") return Config.options.bar.floatingNotch.heightHome;
+        if (mode === "search")
+            return searchWidgetRef ? Math.min(win.screen.height * 0.7, searchWidgetRef.implicitHeight) + root.searchPersistentStripHeight : 54 + root.searchPersistentStripHeight;
+        if (mode === "osd")
+            return 72;
+        if (mode === "home")
+            return Config.options.bar.floatingNotch.heightHome;
 
         if (isHoverExpanded) {
+            let list = activeWidgetsList;
+            if (list.length > 0) {
+                let maxH = 0;
+                for (let i = 0; i < list.length; i++) {
+                    maxH = Math.max(maxH, list[i].expandedH);
+                }
+                return maxH;
+            }
             return 140;
         } else {
-            return activeWidgetsList[0].contractedH;
+            let list = activeWidgetsList;
+            if (list.length > 0) {
+                let maxH = 0;
+                for (let i = 0; i < list.length; i++) {
+                    maxH = Math.max(maxH, list[i].contractedH);
+                }
+                return maxH;
+            }
+            return 88;
         }
     }
 
@@ -559,7 +669,8 @@ Scope {
         screen: {
             var name = (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "");
             var found = Quickshell.screens.find(s => s.name === name);
-            if (found) return found;
+            if (found)
+                return found;
             return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null;
         }
         visible: !GlobalStates.screenLocked
@@ -594,7 +705,7 @@ Scope {
             id: maskTarget
             anchors.horizontalCenter: container.horizontalCenter
             anchors.top: container.top
-            width: container.width
+            width: root.isDragOverNotch ? Math.max(container.width, root.targetW + 60) : container.width
             height: container.height
         }
 
@@ -607,15 +718,62 @@ Scope {
 
             DropArea {
                 id: notchDropArea
-                anchors.fill: parent
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: root.isDragOverNotch ? Math.max(parent.width, root.targetW + 60) : parent.width
                 keys: ["text/uri-list"]
                 enabled: Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableLocalSend && LocalSend.available
-                onDropped: (drop) => {
-                    if (!drop.hasUrls) return
-                    for (let i = 0; i < drop.urls.length; i++) {
-                        LocalSend.addDroppedFile(drop.urls[i])
+                onEntered: drag => {
+                    drag.accept(Qt.CopyAction);
+                }
+                onPositionChanged: drag => {
+                    const lsWidget = root._localSendWidget;
+                    if (!lsWidget)
+                        return;
+                    const dropW = root.isDragOverNotch ? Math.max(container.width, root.targetW + 60) : container.width;
+                    const kdeReady = !Config.options.bar.floatingNotch.disableKdeConnectInLocalSend && typeof KdeConnectService !== "undefined" && KdeConnectService.available && KdeConnectService.activeReachable && KdeConnectService.activeDevice;
+                    if (kdeReady) {
+                        lsWidget.rightHover = drag.x >= dropW / 2;
+                        lsWidget.leftHover = drag.x < dropW / 2;
+                    } else {
+                        lsWidget.leftHover = true;
+                        lsWidget.rightHover = false;
                     }
-                    drop.accept(Qt.CopyAction)
+                }
+                onExited: {
+                    const lsWidget = root._localSendWidget;
+                    if (lsWidget) {
+                        lsWidget.leftHover = false;
+                        lsWidget.rightHover = false;
+                    }
+                }
+                onDropped: drop => {
+                    if (!drop.hasUrls)
+                        return;
+                    const lsWidget = root._localSendWidget;
+                    const dropW = root.isDragOverNotch ? Math.max(container.width, root.targetW + 60) : container.width;
+                    const useKde = !Config.options.bar.floatingNotch.disableKdeConnectInLocalSend && typeof KdeConnectService !== "undefined" && KdeConnectService.available && KdeConnectService.activeReachable && KdeConnectService.activeDevice && drop.x >= dropW / 2;
+                    const cleanPaths = drop.urls.map(function (u) {
+                        return u.toString().replace(/^file:\/\//, "");
+                    });
+                    // Set panel-level mirror first (drives widget visibility + auto-expand)
+                    root._lsServiceChoice = useKde ? 2 : 1;
+                    root._lsQueueFiles = cleanPaths;
+                    if (lsWidget) {
+                        lsWidget.serviceChoice = useKde ? 2 : 1;
+                        lsWidget.queueFiles = cleanPaths;
+                        lsWidget.leftHover = false;
+                        lsWidget.rightHover = false;
+                    }
+                    if (!useKde) {
+                        for (let i = 0; i < drop.urls.length; i++) {
+                            LocalSend.addDroppedFile(drop.urls[i]);
+                        }
+                        if (LocalSend.available)
+                            LocalSend.startScanning();
+                    }
+                    drop.accept(Qt.CopyAction);
                 }
             }
 
@@ -627,33 +785,36 @@ Scope {
 
             Behavior on width {
                 NumberAnimation {
-                    duration: 500
+                    duration: Appearance.animation.elementMove.duration
                     easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
+                    easing.overshoot: 0.9
                 }
             }
 
             Behavior on height {
                 NumberAnimation {
-                    duration: 500
+                    duration: root.mode === "search" ? Appearance.animation.elementMoveSmall.duration : Appearance.animation.elementMove.duration
                     easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
+                    easing.overshoot: 0.5
                 }
             }
 
             // Slide vertically out of screen when idleHidden is true
             y: {
-                if (idleHidden) return -targetH - 10;
-                if (root.hasTopBar) return Appearance.sizes.barHeight;
-                if (root.usingWrappedFrame) return Config.options.appearance.wrappedFrameThickness;
+                if (idleHidden)
+                    return -targetH - 10;
+                if (root.hasTopBar)
+                    return Appearance.sizes.barHeight;
+                if (root.usingWrappedFrame)
+                    return Config.options.appearance.wrappedFrameThickness;
                 return 0;
             }
 
             Behavior on y {
                 NumberAnimation {
-                    duration: 350
+                    duration: 380
                     easing.type: Easing.OutBack
-                    easing.overshoot: 0.4
+                    easing.overshoot: 0.9
                 }
             }
 
@@ -675,9 +836,10 @@ Scope {
                 antialiasing: true
                 layer.effect: MultiEffect {
                     shadowEnabled: true
-                    shadowColor: Qt.rgba(0, 0, 0, 0.28)
-                    shadowVerticalOffset: 4
-                    shadowBlur: 1.0
+                    shadowColor: Qt.rgba(0, 0, 0, root.isHoverExpanded ? 0.65 : 0.45)
+                    shadowHorizontalOffset: 0
+                    shadowVerticalOffset: 0
+                    shadowBlur: root.isHoverExpanded ? 2.4 : 1.8
                 }
             }
 
@@ -705,14 +867,30 @@ Scope {
                 // Search Widget Loader
                 Loader {
                     id: searchWidgetLoader
-                    anchors.fill: parent
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    // Leave room at the bottom for the persistent widgets strip
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: root.searchPersistentStripHeight
                     readonly property bool shown: root.mode === "search"
                     active: Config.ready
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 350
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 450
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 0.5
+                        }
+                    }
 
                     onVisibleChanged: {
                         if (visible && item) {
@@ -741,7 +919,94 @@ Scope {
                     }
                 }
 
-                // OSD Widget Loader
+                // ── Search Persistent Widgets Strip ──────────────────────────
+                // Widgets that remain visible at the bottom of the DI when search
+                // is open. Controlled by root.searchPersistentWidgets.
+                Item {
+                    id: searchPersistentStrip
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: root.searchPersistentStripHeight
+                    visible: root.searchActive && root.searchPersistentWidgets.length > 0
+                    opacity: visible ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 200
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+
+                    // Separator line
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        height: 1
+                        opacity: 0.15
+                        color: Appearance.colors.colOnLayer0
+                    }
+
+                    // Contracted widgets row
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Repeater {
+                            model: root.searchPersistentWidgets
+                            delegate: Item {
+                                required property var modelData
+                                width: modelData.contractedW
+                                height: modelData.contractedH
+
+                                Loader {
+                                    id: persistentWidgetLoader
+                                    anchors.centerIn: parent
+                                    width: modelData.contractedW
+                                    height: modelData.contractedH
+                                    active: root.searchActive
+                                    source: modelData.source
+
+                                    // Contracted mode bindings
+                                    Binding {
+                                        target: persistentWidgetLoader.item && persistentWidgetLoader.item.hasOwnProperty("isExpanded") ? persistentWidgetLoader.item : null
+                                        property: "isExpanded"
+                                        value: false
+                                    }
+                                    Binding {
+                                        target: persistentWidgetLoader.item && persistentWidgetLoader.item.hasOwnProperty("panelWidgetsCount") ? persistentWidgetLoader.item : null
+                                        property: "panelWidgetsCount"
+                                        value: root.searchPersistentWidgets.length
+                                    }
+
+                                    // Entry animation
+                                    opacity: 0.0
+                                    scale: 0.9
+                                    Component.onCompleted: {
+                                        opacity = 1.0;
+                                        scale = 1.0;
+                                    }
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: 250
+                                            easing.type: Easing.OutQuad
+                                        }
+                                    }
+                                    Behavior on scale {
+                                        NumberAnimation {
+                                            duration: 350
+                                            easing.type: Easing.OutBack
+                                            easing.overshoot: 0.5
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Loader {
                     id: osdWidgetLoader
                     anchors.fill: parent
@@ -750,8 +1015,19 @@ Scope {
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 350
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 450
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 0.5
+                        }
+                    }
 
                     sourceComponent: Component {
                         Item {
@@ -761,13 +1037,29 @@ Scope {
                                 anchors.fill: parent
                                 source: {
                                     const item = [
-                                        { id: "volume", sourceUrl: "indicators/VolumeIndicator.qml" },
-                                        { id: "brightness", sourceUrl: "indicators/BrightnessIndicator.qml" },
-                                        { id: "playerVolume", sourceUrl: "indicators/PlayerVolumeIndicator.qml" },
-                                        { id: "gamma", sourceUrl: "indicators/GammaIndicator.qml" },
-                                        { id: "keyboardBrightness", sourceUrl: "indicators/KeyboardBrightnessIndicator.qml" }
+                                        {
+                                            id: "volume",
+                                            sourceUrl: "indicators/VolumeIndicator.qml"
+                                        },
+                                        {
+                                            id: "brightness",
+                                            sourceUrl: "indicators/BrightnessIndicator.qml"
+                                        },
+                                        {
+                                            id: "playerVolume",
+                                            sourceUrl: "indicators/PlayerVolumeIndicator.qml"
+                                        },
+                                        {
+                                            id: "gamma",
+                                            sourceUrl: "indicators/GammaIndicator.qml"
+                                        },
+                                        {
+                                            id: "keyboardBrightness",
+                                            sourceUrl: "indicators/KeyboardBrightnessIndicator.qml"
+                                        }
                                     ].find(i => i.id === GlobalStates.osdCurrentIndicator);
-                                    if (!item) return "";
+                                    if (!item)
+                                        return "";
                                     return Quickshell.shellPath("modules/ii/topLayer/osd/" + item.sourceUrl);
                                 }
                             }
@@ -793,7 +1085,18 @@ Scope {
                                 anchors.fill: parent
                                 anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 2 : 2
                                 radius: Appearance.rounding.windowRounding
-                                color: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? Appearance.colors.colSurfaceContainerLow : "transparent"
+                                // Suppress background when widget provides its own (LocalSend drag/expanded
+                                // uses per-service tinted columns).  Stacking the panel's card on top of those
+                                // causes the "rectangles duplos" issue.
+                                readonly property bool widgetOwnsBackground: (modelData.type === "localsend" && (root.isDragOverNotch || (root.isHoverExpanded && modelData.hasExpandedVersion !== false))) || modelData.type === "notification"
+                                color: {
+                                    if (widgetOwnsBackground)
+                                        return "transparent";
+                                    if (root.isHoverExpanded && root.activeWidgetsList.length > 1)
+                                        return Appearance.colors.colSurfaceContainerLow;
+                                    return "transparent";
+                                }
+                                visible: color !== "transparent"
 
                                 Loader {
                                     id: widgetLoader
@@ -807,14 +1110,43 @@ Scope {
                                     opacity: 0.0
                                     scale: 0.95
                                     Component.onCompleted: {
-                                        opacity = 1.0
-                                        scale = 1.0
+                                        opacity = 1.0;
+                                        scale = 1.0;
+                                    }
+
+                                    // Track the loaded LocalSend widget so the
+                                    // DropArea can push serviceChoice/queueFiles.
+                                    onLoaded: {
+                                        if (modelData.type === "localsend") {
+                                            root._localSendWidget = item;
+                                            if (root._lsServiceChoice !== 0) {
+                                                item.serviceChoice = root._lsServiceChoice;
+                                                item.queueFiles = root._lsQueueFiles;
+                                            }
+                                        }
+                                    }
+                                    onItemChanged: {
+                                        if (modelData.type === "localsend") {
+                                            if (!item) {
+                                                root._localSendWidget = null;
+                                            } else if (root._lsServiceChoice !== 0) {
+                                                item.serviceChoice = root._lsServiceChoice;
+                                                item.queueFiles = root._lsQueueFiles;
+                                            }
+                                        }
                                     }
                                     Behavior on opacity {
-                                        NumberAnimation { duration: 250; easing.type: Easing.InOutQuad }
+                                        NumberAnimation {
+                                            duration: 250
+                                            easing.type: Easing.InOutQuad
+                                        }
                                     }
                                     Behavior on scale {
-                                        NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
+                                        NumberAnimation {
+                                            duration: 450
+                                            easing.type: Easing.OutBack
+                                            easing.overshoot: 0.6
+                                        }
                                     }
 
                                     // Bind isExpanded property
@@ -823,13 +1155,40 @@ Scope {
                                         property: "isExpanded"
                                         value: root.isHoverExpanded
                                     }
+
+                                    // Bind isDragOverNotch (panel-level state)
+                                    Binding {
+                                        target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isDragOverNotch") ? widgetLoader.item : null
+                                        property: "isDragOverNotch"
+                                        value: root.isDragOverNotch
+                                    }
+
+                                    // Bind activeWidgetsList (panel-level state)
+                                    Binding {
+                                        target: widgetLoader.item && widgetLoader.item.hasOwnProperty("panelWidgetsCount") ? widgetLoader.item : null
+                                        property: "panelWidgetsCount"
+                                        value: root.activeWidgetsList.length
+                                    }
+
+                                    Connections {
+                                        target: widgetLoader.item && modelData.type === "localsend" ? widgetLoader.item : null
+                                        enabled: target !== null
+                                        function onServiceChoiceChanged() {
+                                            if (target && target.serviceChoice === 0) {
+                                                root._lsServiceChoice = 0;
+                                                root._lsQueueFiles = [];
+                                                root._localSendWidget = target;
+                                                target.queueFiles = [];
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Idle home display 
+                // Idle home display
                 Item {
                     id: homeWidget
                     anchors.fill: parent
@@ -837,8 +1196,19 @@ Scope {
                     visible: opacity > 0.01
                     opacity: shown ? 1.0 : 0.0
                     scale: shown ? 1.0 : 0.95
-                    Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-                    Behavior on scale { NumberAnimation { duration: 350; easing.type: Easing.OutBack; easing.overshoot: 0.5 } }
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: 350
+                            easing.type: Easing.InOutQuad
+                        }
+                    }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 350
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 0.5
+                        }
+                    }
 
                     RowLayout {
                         anchors.centerIn: parent
