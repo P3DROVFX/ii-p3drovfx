@@ -15,6 +15,7 @@ Singleton {
     property string deviceName: ""
     property bool available: false
     property bool ready: false
+    property bool initialValueLoaded: false
 
     readonly property int levels: maxValue + 1
     readonly property real percentage: maxValue > 0 ? (currentValue / maxValue) * 100 : 0

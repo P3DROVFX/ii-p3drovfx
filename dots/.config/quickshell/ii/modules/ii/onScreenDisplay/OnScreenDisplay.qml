@@ -92,6 +92,10 @@ Scope {
         target: KeyboardBacklight
         function onCurrentValueChanged() {
             if (root.isStartup) return;
+            if (!KeyboardBacklight.initialValueLoaded) {
+                KeyboardBacklight.initialValueLoaded = true;
+                return;
+            }
             root.protectionMessage = "";
             root.currentIndicator = "keyboardBrightness";
             root.triggerOsd();
