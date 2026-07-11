@@ -221,7 +221,7 @@ ContentPage {
                 visible: Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBluetooth
                 value: Config.options.bar.floatingNotch.heightBluetooth
                 from: 24
-                to: 60
+                to: 88
                 stepSize: 1
                 onValueChanged: {
                     Config.options.bar.floatingNotch.heightBluetooth = value;

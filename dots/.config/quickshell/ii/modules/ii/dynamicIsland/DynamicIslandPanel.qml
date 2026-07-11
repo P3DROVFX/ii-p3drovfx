@@ -590,6 +590,13 @@ Scope {
         if (rightClickHidden)
             return true;
 
+        // Never hide while a file drag is hovering the drop area — the user
+        // needs to see the drop target to complete the transfer. Without this
+        // the container stays off-screen when dragging from a file manager
+        // (HoverHandler doesn't fire during DnD, so showOnTopHover stays false).
+        if (root.isDragOverNotch)
+            return false;
+
         // Hide if we are idle and the user is not hovering either the top trigger or the container itself
         if (isIdle) {
             return !showOnTopHover && !hoverActive;
@@ -824,11 +831,13 @@ Scope {
                 return 0;
             }
 
+            // Bounce with reduced overshoot when appearing to prevent top gap
+            // Disappearing uses full overshoot (goes off-screen, invisible)
             Behavior on y {
                 NumberAnimation {
                     duration: 380
                     easing.type: Easing.OutBack
-                    easing.overshoot: 0.9
+                    easing.overshoot: root.idleHidden ? 0.9 : 0.3
                 }
             }
 
@@ -1256,6 +1265,61 @@ Scope {
 
             HoverHandler {
                 id: topSensorHandler
+            }
+        }
+
+        // Top-edge drop zone: reveals the hidden container during file drag-and-drop.
+        // HoverHandler in topSensor doesn't fire during DnD, so this DropArea bridges the gap.
+        DropArea {
+            id: topDropZone
+            width: 320
+            height: 40
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            keys: ["text/uri-list"]
+            enabled: root.idleHidden
+                && Config.options.bar.floatingNotch.enable
+                && !Config.options.bar.floatingNotch.disableLocalSend
+                && LocalSend.available
+            onEntered: drag => {
+                drag.accept(Qt.CopyAction);
+                topHoverCollapseTimer.stop();
+                root.showOnTopHover = true;
+                root.rightClickHidden = false;
+            }
+            onExited: {
+                topHoverCollapseTimer.restart();
+            }
+            onDropped: drop => {
+                if (!drop.hasUrls)
+                    return;
+                const kdeReady = !Config.options.bar.floatingNotch.disableKdeConnectInLocalSend
+                    && typeof KdeConnectService !== "undefined"
+                    && KdeConnectService.available
+                    && KdeConnectService.activeReachable
+                    && KdeConnectService.activeDevice;
+                const useKde = kdeReady && drop.x >= width / 2;
+                const cleanPaths = drop.urls.map(function (u) {
+                    return u.toString().replace(/^file:\/\//, "");
+                });
+                root._lsServiceChoice = useKde ? 2 : 1;
+                root._lsQueueFiles = cleanPaths;
+                const lsWidget = root._localSendWidget;
+                if (lsWidget) {
+                    lsWidget.serviceChoice = useKde ? 2 : 1;
+                    lsWidget.queueFiles = cleanPaths;
+                    lsWidget.leftHover = false;
+                    lsWidget.rightHover = false;
+                }
+                if (!useKde) {
+                    for (let i = 0; i < drop.urls.length; i++) {
+                        LocalSend.addDroppedFile(drop.urls[i]);
+                    }
+                    if (LocalSend.available)
+                        LocalSend.startScanning();
+                }
+                drop.accept(Qt.CopyAction);
+                topHoverCollapseTimer.restart();
             }
         }
 
