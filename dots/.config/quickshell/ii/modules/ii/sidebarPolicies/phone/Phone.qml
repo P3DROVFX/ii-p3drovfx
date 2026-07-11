@@ -43,7 +43,9 @@ Item {
 
     property var stagedFiles: []
     readonly property bool hasStagedFiles: stagedFiles.length > 0
-    readonly property bool showOverlay: phoneDropArea.containsDrag || root.hasStagedFiles
+    readonly property bool showOverlay: phoneDropArea.containsDrag || root.hasStagedFiles || root.isSending
+    property bool isSending: false
+    property int sendingIndex: 0
 
 
     readonly property bool emptyStateVisible: !KdeConnectService.available
@@ -60,6 +62,31 @@ Item {
 
     function closeSubPage(): void {
         root.activeSubPage = ""
+    }
+
+    function sendNextFile(): void {
+        if (root.sendingIndex >= root.stagedFiles.length) {
+            const count = root.stagedFiles.length
+            root.isSending = false
+            root.sendingIndex = 0
+            root.stagedFiles = []
+            toastLayer.show(
+                count === 1 ? Translation.tr("File sent successfully")
+                            : Translation.tr("%1 files sent successfully").arg(String(count)),
+                true
+            )
+            return
+        }
+        KdeConnectService.shareUrl(KdeConnectService.activeDeviceId, root.stagedFiles[root.sendingIndex])
+        root.sendingIndex++
+        sendTimer.restart()
+    }
+
+    Timer {
+        id: sendTimer
+        interval: 300
+        repeat: false
+        onTriggered: root.sendNextFile()
     }
 
     Rectangle {
@@ -994,7 +1021,7 @@ Item {
                 id: readyStateLayout
                 anchors.centerIn: parent
                 spacing: 24
-                visible: phoneDropArea.containsDrag
+                visible: phoneDropArea.containsDrag && !root.isSending
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignHCenter
@@ -1028,7 +1055,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 24
                 spacing: 28
-                visible: !phoneDropArea.containsDrag && root.hasStagedFiles
+                visible: !phoneDropArea.containsDrag && root.hasStagedFiles && !root.isSending
 
                 Item {
                     Layout.fillHeight: true
@@ -1176,16 +1203,74 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            enabled: !root.isSending
                             onClicked: {
                                 if (root.stagedFiles.length > 0) {
-                                    for (let i = 0; i < root.stagedFiles.length; i++) {
-                                        KdeConnectService.shareUrl(KdeConnectService.activeDeviceId, root.stagedFiles[i])
-                                    }
-                                    root.stagedFiles = []
+                                    root.isSending = true
+                                    root.sendingIndex = 0
+                                    sendNextFile()
                                 }
                             }
                         }
                     }
+                }
+            }
+
+            // State 3: Sending files
+            ColumnLayout {
+                id: sendingStateLayout
+                anchors.centerIn: parent
+                spacing: 20
+                visible: root.isSending
+
+                Item {
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 80
+
+                    CircularProgress {
+                        anchors.centerIn: parent
+                        width: 80
+                        height: 80
+                        value: root.stagedFiles.length > 0 ? root.sendingIndex / root.stagedFiles.length : 0
+                        colPrimary: Appearance.colors.colPrimary
+                        colSecondary: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: root.stagedFiles.length > 0
+                              ? "%1/%2".arg(String(root.sendingIndex)).arg(String(root.stagedFiles.length))
+                              : "0"
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Sending files...")
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer2
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: parent.width - 48
+                    text: {
+                        if (root.sendingIndex > 0 && root.sendingIndex <= root.stagedFiles.length) {
+                            const urlStr = root.stagedFiles[root.sendingIndex - 1]
+                            return decodeURIComponent(urlStr.substring(urlStr.lastIndexOf("/") + 1))
+                        }
+                        return ""
+                    }
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                    opacity: 0.8
                 }
             }
         }
