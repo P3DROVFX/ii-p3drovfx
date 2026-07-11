@@ -9,6 +9,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
 
@@ -295,7 +296,7 @@ MouseArea {
         }
 
         // Keyboard layout (Fcitx)
-        Bar.SysTray {
+        SysTray {
             Layout.rightMargin: 10
             Layout.alignment: Qt.AlignVCenter
             showSeparator: false
