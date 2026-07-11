@@ -74,7 +74,7 @@ Scope {
             anchors.rightMargin: root.isRight ? Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5) : 0
             anchors.topMargin: Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5)
             anchors.bottomMargin: Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5)
-            width: Appearance.sizes.notificationPopupWidth
+            width: Appearance.sizes.notificationPopupWidth * (Config.options.notifications.zoomPercent / 100)
             popup: true
             height: Math.min(contentItem.height + anchors.topMargin + anchors.bottomMargin, parent.height)
             verticalLayoutDirection: root.isBottom ? ListView.BottomToTop : ListView.TopToBottom

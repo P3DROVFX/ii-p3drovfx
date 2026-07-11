@@ -18,6 +18,7 @@ MouseArea { // Notification group area
     property bool multipleNotifications: notificationCount > 1
     property bool expanded: false
     property bool popup: false
+    property real zoom: 1.0
     property int lazyLimit: 2
 
     onExpandedChanged: {
@@ -45,7 +46,7 @@ MouseArea { // Notification group area
             }
         }
     }
-    property real padding: 10
+    property real padding: 10 * zoom
     implicitHeight: background.implicitHeight
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
@@ -174,7 +175,7 @@ MouseArea { // Notification group area
         anchors.left: parent.left
         width: parent.width
         color: popup ? Appearance.colors.colBackgroundSurfaceContainer : Appearance.colors.colLayer2
-        radius: Appearance.rounding.windowRounding
+        radius: Appearance.rounding.windowRounding * root.zoom
         anchors.leftMargin: root.xOffset
 
         opacity: {
@@ -202,7 +203,7 @@ MouseArea { // Notification group area
         }
 
         clip: true
-        implicitHeight: root.expanded ? row.implicitHeight + padding * 2 : Math.min(80, row.implicitHeight + padding * 2)
+        implicitHeight: root.expanded ? row.implicitHeight + padding * 2 : Math.min(80 * root.zoom, row.implicitHeight + padding * 2)
 
         Behavior on implicitHeight {
             id: implicitHeightAnim
@@ -215,11 +216,12 @@ MouseArea { // Notification group area
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: root.padding
-            spacing: 10
+            spacing: 10 * root.zoom
 
             NotificationAppIcon { // Icons
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: false
+                implicitSize: 38 * root.zoom
                 image: root?.multipleNotifications ? "" : notificationGroup?.notifications[0]?.image ?? ""
                 appIcon: root.notificationGroup?.appIcon
                 summary: root.notificationGroup?.notifications[root.notificationCount - 1]?.summary
@@ -238,7 +240,7 @@ MouseArea { // Notification group area
                     id: topRow
                     // spacing: 0
                     Layout.fillWidth: true
-                    property real fontSize: Appearance.font.pixelSize.smaller
+                    property real fontSize: Appearance.font.pixelSize.smaller * root.zoom
                     property bool showAppName: root.multipleNotifications
                     implicitHeight: Math.max(topTextRow.implicitHeight, expandButton.implicitHeight)
 
@@ -253,7 +255,7 @@ MouseArea { // Notification group area
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                             text: (topRow.showAppName ? notificationGroup?.appName : notificationGroup?.notifications[0]?.summary) || ""
-                            font.pixelSize: topRow.showAppName ? topRow.fontSize : Appearance.font.pixelSize.small
+                            font.pixelSize: topRow.showAppName ? topRow.fontSize : Appearance.font.pixelSize.small * root.zoom
                             color: topRow.showAppName ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer2
                         }
                         StyledText {
@@ -272,7 +274,9 @@ MouseArea { // Notification group area
                         anchors.verticalCenter: parent.verticalCenter
                         count: root.notificationCount
                         expanded: root.expanded
+                        zoom: root.zoom
                         fontSize: topRow.fontSize
+                        iconSize: Appearance.font.pixelSize.normal * root.zoom
                         onClicked: {
                             root.toggleExpanded();
                         }
@@ -304,6 +308,7 @@ MouseArea { // Notification group area
                         required property var modelData
                         notificationObject: modelData
                         expanded: root.expanded
+                        zoom: root.zoom
                         onlyNotification: (root.notificationCount === 1)
                         opacity: (!root.expanded && index == 1 && root.notificationCount > 2) ? 0.5 : 1
                         visible: root.expanded || (index < 2)

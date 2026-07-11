@@ -1148,6 +1148,22 @@ Singleton {
                     property bool requirePasswordToPower: false
                 }
                 property bool materialShapeChars: true
+                property JsonObject notifications: JsonObject {
+                    property bool enable: false // Off by default: showing notifications on the lock screen is a privacy trade-off
+                    property string position: "top_right" // "top_left" | "top_right" | "bottom_left" | "bottom_right"
+                    property string privacy: "redacted" // "full" | "redacted" | "countOnly"
+                    property bool onlySinceLock: true // Only show notifications that arrived while locked
+                    property int maxShown: 5
+                    property int zoomPercent: 100 // 50-200, step 10
+                    property string defaultPolicy: "show" // "show" | "hide" — apps without an explicit rule
+                    property list<string> alwaysShowApps: [] // App names, case-insensitive match
+                    property list<string> neverShowApps: []
+                    property JsonObject filters: JsonObject {
+                        property bool skipTransient: true
+                        property bool skipLowUrgency: false
+                        property string criticalOverride: "full" // "full" | "none" — critical notifications bypass privacy redaction
+                    }
+                }
             }
 
             property JsonObject media: JsonObject {
@@ -1166,6 +1182,7 @@ Singleton {
             property JsonObject notifications: JsonObject {
                 property int timeout: 7000
                 property string position: "top_right"
+                property int zoomPercent: 100 // 50-200, step 10
                 property JsonObject monitor: JsonObject {
                     property bool enable: false
                     property string name: "" // Name of the monitor to show notifications on, like "eDP-1". Find out with 'hyprctl monitors' command
