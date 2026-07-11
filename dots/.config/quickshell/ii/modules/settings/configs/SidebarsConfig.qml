@@ -234,6 +234,15 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "music_note"
+            text: Translation.tr("Show media player in volume dialog")
+            checked: Config.options.sidebar.volumeDialogMediaWidget
+            onCheckedChanged: {
+                Config.options.sidebar.volumeDialogMediaWidget = checked;
+            }
+        }
+
         ContentSubsection {
             title: Translation.tr("Sidebar position")
             icon: "switch_right"

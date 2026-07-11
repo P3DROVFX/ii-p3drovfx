@@ -1460,6 +1460,7 @@ Singleton {
                     property bool showVolume: true
                     property bool showBrightness: false // gamma setting also works for brightness
                 }
+                property bool volumeDialogMediaWidget: true
             }
 
             property JsonObject screenRecord: JsonObject {

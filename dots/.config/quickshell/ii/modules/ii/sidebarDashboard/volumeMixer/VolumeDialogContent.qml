@@ -138,34 +138,42 @@ StyledFlickable {
         anchors.topMargin: 20
         spacing: 16
 
-        // Section 1: Device Output / Input
-        StyledText {
+        VolumeDialogMedia {
+            id: mediaWidget
             Layout.fillWidth: true
-            font.pixelSize: Appearance.font.pixelSize.normal
-            font.bold: true
-            color: Appearance.colors.colSubtext
-            text: root.isSink ? Translation.tr("Device Output") : Translation.tr("Device Input")
+            Layout.preferredHeight: 100
+            visible: root.isSink && Config.options.sidebar.volumeDialogMediaWidget && MprisController.activePlayer !== null && MprisController.players.length > 0
         }
 
-        // List of physical devices
+        // Section 1 Group (Title + List)
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 4
+            spacing: 6
             visible: root.hasDevices
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 24
 
-            Repeater {
-                model: ScriptModel {
-                    values: root.devices
-                }
-                delegate: VolumeDeviceEntry {
-                    Layout.fillWidth: true
-                    required property var modelData
-                    node: modelData
-                    isSink: root.isSink
-                    totalCount: root.devices.length
+            StyledText {
+                Layout.fillWidth: true
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.bold: true
+                color: Appearance.colors.colSubtext
+                text: root.isSink ? Translation.tr("Device Output") : Translation.tr("Device Input")
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Repeater {
+                    model: ScriptModel {
+                        values: root.devices
+                    }
+                    delegate: VolumeDeviceEntry {
+                        Layout.fillWidth: true
+                        required property var modelData
+                        node: modelData
+                        isSink: root.isSink
+                        totalCount: root.devices.length
+                    }
                 }
             }
         }
@@ -183,32 +191,35 @@ StyledFlickable {
             }
         }
 
-        // Section 2: Program Playback / Recording
-        StyledText {
-            Layout.fillWidth: true
-            font.pixelSize: Appearance.font.pixelSize.normal
-            font.bold: true
-            color: Appearance.colors.colSubtext
-            text: root.isSink ? Translation.tr("Program Playback") : Translation.tr("Program Recording")
-        }
-
-        // List of applications
+        // Section 2 Group (Title + List)
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 4
+            spacing: 6
             visible: root.hasApps
-            anchors.topMargin: 24
 
-            Repeater {
-                model: ScriptModel {
-                    values: root.appPwNodes
-                }
-                delegate: VolumeProgramEntry {
-                    Layout.fillWidth: true
-                    required property var modelData
-                    node: modelData
-                    isSink: root.isSink
-                    totalCount: root.appPwNodes.length
+            StyledText {
+                Layout.fillWidth: true
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.bold: true
+                color: Appearance.colors.colSubtext
+                text: root.isSink ? Translation.tr("Program Playback") : Translation.tr("Program Recording")
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Repeater {
+                    model: ScriptModel {
+                        values: root.appPwNodes
+                    }
+                    delegate: VolumeProgramEntry {
+                        Layout.fillWidth: true
+                        required property var modelData
+                        node: modelData
+                        isSink: root.isSink
+                        totalCount: root.appPwNodes.length
+                    }
                 }
             }
         }
