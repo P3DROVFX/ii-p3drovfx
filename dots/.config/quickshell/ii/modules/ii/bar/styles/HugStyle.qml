@@ -12,7 +12,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
-// cornerStyle === 0 — full-width, sem margin, sem border, sem rounding
+// cornerStyle === 0 
 Item {
     id: root
 
@@ -32,18 +32,67 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
     }
 
+    readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
+    readonly property string barEdge: Config.options.bar.bottom ? "bottom" : "top"
+
     Rectangle {
         id: barBackground
         anchors.fill: parent
-        color: root.actualColor
+        color: root.isIslandMode ? "transparent" : root.actualColor
         radius: 0
 
-        layer.enabled: Config.options.bar.dropShadow
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
             shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
             shadowBlur: 1.0
+        }
+    }
+
+    // ── Hug-style islands (barBackgroundStyle === 3) ─────────────────────────
+    HugIslandGroup {
+        id: leftIsland
+        z: -9
+        visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
+        edge: root.barEdge
+        role: "first"
+        fillColor: root.actualColor
+        anchors {
+            top: parent.top
+            bottom: parent.bottom
+            left: parent.left
+            right: leftSection.right; rightMargin: -6
+        }
+    }
+
+    HugIslandGroup {
+        id: middleIsland
+        z: -9
+        visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
+        edge: root.barEdge
+        role: "middle"
+        fillColor: root.actualColor
+        anchors {
+            top: middleSection.top
+            bottom: middleSection.bottom
+            left: middleSection.left; leftMargin: -6
+            right: middleSection.right; rightMargin: -6
+        }
+    }
+
+    HugIslandGroup {
+        id: rightIsland
+        z: -9
+        visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
+        edge: root.barEdge
+        role: "last"
+        fillColor: root.actualColor
+        anchors {
+            top: parent.top
+            bottom: parent.bottom
+            left: rightSection.left; leftMargin: -6
+            right: parent.right
         }
     }
 

@@ -66,16 +66,16 @@ Scope {
                 && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false)
                 && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
-        property bool showBarBackground: hasActiveWindows && (Config.options.bar.barBackgroundStyle === 2
-            || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1))
+        property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2)
             || Config.options.bar.barBackgroundStyle === 1
+            || Config.options.bar.barBackgroundStyle === 3
 
         BarThemes { id: barThemes }
         property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
         // ── Window tracking (for showBarBackground) ──────────────────────────
         Connections {
-            enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1)
+            enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 1))
             target: HyprlandData
             function onWindowListChanged() {
                 const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
@@ -125,9 +125,8 @@ Scope {
         }
 
         property bool superShow: false
-        property bool mustShow: !hasFullscreenWindowOnMonitor &&
-            (hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen)
-        property real hiddenAmount: (hasFullscreenWindowOnMonitor || (Config?.options.bar.autoHide.enable && !mustShow))
+        property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
+        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow)
             ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
@@ -274,7 +273,7 @@ Scope {
                 id: roundDecorators
                 anchors { left: parent.left; right: parent.right; top: barContent.bottom; bottom: undefined }
                 height: Appearance.rounding.screenRounding
-                active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3
+                active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3
 
                 states: State {
                     name: "bottom"

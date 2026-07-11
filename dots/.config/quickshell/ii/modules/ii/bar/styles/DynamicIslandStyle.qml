@@ -543,6 +543,8 @@ Item {
         anchors.top: barBackground.top
         anchors.right: barBackground.left
         anchors.rightMargin: 0
+        extendHorizontal: false
+        extendVertical: false
         implicitSize: barBackground.baseRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopRight
@@ -560,6 +562,8 @@ Item {
         anchors.top: barBackground.top
         anchors.left: barBackground.right
         anchors.leftMargin: 0
+        extendHorizontal: false
+        extendVertical: false
         implicitSize: barBackground.baseRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopLeft
@@ -577,6 +581,8 @@ Item {
         anchors.bottom: barBackground.bottom
         anchors.right: barBackground.left
         anchors.rightMargin: 0
+        extendHorizontal: false
+        extendVertical: false
         implicitSize: barBackground.baseRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomRight
@@ -594,6 +600,8 @@ Item {
         anchors.bottom: barBackground.bottom
         anchors.left: barBackground.right
         anchors.leftMargin: 0
+        extendHorizontal: false
+        extendVertical: false
         implicitSize: barBackground.baseRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomLeft
