@@ -18,7 +18,6 @@ StyledPopup {
 
     hoverTarget: targetItem
     stickyHover: true
-    active: (stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse)) && appTitleText !== ""
 
     Rectangle {
         implicitWidth: Math.max(popupRoot.popupWidth, Math.min(popupRoot.maxPopupWidth, popupText.implicitWidth + 32))

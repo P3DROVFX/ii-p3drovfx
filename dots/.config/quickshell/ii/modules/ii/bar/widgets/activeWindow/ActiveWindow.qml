@@ -31,8 +31,8 @@ Item {
     property string appTitleText: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
                 root.activeWindow?.title : (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
     
-    implicitHeight: root.vertical && isFixedSize ? fixedSize : (root.vertical ? Math.max(classText.implicitWidth, titleText.implicitWidth) + 20 : colLayout.implicitHeight)
-    implicitWidth: !root.vertical && isFixedSize ? fixedSize : (root.vertical ? undefined : Math.min(Math.max(classText.implicitWidth, titleText.implicitWidth) + 20, maxSize))
+    implicitHeight: root.vertical && isFixedSize ? fixedSize : (root.vertical ? Math.max(classText.implicitWidth, titleText.implicitWidth) + 20 : Appearance.sizes.baseBarHeight)
+    implicitWidth: !root.vertical && isFixedSize ? fixedSize : (root.vertical ? Appearance.sizes.verticalBarWidth : Math.min(Math.max(classText.implicitWidth, titleText.implicitWidth) + 20, maxSize))
     clip: true
 
     property bool containsMouse: mouseArea.containsMouse
@@ -40,8 +40,7 @@ Item {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
     }
 
     ActiveWindowPopup {

@@ -19,18 +19,18 @@ MouseArea {
     width: implicitWidth
     height: implicitHeight
 
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-    onPressed: {
-        if (mouse.button === Qt.RightButton) {
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onPressed: {
             Weather.getData();
             Quickshell.execDetached(["notify-send",
                 Translation.tr("Weather"),
                 Translation.tr("Refreshing (manually triggered)"),
                 "-a", "Shell"
             ])
-            mouse.accepted = false
         }
     }
 

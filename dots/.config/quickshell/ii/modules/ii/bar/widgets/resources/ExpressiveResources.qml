@@ -19,8 +19,8 @@ Item {
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
 
-    implicitWidth:  vertical ? mainCol.implicitWidth  : mainRow.implicitWidth
-    implicitHeight: vertical ? mainCol.implicitHeight : mainRow.implicitHeight
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : mainRow.implicitWidth
+    implicitHeight: vertical ? mainCol.implicitHeight : Appearance.sizes.baseBarHeight
     width: implicitWidth
     height: implicitHeight
 
@@ -475,6 +475,5 @@ Item {
         id: hoverArea
         anchors.fill: parent
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
     }
 }

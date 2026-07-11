@@ -10,13 +10,12 @@ import "../../shared/cards"
 
 MouseArea {
     id: indicator
+
     property bool vertical: false
-
-    implicitWidth: 40
-    implicitHeight: Appearance.sizes.baseBarHeight
-
     property bool activelyScreenSharing: false
-    
+
+    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : 40
+    implicitHeight: vertical ? 40 : Appearance.sizes.baseBarHeight
     hoverEnabled: true
     Component.onCompleted: rootItem.toggleHighlight(true)
 
