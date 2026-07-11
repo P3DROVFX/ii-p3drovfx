@@ -180,11 +180,9 @@ Item {
 
         Component {
             id: layout4x2StandardComp
-            MediaCtrl.PlayerControl {
+            MediaCtrl.AndroidMediaPopup {
                 player: MprisController.activePlayer
                 anchors.fill: parent
-                radius: Appearance.rounding.large
-                compactMode: true
             }
         }
 
