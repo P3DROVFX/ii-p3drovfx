@@ -25,25 +25,25 @@ ContentPage {
     // ── Custom fork URL input for the Fork Switcher ──
     property string customForkUrl: ""
 
-    readonly property string setupScript: FileUtils.trimFileProtocol(`${Directories.home}/.local/share/ii-vynx/setup-ii-vynx.sh`)
+    readonly property string setupScript: FileUtils.trimFileProtocol(Directories.home + "/.local/share/ii-vynx/setup-ii-vynx.sh")
 
     // ── Read state files: .active-remote | .active-branch | .active-fork | .active-commit ──
     Process {
         id: stateReadProc
-        command: ["bash", "-c",
-            `dir="$HOME/.config/quickshell/ii";
-             out="";
-             [ -f "$dir/.active-remote" ] && out+="$(cat "$dir/.active-remote")";
-             out+="---";
-             [ -f "$dir/.active-branch" ] && out+="$(cat "$dir/.active-branch")";
-             out+="---";
-             [ -f "$dir/.active-fork" ] && out+="$(cat "$dir/.active-fork")";
-             out+="---";
-             [ -f "$dir/.active-commit" ] && out+="$(cat "$dir/.active-commit")";
-             printf '%s' "$out"']
+command: ["bash", "-c",
+            "dir=\"$HOME/.config/quickshell/ii\"; " +
+            "out=\"\"; " +
+            "[ -f \"$dir/.active-remote\" ] && out+=\"$(cat \"$dir/.active-remote\")\"; " +
+            "out+=\"---\"; " +
+            "[ -f \"$dir/.active-branch\" ] && out+=\"$(cat \"$dir/.active-branch\")\"; " +
+            "out+=\"---\"; " +
+            "[ -f \"$dir/.active-fork\" ] && out+=\"$(cat \"$dir/.active-fork\")\"; " +
+            "out+=\"---\"; " +
+            "[ -f \"$dir/.active-commit\" ] && out+=\"$(cat \"$dir/.active-commit\")\"; " +
+            "printf '%s' \"$out\""]
         stdout: StdioCollector {
             onStreamFinished: {
-                const parts = text.split("---");
+                var parts = text.split("---");
                 page.activeRemote = (parts[0] || "").trim();
                 page.activeBranch = (parts[1] || "main").trim() || "main";
                 page.activeFork   = (parts[2] || "p3drovfx").trim() || "p3drovfx";
@@ -57,9 +57,9 @@ ContentPage {
     // ── Remote HEAD probe: shows SHA of origin/<branch> so we can compute hasUpdate ──
     Process {
         id: remoteHeadProc
-        command: ["bash", "-c",
-            `if [ -z "${page.activeRemote}" ] || [ -z "${page.activeBranch}" ]; then exit 0; fi;
-             git ls-remote --heads "${page.activeRemote}" "${page.activeBranch}" 2>/dev/null | awk '{print $1; exit}'`]
+                command: ["bash", "-c",
+            "if [ -z \"" + page.activeRemote + "\" ] || [ -z \"" + page.activeBranch + "\" ]; then exit 0; fi; " +
+            "git ls-remote --heads \"" + page.activeRemote + "\" \"" + page.activeBranch + "\" 2>/dev/null | awk '{print $1; exit}'"]
         onStarted: page.checkingUpdates = true
         stdout: StdioCollector {
             onStreamFinished: {
@@ -407,7 +407,7 @@ ContentPage {
                         const b = page.activeFork === "p3drovfx"
                             ? Translation.tr("main = stable • dev = new features")
                             : "";
-                        return `${f}  •  ${page.activeBranch}` + (b ? `  •  ${b}` : "");
+                        return f + "  •  " + page.activeBranch + (b ? ("  •  " + b) : "");
                     }
                     wrapMode: Text.Wrap
                 }
@@ -467,7 +467,7 @@ ContentPage {
                 wrapMode: Text.Wrap
                 text: page.activeFork === "p3drovfx"
                       ? Translation.tr("Active branch: ") + page.activeBranch
-                      : Translation.tr("Branch switcher is only available on the P3DROVFX fork. Use the CLI for other forks: `vynx branch <name>`.")
+                      : Translation.tr("Branch switcher is only available on the P3DROVFX fork. Use the CLI for other forks: 'vynx branch <name>'.")
             }
         }
     }
