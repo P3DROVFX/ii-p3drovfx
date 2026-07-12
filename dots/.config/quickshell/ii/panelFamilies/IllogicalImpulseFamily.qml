@@ -86,6 +86,7 @@ Scope {
         component: LocalSendPopup {}
     }
     PanelLoader {
+        extraCondition: !(Config.ready && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableNotification)
         component: NotificationPopup {}
     }
     PanelLoader {

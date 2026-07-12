@@ -23,6 +23,9 @@ Item {
     property bool smooth: true
     property bool mipmap: true
 
+    readonly property Item fromImage: imgAIsBack ? imgA : imgB
+    readonly property Item toImage: imgAIsBack ? imgB : imgA
+
     onImageSourceChanged: fadeTo(imageSource)
     Component.onCompleted: imgA.source = imageSource
 
@@ -81,6 +84,7 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 
     Image {
@@ -94,5 +98,6 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 }

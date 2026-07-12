@@ -154,6 +154,12 @@ Scope {
                 const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
                 return enabled && sensitiveWallpaper && sensitiveNetwork;
             }
+
+            property var shaderList: ["circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"]
+            property string currentShader: "pixelate"
+            property real transitionProgress: 1.0
+            property bool transitionEverStarted: false
+
             property real wallpaperToScreenRatio: {
                 if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || screen.width <= 0 || screen.height <= 0 || isNaN(wallpaperWidth) || isNaN(wallpaperHeight))
                     return 1.0;
@@ -217,7 +223,7 @@ Scope {
             Behavior on lockZoomScale {
                 NumberAnimation {
                     id: lockZoomAnim
-                    duration: Config.options.lock.zoomAnimation.enabled ? 700 : 0
+                    duration: Config.options.lock.zoomAnimation.enabled ? 700 : 300
                     easing.type: Easing.OutCubic
                 }
             }
@@ -326,7 +332,33 @@ Scope {
 
             onWallpaperPathChanged: {
                 bgRoot.updateZoomScale();
-                // Clock position gets updated after zoom scale is updated
+                if (wallpaperSafetyTriggered || Config.options.background.wallpaperAnimation === "" || !Config.options.background.animateWallpaperChanges || wallpaperIsVideo) {
+                    bgRoot.transitionProgress = 1.0
+                    return
+                }
+                if (bgRoot.transitionProgress >= 1.0) {
+                    bgRoot.transitionEverStarted = true
+                    if (Config.options.background.wallpaperAnimation === "random") {
+                        bgRoot.currentShader = bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
+                    } else {
+                        bgRoot.currentShader = Config.options.background.wallpaperAnimation
+                    }
+                    bgRoot.transitionProgress = 0.0
+                    transitionAnim.restart()
+                }
+            }
+
+            NumberAnimation {
+                id: transitionAnim
+                target: bgRoot
+                property: "transitionProgress"
+                from: 0.0
+                to: 1.0
+                duration: 1400
+                easing.type: Easing.InOutCubic
+                onFinished: {
+                    bgRoot.transitionProgress = 1.0
+                }
             }
 
             // Wallpaper zoom scale
@@ -422,6 +454,7 @@ Scope {
                         anchors.fill: parent
                         imageSource: ((wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperSafetyTriggered) ? bgRoot.wallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
+                        animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                         fillMode: Image.PreserveAspectCrop
                         // Visible for both styles during zoom out & return animation to avoid any black fallback margins
                         visible: Config.options.background.zoomOutStyle !== 2 && (wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperIsVideo
@@ -681,7 +714,7 @@ Scope {
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
 
                                 visible: opacity > 0 && !bgRoot.wallpaperIsVideo
-                                opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+                                opacity: (!bgRoot.wallpaperIsVideo) ? 1 : 0
                                 sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
 
                                 property int chunkSize: bgRoot.chunkSize
@@ -714,6 +747,7 @@ Scope {
 
                                 imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
                                 animated: Config.options.background.animateWallpaperChanges
+                                animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                                 fillMode: Image.PreserveAspectCrop
 
                                 Behavior on x {
@@ -742,6 +776,22 @@ Scope {
                                 }
                                 scale: bgRoot.lockZoomScale
                                 transformOrigin: Item.Center
+                            }
+
+                            ShaderEffect {
+                                id: transitionShaderEffect
+                                anchors.fill: wallpaper
+                                visible: (bgRoot.transitionProgress < 1.0 || (bgRoot.transitionEverStarted && wallpaper.status !== Image.Ready)) && Config.options.background.wallpaperAnimation !== "" && !bgRoot.wallpaperSafetyTriggered && !bgRoot.wallpaperIsVideo
+                                property var fromImage: wallpaper.fromImage
+                                property var toImage: wallpaper.toImage
+                                property real progress: bgRoot.transitionProgress
+                                property real aspectX: width / height
+                                property real aspectY: 1.0
+                                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+                                property vector2d origin: Qt.vector2d(0.5, 0.5)
+                                fragmentShader: Config.options.background.wallpaperAnimation !== ""
+                                    ? Qt.resolvedUrl(`shaders/${bgRoot.currentShader}.frag.qsb`)
+                                    : ""
                             }
 
                             // --- Frozen blur source ---
