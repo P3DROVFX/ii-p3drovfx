@@ -89,6 +89,7 @@ Item {
     Rectangle {
         id: barBackground
         clip: true
+        antialiasing: true
         color: root.actualColor
 
         anchors {
@@ -98,6 +99,7 @@ Item {
         }
 
         layer.enabled: Config.options.bar.dropShadow
+        layer.smooth: true
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
@@ -226,6 +228,7 @@ Item {
             }
 
             layer.enabled: modeState.notchModeEnabled && !modeState.expanded
+            layer.smooth: true
             layer.effect: OpacityMask {
                 maskSource: Rectangle {
                     width: islandSections.width

@@ -409,7 +409,7 @@ Scope {
         ScreencopyView {
             id: capture
             anchors.fill: parent
-            captureSource: tile.visible ? tile.toplevel : null
+            captureSource: (tile.visible && Config.options.overview.showWindowPreviews) ? tile.toplevel : null
             // Performance: live false to avoid continuous screencopy overhead
             live: false
             paintCursor: false

@@ -73,11 +73,13 @@ Item {
 
             // Shift the wallpaper image so it aligns with the monitor bounds
             x: {
-                if (!root.vertical) return 0;
+                if (!root.vertical)
+                    return 0;
                 return root.isBottom ? -(root.targetScreen ? root.targetScreen.width - parent.width : 0) : 0;
             }
             y: {
-                if (root.vertical) return 0;
+                if (root.vertical)
+                    return 0;
                 return root.isBottom ? -(root.targetScreen ? root.targetScreen.height - parent.height : 0) : 0;
             }
 
@@ -97,15 +99,11 @@ Item {
             orientation: root.vertical ? Gradient.Horizontal : Gradient.Vertical
             GradientStop {
                 position: 0.0
-                color: (!root.vertical && root.isBottom) || (root.vertical && root.isBottom)
-                    ? "transparent"
-                    : ColorUtils.applyAlpha(root.dimColor, root.dimOpacity)
+                color: (!root.vertical && root.isBottom) || (root.vertical && root.isBottom) ? "transparent" : ColorUtils.applyAlpha(root.dimColor, root.dimOpacity)
             }
             GradientStop {
                 position: 1.0
-                color: (!root.vertical && root.isBottom) || (root.vertical && root.isBottom)
-                    ? ColorUtils.applyAlpha(root.dimColor, root.dimOpacity)
-                    : "transparent"
+                color: (!root.vertical && root.isBottom) || (root.vertical && root.isBottom) ? ColorUtils.applyAlpha(root.dimColor, root.dimOpacity) : "transparent"
             }
         }
     }

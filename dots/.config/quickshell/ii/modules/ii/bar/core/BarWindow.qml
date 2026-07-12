@@ -32,21 +32,18 @@ Scope {
             left: true
             right: true
         }
-        exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps)
-            ? ExclusionMode.Ignore
-            : ExclusionMode.Normal
+        exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
 
         property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
         property real minZone: (Config.options.appearance.fakeScreenRounding === 3 && Config.options.bar.cornerStyle !== 3) ? Config.options.appearance.wrappedFrameThickness : 0
 
         exclusiveZone: {
-            if (barRoot.hasFullscreenWindowOnMonitor) return 0;
+            if (barRoot.hasFullscreenWindowOnMonitor)
+                return 0;
             if (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) {
                 return 0;
             }
-            return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows)
-                ? minZone
-                : Math.max(minZone, targetZone - barRoot.hiddenAmount);
+            return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
         }
 
         implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
@@ -62,15 +59,13 @@ Scope {
         property int monitorIndex: root.monitorIndex
         property bool hasActiveWindows: false
         readonly property bool isSearchActiveHere: {
-            return GlobalStates.overviewOpen
-                && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false)
-                && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
+            return GlobalStates.overviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
-        property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2)
-            || Config.options.bar.barBackgroundStyle === 1
-            || Config.options.bar.barBackgroundStyle === 3
+        property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
-        BarThemes { id: barThemes }
+        BarThemes {
+            id: barThemes
+        }
         property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
         // ── Window tracking (for showBarBackground) ──────────────────────────
@@ -80,9 +75,7 @@ Scope {
             function onWindowListChanged() {
                 const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
                 const wsId = monitor?.activeWorkspace?.id;
-                const hasWindow = wsId
-                    ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating)
-                    : false;
+                const hasWindow = wsId ? HyprlandData.windowList.some(w => w.workspace.id === wsId && !w.floating) : false;
                 barRoot.hasActiveWindows = hasWindow;
             }
         }
@@ -97,7 +90,8 @@ Scope {
         Connections {
             target: GlobalStates
             function onSuperDownChanged() {
-                if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
+                if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
+                    return;
                 if (GlobalStates.superDown)
                     showBarTimer.restart();
                 else {
@@ -113,21 +107,14 @@ Scope {
             const specialWsName = monitorData?.specialWorkspace?.name;
             const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === barRoot.screen.name);
             return workspaces.some(workspace => {
-                const isWorkspaceActive = workspace.active ||
-                    (specialWsName && specialWsName !== "" &&
-                     (workspace.name === specialWsName ||
-                      workspace.name === "special:" + specialWsName ||
-                      (specialWsName === "special:special" && workspace.name === "special") ||
-                      (specialWsName === "special" && workspace.name === "special:special")));
-                return isWorkspaceActive &&
-                    workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
+                const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
+                return isWorkspaceActive && workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
             });
         }
 
         property bool superShow: false
         property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow)
-            ? Appearance.sizes.barHeight : 0
+        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
         }
@@ -139,9 +126,16 @@ Scope {
 
         // Mask extends further when transparent to allow glow gradient rendering.
         // In fullscreen, mask becomes empty to allow clicks to pass through to the fullscreen app.
-        mask: Region { item: barRoot.hasFullscreenWindowOnMonitor ? null : hoverMaskRegion }
+        mask: Region {
+            item: barRoot.hasFullscreenWindowOnMonitor ? null : hoverMaskRegion
+        }
         color: "transparent"
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
 
         TransparentBarGlow {
             z: -20
@@ -156,7 +150,7 @@ Scope {
             }
         }
 
-        Component.onCompleted:  GlobalFocusGrab.addPersistent(barRoot)
+        Component.onCompleted: GlobalFocusGrab.addPersistent(barRoot)
         Component.onDestruction: GlobalFocusGrab.removePersistent(barRoot)
 
         // ── WrappedFrame visuals (fake screen rounding) ───────────────────────
@@ -196,10 +190,11 @@ Scope {
                 }
             }
             anchors {
-                left: parent.left; right: parent.right
-                top:    !Config.options.bar.bottom ? parent.top    : undefined
-                bottom:  Config.options.bar.bottom ? parent.bottom : undefined
-                rightMargin:  (Config.options.interactions.deadPixelWorkaround.enable) * 1
+                left: parent.left
+                right: parent.right
+                top: !Config.options.bar.bottom ? parent.top : undefined
+                bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * 1
                 bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && Config.options.bar.bottom) * 1
             }
             height: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
@@ -207,15 +202,11 @@ Scope {
             Item {
                 id: hoverMaskRegion
                 readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
-                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable 
-                    ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend)
-                    : Config.options.bar.autoHide.hoverRegionWidth
-                readonly property real topMaskExtend: Config.options.bar.autoHide.enable 
-                    ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend)
-                    : Config.options.bar.autoHide.hoverRegionWidth
+                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
+                readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
                 anchors {
                     fill: barContent
-                    topMargin:    -topMaskExtend - (barContent.verticalTopOffset ?? 0)
+                    topMargin: -topMaskExtend - (barContent.verticalTopOffset ?? 0)
                     bottomMargin: -bottomMaskExtend - (barContent.verticalBottomOffset ?? 0)
                 }
             }
@@ -224,8 +215,10 @@ Scope {
                 id: barContent
                 implicitHeight: Appearance.sizes.barHeight
                 anchors {
-                    right: parent.right; left: parent.left
-                    top: parent.top; bottom: undefined
+                    right: parent.right
+                    left: parent.left
+                    top: parent.top
+                    bottom: undefined
                     topMargin: -barRoot.hiddenAmount
                     rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * -1
                 }
@@ -240,7 +233,12 @@ Scope {
                     when: Config.options.bar.bottom
                     AnchorChanges {
                         target: barContent
-                        anchors { right: parent.right; left: parent.left; top: undefined; bottom: parent.bottom }
+                        anchors {
+                            right: parent.right
+                            left: parent.left
+                            top: undefined
+                            bottom: parent.bottom
+                        }
                     }
                     PropertyChanges {
                         target: barContent
@@ -253,7 +251,12 @@ Scope {
             // ── Round decorators (Hug style bottom corners) ───────────────────
             Loader {
                 id: roundDecorators
-                anchors { left: parent.left; right: parent.right; top: barContent.bottom; bottom: undefined }
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: barContent.bottom
+                    bottom: undefined
+                }
                 height: Appearance.rounding.screenRounding
                 active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3
 
@@ -262,7 +265,12 @@ Scope {
                     when: Config.options.bar.bottom
                     AnchorChanges {
                         target: roundDecorators
-                        anchors { right: parent.right; left: parent.left; top: undefined; bottom: barContent.top }
+                        anchors {
+                            right: parent.right
+                            left: parent.left
+                            top: undefined
+                            bottom: barContent.top
+                        }
                     }
                 }
 
@@ -270,32 +278,38 @@ Scope {
                     implicitHeight: Appearance.rounding.screenRounding
                     RoundCorner {
                         id: leftCorner
-                        anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+                        anchors {
+                            top: parent.top
+                            bottom: parent.bottom
+                            left: parent.left
+                        }
                         implicitSize: Appearance.rounding.screenRounding
-                        color: barRoot.showBarBackground
-                            ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0)
-                            : "transparent"
+                        color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                         corner: RoundCorner.CornerEnum.TopLeft
                         states: State {
-                            name: "bottom"; when: Config.options.bar.bottom
-                            PropertyChanges { leftCorner.corner: RoundCorner.CornerEnum.BottomLeft }
+                            name: "bottom"
+                            when: Config.options.bar.bottom
+                            PropertyChanges {
+                                leftCorner.corner: RoundCorner.CornerEnum.BottomLeft
+                            }
                         }
                     }
                     RoundCorner {
                         id: rightCorner
                         anchors {
                             right: parent.right
-                            top:    !Config.options.bar.bottom ? parent.top    : undefined
-                            bottom:  Config.options.bar.bottom ? parent.bottom : undefined
+                            top: !Config.options.bar.bottom ? parent.top : undefined
+                            bottom: Config.options.bar.bottom ? parent.bottom : undefined
                         }
                         implicitSize: Appearance.rounding.screenRounding
-                        color: barRoot.showBarBackground
-                            ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0)
-                            : "transparent"
+                        color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                         corner: RoundCorner.CornerEnum.TopRight
                         states: State {
-                            name: "bottom"; when: Config.options.bar.bottom
-                            PropertyChanges { rightCorner.corner: RoundCorner.CornerEnum.BottomRight }
+                            name: "bottom"
+                            when: Config.options.bar.bottom
+                            PropertyChanges {
+                                rightCorner.corner: RoundCorner.CornerEnum.BottomRight
+                            }
                         }
                     }
                 }

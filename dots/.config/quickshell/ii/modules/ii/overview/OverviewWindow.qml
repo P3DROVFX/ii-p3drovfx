@@ -156,7 +156,7 @@ Item { // Window
     ScreencopyView {
         id: windowPreview
         anchors.fill: parent
-        captureSource: root.toplevel
+        captureSource: (root.toplevel && Config.options.overview.showWindowPreviews) ? root.toplevel : null
         // Performance: live false to avoid continuous screencopy overhead
         live: false
         z: 1
