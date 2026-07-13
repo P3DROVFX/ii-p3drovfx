@@ -198,7 +198,7 @@ Item {
     Item {
         id: dropContainer
         x: positioner.anchorX
-        y: positioner.anchorY
+        y: root.barBottom ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
         width: dropState.targetW
         height: root.animHeight
         visible: root.animHeight > 0.001
@@ -229,61 +229,6 @@ Item {
             }
         }
 
-        // ── Concave corners at bar attachment edge ────────────────────────────
-        // RoundCorners flush at the TOP of dropContainer, outside its left/right edges,
-        // painting colLayer0 (bar background) to create a smooth concave curve where
-        // the bar bottom meets the drop panel. Grow from radius 0 with animHeight.
-        //
-        // Corner enum semantics for "drop below bar" layout:
-        //   Left side:  BottomRight fills bottom-right quadrant → arc faces inward → concave ✓
-        //   Right side: BottomLeft  fills bottom-left  quadrant → arc faces inward → concave ✓
-        readonly property real _cornerRadius: Math.min(Appearance.rounding.windowRounding, root.animHeight)
-        readonly property bool _showCorners: !root.barVertical && root.animHeight > 0.5
-
-        RoundCorner {
-            id: topLeftCorner
-            visible: false
-            implicitSize: dropContainer._cornerRadius
-            color: root.themeBgColor
-            corner: RoundCorner.CornerEnum.BottomRight
-            anchors.right: parent.left
-            anchors.top: parent.top
-        }
-
-        RoundCorner {
-            id: topRightCorner
-            visible: false
-            implicitSize: dropContainer._cornerRadius
-            color: root.themeBgColor
-            corner: RoundCorner.CornerEnum.BottomLeft
-            anchors.left: parent.right
-            anchors.top: parent.top
-        }
-
-        // barBottom variant: corners at the BOTTOM edge (drop grows upward)
-        RoundCorner {
-            id: bottomLeftCorner
-            visible: dropContainer._showCorners && root.barBottom
-            implicitSize: dropContainer._cornerRadius
-            color: root.themeBgColor
-            corner: RoundCorner.CornerEnum.TopRight
-            extendHorizontal: true
-            extendVertical: true
-            anchors.right: parent.left
-            anchors.bottom: parent.bottom
-        }
-
-        RoundCorner {
-            id: bottomRightCorner
-            visible: dropContainer._showCorners && root.barBottom
-            implicitSize: dropContainer._cornerRadius
-            color: root.themeBgColor
-            corner: RoundCorner.CornerEnum.TopLeft
-            extendHorizontal: true
-            extendVertical: true
-            anchors.left: parent.right
-            anchors.bottom: parent.bottom
-        }
 
         // ── Content (clipped to growing height) ──────────────────────────────
         Item {
@@ -376,15 +321,15 @@ Item {
 
     Loader { // Classic overview
         id: overviewLoader
-        anchors.top: dropContainer.bottom
-        anchors.topMargin: 10
+        y: root.barBottom ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
+        height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
         transform: Translate {
-            y: root.isOverviewVisible ? 0 : 30
+            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
             Behavior on y {
                 NumberAnimation {
                     duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
@@ -410,16 +355,16 @@ Item {
 
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
-        anchors.top: dropContainer.bottom
+        y: root.barBottom ? 0 : (dropContainer.y + dropContainer.height)
+        height: root.barBottom ? dropContainer.y : (parent.height - y)
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
         active: root.isWidgetActive && root.isScrollingLayout
         visible: opacity > 0.01
 
         opacity: root.isOverviewVisible ? 1.0 : 0.0
         transform: Translate {
-            y: root.isOverviewVisible ? 0 : 30
+            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
             Behavior on y {
                 NumberAnimation {
                     duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose

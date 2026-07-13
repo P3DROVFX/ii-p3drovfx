@@ -442,6 +442,7 @@ Singleton {
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
                 property bool windowZoomOnOverview: false // fake window scale-out during overview (GNOME-like)
+                property bool windowZoomLiveCapture: false // keep screencopy live instead of freezing on overview open
                 property bool cheatsheetZoomOut: true
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false

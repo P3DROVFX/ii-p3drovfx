@@ -28,6 +28,14 @@ Singleton {
 		updatePlayersList();
 	}
 
+	Timer {
+		id: playersRefreshTimer
+		interval: 10000
+		running: true
+		repeat: true
+		onTriggered: root.updatePlayersList()
+	}
+
 	property MprisPlayer trackedPlayer: null;
 	property MprisPlayer activePlayer: trackedPlayer ?? Mpris.players.values[0] ?? null;
 	signal trackChanged(reverse: bool);

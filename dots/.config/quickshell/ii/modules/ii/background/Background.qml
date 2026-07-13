@@ -1115,6 +1115,96 @@ Scope {
                     }
                 }
 
+                // Transparent bar gradient overlay
+                Rectangle {
+                    id: barGradientOverlay
+                    visible: Config.options.bar.barBackgroundStyle === 0 && Config.options.bar.transparentGlow && GlobalStates.barOpen && !GlobalStates.screenLocked
+
+                    readonly property bool isVertical: Config.options.bar.vertical
+                    readonly property bool isBottom: Config.options.bar.bottom
+                    readonly property real glowDepth: isVertical ? 50 : 40
+                    readonly property real blurValue: 80
+                    readonly property real dimOpacity: 0.15
+                    readonly property color dimColor: "#000000"
+
+                    // Position and size based on bar location
+                    width: isVertical ? glowDepth : parent.width
+                    height: isVertical ? parent.height : glowDepth
+                    x: isVertical ? (isBottom ? parent.width - glowDepth : 0) : 0
+                    y: isVertical ? 0 : (isBottom ? parent.height - glowDepth : 0)
+
+                    // Gradient mask using the same strategy as AndroidMediaPopup
+                    Item {
+                        id: gradientMask
+                        anchors.fill: parent
+                        visible: false
+
+                        // Primary gradient (perpendicular to bar direction)
+                        Rectangle {
+                            id: perpMask
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                orientation: barGradientOverlay.isVertical ? Gradient.Horizontal : Gradient.Vertical
+                                GradientStop { position: 0.0; color: barGradientOverlay.isBottom ? "white" : "transparent" }
+                                GradientStop { position: 1.0; color: barGradientOverlay.isBottom ? "transparent" : "white" }
+                            }
+                        }
+
+                        // Secondary gradient (parallel to bar direction) - crossed with primary
+                        Rectangle {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                orientation: barGradientOverlay.isVertical ? Gradient.Vertical : Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.5; color: "white" }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: perpMask
+                            }
+                        }
+                    }
+
+                    // Blurred wallpaper layer
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: gradientMask
+                        }
+
+                        Image {
+                            source: bgRoot.wallpaperPath
+                            fillMode: Image.PreserveAspectCrop
+                            width: bgRoot.screen.width
+                            height: bgRoot.screen.height
+                            x: barGradientOverlay.isVertical ? (barGradientOverlay.isBottom ? -(bgRoot.screen.width - barGradientOverlay.width) : 0) : 0
+                            y: barGradientOverlay.isVertical ? 0 : (barGradientOverlay.isBottom ? -(bgRoot.screen.height - barGradientOverlay.height) : 0)
+                            layer.enabled: barGradientOverlay.blurValue > 0
+                            layer.effect: MultiEffect {
+                                blurEnabled: barGradientOverlay.blurValue > 0
+                                blurMax: 128
+                                blur: barGradientOverlay.blurValue / 128
+                            }
+                        }
+                    }
+
+                    // Dim layer
+                    Item {
+                        anchors.fill: parent
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: gradientMask
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: CF.ColorUtils.applyAlpha(barGradientOverlay.dimColor, barGradientOverlay.dimOpacity)
+                        }
+                    }
+                }
+
                 GlobalShortcut {
                     name: "mediaModeToggle"
                     description: "Toggles media mode on press"

@@ -1578,7 +1578,7 @@ Singleton {
 
     Timer {
         id: scrcpyStatusTimer
-        interval: 1500
+        interval: 10000
         running: root.ready && root._enabled
         repeat: true
         triggeredOnStart: true

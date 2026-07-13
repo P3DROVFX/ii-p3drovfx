@@ -66,7 +66,7 @@ Item {
     readonly property bool isAnySpecialMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
     readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
     property bool showResults: searchingText != "" || isAnySpecialMode || alwaysListAppsMode || (searchingText === "" && LauncherSearch.results.length > 0)
-    property string overviewPosition: Config.options.overview?.position ?? ""
+    property string overviewPosition: (Config.options.bar?.bottom ? "bottom" : (Config.options.overview?.position ?? ""))
 
     // Re-enable item transitions after panel open animation completes
     Timer {

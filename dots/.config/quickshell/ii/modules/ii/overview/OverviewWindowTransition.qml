@@ -64,7 +64,7 @@ Scope {
 
             readonly property bool barVertical: Config.options.bar.vertical
             readonly property bool barBottom: Config.options.bar.bottom
-            readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWindowWidth : Appearance.sizes.barHeight
+            readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
             readonly property int gap: Appearance.gapsOut
 
             readonly property int padLeft: barVertical && !barBottom ? barSize : gap
@@ -103,6 +103,14 @@ Scope {
             Connections {
                 target: ToplevelManager.toplevels
                 function onValuesChanged() {
+                    tRoot.updateToplevels();
+                }
+            }
+
+            Connections {
+                target: HyprlandData
+                ignoreUnknownSignals: true
+                function onWindowByAddressChanged() {
                     tRoot.updateToplevels();
                 }
             }
@@ -409,9 +417,9 @@ Scope {
         ScreencopyView {
             id: capture
             anchors.fill: parent
-            captureSource: (tile.visible && Config.options.overview.showWindowPreviews) ? tile.toplevel : null
+            captureSource: tile.visible ? tile.toplevel : null
             // Performance: live false to avoid continuous screencopy overhead
-            live: false
+            live: Config.options.background.windowZoomLiveCapture
             paintCursor: false
             opacity: 1.0
         }

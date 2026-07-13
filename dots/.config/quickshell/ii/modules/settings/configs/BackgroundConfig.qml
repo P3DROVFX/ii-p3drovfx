@@ -263,6 +263,19 @@ ContentPage {
                 text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
             }
         }
+
+        ConfigSwitch {
+            visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview
+            buttonIcon: "videocam"
+            text: Translation.tr("Keep screencopy live (no freeze)")
+            checked: Config.options.background.windowZoomLiveCapture
+            onCheckedChanged: {
+                Config.options.background.windowZoomLiveCapture = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("When enabled, window previews stay live instead of freezing on overview open.\nDisable for better performance (freezes capture on open).")
+            }
+        }
     }
 
     ContentSection {

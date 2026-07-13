@@ -123,19 +123,6 @@ Scope {
                     }
                     color: "transparent"
 
-                    TransparentBarGlow {
-                        z: -20
-                        vertical: true
-                        isBottom: Config.options.bar.bottom
-                        targetScreen: barRoot.screen
-                        anchors {
-                            top: parent.top
-                            bottom: parent.bottom
-                            left: !Config.options.bar.bottom ? parent.left : undefined
-                            right: Config.options.bar.bottom ? parent.right : undefined
-                        }
-                    }
-
                     // Positioning FULL SCREEN
                     anchors {
                         left: true
@@ -176,7 +163,7 @@ Scope {
                         Item {
                             id: hoverMaskRegion
                             readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
-                            readonly property real sideMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
+                            readonly property real sideMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                             anchors {
                                 fill: barContent
                                 leftMargin: -sideMaskExtend

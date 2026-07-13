@@ -137,19 +137,6 @@ Scope {
             right: true
         }
 
-        TransparentBarGlow {
-            z: -20
-            vertical: false
-            isBottom: Config.options.bar.bottom
-            targetScreen: barRoot.screen
-            anchors {
-                left: parent.left
-                right: parent.right
-                top: !Config.options.bar.bottom ? parent.top : undefined
-                bottom: Config.options.bar.bottom ? parent.bottom : undefined
-            }
-        }
-
         Component.onCompleted: GlobalFocusGrab.addPersistent(barRoot)
         Component.onDestruction: GlobalFocusGrab.removePersistent(barRoot)
 
@@ -202,8 +189,8 @@ Scope {
             Item {
                 id: hoverMaskRegion
                 readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
-                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
-                readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
+                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
+                readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                 anchors {
                     fill: barContent
                     topMargin: -topMaskExtend - (barContent.verticalTopOffset ?? 0)
