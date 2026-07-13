@@ -10,6 +10,7 @@ Rectangle {
     property string tooltip: ""
     property string icon: ""
     default property alias contentData: sectionContent.data
+    property Component headerExtra: null
 
     Layout.fillWidth: true
     implicitHeight: mainLayout.implicitHeight + 16
@@ -194,6 +195,13 @@ Rectangle {
                 text: root.title
                 Layout.fillWidth: true
                 color: Appearance.colors.colOnLayer2
+            }
+
+            Loader {
+                Layout.alignment: Qt.AlignVCenter
+                active: root.headerExtra !== null
+                visible: active
+                sourceComponent: root.headerExtra
             }
 
             MaterialSymbol {
