@@ -14,4 +14,4 @@ SETUP_FLAGS="--switch --branch $BRANCH_VAL"
 [[ "$NO_CONFIRM" == "true" ]] && SETUP_FLAGS="$SETUP_FLAGS --no-confirm"
 SETUP_FLAGS="$SETUP_FLAGS --preserve-config"
 
-bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS
+bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS ${PASS_FLAGS+"${PASS_FLAGS[@]}"}

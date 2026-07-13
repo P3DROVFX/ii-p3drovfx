@@ -11,4 +11,4 @@ SETUP_FLAGS="--update"
 # preserve config by default for updates
 SETUP_FLAGS="$SETUP_FLAGS --preserve-config"
 
-bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS
+bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS ${PASS_FLAGS+"${PASS_FLAGS[@]}"}

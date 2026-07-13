@@ -18,4 +18,4 @@ SETUP_FLAGS="--switch --fork $FORK_VAL"
 [[ "$VERBOSE" == "true" ]]    && SETUP_FLAGS="$SETUP_FLAGS -v"
 [[ "$NO_CONFIRM" == "true" ]] && SETUP_FLAGS="$SETUP_FLAGS --no-confirm"
 
-bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS
+bash "$SCRIPT_DIR/setup-ii-vynx.sh" $SETUP_FLAGS ${PASS_FLAGS+"${PASS_FLAGS[@]}"}

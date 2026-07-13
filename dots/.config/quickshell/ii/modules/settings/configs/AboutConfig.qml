@@ -368,7 +368,7 @@ command: ["bash", "-c",
                     StatusChip {
                         iconText: "hub"
                         chipText: {
-                            const label = page.activeFork === "p3drovfx" ? "P3DROVFX"
+                            const label = (page.activeFork === "p3drovfx" || page.activeFork === "mine") ? "P3DROVFX"
                                        : page.activeFork === "end4" ? "end-4"
                                        : page.activeFork === "vynx" || page.activeFork === "upstream"
                                          ? "ii-vynx" : (page.activeFork || "fork");
@@ -394,7 +394,7 @@ command: ["bash", "-c",
                     }
 
                     StatusChip {
-                        visible: page.activeFork === "p3drovfx"
+                        visible: page.activeFork === "p3drovfx" || page.activeFork === "mine"
                         iconText: page.activeBranch === "main" ? "verified" : "science"
                         chipText: page.activeBranch === "main" ? Translation.tr("Stable") : Translation.tr("Dev (New Features)")
                         chipColor: page.activeBranch === "main" ? Appearance.colors.colPrimaryContainer : Appearance.colors.colTertiaryContainer
@@ -421,7 +421,7 @@ command: ["bash", "-c",
                         text: {
                             if (actionProc.running && actionProc.mode === "update")
                                 return Translation.tr("Updating…");
-                            const label = page.activeFork === "p3drovfx" ? "P3DROVFX"
+                            const label = (page.activeFork === "p3drovfx" || page.activeFork === "mine") ? "P3DROVFX"
                                        : page.activeFork === "end4" ? "end-4"
                                        : page.activeFork === "vynx" || page.activeFork === "upstream"
                                          ? "ii-vynx" : (page.activeFork || "fork");
@@ -441,7 +441,7 @@ command: ["bash", "-c",
 
                 // ── Circle Badge next to the button ──
                 Rectangle {
-                    visible: page.hasUpdate && !(actionProc.running && actionProc.mode === "update")
+                    visible: page.hasUpdate && !(actionProc.running && actionProc.mode === "update") && !(actionProc.finished && actionProc.mode === "update")
                     radius: width / 2
                     color: Appearance.colors.colErrorContainer
                     Layout.preferredHeight: 48
@@ -458,6 +458,26 @@ command: ["bash", "-c",
 
                     Behavior on opacity { NumberAnimation { duration: 200 } }
                 }
+
+                // ── Feedback Badge next to the button (success/error) ──
+                Rectangle {
+                    visible: actionProc.finished && actionProc.mode === "update"
+                    radius: width / 2
+                    color: actionProc.exitCode === 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colErrorContainer
+                    Layout.preferredHeight: 48
+                    Layout.preferredWidth: 48
+                    Layout.alignment: Qt.AlignVCenter
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: actionProc.exitCode === 0 ? "done" : "close"
+                        iconSize: 22
+                        color: actionProc.exitCode === 0 ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                        fill: 1
+                    }
+
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
+                }
             }
 
             // ── Status + log box (inline) ──
@@ -468,7 +488,7 @@ command: ["bash", "-c",
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.topMargin: 8
-                    height: 40
+                    Layout.preferredHeight: 40
                     visible: actionProc.finished
                     radius: Appearance.rounding.small
                     color: ColorUtils.transparentize(actionProc.exitCode === 0 ? Appearance.colors.colPrimary : Appearance.colors.colError, 0.85)
@@ -500,7 +520,7 @@ command: ["bash", "-c",
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.topMargin: 6
-                    height: Math.min(250, logText.implicitHeight + 16)
+                    Layout.preferredHeight: Math.min(250, logText.implicitHeight + 16)
                     visible: actionProc.logOutput !== ""
                     radius: Appearance.rounding.small
                     color: Appearance.colors.colLayer0
@@ -543,25 +563,25 @@ command: ["bash", "-c",
 
             ConfigSelectionArray {
                 id: branchSelector
-                currentValue: page.activeFork === "p3drovfx" ? page.activeBranch : null
+                currentValue: (page.activeFork === "p3drovfx" || page.activeFork === "mine") ? page.activeBranch : null
                 onSelected: newValue => {
                     if (newValue === page.activeBranch) return;
                     page.runAction("branch-" + newValue,
-                        ["--switch", "--branch", newValue, "--fork", "p3drovfx",
+                        ["--switch", "--branch", newValue, "--fork", page.activeFork,
                          "--no-confirm", "--preserve-config"]);
                 }
                 options: [
                     {
                         displayName: Translation.tr("main") + " · " + Translation.tr("stable"),
-                        icon: (page.activeBranch === "main" && page.activeFork === "p3drovfx") ? "check" : "verified",
+                        icon: (page.activeBranch === "main" && (page.activeFork === "p3drovfx" || page.activeFork === "mine")) ? "check" : "verified",
                         value: "main",
-                        enabled: !actionProc.running && page.activeFork === "p3drovfx"
+                        enabled: !actionProc.running && (page.activeFork === "p3drovfx" || page.activeFork === "mine")
                     },
                     {
                         displayName: Translation.tr("dev") + " · " + Translation.tr("new features"),
-                        icon: (page.activeBranch === "dev" && page.activeFork === "p3drovfx") ? "check" : "science",
+                        icon: (page.activeBranch === "dev" && (page.activeFork === "p3drovfx" || page.activeFork === "mine")) ? "check" : "science",
                         value: "dev",
-                        enabled: !actionProc.running && page.activeFork === "p3drovfx"
+                        enabled: !actionProc.running && (page.activeFork === "p3drovfx" || page.activeFork === "mine")
                     }
                 ]
             }
@@ -572,7 +592,7 @@ command: ["bash", "-c",
                 font.pixelSize: Appearance.font.pixelSize.smallie
                 color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap
-                visible: page.activeFork !== "p3drovfx"
+                visible: page.activeFork !== "p3drovfx" && page.activeFork !== "mine"
                 text: Translation.tr("Branch switcher is only available on the P3DROVFX fork. Use the CLI for other forks: 'vynx branch <name>'.")
             }
         }
