@@ -114,11 +114,13 @@ Item {
                         property string ampm: timeParts[2] ?? ""
 
                         text: {
-                            let time = timeText.ampm !== "" 
-                                        ? timeText.hours.padStart(2, "0") + ":" + timeText.minutes.padStart(2, "0") 
-                                        : DateTime.time;
-                            return Config.options.bar.clock.showSeconds ? time + ":" + Math.floor(DateTime.seconds).toString().padStart(2, "0") 
-                                                                : time;
+                            let baseTime = timeText.ampm !== "" 
+                                            ? timeText.hours.padStart(2, "0") + ":" + timeText.minutes.padStart(2, "0")
+                                            : DateTime.time;
+                            let time = Config.options.bar.clock.showSeconds 
+                                        ? baseTime + ":" + Math.floor(DateTime.seconds).toString().padStart(2, "0")
+                                        : baseTime;
+                            return timeText.ampm !== "" ? time + " " + timeText.ampm : time;
                         }
                         font.features: { "tnum": 1 }
                         font.letterSpacing: -0.4
