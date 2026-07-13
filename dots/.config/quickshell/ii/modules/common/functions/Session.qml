@@ -49,7 +49,7 @@ Singleton {
 
     function reboot() {
         closeAllWindows();
-        Quickshell.execDetached(["bash", "-c", `reboot || loginctl reboot`]);
+        Quickshell.execDetached(["bash", "-c", `systemctl reboot || loginctl reboot`]);
     }
 
     function rebootToFirmware() {

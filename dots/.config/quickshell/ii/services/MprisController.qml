@@ -16,8 +16,18 @@ import qs.modules.common
  */
 Singleton {
 	id: root;
-	property list<MprisPlayer> allPlayers: Mpris.players.values;
-	property list<MprisPlayer> players: Mpris.players.values.filter(player => isRealPlayer(player));
+	property list<MprisPlayer> allPlayers;
+	property list<MprisPlayer> players;
+
+	function updatePlayersList() {
+		allPlayers = Mpris.players.values;
+		players = Mpris.players.values.filter(player => isRealPlayer(player));
+	}
+
+	Component.onCompleted: {
+		updatePlayersList();
+	}
+
 	property MprisPlayer trackedPlayer: null;
 	property MprisPlayer activePlayer: trackedPlayer ?? Mpris.players.values[0] ?? null;
 	signal trackChanged(reverse: bool);
@@ -89,6 +99,7 @@ Singleton {
 				if (root.trackedPlayer == null || modelData.isPlaying) {
 					root.trackedPlayer = modelData;
 				}
+				root.updatePlayersList();
 			}
 
 			Component.onDestruction: {
@@ -107,6 +118,7 @@ Singleton {
 						root.trackedPlayer = Mpris.players.values[0];
 					}
 				}
+				Qt.callLater(() => root.updatePlayersList());
 			}
 
 			function onPlaybackStateChanged() {

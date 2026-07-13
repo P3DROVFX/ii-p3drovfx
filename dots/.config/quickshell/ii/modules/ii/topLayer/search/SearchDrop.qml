@@ -7,7 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overview
-import qs.modules.ii.bar
+import qs.modules.ii.bar.shared
 
 // ── Animation strategy ──────────────────────────────────────────────────────
 // Caestelia-inspired: uses expressiveFastSpatial (spring overshoot y1=1.67)
@@ -24,7 +24,8 @@ Item {
     BarThemes {
         id: barThemes
     }
-    readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+    property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
+    readonly property color themeBgColor: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
@@ -58,9 +59,9 @@ Item {
     property int frameThickness: 0
     property int barHeight: Appearance.sizes.barHeight
     property int verticalBarWidth: Appearance.sizes.verticalBarWidth
-    property real barMargin: 0
     property real hBarHiddenAmount: 0
     property real vBarHiddenAmount: 0
+    property real barMargin: 0
     property real animatedLeftSidebarWidth: 0
     property real animatedRightSidebarWidth: 0
     property bool leftSidebarActiveOnMonitor: false
@@ -75,11 +76,7 @@ Item {
 
     property var searchWidgetRef: null
 
-    readonly property bool isOverviewVisible: root.isOpen
-        && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true)
-        && !GlobalStates.searchOnlyMode
-        && !Config.options.search.alwaysListApps
-        && (Config?.options.overview.enable ?? true)
+    readonly property bool isOverviewVisible: root.isOpen && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
 
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
@@ -224,7 +221,7 @@ Item {
             // animHeight * 0.8 reaches windowRounding quickly without overshoot.
             topRadius: Math.min(_wr, root.animHeight * 0.8)
             bottomRadius: Math.min(_wr, root.animHeight)
-            fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+            fillColor: root.themeBgColor
             transform: Scale {
                 xScale: 1
                 yScale: barBottom ? -1 : 1
@@ -240,17 +237,14 @@ Item {
         // Corner enum semantics for "drop below bar" layout:
         //   Left side:  BottomRight fills bottom-right quadrant → arc faces inward → concave ✓
         //   Right side: BottomLeft  fills bottom-left  quadrant → arc faces inward → concave ✓
-        readonly property real _cornerRadius: Math.min(
-            Appearance.rounding.windowRounding,
-            root.animHeight
-        )
+        readonly property real _cornerRadius: Math.min(Appearance.rounding.windowRounding, root.animHeight)
         readonly property bool _showCorners: !root.barVertical && root.animHeight > 0.5
 
         RoundCorner {
             id: topLeftCorner
             visible: false
             implicitSize: dropContainer._cornerRadius
-            color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: root.themeBgColor
             corner: RoundCorner.CornerEnum.BottomRight
             anchors.right: parent.left
             anchors.top: parent.top
@@ -260,7 +254,7 @@ Item {
             id: topRightCorner
             visible: false
             implicitSize: dropContainer._cornerRadius
-            color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: root.themeBgColor
             corner: RoundCorner.CornerEnum.BottomLeft
             anchors.left: parent.right
             anchors.top: parent.top
@@ -271,7 +265,7 @@ Item {
             id: bottomLeftCorner
             visible: dropContainer._showCorners && root.barBottom
             implicitSize: dropContainer._cornerRadius
-            color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: root.themeBgColor
             corner: RoundCorner.CornerEnum.TopRight
             extendHorizontal: true
             extendVertical: true
@@ -283,7 +277,7 @@ Item {
             id: bottomRightCorner
             visible: dropContainer._showCorners && root.barBottom
             implicitSize: dropContainer._cornerRadius
-            color: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: root.themeBgColor
             corner: RoundCorner.CornerEnum.TopLeft
             extendHorizontal: true
             extendVertical: true
@@ -461,13 +455,7 @@ Item {
 
         const topR = dropNotch.topRadius;
         const bottomR = dropNotch.bottomRadius;
-        if (GlobalStates.searchDropActive !== active
-            || GlobalStates.searchDropExclusionX !== sx
-            || GlobalStates.searchDropExclusionY !== sy
-            || GlobalStates.searchDropExclusionWidth !== sw
-            || GlobalStates.searchDropExclusionHeight !== sh
-            || GlobalStates.searchDropTopRadius !== topR
-            || GlobalStates.searchDropBottomRadius !== bottomR) {
+        if (GlobalStates.searchDropActive !== active || GlobalStates.searchDropExclusionX !== sx || GlobalStates.searchDropExclusionY !== sy || GlobalStates.searchDropExclusionWidth !== sw || GlobalStates.searchDropExclusionHeight !== sh || GlobalStates.searchDropTopRadius !== topR || GlobalStates.searchDropBottomRadius !== bottomR) {
             GlobalStates.searchDropActive = active;
             GlobalStates.searchDropExclusionX = sx;
             GlobalStates.searchDropExclusionY = sy;

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.popups.battery
 import Quickshell.Services.UPower
 
 MouseArea {
@@ -473,7 +474,7 @@ MouseArea {
 
     Component {
         id: popupComponent
-        Bar.BatteryPopup {
+        BatteryPopup {
             hoverTarget: root
         }
     }

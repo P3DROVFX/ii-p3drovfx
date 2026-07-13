@@ -117,6 +117,10 @@ Singleton {
         }
     }
 
+    Component.onDestruction: {
+        root.blockWrites = true;
+    }
+
     FileView {
         id: configFileView
         path: root.filePath
@@ -127,14 +131,14 @@ Singleton {
         // SIGKILL during shell update).
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
-        onAdapterUpdated: fileWriteTimer.restart()
+        onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
                 return;
             }
             const elapsed = Date.now() - root.initTimestamp;
-            if (elapsed > root.missingFileGracePeriod) {
+            if (elapsed > root.missingFileGracePeriod && !root.ready) {
                 // Singleton has been alive past the grace window and the file
                 // is still gone — legitimately missing (first-run install or
                 // user manually deleted it). Safe to seed defaults.
@@ -148,6 +152,10 @@ Singleton {
                 // it still fails past the grace window, defaults are written.
                 missingFileRetryTimer.restart();
             }
+        }
+
+        Component.onDestruction: {
+            configFileView.blockWrites = true;
         }
 
         JsonAdapter {
@@ -340,20 +348,7 @@ Singleton {
                 property string volumeMixer: `~/.config/hypr/hyprland/scripts/launch_first_available.sh "pavucontrol-qt" "pavucontrol"`
             }
 
-            property var bluetoothDeviceImages: [
-                {
-                    "mac": "E8:EE:CC:96:31:3A",
-                    "image": "anker_q30_.png"
-                },
-                {
-                    "mac": "40:35:E6:31:8B:AC",
-                    "image": "galaxy_buds_3.png"
-                },
-                {
-                    "mac": "64:1B:2F:9B:95:CE",
-                    "image": "samsung_s23.png"
-                }
-            ]
+            property list<var> bluetoothDeviceImages: []
 
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
@@ -361,6 +356,7 @@ Singleton {
                     property JsonObject clock: JsonObject {
                         property bool enable: true
                         property bool showOnlyWhenLocked: false
+                        property bool disableAnimationOnLock: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 1518.98
                         property real y: 168.8
@@ -443,6 +439,7 @@ Singleton {
                 }
                 property bool scaleLargeWallpapers: true
                 property bool animateWallpaperChanges: true
+                property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
                 property bool windowZoomOnOverview: false // fake window scale-out during overview (GNOME-like)
                 property bool cheatsheetZoomOut: true
@@ -543,13 +540,71 @@ Singleton {
                 property bool bottom: false // Instead of top
                 property int cornerStyle: 0 // 0: Hug | 1: Float | 2: Plain rectangle
                 property bool floatStyleShadow: true // Show shadow behind bar when cornerStyle == 1 (Float)
+                property bool dropShadow: true
                 property int dynamicIslandSpacingHorizontal: 48
                 property int dynamicIslandSpacingVertical: 16
                 property bool dynamicIslandLoadBalance: true
+
+                property JsonObject dynamicIsland: JsonObject {
+                    property JsonObject notchMode: JsonObject {
+                        property bool enable: false
+                        property int expandAnimDuration: 250
+                        property int fadeDelay: 0
+                        property list<string> visibleWidgets: []
+                        property bool overlapApps: false
+                    }
+                }
+
+                property JsonObject floatingNotch: JsonObject {
+                    property bool enable: false
+                    property bool autoHide: false
+                    property bool dropShadow: false
+                    property bool onlyShowOnSingleMonitor: false
+                    property string singleMonitorName: ""
+
+                    // Disables
+                    property bool disableWorkspaces: false
+                    property bool disableKeyboard: false
+                    property bool disableWifi: false
+                    property bool disableBluetooth: false
+                    property bool disableMedia: false
+                    property bool disableNotification: false
+                    property bool disableOsd: false
+                    property bool disableRecording: false
+                    property bool disableTimer: false
+                    property bool disableClipboard: false
+                    property bool disableLocalSend: false
+                    property bool disableKdeConnectInLocalSend: false
+                    property bool disableChecklist: true
+                    property bool checklistAlwaysVisible: false
+                    property bool checklistOnlyExpanded: false
+                    property bool disableCalendar: false
+                    property bool disableAudio: true
+                    property bool disableProgress: false
+
+                    // Contracted Heights
+                    property int heightHome: 36
+                    property int heightWorkspaces: 36
+                    property int heightKeyboard: 36
+                    property int heightWifi: 36
+                    property int heightBluetooth: 88
+                    property int heightMedia: 52
+                    property int heightNotification: 64
+                    property int heightRecording: 36
+                    property int heightTimer: 36
+                    property int heightClipboard: 36
+                    property int heightLocalSend: 42
+                    property int heightChecklist: 36
+                    property int heightCalendar: 48
+                    property int heightAudio: 36
+                    property int heightProgress: 48
+                }
+
                 property int barGroupStyle: 1 // 0: Pills | 1: Island (opaque) | 2: Transparent (or maybe line-separated in the future)
                 property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
                 property bool useMaterialSymbolForTopLeftIcon: false
                 property int barBackgroundStyle: 1 // 0: Transparent | 1: Visible | 2: Adaptive
+                property bool transparentGlow: true
                 property bool expressiveColors: false
                 property string expressiveColorTheme: "content"
                 property bool verbose: true
@@ -558,6 +613,7 @@ Singleton {
                 property bool enableBrightnessScroll: true
 
                 property JsonObject mediaPlayer: JsonObject {
+                    property string popupStyle: "default" // "default" | "expressive" | "android"
                     property bool expressivePopup: false
                     property bool useFixedSize: true
                     property int customSize: 200
@@ -642,6 +698,8 @@ Singleton {
                     property list<var> customOrder: []
                 }
                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
+                property bool onlyShowOnSingleMonitor: false
+                property string singleMonitorName: ""
 
                 property JsonObject timers: JsonObject {
                     property bool showPomodoro: true
@@ -951,22 +1009,38 @@ Singleton {
                     property real radius: 100
                     property real extraZoom: 1.1
                 }
-                property bool centerClock: true
+                property string centerWidget: "clock" // "clock" | "media" | "none"
                 property bool showLockedText: true
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false
                 }
                 property bool materialShapeChars: true
+                property JsonObject zoomAnimation: JsonObject {
+                    property bool enabled: true
+                }
+                property JsonObject notifications: JsonObject {
+                    property bool enable: false // Off by default: showing notifications on the lock screen is a privacy trade-off
+                    property string position: "top_right" // "top_left" | "top_right" | "bottom_left" | "bottom_right"
+                    property string privacy: "redacted" // "full" | "redacted" | "countOnly"
+                    property bool onlySinceLock: true // Only show notifications that arrived while locked
+                    property int maxShown: 5
+                    property int zoomPercent: 100 // 50-200, step 10
+                    property string defaultPolicy: "show" // "show" | "hide" — apps without an explicit rule
+                    property list<string> alwaysShowApps: [] // App names, case-insensitive match
+                    property list<string> neverShowApps: []
+                    property JsonObject filters: JsonObject {
+                        property bool skipTransient: true
+                        property bool skipLowUrgency: false
+                        property string criticalOverride: "full" // "full" | "none" — critical notifications bypass privacy redaction
+                    }
+                }
             }
 
             property JsonObject media: JsonObject {
-                // Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)
                 property bool filterDuplicatePlayers: true
-
-                // Automatically sets the active player to a newly detected player if its identifier matches the value specified in the priorityPlayer property like "spotify" or "google-chrome"
-                // This comparison uses the desktopEntry property of MprisPlayer (which is the name of the app casting the media)
                 property string priorityPlayer: ""
+                property bool dynamicAlbumColors: true
             }
 
             property JsonObject networking: JsonObject {
@@ -976,6 +1050,7 @@ Singleton {
             property JsonObject notifications: JsonObject {
                 property int timeout: 7000
                 property string position: "top_right"
+                property int zoomPercent: 100 // 50-200, step 10
                 property JsonObject monitor: JsonObject {
                     property bool enable: false
                     property string name: "" // Name of the monitor to show notifications on, like "eDP-1". Find out with 'hyprctl monitors' command
@@ -1013,6 +1088,7 @@ Singleton {
 
             property JsonObject overview: JsonObject {
                 property bool enable: true
+                property bool showWindowPreviews: true
                 property real scale: 0.18 // Relative to screen size
                 property real rows: 2
                 property real columns: 5
@@ -1153,7 +1229,7 @@ Singleton {
                         property bool multiline: true
                     }
                 }
-                property bool showNowPlayingBubble: true
+                property bool showNowPlayingBubble: false
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 500
             }
@@ -1227,6 +1303,7 @@ Singleton {
 
                 property JsonObject quickToggles: JsonObject {
                     property string style: "android" // Options: classic, android
+                    property bool useThreeWaySliders: true
                     property JsonObject android: JsonObject {
                         property int columns: 5
                         property list<var> pages: [[
@@ -1293,7 +1370,7 @@ Singleton {
             }
 
             property JsonObject soundcore: JsonObject {
-                property string macAddress: "E8:EE:CC:96:31:3A"
+                property string macAddress: ""
                 property string model: "SoundcoreA3028"
             }
 
@@ -1314,7 +1391,14 @@ Singleton {
                     property int longBreak: 900
                 }
                 property list<var> worldClocks: []
-                property bool secondPrecision: true
+                property bool secondPrecision: false
+
+                property JsonObject alarms: JsonObject {
+                    property bool useFullscreenPopup: false
+                    property bool showAnalogClock: true
+                    property bool showWorldClocks: true
+                    property bool showAlarmsSection: true
+                }
             }
 
             property JsonObject updates: JsonObject {

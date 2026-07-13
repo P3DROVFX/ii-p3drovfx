@@ -74,13 +74,13 @@ Scope {
                 }
                 left: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWidth + leftFrameThickness;
+                        return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness;
                     }
                     return leftFrameThickness;
                 }
                 right: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Appearance.sizes.verticalBarWidth + rightFrameThickness : rightFrameThickness;
+                        return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness;
                     }
                     return barGaps + 4 + rightFrameThickness;
                 }

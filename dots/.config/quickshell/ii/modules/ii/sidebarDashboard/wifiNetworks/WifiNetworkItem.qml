@@ -1,305 +1,527 @@
 import qs
-import qs.modules.common
-import qs.modules.common.functions
-import qs.modules.common.widgets
 import qs.services
 import qs.services.network
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
-Rectangle {
+Item {
     id: root
+
     required property WifiAccessPoint wifiNetwork
+
     property bool isFirst: false
     property bool isLast: false
-    property bool hovered: itemMouseArea.containsMouse
 
-    property bool isActive: (wifiNetwork?.active ?? false)
-    property bool isAskingPassword: (wifiNetwork?.askingPassword ?? false)
-    property bool isConnecting: Network.wifiConnectTarget === root.wifiNetwork && !isActive
+    // Derived state
+    readonly property bool isActive: wifiNetwork?.active ?? false
+    readonly property bool isAskingPassword: wifiNetwork?.askingPassword ?? false
+    readonly property bool isConnecting: Network.wifiConnectTarget === root.wifiNetwork && !isActive
+    readonly property bool hasError: Network.lastWifiExitCode !== 0 && Network.wifiErrorTarget === root.wifiNetwork
 
-    enabled: !isConnecting
-
-    implicitHeight: contentColumn.implicitHeight + 24
-
-    color: {
-        let base = isActive ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer;
-        if (itemMouseArea.containsPress)
-            return isActive ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive;
-        if (hovered)
-            return isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover;
-        return base;
+    onHasErrorChanged: {
+        if (hasError) {
+            shakeAnim.start();
+        }
     }
 
-    Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(root)
+    // Radius system
+    readonly property real rFull: height / 2
+    readonly property real rOuter: Appearance.rounding.large
+    readonly property real rInner: Appearance.rounding.verysmall
+
+    readonly property int activePassIdx: {
+        let p = parent;
+        while (p && typeof p.activePasswordIndex === "undefined") {
+            p = p.parent;
+        }
+        return p ? p.activePasswordIndex : -1;
+    }
+    readonly property bool isPasswordActive: activePassIdx === index
+    readonly property bool isPrevPasswordActive: activePassIdx === index + 1
+    readonly property bool isNextPasswordActive: activePassIdx === index - 1
+
+    readonly property real topLeftRadius: isPasswordActive ? rFull : (isNextPasswordActive ? rFull : (isFirst ? rOuter : rInner))
+    readonly property real topRightRadius: isPasswordActive ? rFull : (isNextPasswordActive ? rFull : (isFirst ? rOuter : rInner))
+    readonly property real bottomLeftRadius: isPasswordActive ? rFull : (isPrevPasswordActive ? rFull : (isLast ? rOuter : rInner))
+    readonly property real bottomRightRadius: isPasswordActive ? rFull : (isPrevPasswordActive ? rFull : (isLast ? rOuter : rInner))
+
+    onIsAskingPasswordChanged: {
+        if (root.isAskingPassword) {
+            if (Network.wifiErrorTarget === root.wifiNetwork) {
+                Network.wifiErrorTarget = null;
+                Network.lastWifiExitCode = 0;
+            }
+        } else {
+            passwordInput.text = "";
+        }
+        let p = parent;
+        while (p && typeof p.activePasswordIndex === "undefined") {
+            p = p.parent;
+        }
+        if (p) {
+            if (root.isAskingPassword) {
+                p.activePasswordIndex = index;
+            } else {
+                if (p.activePasswordIndex === index) {
+                    p.activePasswordIndex = -1;
+                }
+            }
+        }
     }
 
-    topLeftRadius: root.isFirst ? 16 : 0
-    topRightRadius: root.isFirst ? 16 : 0
-    bottomLeftRadius: root.isLast ? 16 : 0
-    bottomRightRadius: root.isLast ? 16 : 0
+    implicitHeight: 56
+    height: implicitHeight
+    clip: true
 
-    MouseArea {
-        id: itemMouseArea
+    // Sliding Flickable Container (Style similar to Bluetooth actions menu)
+    Flickable {
+        id: flick
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: root.isAskingPassword || root.isConnecting ? Qt.NoButton : Qt.LeftButton
-        onClicked: {
-            Network.connectToWifiNetwork(wifiNetwork);
+        contentWidth: flick.width * 2 + 8
+        contentHeight: flick.height
+        interactive: false
+        clip: true
+
+        contentX: root.isAskingPassword ? (flick.width + 8) : 0
+
+        Behavior on contentX {
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutExpo
+            }
         }
-    }
 
-    ColumnLayout {
-        id: contentColumn
-        anchors {
-            top: parent.top
-            left: parent.left
-            right: parent.right
-            margins: 12
-            leftMargin: 20
-            rightMargin: 20
-        }
-        spacing: 12
+        Row {
+            height: flick.height
+            spacing: 8
 
-        RowLayout {
-            // Name
-            spacing: 12
+            // PAGE 1: Normal wifi network card (mainRow)
+            Rectangle {
+                id: mainRow
+                width: flick.width
+                height: flick.height
+                
+                topLeftRadius: root.topLeftRadius
+                topRightRadius: root.topRightRadius
+                bottomLeftRadius: root.bottomLeftRadius
+                bottomRightRadius: root.bottomRightRadius
 
-            Item {
-                width: 24
-                height: 24
+                color: itemMouseArea.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                       : itemMouseArea.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                       : Appearance.colors.colSurfaceContainerHighest
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    iconSize: Appearance.font.pixelSize.larger
-                    property int strength: root.wifiNetwork?.strength ?? 0
-                    text: strength > 80 ? "signal_wifi_4_bar" : strength > 60 ? "network_wifi_3_bar" : strength > 40 ? "network_wifi_2_bar" : strength > 20 ? "network_wifi_1_bar" : "signal_wifi_0_bar"
-                    color: root.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                Behavior on color {
+                    ColorAnimation { duration: 150 }
+                }
 
-                    scale: root.isConnecting ? 0 : 1
-                    opacity: root.isConnecting ? 0 : 1
+                Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
 
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.5
+                RowLayout {
+                    anchors {
+                        fill: parent
+                        leftMargin: 20
+                        rightMargin: 16
+                    }
+                    spacing: 10
+
+                    Item {
+                        width: 22
+                        height: 22
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            property int strength: root.wifiNetwork?.strength ?? 0
+                            text: strength > 80 ? "android_wifi_4_bar" 
+                                  : strength > 60 ? "android_wifi_3_bar" 
+                                  : strength > 40 ? "wifi_2_bar" 
+                                  : strength > 20 ? "wifi_1_bar" 
+                                  : "signal_wifi_0_bar"
+                            fill: 1
+                            iconSize: 22
+                            color: Appearance.colors.colOnSurface
                         }
                     }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.InOutQuad
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: root.wifiNetwork?.ssid ?? Translation.tr("Unknown")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.bold: true
+                        color: Appearance.colors.colOnSurface
+                        textFormat: Text.PlainText
+                    }
+
+                    Item {
+                        Layout.preferredWidth: 22
+                        Layout.preferredHeight: 22
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            visible: (root.wifiNetwork?.isSecure ?? false) && !root.isConnecting
+                            text: "lock"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.3)
+                        }
+
+                        MaterialShape {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            shape: MaterialShape.Shape.Cookie7Sided
+                            color: Appearance.colors.colPrimary
+                            visible: root.isConnecting
+                            RotationAnimator on rotation {
+                                from: 0
+                                to: 360
+                                duration: 2000
+                                loops: Animation.Infinite
+                                running: root.isConnecting
+                            }
                         }
                     }
                 }
 
-                // M3 Cookie shape loader
-                MaterialShape {
-                    anchors.centerIn: parent
-                    width: 24
-                    height: 24
-                    shape: MaterialShape.Shape.Cookie7Sided
-                    color: Appearance.colors.colPrimary
-
-                    scale: root.isConnecting ? 1 : 0
-                    opacity: root.isConnecting ? 1 : 0
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.5
-                        }
+                MouseArea {
+                    id: itemMouseArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: !root.isConnecting
+                    onClicked: {
+                        Network.connectToWifiNetwork(root.wifiNetwork);
                     }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.InOutQuad
-                        }
-                    }
+                }
 
-                    RotationAnimator on rotation {
-                        from: 0
-                        to: 360
-                        duration: 2000
-                        loops: Animation.Infinite
-                        running: root.isConnecting
-                    }
+                StyledToolTip {
+                    text: root.wifiNetwork.isSecure ? Translation.tr("Connect with password") : Translation.tr("Connect")
+                    alternativeVisibleCondition: itemMouseArea.containsMouse
+                    extraVisibleCondition: false
                 }
             }
 
-            StyledText {
-                Layout.fillWidth: true
-                color: root.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                elide: Text.ElideRight
-                text: root.wifiNetwork?.ssid ?? Translation.tr("Unknown")
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.Bold
-                textFormat: Text.PlainText
-            }
-
-            StyledText {
-                visible: root.isActive || root.isConnecting
-                text: root.isConnecting ? Translation.tr("Connecting...") : Translation.tr("Connected")
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.Medium
-                color: ColorUtils.transparentize(root.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2, 0.25)
-            }
-
-            MaterialSymbol {
-                visible: (root.wifiNetwork?.isSecure || root.isActive) ?? false
-                text: root.isActive ? "check" : "lock"
-                iconSize: Appearance.font.pixelSize.normal
-                color: root.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-            }
-        }
-
-        ColumnLayout { // Password
-            id: passwordPrompt
-            Layout.topMargin: 4
-            visible: root.isAskingPassword
-
-            MaterialTextField {
-                id: passwordField
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Password")
-
-                // Password
-                echoMode: TextInput.Password
-                inputMethodHints: Qt.ImhSensitiveData
-
-                onAccepted: {
-                    Network.changePassword(root.wifiNetwork, passwordField.text);
-                }
-            }
-
+            // PAGE 2: Password entry row (passwordRow)
             RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 4
+                id: passwordRow
+                width: flick.width
+                height: flick.height
+                spacing: 4
 
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                // Disconnect button (right pill)
+                // Lock circle — left side dynamic, right side inner
                 Rectangle {
-                    height: 28
-                    width: cancelText.implicitWidth + 24
-                    color: cancelMouseArea.containsPress ? Appearance.colors.colLayer2Active : cancelMouseArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
-
-                    scale: cancelMouseArea.containsPress ? 0.95 : 1
-                    Behavior on scale {
-                        animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
-                    }
-
-                    // Shape: pill
-                    radius: height / 2
+                    id: lockCircle
+                    width: 56
+                    height: 56
+                    color: root.hasError ? Appearance.colors.colError
+                           : (cancelMouseArea.containsMouse ? Appearance.colors.colErrorContainer : Appearance.colors.colSurfaceContainerHighest)
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
 
-                    StyledText {
-                        id: cancelText
+                    radius: root.rFull
+
+                    transform: Translate {
+                        id: shakeTranslate
+                        x: 0
+                    }
+
+                    SequentialAnimation {
+                        id: shakeAnim
+                        loops: 1
+
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: 0; to: -8; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: -8; to: 8; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: 8; to: -8; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: -8; to: 8; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: 8; to: -4; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: -4; to: 4; duration: 50; easing.type: Easing.Linear }
+                        NumberAnimation { target: shakeTranslate; property: "x"; from: 4; to: 0; duration: 50; easing.type: Easing.Linear }
+                    }
+
+                    MaterialSymbol {
                         anchors.centerIn: parent
-                        text: Translation.tr("Cancel")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnLayer1
+                        text: root.hasError ? "close" : (cancelMouseArea.containsMouse ? "close" : "password")
+                        fill: 1
+                        iconSize: 22
+                        color: root.hasError ? Appearance.colors.colOnError
+                               : (cancelMouseArea.containsMouse ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurface)
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
                     }
 
                     MouseArea {
                         id: cancelMouseArea
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.wifiNetwork.askingPassword = false;
                         }
                     }
-                }
 
-                Rectangle {
-                    height: 28
-                    width: pconnectText.implicitWidth + 24
-                    color: pconnectMouseArea.containsPress ? Appearance.colors.colPrimaryActive : pconnectMouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
-
-                    scale: pconnectMouseArea.containsPress ? 0.95 : 1
-                    Behavior on scale {
-                        animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
-                    }
-
-                    // Shape: pill
-                    radius: height / 2
-
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-
-                    StyledText {
-                        id: pconnectText
-                        anchors.centerIn: parent
-                        text: Translation.tr("Connect")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    MouseArea {
-                        id: pconnectMouseArea
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: {
-                            Network.changePassword(root.wifiNetwork, passwordField.text);
-                        }
+                    StyledToolTip {
+                        text: Translation.tr("Cancel")
+                        alternativeVisibleCondition: cancelMouseArea.containsMouse
+                        extraVisibleCondition: false
                     }
                 }
-            }
-        }
 
-        ColumnLayout { // Public wifi login page
-            id: publicWifiPortal
-            Layout.topMargin: 4
-            visible: (root.isActive && (root.wifiNetwork?.security ?? "").trim().length === 0) ?? false
-
-            RowLayout {
-                Layout.fillWidth: true
-
+                // Password input (middle)
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 32
-                    radius: 16
-                    color: portalMouseArea.containsPress ? Appearance.colors.colLayer4Active : portalMouseArea.containsMouse ? Appearance.colors.colLayer4Hover : Appearance.colors.colLayer4
+                    height: 56
+                    radius: root.rInner
+                    color: Appearance.colors.colSurfaceContainerHighest
 
-                    scale: portalMouseArea.containsPress ? 0.95 : 1
-                    Behavior on scale {
-                        animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
+                    // Material shape chars overlay (rendered first = behind)
+                    StyledFlickable {
+                        id: charsDisplay
+                        anchors {
+                            fill: parent
+                            leftMargin: 16
+                            rightMargin: 16
+                        }
+                        clip: true
+
+                        readonly property int length: passwordInput.text.length
+                        readonly property color shapeColor: Appearance.colors.colOnSurface
+                        readonly property int charSize: Appearance.font.pixelSize.normal
+
+                        contentWidth: charsRow.implicitWidth
+                        contentX: Math.max(contentWidth - width, 0)
+                        Behavior on contentX {
+                            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(charsDisplay)
+                        }
+
+                        Row {
+                            id: charsRow
+                            anchors {
+                                left: parent.left
+                                verticalCenter: parent.verticalCenter
+                            }
+                            spacing: 0
+
+                            Repeater {
+                                model: ScriptModel {
+                                    values: Array(charsDisplay.length)
+                                }
+
+                                delegate: Rectangle {
+                                    id: charItem
+                                    required property int index
+                                    implicitWidth: charsDisplay.charSize
+                                    implicitHeight: charsDisplay.charSize
+                                    color: "transparent"
+
+                                    SequentialAnimation {
+                                        id: waveJumpAnim
+                                        running: root.isConnecting
+                                        loops: Animation.Infinite
+
+                                        PauseAnimation {
+                                            duration: charItem.index * 120
+                                        }
+
+                                        NumberAnimation {
+                                            target: materialShape
+                                            property: "anchors.verticalCenterOffset"
+                                            from: 0
+                                            to: -8
+                                            duration: 350
+                                            easing.type: Easing.OutQuad
+                                        }
+
+                                        NumberAnimation {
+                                            target: materialShape
+                                            property: "anchors.verticalCenterOffset"
+                                            from: -8
+                                            to: 0
+                                            duration: 350
+                                            easing.type: Easing.InOutQuad
+                                        }
+
+                                        PauseAnimation {
+                                            duration: Math.max(0, 2000 - (charItem.index * 120) - 700)
+                                        }
+                                    }
+
+                                    MaterialShape {
+                                        id: materialShape
+                                        anchors.centerIn: parent
+
+                                        property list<var> charShapes: [
+                                            MaterialShape.Shape.Clover4Leaf,
+                                            MaterialShape.Shape.Arrow,
+                                            MaterialShape.Shape.Pill,
+                                            MaterialShape.Shape.SoftBurst,
+                                            MaterialShape.Shape.Diamond,
+                                            MaterialShape.Shape.ClamShell,
+                                            MaterialShape.Shape.Pentagon
+                                        ]
+
+                                        property int randomShapeIndex: Math.floor(Math.random() * charShapes.length)
+                                        shape: charShapes[randomShapeIndex]
+
+                                        color: charsDisplay.shapeColor
+                                        implicitSize: 0
+                                        opacity: 0
+                                        scale: 0.5
+
+                                        Component.onCompleted: {
+                                            appearAnim.start();
+                                        }
+
+                                        ParallelAnimation {
+                                            id: appearAnim
+                                            NumberAnimation {
+                                                target: materialShape
+                                                properties: "opacity"
+                                                to: 1
+                                                duration: 50
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                            NumberAnimation {
+                                                target: materialShape
+                                                properties: "scale"
+                                                to: 1
+                                                duration: 220
+                                                easing.type: Easing.BezierSpline
+                                                easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                                            }
+                                            NumberAnimation {
+                                                target: materialShape
+                                                properties: "implicitSize"
+                                                to: charsDisplay.charSize - 2
+                                                easing.type: Easing.BezierSpline
+                                                easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                                            }
+                                            ColorAnimation {
+                                                target: materialShape
+                                                properties: "color"
+                                                from: Appearance.colors.colPrimary
+                                                to: charsDisplay.shapeColor
+                                                duration: 1000
+                                                easing.type: Appearance.animation.elementMoveFast.type
+                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+
+                    // Invisible TextInput for input handling (rendered on top = receives events)
+                    TextInput {
+                        id: passwordInput
+                        anchors {
+                            fill: parent
+                            leftMargin: 16
+                            rightMargin: 16
+                        }
+                        verticalAlignment: TextInput.AlignVCenter
+                        echoMode: TextInput.Password
+                        color: "transparent"
+                        cursorVisible: false
+                        cursorDelegate: Component { Item {} }
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.bold: true
+                        clip: true
+
+                        onVisibleChanged: if (visible)
+                            forceActiveFocus()
+
+                        StyledText {
+                            anchors.fill: parent
+                            verticalAlignment: Text.AlignVCenter
+                            text: Translation.tr("Password")
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.4)
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            visible: passwordInput.text.length === 0
+                        }
+
+                        onAccepted: {
+                            Network.connectWithPassword(root.wifiNetwork.ssid, passwordInput.text);
+                        }
+                    }
+
+                    // IBeam cursor for text input area
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.NoButton // pass-through clicks to TextInput
+                    }
+                }
+
+                // Confirm/status circle — always rFull on the right side
+                Rectangle {
+                    id: confirmCircle
+                    width: 56
+                    height: 56
+                    color: root.isConnecting ? Appearance.colors.colPrimaryContainer : (Network.lastWifiExitCode !== 0 && Network.wifiConnectTarget === root.wifiNetwork) ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimaryContainer
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
 
-                    StyledText {
+                    radius: root.rFull
+
+                    // Checkmark
+                    MaterialSymbol {
                         anchors.centerIn: parent
-                        text: Translation.tr("Open network portal")
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnLayer4
+                        text: (Network.lastWifiExitCode !== 0 && Network.wifiConnectTarget === root.wifiNetwork) ? "close" : "check"
+                        fill: 1
+                        iconSize: 22
+                        color: Appearance.colors.colOnPrimaryContainer
+                        opacity: root.isConnecting ? 0 : 1
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                    }
+
+                    // Spinner
+                    MaterialShape {
+                        anchors.centerIn: parent
+                        width: 22
+                        height: 22
+                        shape: MaterialShape.Shape.Cookie7Sided
+                        color: Appearance.colors.colOnPrimaryContainer
+                        opacity: root.isConnecting ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        RotationAnimator on rotation {
+                            from: 0
+                            to: 360
+                            duration: 2000
+                            loops: Animation.Infinite
+                            running: root.isConnecting
+                        }
                     }
 
                     MouseArea {
-                        id: portalMouseArea
+                        id: confirmMouseArea
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        enabled: !root.isConnecting
                         onClicked: {
-                            Network.openPublicWifiPortal();
-                            GlobalStates.sidebarRightOpen = false;
+                            Network.connectWithPassword(root.wifiNetwork.ssid, passwordInput.text);
                         }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Connect")
+                        alternativeVisibleCondition: confirmMouseArea.containsMouse
+                        extraVisibleCondition: false
                     }
                 }
             }

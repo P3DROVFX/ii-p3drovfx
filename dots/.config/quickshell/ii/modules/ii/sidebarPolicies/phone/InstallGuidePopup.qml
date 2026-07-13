@@ -32,8 +32,9 @@ Item {
     /** Title for the popup header. */
     property string headerTitle: Translation.tr("Missing Dependencies")
 
-    /** Emitted when the user clicks "Re-check" — the parent should call
-     *  refresh() on the relevant services. */
+    /** Emitted when the user clicks outside or the close button. */
+    signal closeRequested()
+    /** Emitted when the user clicks "Re-check". */
     signal refreshRequested()
 
     /** Currently selected distro tab (user can override auto-detection). */
@@ -41,8 +42,12 @@ Item {
         ? root.detectedDistro : "arch"
 
     onVisibleChanged: {
-        if (visible) root._selectedDistro = root.detectedDistro.length > 0 && root.detectedDistro !== "unknown"
-            ? root.detectedDistro : "arch"
+        if (visible) {
+            root._selectedDistro = root.detectedDistro.length > 0 && root.detectedDistro !== "unknown"
+                ? root.detectedDistro : "arch"
+            // Replay entrance animation each time popup opens
+            entranceAnim.restart()
+        }
     }
 
     /** Copies text to the Wayland clipboard via wl-copy. */
@@ -73,27 +78,36 @@ Item {
         anchors.fill: parent
         color: "transparent"
         visible: root.visible
+        opacity: root.visible ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
-        // Click-outside catcher
+        // Click-outside catcher — uses signal instead of imperative visible=false
+        // to avoid breaking the parent's visible binding.
         MouseArea {
             anchors.fill: parent
             z: 0
-            onClicked: root.visible = false
+            onClicked: root.closeRequested()
         }
 
         Rectangle {
             id: popupCard
             anchors.centerIn: parent
             width: Math.min(parent.width - 16, 420)
-            height: Math.min(parent.height - 16, popupColumn.implicitHeight + 24)
-            color: Appearance.colors.colLayer2
+            height: Math.min(parent.height - 16, popupColumn.implicitHeight + 64)
+            color: Appearance.colors.colLayer2Base
             radius: Appearance.rounding.large
             z: 1
 
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Easing.OutCubic
+            opacity: 0
+            scale: 0.94
+            transform: Translate { id: cardTranslate; y: 18 }
+
+            SequentialAnimation {
+                id: entranceAnim
+                ParallelAnimation {
+                    NumberAnimation { target: popupCard; property: "opacity"; from: 0; to: 1; duration: 260; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: popupCard; property: "scale"; from: 0.94; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+                    NumberAnimation { target: cardTranslate; property: "y"; from: 18; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -101,7 +115,7 @@ Item {
                 id: popupColumn
                 anchors.fill: parent
                 anchors.margins: 16
-                spacing: 12
+                spacing: 14
 
                 // ─── Header ───────────────────────────────────
                 RowLayout {
@@ -120,22 +134,22 @@ Item {
                         text: root.headerTitle
                         font.pixelSize: Appearance.font.pixelSize.normal
                         font.weight: Font.DemiBold
-                        color: Appearance.colors.colOnLayer2
+                        color: Appearance.colors.colOnSurface
                     }
 
                     RippleButton {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         buttonRadius: Appearance.rounding.full
-                        colBackground: Appearance.colors.colLayer3
-                        colBackgroundHover: Appearance.colors.colLayer3Hover
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
                         contentItem: MaterialSymbol {
                             anchors.centerIn: parent
                             text: "close"
                             iconSize: 18
-                            color: Appearance.colors.colOnLayer3
+                            color: Appearance.colors.colOnSurfaceVariant
                         }
-                        onClicked: root.visible = false
+                        onClicked: root.closeRequested()
                     }
                 }
 
@@ -156,10 +170,10 @@ Item {
                             buttonRadius: Appearance.rounding.full
                             colBackground: root._selectedDistro === modelData.key
                                 ? Appearance.colors.colPrimaryContainer
-                                : Appearance.colors.colLayer3
+                                : Appearance.colors.colSurfaceContainerHigh
                             colBackgroundHover: root._selectedDistro === modelData.key
                                 ? Appearance.colors.colPrimaryContainerHover
-                                : Appearance.colors.colLayer3Hover
+                                : Appearance.colors.colSurfaceContainerHighest
                             scale: down ? 0.96 : 1.0
                             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
                             contentItem: StyledText {
@@ -170,7 +184,7 @@ Item {
                                 font.weight: root._selectedDistro === modelData.key ? Font.DemiBold : Font.Normal
                                 color: root._selectedDistro === modelData.key
                                     ? Appearance.colors.colOnPrimaryContainer
-                                    : Appearance.colors.colOnLayer3
+                                    : Appearance.colors.colOnSurfaceVariant
                             }
                             leftPadding: 14
                             rightPadding: 14
@@ -199,9 +213,9 @@ Item {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.preferredHeight: depColumn.implicitHeight + 16
+                        Layout.preferredHeight: depColumn.implicitHeight + 18
                         radius: Appearance.rounding.normal
-                        color: Appearance.colors.colLayer1
+                        color: Appearance.colors.colSurfaceContainerLow
 
                         ColumnLayout {
                             id: depColumn
@@ -234,15 +248,15 @@ Item {
                                         text: modelData.name
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.DemiBold
-                                        color: Appearance.colors.colOnLayer1
+                                        color: Appearance.colors.colOnSurface
                                         wrapMode: Text.WordWrap
                                     }
                                     StyledText {
                                         Layout.fillWidth: true
                                         text: modelData.description
                                         font.pixelSize: Appearance.font.pixelSize.smallest
-                                        color: Appearance.colors.colOnLayer1
-                                        opacity: 0.7
+                                        color: Appearance.colors.colOnSurfaceVariant
+                                        opacity: 0.85
                                         wrapMode: Text.WordWrap
                                     }
                                 }
@@ -253,7 +267,7 @@ Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Math.max(34, cmdRow.implicitHeight + 10)
                                 radius: Appearance.rounding.small
-                                color: Appearance.colors.colLayer3
+                                color: Appearance.colors.colSurfaceContainerHigh
                                 visible: {
                                     const cmds = modelData.installCommands
                                     return cmds && cmds[root._selectedDistro]
@@ -278,7 +292,7 @@ Item {
                                         }
                                         font.pixelSize: Appearance.font.pixelSize.smallest
                                         font.family: Appearance.font.family.monospace || font.family
-                                        color: Appearance.colors.colOnLayer3
+                                        color: Appearance.colors.colOnSurface
                                         wrapMode: Text.WrapAnywhere
                                         elide: Text.ElideRight
                                         maximumLineCount: 2
@@ -288,8 +302,8 @@ Item {
                                         Layout.preferredWidth: 30
                                         Layout.preferredHeight: 30
                                         buttonRadius: Appearance.rounding.full
-                                        colBackground: Appearance.colors.colLayer4
-                                        colBackgroundHover: Appearance.colors.colLayer4Hover
+                                        colBackground: Appearance.colors.colSurfaceContainerHighest
+                                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                                         scale: down ? 0.92 : 1.0
                                         Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
                                         contentItem: MaterialSymbol {
@@ -298,7 +312,7 @@ Item {
                                             iconSize: 15
                                             color: copyLabel.showCheck
                                                 ? Appearance.colors.colPrimary
-                                                : Appearance.colors.colOnLayer4
+                                                : Appearance.colors.colOnSurface
                                             fill: 1.0
                                         }
                                         property bool _copied: false

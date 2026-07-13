@@ -77,6 +77,11 @@ Singleton {
      *  not running. */
     property int scrcpyElapsedMs: 0
 
+    /** Error message set when scrcpy launch fails (e.g. ADB not reachable).
+     *  Cleared when scrcpy is actually running. The PhoneFooter reads this
+     *  to show a hint on the card. */
+    property string scrcpyLaunchError: ""
+
     /** True if `adb` is reachable on the active device (either wireless ADB
      *  via Config.options.phone.scrcpy.useWireless + configured IP, or via
      *  a USB-attached device). Cached for 30s — used to enable ADB-only
@@ -207,6 +212,7 @@ Singleton {
         checkAvailabilityProc.running = true
         checkScrcpyProc.running = true
         checkAdbProc.running = true
+        checkPythonDbusProc.running = true
     }
 
     // Reflects Config.options.policies.phone. When false, the service stays
@@ -224,6 +230,7 @@ Singleton {
             checkAvailabilityProc.running = true
             checkScrcpyProc.running = true
             checkAdbProc.running = true
+            checkPythonDbusProc.running = true
         } else {
             // Disabled: stop everything that consumes CPU/IPC.
             monitorProc.running = false
@@ -272,6 +279,7 @@ Singleton {
 
     // ─── Granular dependency flags (for the install guide UI) ───
     property bool adbPresent: false
+    property bool pythonDbusPresent: false
     property string detectedDistro: "unknown"
 
     /** Array of missing dependency descriptors for the scrcpy card install
@@ -302,6 +310,18 @@ Singleton {
                     debian: "sudo apt install android-tools-adb",
                 })
             })
+        if (!root.pythonDbusPresent)
+            deps.push({
+                key: "python-dbus",
+                name: Translation.tr("python-dbus"),
+                description: Translation.tr("Python D-Bus bindings — required for the KDE Connect monitor to read notifications, battery, and connectivity."),
+                present: false,
+                installCommands: ({
+                    arch: "sudo pacman -S python-dbus",
+                    fedora: "sudo dnf install python3-dbus",
+                    debian: "sudo apt install python3-dbus",
+                })
+            })
         return deps
     }
 
@@ -329,6 +349,22 @@ Singleton {
         command: ["bash", "-c", "command -v adb >/dev/null 2>&1"]
         onExited: (code, status) => {
             root.adbPresent = (code === 0)
+        }
+    }
+
+    // ─── Python dbus presence check ───────────────────────────
+    Process {
+        id: checkPythonDbusProc
+        running: false
+        command: ["bash", "-c", "python3 -c 'import dbus' 2>/dev/null && echo 'ok'"]
+        stdout: SplitParser {
+            onRead: line => {
+                root.pythonDbusPresent = (String(line).trim() === "ok")
+            }
+        }
+        onExited: (code, status) => {
+            if (code !== 0)
+                root.pythonDbusPresent = false
         }
     }
 
@@ -368,7 +404,7 @@ Singleton {
 
         stderr: SplitParser {
             onRead: line => {
-                // Carry on. Most stderr noise is from dbus-python introspect
+                // Carry on. Most stderr noise is from D-Bus introspect
                 // failures for inaccessible plugin paths on offline devices.
                 if (String(line).indexOf("Introspect error") < 0
                     && String(line).indexOf("UnknownObject") < 0)
@@ -403,7 +439,13 @@ Singleton {
             break
         case "fatal":
             root.ready = false
-            console.warn("[KdeConnect] monitor fatal:", ev.error, ev.detail ?? "")
+            console.warn("[KdeConnect] monitor fatal:", ev.error, ev.message ?? "", ev.detail ?? "")
+            if (ev.error === "missing_deps") {
+                const msg = ev.message || Translation.tr("Missing Python dependency")
+                const detail = ev.detail || ""
+                const label = detail.length > 0 ? msg + "\n" + detail : msg
+                root.criticalDepMissing("python-deps", label)
+            }
             break
         case "device_added_signal":
             // Marker before `device_added`. Swallow.
@@ -1261,6 +1303,29 @@ Singleton {
 
     function launchScrcpy(devId, mode, deepLink) {
         if (!devId) return
+
+        // Pre-flight check: ADB must be reachable (USB debugging or wireless).
+        // Without it, scrcpy has no device to connect to and the error is
+        // just "unknown" — unhelpful. Early return with a descriptive message.
+        if (!root.adbReachable) {
+            const wirelessIp = Config.options.phone && Config.options.phone.scrcpy
+                ? (Config.options.phone.scrcpy.wirelessIp || "").trim()
+                : ""
+            if (!wirelessIp || mode === "usb") {
+                root.scrcpyLaunchError = Translation.tr("Phone not connected via ADB.\n\n"
+                    + "To mirror your screen you need ADB access:\n"
+                    + "  • USB: plug your phone AND enable USB debugging\n"
+                    + "    (Settings → Developer options → USB debugging)\n"
+                    + "  • Wireless: enable Wireless debugging in\n"
+                    + "    Developer options, pair via ADB, then set\n"
+                    + "    the IP in Phone → scrcpy settings.\n\n"
+                    + "Scrcpy launches once ADB detects your phone.")
+                root.actionFeedback(Translation.tr("scrcpy needs ADB — connect via USB or configure wireless"), false)
+                return
+            }
+        }
+
+        root.scrcpyLaunchError = ""
         // Instant UI feedback: turn on the launching flag before the
         // scrcpyStatusTimer has had a chance to poll pgrep. The flag is
         // cleared by checkScrcpyRunningProc.onExited once the process
@@ -1387,7 +1452,9 @@ Singleton {
             // of a generic "Failed to start" message. The previous generic
             // message made it impossible to diagnose why scrcpy was failing
             // (e.g., "device not found", "unknown option", ADB auth issues).
-            const shellCmd = "ERRFILE=$(mktemp); (" + fullScrcpyCmd + ") 2>\"$ERRFILE\" || { ERR=$(head -5 \"$ERRFILE\"); notify-send 'scrcpy' 'scrcpy failed:\n${ERR:-unknown error}' -i smartphone; }; rm -f \"$ERRFILE\""
+            // Enhanced: also check adb devices when stderr is empty, so the
+            // user gets a human-readable hint instead of "unknown error".
+            const shellCmd = "ERRFILE=$(mktemp); (" + fullScrcpyCmd + ") 2>\"$ERRFILE\" || { ERR=$(head -5 \"$ERRFILE\"); if [ -z \"$ERR\" ]; then ADB_DEVICES=$(adb devices 2>/dev/null | grep -v 'List of devices' | grep -v '^$' | wc -l); if [ \"$ADB_DEVICES\" = \"0\" ]; then HINT='No device detected via ADB.\nConnect via USB (USB debugging) or configure\nwireless debugging in Phone → scrcpy settings.'; else HINT='scrcpy exited but ADB is connected.\nCheck that the phone screen is unlocked and\nthe ADB authorization is accepted.'; fi; notify-send 'scrcpy Mirror' \"$HINT\" -i smartphone; else notify-send 'scrcpy Mirror' \"scrcpy failed:\n${ERR}\" -i smartphone; fi; }; rm -f \"$ERRFILE\""
             Quickshell.execDetached([
                 "bash", "-c",
                 shellCmd + " &"
@@ -1487,6 +1554,7 @@ Singleton {
             "done"])
         root.scrcpyRunning = false
         root.scrcpyLaunching = false
+        root.scrcpyLaunchError = ""
         scrcpyLaunchFallbackTimer.stop()
     }
 
@@ -1573,6 +1641,7 @@ Singleton {
                     root.scrcpyElapsedMs = 0
                 root.scrcpyRunning = true
                 root.scrcpyLaunching = false
+                root.scrcpyLaunchError = ""
                 scrcpyLaunchFallbackTimer.stop()
             } else {
                 // scrcpy NOT found. This could mean:

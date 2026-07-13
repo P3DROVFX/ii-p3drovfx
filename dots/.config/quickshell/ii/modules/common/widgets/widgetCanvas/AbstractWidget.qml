@@ -11,6 +11,7 @@ MouseArea {
     property bool allowMiddleClick: false
     property alias animateXPos: xBehavior.enabled
     property alias animateYPos: yBehavior.enabled
+    property int animDuration: Appearance.animation.elementMove.duration
     property bool draggable: true
     drag.target: draggable ? root : undefined
     cursorShape: (draggable && containsPress) ? Qt.ClosedHandCursor : draggable ? Qt.OpenHandCursor : Qt.ArrowCursor
@@ -21,12 +22,24 @@ MouseArea {
         root.y = (root.parent.height - root.height) / 2
     }
 
+    NumberAnimation {
+        id: sharedXAnim
+        duration: root.animDuration
+        easing.type: root.animDuration > 500 ? Easing.OutCubic : Appearance.animation.elementMove.type
+        easing.bezierCurve: root.animDuration > 500 ? [] : Appearance.animation.elementMove.bezierCurve
+    }
     Behavior on x {
         id: xBehavior
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        animation: sharedXAnim
+    }
+    NumberAnimation {
+        id: sharedYAnim
+        duration: root.animDuration
+        easing.type: root.animDuration > 500 ? Easing.OutCubic : Appearance.animation.elementMove.type
+        easing.bezierCurve: root.animDuration > 500 ? [] : Appearance.animation.elementMove.bezierCurve
     }
     Behavior on y {
         id: yBehavior
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        animation: sharedYAnim
     }
 }

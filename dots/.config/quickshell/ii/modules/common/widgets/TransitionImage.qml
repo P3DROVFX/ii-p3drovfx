@@ -23,6 +23,9 @@ Item {
     property bool smooth: true
     property bool mipmap: true
 
+    readonly property Item fromImage: imgAIsBack ? imgA : imgB
+    readonly property Item toImage: imgAIsBack ? imgB : imgA
+
     onImageSourceChanged: fadeTo(imageSource)
     Component.onCompleted: imgA.source = imageSource
 
@@ -50,6 +53,8 @@ Item {
             fadeAnim.restart();
         } else {
             front.opacity = 1;
+            var oldBack = imgAIsBack ? imgA : imgB;
+            oldBack.source = "";
             root.imgAIsBack = !root.imgAIsBack;
         }
     }
@@ -63,6 +68,8 @@ Item {
         easing.type: Easing.InOutQuad
 
         onFinished: {
+            var oldBack = root.imgAIsBack ? imgA : imgB;
+            oldBack.source = "";
             root.imgAIsBack = !root.imgAIsBack;
         }
     }
@@ -77,6 +84,7 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 
     Image {
@@ -90,5 +98,6 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        layer.enabled: true
     }
 }

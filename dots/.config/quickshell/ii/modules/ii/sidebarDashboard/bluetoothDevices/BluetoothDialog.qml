@@ -12,39 +12,27 @@ import Quickshell.Bluetooth
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
-import "../../bar/cards"
+import "../../bar/shared/cards"
 
 WindowDialog {
     id: root
-    backgroundHeight: 700
+    backgroundHeight: 600
 
-    readonly property var pairedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.paired || d.connected)
+    readonly property var connectedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.connected)
+    readonly property var savedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.paired && !d.connected)
     readonly property var availableDevices: BluetoothStatus.friendlyDeviceList.filter(d => !d.paired && !d.connected)
 
-    // Header
+    // Header (margins, fonts, and spacing matching WifiDialog/VolumeDialog)
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
-        
-        // Icon with circular background
-        Rectangle {
-            width: 24
-            height: 24
-            radius: 12
-            color: Appearance.colors.colPrimaryContainer
-            
-            MaterialSymbol {
-                anchors.centerIn: parent
-                iconSize: 16
-                text: "bluetooth_connected"
-                color: Appearance.colors.colOnPrimaryContainer
-            }
-        }
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        spacing: 0
         
         StyledText {
             Layout.fillWidth: true
-            text: Translation.tr("Bluetooth Devices")
-            font.pixelSize: Appearance.font.pixelSize.normal
+            text: Translation.tr("Bluetooth")
+            font.pixelSize: Appearance.font.pixelSize.larger
             font.weight: Font.Bold
             color: Appearance.colors.colOnLayer1
         }
@@ -64,181 +52,349 @@ WindowDialog {
         id: scrollArea
         Layout.fillHeight: true
         Layout.fillWidth: true
+        Layout.topMargin: -4
         contentHeight: scrollContent.implicitHeight
         clip: true
+
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: Item {
+                id: maskRoot
+                width: scrollArea.width
+                height: scrollArea.height
+
+                property color topFadeColor: scrollArea.atYBeginning ? "white" : "transparent"
+                property color bottomFadeColor: scrollArea.atYEnd ? "white" : "transparent"
+
+                Behavior on topFadeColor {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+                Behavior on bottomFadeColor {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+                Column {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    Rectangle {
+                        width: parent.width
+                        height: Math.min(46, parent.height / 2)
+                        color: "transparent"
+                        gradient: Gradient {
+                            GradientStop {
+                                position: 0.0
+                                color: maskRoot.topFadeColor
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: "white"
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
+                        color: "white"
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: Math.min(56, parent.height / 2)
+                        color: "transparent"
+                        gradient: Gradient {
+                            GradientStop {
+                                position: 0.0
+                                color: "white"
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: maskRoot.bottomFadeColor
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         ColumnLayout {
             id: scrollContent
             width: parent.width
             spacing: 16
 
-            // Progress bar when discovering
-            StyledProgressBar {
-                indeterminate: true
-                visible: Bluetooth.defaultAdapter?.discovering ?? false
-                Layout.fillWidth: true
-                Layout.topMargin: -4
-                Layout.bottomMargin: -4
-            }
-
-            // Paired/Connected devices section
+            // Connected devices section
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 4
-                visible: (Bluetooth.defaultAdapter?.enabled ?? false) && root.pairedDevices.length > 0
+                spacing: 6
+                visible: Bluetooth.defaultAdapter?.enabled ?? false
 
-                Repeater {
-                    model: ScriptModel {
-                        values: root.pairedDevices
-                    }
-                    delegate: BluetoothDeviceItem {
-                        required property BluetoothDevice modelData
-                        required property int index
-                        device: modelData
-                        isFirst: index === 0
-                        isLast: index === root.pairedDevices.length - 1
-                        isPairedSection: true
-                        Layout.fillWidth: true
-                    }
-                }
-            }
-
-            // Available Devices header
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 10
-                spacing: 8
-                visible: (Bluetooth.defaultAdapter?.enabled ?? false) && (root.availableDevices.length > 0 || (Bluetooth.defaultAdapter?.discovering ?? false))
-
-                // Checkmark icon with circular background
-                Rectangle {
-                    width: 24
-                    height: 24
-                    radius: 12
-                    color: Appearance.colors.colPrimaryContainer
-                    
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        iconSize: 16
-                        text: "bluetooth_searching"
-                        color: Appearance.colors.colOnPrimaryContainer
-                    }
-                }
-                
                 StyledText {
-                    text: Translation.tr("Available Devices")
+                    text: Translation.tr("Connected devices")
                     font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnLayer1
+                    font.bold: true
+                    color: Appearance.colors.colSubtext
                     Layout.fillWidth: true
                 }
 
-                // Scan button with hover effect
-                Rectangle {
-                    id: scanButton
-                    Layout.preferredHeight: 28
-                    Layout.preferredWidth: scanRow.implicitWidth + 16
-                    radius: 14
-                    color: scanMouseArea.containsPress ? Appearance.colors.colPrimaryContainerActive 
-                        : scanMouseArea.containsMouse ? Appearance.colors.colPrimaryContainerHover 
-                        : Appearance.colors.colPrimaryContainer
+                // Empty state for connected devices
+                StyledText {
+                    visible: root.connectedDevices.length === 0
+                    text: Translation.tr("No connected devices")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                }
 
-                    scale: scanMouseArea.containsPress ? 0.95 : 1
-                    Behavior on scale {
-                        animation: Appearance.animation.clickBounce.numberAnimation.createObject(this)
-                    }
+                // Connected devices list
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: root.connectedDevices.length > 0
 
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-
-                    RowLayout {
-                        id: scanRow
-                        anchors.centerIn: parent
-                        spacing: 6
-
-                        StyledText {
-                            text: Translation.tr("Scan")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnPrimaryContainer
+                    Repeater {
+                        model: ScriptModel {
+                            values: root.connectedDevices
                         }
-                        MaterialSymbol {
-                            iconSize: 16
-                            text: "search"
-                            color: Appearance.colors.colOnPrimaryContainer
+                        delegate: BluetoothDeviceItem {
+                            required property BluetoothDevice modelData
+                            required property int index
+                            device: modelData
+                            isFirst: index === 0
+                            isLast: index === root.connectedDevices.length - 1
+                            index: index
+                            totalCount: root.connectedDevices.length
+                            isPairedSection: true
+                            Layout.fillWidth: true
                         }
+                    }
+                }
+            }
+
+            // Saved devices section
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: Bluetooth.defaultAdapter?.enabled ?? false
+
+                StyledText {
+                    text: Translation.tr("Saved devices")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.bold: true
+                    color: Appearance.colors.colSubtext
+                    Layout.fillWidth: true
+                }
+
+                // Empty state for saved devices
+                StyledText {
+                    visible: root.savedDevices.length === 0
+                    text: Translation.tr("No saved devices")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                }
+
+                // Saved devices list
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: root.savedDevices.length > 0
+
+                    Repeater {
+                        model: ScriptModel {
+                            values: root.savedDevices
+                        }
+                        delegate: BluetoothDeviceItem {
+                            required property BluetoothDevice modelData
+                            required property int index
+                            device: modelData
+                            isFirst: index === 0
+                            isLast: index === root.savedDevices.length - 1
+                            index: index
+                            totalCount: root.savedDevices.length
+                            isPairedSection: true
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
+            }
+
+            // Available devices section
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: Bluetooth.defaultAdapter?.enabled ?? false
+
+                StyledText {
+                    text: Translation.tr("Available devices")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.bold: true
+                    color: Appearance.colors.colSubtext
+                    Layout.fillWidth: true
+                }
+
+                // Available devices list
+                ColumnLayout {
+                    id: availableDevicesList
+                    Layout.fillWidth: true
+                    spacing: 4
+                    visible: root.availableDevices.length > 0
+
+                    Repeater {
+                        model: ScriptModel {
+                            values: root.availableDevices
+                        }
+                        delegate: BluetoothDeviceItem {
+                            required property BluetoothDevice modelData
+                            required property int index
+                            device: modelData
+                            isFirst: index === 0
+                            isLast: index === root.availableDevices.length - 1
+                            index: index
+                            totalCount: root.availableDevices.length
+                            isPairedSection: false
+                            Layout.fillWidth: true
+                        }
+                    }
+                }
+
+                // Searching / Empty placeholder for available devices
+                LoadingPlaceholder {
+                    id: availableDevicesPlaceholder
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 100
+                    visible: root.availableDevices.length === 0
+                    loading: Bluetooth.defaultAdapter?.discovering ?? false
+                    loadingText: Translation.tr("Searching...")
+                    emptyText: Translation.tr("No devices found")
+                    indicatorSize: 36
+                }
+
+                // Scan for devices button
+                RippleButton {
+                    id: scanForDevicesBtn
+                    Layout.fillWidth: true
+                    implicitHeight: 56
+                    buttonRadius: Appearance.rounding.large
+                    
+                    // Disabled when discovering is active
+                    enabled: !(Bluetooth.defaultAdapter?.discovering ?? false)
+                    opacity: enabled ? 1.0 : 0.5
+                    
+                    colBackground: scanMouseArea.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                   : scanMouseArea.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                   : Appearance.colors.colSurfaceContainerHighest
+                    
+                    Behavior on colBackground {
+                        ColorAnimation { duration: 150 }
+                    }
+                    
+                    Behavior on opacity {
+                        NumberAnimation { duration: 150 }
                     }
 
                     MouseArea {
                         id: scanMouseArea
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
+                        cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
-                            if (Bluetooth.defaultAdapter?.discovering) {
-                                Bluetooth.defaultAdapter?.stopDiscovery();
-                            } else {
+                            if (!Bluetooth.defaultAdapter?.discovering) {
                                 Bluetooth.defaultAdapter?.startDiscovery();
                             }
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 12
+
+                        MaterialSymbol {
+                            text: "search"
+                            iconSize: 24
+                            color: Appearance.colors.colOnSurface
+                        }
+
+                        StyledText {
+                            text: Translation.tr("Scan for devices")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: Appearance.colors.colOnSurface
                         }
                     }
                 }
             }
 
-            // Available devices list
-            ColumnLayout {
-                id: availableDevicesList
-                Layout.fillWidth: true
-                spacing: 8
-                visible: (Bluetooth.defaultAdapter?.enabled ?? false) && root.availableDevices.length > 0
-
-                Repeater {
-                    model: ScriptModel {
-                        values: root.availableDevices
-                    }
-                    delegate: BluetoothDeviceItem {
-                        required property BluetoothDevice modelData
-                        device: modelData
-                        Layout.fillWidth: true
-                        isPairedSection: false
-                    }
-                }
-            }
-
+            // Bluetooth disabled placeholder
             PagePlaceholder {
                 id: offPlaceholder
                 Layout.fillHeight: true
                 Layout.fillWidth: true
+                Layout.preferredHeight: 300
                 icon: "bluetooth_disabled"
                 title: Translation.tr("Bluetooth is off")
                 description: Translation.tr("Turn on Bluetooth to see devices")
                 shape: MaterialShape.Shape.Cookie7Sided
                 shown: !(Bluetooth.defaultAdapter?.enabled ?? false)
-            }
-
-            LoadingPlaceholder {
-                id: availableDevicesPlaceholder
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                visible: (Bluetooth.defaultAdapter?.enabled ?? false) && root.availableDevices.length === 0
-                loading: Bluetooth.defaultAdapter?.discovering ?? false
-                loadingText: Translation.tr("Searching...")
-                emptyText: Translation.tr("No devices found")
-                indicatorSize: 72
-            }
-
-            Item {
-                Layout.fillHeight: true
-                visible: !availableDevicesList.visible && !availableDevicesPlaceholder.visible && !offPlaceholder.visible
+                visible: shown
             }
         }
     }
 
-    WindowDialogSeparator {}
+    // Bottom Buttons Row (Details and Done)
     WindowDialogButtonRow {
-        DialogButton {
-            buttonText: Translation.tr("Details")
+        Layout.leftMargin: 0
+        Layout.rightMargin: 0
+        Layout.bottomMargin: -8
+        
+        // Details button with only a border and no fill
+        RippleButton {
+            id: detailsBtn
+            buttonRadius: Appearance.rounding.full
+            colBackground: "transparent"
+            colBackgroundHover: "transparent"
+            colRipple: "transparent"
+            implicitHeight: 36
+            implicitWidth: detailsText.implicitWidth + 48
+
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.width: 1
+                border.color: detailsBtn.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                radius: parent.buttonEffectiveRadius
+
+                Behavior on border.color {
+                    ColorAnimation { duration: 150 }
+                }
+            }
+
+            contentItem: StyledText {
+                id: detailsText
+                text: Translation.tr("Details")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 500
+                    })
+                color: detailsBtn.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
             onClicked: {
                 Quickshell.execDetached(["bash", "-c", `${Config.options.apps.bluetooth}`]);
                 GlobalStates.sidebarRightOpen = false;
@@ -249,8 +405,27 @@ WindowDialog {
             Layout.fillWidth: true
         }
 
-        DialogButton {
-            buttonText: Translation.tr("Done")
+        // Done button with fill
+        RippleButton {
+            id: doneBtn
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colPrimary
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            colRipple: Appearance.colors.colPrimaryActive
+            implicitHeight: 36
+            implicitWidth: doneText.implicitWidth + 48
+
+            contentItem: StyledText {
+                id: doneText
+                text: Translation.tr("Done")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({
+                        "wght": 700
+                    })
+                color: Appearance.colors.colOnPrimary
+            }
             onClicked: root.dismiss()
         }
     }

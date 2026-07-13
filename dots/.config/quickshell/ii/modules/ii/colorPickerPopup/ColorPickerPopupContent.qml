@@ -8,7 +8,7 @@ import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-import qs.modules.ii.bar.cards
+import qs.modules.ii.bar.shared.cards
 
 import "../../common/functions/colorNames.js" as ColorNames
 

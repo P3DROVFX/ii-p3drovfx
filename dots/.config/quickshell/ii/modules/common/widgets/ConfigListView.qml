@@ -149,9 +149,10 @@ Rectangle {
                 if (available[root.selectedCompIndex] == null)
                     return;
                 let newComp = initilizateComponent(available[root.selectedCompIndex]);
-                listModel.push(newComp);
-
-                root.updated(listModel);
+                // Create a NEW array reference so the binding in BarConfig.qml
+                // actually triggers QML property change notification to update
+                // the bar's Repeater models.
+                root.updated(listModel.concat([newComp]));
             }
         }
     }

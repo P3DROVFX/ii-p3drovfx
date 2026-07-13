@@ -85,17 +85,7 @@ ContentPage {
             }
 
 
-            ConfigSwitch {
-                buttonIcon: "lock"
-                text: Translation.tr("Show only when locked")
-                checked: Config.options.background.widgets.clock.showOnlyWhenLocked
-                onCheckedChanged: {
-                    Config.options.background.widgets.clock.showOnlyWhenLocked = checked;
-                }
-            }
-
             ContentSubsection {
-                visible: !Config.options.background.widgets.clock.showOnlyWhenLocked
                 title: Translation.tr("Clock style")
                 icon: "style"
                 Layout.fillWidth: true

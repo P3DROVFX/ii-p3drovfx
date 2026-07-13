@@ -97,6 +97,8 @@ Item {
                         font.pixelSize: Appearance.font.pixelSize.small
                         Layout.fillWidth: true
                         text: root.name
+                        elide: Text.ElideRight
+                        wrapMode: Text.NoWrap
                     }
 
                     StyledText {
@@ -106,6 +108,7 @@ Item {
                         Layout.preferredWidth: 30
                         horizontalAlignment: Text.AlignRight
                         text: Math.round(root.value * 100)
+                        wrapMode: Text.NoWrap
                     }
                 }
 

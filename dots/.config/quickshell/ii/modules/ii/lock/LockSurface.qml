@@ -9,6 +9,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
 
@@ -95,6 +96,23 @@ MouseArea {
     //         text: "[[ DEBUG BYPASS ]]"
     //     }
     // }
+
+    // Notifications (read-only)
+    Loader {
+        readonly property bool notifsOnTop: Config.options.lock.notifications.position.startsWith("top")
+        readonly property bool notifsOnLeft: Config.options.lock.notifications.position.endsWith("left")
+        anchors {
+            top: notifsOnTop ? parent.top : undefined
+            bottom: notifsOnTop ? undefined : parent.bottom
+            left: notifsOnLeft ? parent.left : undefined
+            right: notifsOnLeft ? undefined : parent.right
+            margins: 20
+        }
+        active: Config.options.lock.notifications.enable
+        scale: root.toolbarScale
+        opacity: root.toolbarOpacity
+        sourceComponent: LockNotifications {}
+    }
 
     // Main toolbar: password box
     Toolbar {
@@ -278,7 +296,7 @@ MouseArea {
         }
 
         // Keyboard layout (Fcitx)
-        Bar.SysTray {
+        SysTray {
             Layout.rightMargin: 10
             Layout.alignment: Qt.AlignVCenter
             showSeparator: false

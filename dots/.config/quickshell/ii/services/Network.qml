@@ -22,8 +22,10 @@ Singleton {
     property bool wifiConnecting: connectProc.running || connectWithPasswordProc.running
     property string lastWifiError: ""
     property int lastWifiExitCode: 0
+    property string activeConnectionName: ""
     property list<string> savedSsids: []
     property WifiAccessPoint wifiConnectTarget
+    property WifiAccessPoint wifiErrorTarget
     readonly property list<WifiAccessPoint> wifiNetworks: []
     readonly property WifiAccessPoint active: wifiNetworks.find(n => n.active) ?? null
     readonly property list<var> friendlyWifiNetworks: [...wifiNetworks].sort((a, b) => {
@@ -62,6 +64,8 @@ Singleton {
 
     function connectToWifiNetwork(accessPoint: WifiAccessPoint): void {
         accessPoint.askingPassword = false;
+        root.lastWifiExitCode = 0;
+        root.wifiErrorTarget = null;
         root.wifiConnectTarget = accessPoint;
         // We use this instead of `nmcli connection up SSID` because this also creates a connection profile
         connectProc.exec(["nmcli", "dev", "wifi", "connect", accessPoint.ssid]);
@@ -72,6 +76,10 @@ Singleton {
             disconnectProc.exec(["nmcli", "connection", "down", active.ssid]);
     }
 
+    function forgetWifiNetwork(ssid: string): void {
+        forgetProc.exec(["nmcli", "connection", "delete", ssid]);
+    }
+
     function openPublicWifiPortal() {
         Quickshell.execDetached(["xdg-open", "https://nmcheck.gnome.org/"]); // From some StackExchange thread, seems to work
     }
@@ -79,6 +87,9 @@ Singleton {
     function changePassword(network: WifiAccessPoint, password: string, username = ""): void {
         // TODO: enterprise wifi with username
         network.askingPassword = false;
+        root.lastWifiExitCode = 0;
+        root.wifiErrorTarget = null;
+        root.wifiConnectTarget = network;
         changePasswordProc.exec({
             "environment": {
                 "PASSWORD": password,
@@ -89,6 +100,14 @@ Singleton {
     }
 
     function connectWithPassword(ssid: string, password: string, username = "", hidden = false): void {
+        root.lastWifiExitCode = 0;
+        root.wifiErrorTarget = null;
+        for (let i = 0; i < friendlyWifiNetworks.length; i++) {
+            if (friendlyWifiNetworks[i].ssid === ssid) {
+                root.wifiConnectTarget = friendlyWifiNetworks[i];
+                break;
+            }
+        }
         connectWithPasswordProc.exec({
             "environment": {
                 "PASSWORD": password,
@@ -124,7 +143,13 @@ Singleton {
             }
         }
         onExited: (exitCode, exitStatus) => {
-            root.lastWifiExitCode = exitCode;
+            if (exitCode !== 0 && !root.lastWifiError.includes("Secrets were required")) {
+                root.lastWifiExitCode = exitCode;
+                root.wifiErrorTarget = root.wifiConnectTarget;
+            } else {
+                root.lastWifiExitCode = 0;
+                root.wifiErrorTarget = null;
+            }
             root.wifiConnectTarget.askingPassword = (exitCode !== 0);
             root.wifiConnectTarget = null;
         }
@@ -134,6 +159,13 @@ Singleton {
         id: disconnectProc
         stdout: SplitParser {
             onRead: getNetworks.running = true
+        }
+    }
+
+    Process {
+        id: forgetProc
+        onExited: {
+            getNetworks.running = true;
         }
     }
 
@@ -166,6 +198,12 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             root.lastWifiExitCode = exitCode;
             getNetworks.running = true;
+            if (exitCode !== 0) {
+                root.wifiErrorTarget = root.wifiConnectTarget;
+            } else {
+                root.wifiErrorTarget = null;
+            }
+            root.wifiConnectTarget = null;
         }
     }
 

@@ -39,17 +39,45 @@ AbstractQuickPanel {
         if (!cfg.pages || cfg.pages.length === 0)
             return [[]];
 
-        const first = cfg.pages[0];
+        var rawPages = cfg.pages;
+        const first = rawPages[0];
         // Detect format: if first element has a `type` property, it's the old flat
         // toggle list (legacy `toggles` renamed to `pages`). Wrap in a single page.
         // Otherwise it's the new pages-of-arrays format.
         if (first && typeof first === "object" && first.type !== undefined) {
             // Old flat format — wrap in single page
-            return [cfg.pages];
+            rawPages = [cfg.pages];
         }
 
-        // New format: pages is array of arrays
-        return cfg.pages;
+        const useThreeWay = Config.options.sidebar.quickToggles.useThreeWaySliders ?? false;
+        if (!useThreeWay)
+            return rawPages;
+
+        var mappedPages = [];
+        for (var p = 0; p < rawPages.length; p++) {
+            var page = rawPages[p];
+            if (!page) {
+                mappedPages.push([]);
+                continue;
+            }
+            var newPage = [];
+            for (var i = 0; i < page.length; i++) {
+                var item = page[i];
+                if (item && (item.type === "soundcoreAnc" || item.type === "powerProfile" || item.type === "keyboardBacklight")) {
+                    var newItem = {};
+                    for (var key in item) {
+                        newItem[key] = item[key];
+                    }
+                    newItem.size = 2;
+                    newItem.sizeW = 2;
+                    newPage.push(newItem);
+                } else {
+                    newPage.push(item);
+                }
+            }
+            mappedPages.push(newPage);
+        }
+        return mappedPages;
     }
 
     // Current page toggles

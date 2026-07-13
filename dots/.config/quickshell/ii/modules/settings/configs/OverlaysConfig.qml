@@ -34,6 +34,18 @@ Item {
                 }
             }
 
+            ConfigSpinBox {
+                icon: "zoom_in"
+                text: Translation.tr("Notification size (%)")
+                value: Config.options.notifications.zoomPercent
+                from: 50
+                to: 200
+                stepSize: 10
+                onValueChanged: {
+                    Config.options.notifications.zoomPercent = value;
+                }
+            }
+
             ConfigSwitch {
                 buttonIcon: "desktop_windows"
                 text: Translation.tr("Force specific monitor")

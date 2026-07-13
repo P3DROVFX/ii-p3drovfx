@@ -9,6 +9,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.shared
 
 Item {
     id: wrappedFrame
@@ -17,13 +18,13 @@ Item {
     property bool barVertical: Config.options.bar.vertical
     property bool barBottom: Config.options.bar.bottom
 
-    Bar.BarThemes {
+    BarThemes {
         id: barThemes
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     Loader {
-        active: Config.options.appearance.fakeScreenRounding == 3 && !GlobalStates.screenLocked
+        active: Config.options.appearance.fakeScreenRounding == 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && !GlobalStates.screenLocked
         sourceComponent: Variants {
             id: wrappedFrameVariant
             property var variantModel: Quickshell.screens
@@ -53,8 +54,10 @@ Item {
                     }
                 }
 
+                readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
+
                 Loader {
-                    active: !(!barVertical && !barBottom) // topFrame is visible
+                    active: hasBarOnThisMonitor && !(!barVertical && !barBottom) // topFrame is visible
                     sourceComponent: FrameSpaceReserver {
                         screen: monitorScope.modelData
                         anchors {
@@ -67,7 +70,7 @@ Item {
                     }
                 }
                 Loader {
-                    active: !(!barVertical && barBottom) // bottomFrame is visible
+                    active: hasBarOnThisMonitor && !(!barVertical && barBottom) // bottomFrame is visible
                     sourceComponent: FrameSpaceReserver {
                         screen: monitorScope.modelData
                         anchors {
@@ -80,7 +83,7 @@ Item {
                     }
                 }
                 Loader {
-                    active: !(barVertical && !barBottom) // leftFrame is visible
+                    active: hasBarOnThisMonitor && !(barVertical && !barBottom) // leftFrame is visible
                     sourceComponent: FrameSpaceReserver {
                         screen: monitorScope.modelData
                         anchors {
@@ -93,7 +96,7 @@ Item {
                     }
                 }
                 Loader {
-                    active: !(barVertical && barBottom) // rightFrame is visible
+                    active: hasBarOnThisMonitor && !(barVertical && barBottom) // rightFrame is visible
                     sourceComponent: FrameSpaceReserver {
                         screen: monitorScope.modelData
                         anchors {

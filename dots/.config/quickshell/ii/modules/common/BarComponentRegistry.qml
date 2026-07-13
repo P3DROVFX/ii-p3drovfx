@@ -41,7 +41,23 @@ Singleton {
             icon: "music_note",
             title: "Music player",
             styleConfigKey: "media",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "graphic_eq",
+                    value: "neural"
+                }
+            ],
             configPage: "MediaPlayerConfig.qml"
         },
         {
@@ -65,6 +81,11 @@ Singleton {
                     displayName: qsTr("Expressive"),
                     icon: "fluid_med",
                     value: "expressive"
+                },
+                {
+                    displayName: qsTr("Dock"),
+                    icon: "dock_to_left",
+                    value: "dock"
                 }
             ]
         },
@@ -104,6 +125,8 @@ Singleton {
             id: "system_tray",
             icon: "system_update_alt",
             title: "System tray",
+            styleConfigKey: "systray",
+            styleOptions: defaultStyleOptions,
             configPage: "SystemTrayConfig.qml"
         },
         {

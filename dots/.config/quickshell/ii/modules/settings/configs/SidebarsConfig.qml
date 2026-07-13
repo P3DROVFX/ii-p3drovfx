@@ -234,6 +234,15 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "music_note"
+            text: Translation.tr("Show media player in volume dialog")
+            checked: Config.options.sidebar.volumeDialogMediaWidget
+            onCheckedChanged: {
+                Config.options.sidebar.volumeDialogMediaWidget = checked;
+            }
+        }
+
         ContentSubsection {
             title: Translation.tr("Sidebar position")
             icon: "switch_right"
@@ -309,6 +318,19 @@ ContentPage {
             stepSize: 1
             onValueChanged: {
                 Config.options.sidebar.quickToggles.android.columns = value;
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.sidebar.quickToggles.style === "android"
+            buttonIcon: "tune"
+            text: Translation.tr("Use 2x1 Capsule Sliders for 3-State Toggles")
+            checked: Config.options.sidebar.quickToggles.useThreeWaySliders
+            onCheckedChanged: {
+                Config.options.sidebar.quickToggles.useThreeWaySliders = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Convert compatible 3-state widgets (ANC, Power Profiles, Keyboard Light) into 2x1 slide/swipe toggles.")
             }
         }
 

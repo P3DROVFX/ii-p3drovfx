@@ -10,7 +10,7 @@ import qs.modules.common.functions
 StyledImage {
     id: root
     required property var fileModelData
-    asynchronous: true
+    asynchronous: !source.toString().startsWith("image://icon/")
     fillMode: Image.PreserveAspectFit
 
     source: {

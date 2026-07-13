@@ -22,6 +22,8 @@ Singleton {
         entry: a
     }))
 
+    signal clipboardUpdated()
+
     // Computed filtered lists for 3-column clipboard panel
     readonly property var textEntries: entries.filter(e => !entryIsImage(e) && !isPinned(e))
     readonly property var imageEntries: entries.filter(e => entryIsImage(e) && !isPinned(e))
@@ -314,6 +316,7 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 root.entries = readProc.buffer
+                root.clipboardUpdated()
             } else {
                 console.error("[Cliphist] Failed to refresh with code", exitCode, "and status", exitStatus)
             }

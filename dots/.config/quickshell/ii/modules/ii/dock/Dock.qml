@@ -197,7 +197,7 @@ Scope {
                     color: Appearance.colors.colLayer0
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
-                    radius: Appearance.rounding.large
+                    radius: Appearance.rounding.windowRounding + 12
 
                     DropArea {
                         id: fileDropArea

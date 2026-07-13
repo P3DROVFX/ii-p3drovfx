@@ -38,6 +38,8 @@ Item {
     readonly property bool isWide: effectiveSizeW > 1
     readonly property bool isTall: effectiveSizeH > 1
     readonly property bool expandedSize: isWide
+    readonly property bool is3Way: (root.buttonData.type === "soundcoreAnc" || root.buttonData.type === "powerProfile" || root.buttonData.type === "keyboardBacklight")
+    readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
 
     // visualButton is reparented — use its native hovered (Button.hovered) so the
     // tooltip fires from the actual rendered widget, not the invisible grid placeholder
@@ -175,13 +177,13 @@ Item {
         verticalPadding: padding
 
         property bool useLayer2Bg: (root.altAction && root.expandedSize) || (root.isTall && !root.isWide)
-        colBackground: Appearance.colors.colLayer2
-        colBackgroundToggled: useLayer2Bg ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary
-        colBackgroundToggledHover: useLayer2Bg ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover
-        colBackgroundToggledActive: useLayer2Bg ? Appearance.colors.colLayer2Active : Appearance.colors.colPrimaryActive
+        colBackground: is3WaySlider ? "transparent" : Appearance.colors.colLayer2
+        colBackgroundToggled: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2 : Appearance.colors.colPrimary)
+        colBackgroundToggledHover: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2Hover : Appearance.colors.colPrimaryHover)
+        colBackgroundToggledActive: is3WaySlider ? "transparent" : (useLayer2Bg ? Appearance.colors.colLayer2Active : Appearance.colors.colPrimaryActive)
         readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
-        buttonRadius: (root.toggled || root.isTall) ? Appearance.rounding.large : fullRadius
-        buttonRadiusPressed: Appearance.rounding.normal
+        buttonRadius: is3WaySlider ? (height / 2) : ((root.toggled || root.isTall) ? Appearance.rounding.large : fullRadius)
+        buttonRadiusPressed: is3WaySlider ? (height / 2) : Appearance.rounding.normal
         property color colText: (root.toggled && !useLayer2Bg && enabled) ? Appearance.colors.colOnPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)
         property color colIcon: root.expandedSize ? ((root.toggled) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3) : colText
 
@@ -189,6 +191,7 @@ Item {
         altAction: root.altAction
 
         onClicked: {
+            if (is3WaySlider) return;
             if (root.expandedSize && root.altAction)
                 root.altAction();
             else
@@ -198,7 +201,8 @@ Item {
         contentItem: Loader {
             id: contentItemLoader
             anchors.fill: parent
-            sourceComponent: (root.isWide && root.isTall) ? ios2x2Layout
+            sourceComponent: is3WaySlider ? threeWaySliderLayout
+                           : (root.isWide && root.isTall) ? ios2x2Layout
                            : (root.isTall && !root.isWide) ? tallLayout
                            : standardLayout
         }
@@ -494,6 +498,15 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    Component {
+        id: threeWaySliderLayout
+        ThreeWaySlider {
+            anchors.fill: parent
+            toggleType: root.buttonData.type
+            toggleModel: root.toggleModel
         }
     }
 

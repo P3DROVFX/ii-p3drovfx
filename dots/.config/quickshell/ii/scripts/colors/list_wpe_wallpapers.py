@@ -32,7 +32,8 @@ def find_workshop_paths():
 def list_wallpapers():
     paths = find_workshop_paths()
     wallpapers = []
-    
+    seen_ids = set()
+
     for path in paths:
         subdirs = glob.glob(os.path.join(path, "*"))
         for subdir in subdirs:
@@ -41,7 +42,10 @@ def list_wallpapers():
             id_str = os.path.basename(subdir)
             if not id_str.isdigit():
                 continue
-            
+            if id_str in seen_ids:
+                continue
+            seen_ids.add(id_str)
+
             project_json_path = os.path.join(subdir, "project.json")
             if os.path.exists(project_json_path):
                 try:

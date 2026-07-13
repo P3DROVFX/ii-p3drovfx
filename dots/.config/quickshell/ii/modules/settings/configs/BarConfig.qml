@@ -169,6 +169,16 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "auto_fix"
+                text: Translation.tr("Auto spacing")
+                visible: Config.options.bar.cornerStyle === 3
+                checked: Config.options.bar.dynamicIslandLoadBalance
+                onCheckedChanged: {
+                    Config.options.bar.dynamicIslandLoadBalance = checked;
+                }
+            }
+
             ConfigSlider {
                 buttonIcon: "space_bar"
                 text: Translation.tr("Dynamic Island spacing")
@@ -184,16 +194,6 @@ Item {
                     } else {
                         Config.options.bar.dynamicIslandSpacingHorizontal = value;
                     }
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "balance"
-                text: Translation.tr("Automatic load balancing")
-                visible: Config.options.bar.cornerStyle === 3
-                checked: Config.options.bar.dynamicIslandLoadBalance
-                onCheckedChanged: {
-                    Config.options.bar.dynamicIslandLoadBalance = checked;
                 }
             }
 
@@ -215,6 +215,19 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "colorize"
+                text: Translation.tr("Expressive group color")
+                checked: Config.options.bar.expressiveGroupColor
+                visible: Config.options.bar.barGroupStyle !== 2
+                onCheckedChanged: {
+                    Config.options.bar.expressiveGroupColor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Use primary container color for pill/island group backgrounds")
+                }
+            }
+
             ContentSubsection {
                 title: Translation.tr("Bar background style")
                 icon: "format_paint"
@@ -228,8 +241,22 @@ Item {
                     options: [
                         { displayName: Translation.tr("Visible"),     icon: "visibility",        value: 1 },
                         { displayName: Translation.tr("Adaptive"),    icon: "masked_transitions", value: 2 },
-                        { displayName: Translation.tr("Transparent"), icon: "opacity",            value: 0 }
+                        { displayName: Translation.tr("Transparent"), icon: "opacity",            value: 0 },
+                        { displayName: Translation.tr("Islands"),     icon: "grid_view",         value: 3 }
                     ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Transparent bar blur/dim")
+                checked: Config.options.bar.transparentGlow
+                visible: Config.options.bar.barBackgroundStyle === 0
+                onCheckedChanged: {
+                    Config.options.bar.transparentGlow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Adds a soft blur and dim gradient under the transparent bar")
                 }
             }
 
@@ -242,6 +269,18 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Use expressive solid layer colors")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "filter_drama"
+                text: Translation.tr("Bar drop-shadow")
+                checked: Config.options.bar.dropShadow
+                onCheckedChanged: {
+                    Config.options.bar.dropShadow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows a soft drop shadow underneath the status bar")
                 }
             }
 
@@ -318,6 +357,7 @@ Item {
             }
         }
 
+
         // ── Top Left Brand Icon ───────────────────────────────────────────
         ContentSection {
             icon: "star"
@@ -353,6 +393,48 @@ Item {
                     var val = textField.text.trim();
                     if (val !== "" && textField.activeFocus) {
                         Config.options.bar.topLeftIcon = val;
+                    }
+                }
+            }
+        }
+
+        // ── Monitor Selection ─────────────────────────────────────────────
+        ContentSection {
+            icon: "monitor"
+            title: Translation.tr("Monitor Selection")
+
+            ConfigSwitch {
+                buttonIcon: "desktop_windows"
+                text: Translation.tr("Only show bar on single monitor")
+                checked: Config.options.bar.onlyShowOnSingleMonitor
+                onCheckedChanged: {
+                    Config.options.bar.onlyShowOnSingleMonitor = checked;
+                    if (checked && Config.options.bar.singleMonitorName === "" && Quickshell.screens.length > 0) {
+                        Config.options.bar.singleMonitorName = Quickshell.screens[0].name;
+                    }
+                }
+                StyledToolTip {
+                    text: Translation.tr("Display the bar on only one chosen monitor instead of all monitors")
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Selected Monitor")
+                icon: "settings_input_hdmi"
+                visible: Config.options.bar.onlyShowOnSingleMonitor
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.bar.singleMonitorName
+                    onSelected: newValue => {
+                        Config.options.bar.singleMonitorName = newValue;
+                    }
+                    options: {
+                        let list = [];
+                        for (let i = 0; i < Quickshell.screens.length; i++) {
+                            let name = Quickshell.screens[i].name;
+                            list.push({ displayName: name, icon: "desktop_windows", value: name });
+                        }
+                        return list;
                     }
                 }
             }

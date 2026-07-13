@@ -89,7 +89,10 @@ Scope {
                         Timer {
                             id: exitAnimTimer
                             interval: root.animDurationExit + 30
-                            onTriggered: root.exitAnimating = false
+                            onTriggered: {
+                                root.exitAnimating = false;
+                                searchWidget.cancelSearch();
+                            }
                         }
 
                         Connections {
@@ -131,7 +134,7 @@ Scope {
                             left: true
                             right: true
                         }
-                        property int barSize: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+                        property int barSize: Config.options.bar.vertical ? Appearance.sizes.verticalBarWindowWidth : Appearance.sizes.barHeight
                         property int margin: isZoomInStyle ? barSize : barSize * 2
                         margins {
                             top: -margin * 2
@@ -194,9 +197,11 @@ Scope {
 
                             Item { // Wrapper for animation
                                 id: searchWidgetWrapper
-                                implicitHeight: searchWidget.implicitHeight
-                                implicitWidth: searchWidget.implicitWidth
+                                readonly property bool isNotchMode: Config.ready && Config.options.bar.dynamicIsland.notchMode.enable
+                                implicitHeight: isNotchMode ? GlobalStates.activeSearchHeight : searchWidget.implicitHeight
+                                implicitWidth: isNotchMode ? GlobalStates.activeSearchWidth : searchWidget.implicitWidth
                                 z: 999
+                                visible: !isNotchMode
 
                                 // Slide from absolute top of screen — offset large enough to hide above top edge
                                 readonly property real slideOffset: -(implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
@@ -205,7 +210,7 @@ Scope {
                                 property real slideY: slideOffset
                                 property real slideOpacity: 0.0
 
-                                opacity: slideOpacity
+                                opacity: isNotchMode ? 0.0 : slideOpacity
                                 transform: Translate {
                                     y: searchWidgetWrapper.slideY
                                 }

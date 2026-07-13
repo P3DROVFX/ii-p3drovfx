@@ -6,7 +6,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 Image {
-    asynchronous: true
+    asynchronous: !source.toString().startsWith("image://icon/")
     retainWhileLoading: true
     mipmap: true
     smooth: true

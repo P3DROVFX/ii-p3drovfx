@@ -217,11 +217,20 @@ for ((i=0;i<${#ARGS[@]};i++)); do
     fi
 done
 IS_OBS_RECORDING=0
-if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
-    STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
-    if [[ "$STATUS" == "active" ]]; then
-        IS_OBS_RECORDING=1
+if [[ "$REC_SERVICE" == "obs" ]]; then
+    if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
+        STATUS=$(python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" status 2>/dev/null)
+        if [[ "$STATUS" == "active" ]]; then
+            IS_OBS_RECORDING=1
+        fi
     fi
+fi
+
+if pgrep wf-recorder > /dev/null; then
+    notify-send "Recording Stopped" "Stopped" -a 'Recorder' &
+    updatestate false
+    pkill wf-recorder &
+    exit 0
 fi
 
 if [[ $IS_OBS_RECORDING -eq 1 ]]; then
@@ -229,13 +238,6 @@ if [[ $IS_OBS_RECORDING -eq 1 ]]; then
     python3 "/home/pedro/.config/quickshell/ii/scripts/videos/obs_control.py" stop
     sleep 1.5
     pkill -x "obs" || pkill -f "com.obsproject.Studio"
-    exit 0
-fi
-
-if pgrep wf-recorder > /dev/null; then
-    notify-send "Recording Stopped" "Stopped" -a 'Recorder' &
-    updatestate false
-    pkill wf-recorder &
     exit 0
 fi
 

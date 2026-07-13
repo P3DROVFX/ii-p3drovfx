@@ -1091,6 +1091,13 @@ Singleton {
                 icon: "translate",
                 isBuiltin: true
             },
+            {
+                names: ["material symbols", "icons", "material", "symbols"],
+                prefix: Config.options.search.prefix.materialSymbols,
+                label: Translation.tr("Material Symbols"),
+                icon: "font_download",
+                isBuiltin: true
+            },
         ];
 
         const queryLower = root.query.toLowerCase();

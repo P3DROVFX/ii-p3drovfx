@@ -40,6 +40,7 @@ Rectangle {
         acceptedButtons: Qt.AllButtons
         hoverEnabled: true
         onPressed: root.dismiss()
+        onWheel: (wheel) => wheel.accepted = true
     }
 
     Rectangle {
@@ -72,6 +73,7 @@ Rectangle {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
             hoverEnabled: true
+            onWheel: (wheel) => wheel.accepted = true
         }
 
         ColumnLayout {

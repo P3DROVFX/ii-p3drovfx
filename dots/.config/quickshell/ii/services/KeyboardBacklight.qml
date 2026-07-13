@@ -15,6 +15,7 @@ Singleton {
     property string deviceName: ""
     property bool available: false
     property bool ready: false
+    property bool initialValueLoaded: false
 
     readonly property int levels: maxValue + 1
     readonly property real percentage: maxValue > 0 ? (currentValue / maxValue) * 100 : 0
@@ -61,7 +62,7 @@ Singleton {
 
     Process {
         id: detectProc
-        command: ["sh", "-c", "ls /sys/class/leds/ 2>/dev/null | grep kbd_backlight | head -1"]
+        command: ["sh", "-c", "ls /sys/class/leds/ 2>/dev/null | grep -E 'kbd_backlight|chromeos::kbd_backlight|cros_ec::kbd_backlight' | head -1"]
         stdout: SplitParser {
             onRead: data => {
                 const device = data.trim()
@@ -96,6 +97,35 @@ Singleton {
         id: setProc
         onExited: {
             root.refresh()
+        }
+    }
+
+    FileView {
+        id: brightnessFileView
+        path: root.deviceName ? `/sys/class/leds/${root.deviceName}/brightness` : ""
+    }
+
+    Timer {
+        id: pollTimer
+        interval: 150
+        running: root.available && root.deviceName !== ""
+        repeat: true
+        onTriggered: {
+            brightnessFileView.reload()
+            const valStr = brightnessFileView.text().trim()
+            if (valStr.length > 0) {
+                const val = parseInt(valStr)
+                if (!isNaN(val) && val !== root.currentValue) {
+                    root.currentValue = val
+                }
+            } else {
+                // If direct read fails (e.g. permission issue), fallback to brightnessctl via refresh()
+                // and slow down the polling to 2 seconds to save CPU.
+                if (pollTimer.interval === 150) {
+                    pollTimer.interval = 2000
+                }
+                root.refresh()
+            }
         }
     }
 

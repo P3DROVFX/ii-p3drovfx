@@ -19,6 +19,8 @@ Item {
     property real maxLimit: 1.0
     property real from: 0.0
     property real to: 1.0
+    property bool useProgressBar: false
+    property int stepCount: 0
 
     signal valueUpdateRequested(real newValue)
 
@@ -140,6 +142,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: root.sliderPadding
                 clip: true
+                visible: !root.useProgressBar
 
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -194,6 +197,21 @@ Item {
                         GradientStop { position: 1.0 - root.maskEdgePosition; color: root.maskEdgeColor }
                     }
                 }
+            }
+
+            // Progress Bar Fill
+            Rectangle {
+                id: progressFill
+                visible: root.useProgressBar
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.margins: root.sliderPadding
+                width: Math.max(0, (parent.width - 2 * root.sliderPadding) * root.animatedValue)
+                radius: root.sliderCornerRadius
+                color: root.value > root.maxLimit ? root.shapeBgColorError : Appearance.colors.colPrimary
+
+                Behavior on color { ColorAnimation { duration: 150 } }
             }
         }
 

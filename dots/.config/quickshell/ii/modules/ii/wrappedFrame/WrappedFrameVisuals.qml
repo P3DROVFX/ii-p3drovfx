@@ -4,6 +4,7 @@ import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.shared
 
 Item {
     id: visualsRoot
@@ -27,24 +28,27 @@ Item {
     property real leftSidebarMaskOffset: 0
     property real rightSidebarMaskOffset: 0
 
+    property real sidebarTopOffset: 0
+    property real sidebarBottomOffset: 0
+
     readonly property real leftSidebarOffset: (GlobalStates.animatedLeftSidebarWidth > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
     readonly property real rightSidebarOffset: (GlobalStates.animatedRightSidebarWidth > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? GlobalStates.animatedRightSidebarWidth : 0
 
     readonly property real staticLeftSidebarOffset: (leftSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? leftSidebarMaskOffset : 0
     readonly property real staticRightSidebarOffset: (rightSidebarMaskOffset > 0 && visualsRoot.screen && visualsRoot.screen.name === GlobalStates.activeRightSidebarMonitor) ? rightSidebarMaskOffset : 0
 
-    readonly property real staticTotalLeftPush: staticLeftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
-    readonly property real staticTotalRightPush: staticRightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real staticTotalLeftPush: staticLeftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real staticTotalRightPush: staticRightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
 
     // Consolidated pushes that account for both the sidebar AND the vertical bar (if present and visible)
-    readonly property real totalLeftPush: leftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
-    readonly property real totalRightPush: rightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real totalLeftPush: leftSidebarOffset + (!hasLeftFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
+    readonly property real totalRightPush: rightSidebarOffset + (!hasRightFrame ? Math.max(0, Appearance.sizes.verticalBarWindowWidth - visualsRoot.vBarHiddenAmount) : 0)
 
     // Consolidated pushes for horizontal bars
     readonly property real totalTopPush: !hasTopFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) : 0
     readonly property real totalBottomPush: !hasBottomFrame ? Math.max(0, Appearance.sizes.barHeight - visualsRoot.hBarHiddenAmount) : 0
 
-    Bar.BarThemes {
+    BarThemes {
         id: barThemes
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
@@ -101,8 +105,8 @@ Item {
             bottom: parent.bottom
             left: parent.left
             leftMargin: (!hasLeftFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.leftSidebarOffset
-            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
-            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            topMargin: (visualsRoot.leftSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : (hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush))
+            bottomMargin: (visualsRoot.leftSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : (hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush))
         }
         width: frameThickness
         color: visualsRoot.baseColor
@@ -116,8 +120,8 @@ Item {
             bottom: parent.bottom
             right: parent.right
             rightMargin: (!hasRightFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.rightSidebarOffset
-            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
-            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            topMargin: (visualsRoot.rightSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : (hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush))
+            bottomMargin: (visualsRoot.rightSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : (hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush))
         }
         width: frameThickness
         color: visualsRoot.baseColor
@@ -214,8 +218,8 @@ Item {
             bottom: parent.bottom
             left: parent.left
             leftMargin: (!hasLeftFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.staticLeftSidebarOffset
-            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
-            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            topMargin: (visualsRoot.staticLeftSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : (hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush))
+            bottomMargin: (visualsRoot.staticLeftSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : (hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush))
         }
         width: frameThickness
     }
@@ -227,8 +231,8 @@ Item {
             bottom: parent.bottom
             right: parent.right
             rightMargin: (!hasRightFrame) ? -Math.max(0, frameThickness - visualsRoot.vBarHiddenAmount) : visualsRoot.staticRightSidebarOffset
-            topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
-            bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
+            topMargin: (visualsRoot.staticRightSidebarOffset > 0 && !visualsRoot.barBottom) ? visualsRoot.sidebarTopOffset : (hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush))
+            bottomMargin: (visualsRoot.staticRightSidebarOffset > 0 && visualsRoot.barBottom) ? visualsRoot.sidebarBottomOffset : (hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush))
         }
         width: frameThickness
     }

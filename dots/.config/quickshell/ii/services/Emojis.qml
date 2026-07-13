@@ -16,10 +16,18 @@ Singleton {
 	property string lineBeforeData: "### DATA ###"
     property bool levenshteinSearch: (Config.options?.search.levenshtein ?? false) || (Config.options?.search.algorithm === "levenshtein")
     property list<var> list
-    readonly property var preparedEntries: list.map(a => ({
-        name: Fuzzy.prepare(`${a}`),
-        entry: a
-    }))
+    property var preparedEntries: []
+    
+    onListChanged: {
+        const newList = list;
+        const startTime = Date.now();
+        root.preparedEntries = newList.map(a => ({
+            name: Fuzzy.prepare(`${a}`),
+            entry: a
+        }));
+        console.log(`[Emojis] Prepared ${root.preparedEntries.length} entries in ${Date.now() - startTime}ms`)
+    }
+    
     function fuzzyQuery(search: string): var {
         if (!search || search.trim() === "") {
             return root.list;
@@ -56,6 +64,7 @@ Singleton {
         }
         const emojis = lines.slice(dataIndex + 1).filter(line => line.trim() !== "")
         root.list = emojis.map(line => line.trim())
+        console.log(`[Emojis] Loaded ${root.list.length} emojis`)
     }
 
     FileView { 

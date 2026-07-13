@@ -317,7 +317,7 @@ Item {
                     property var address: `0x${modelData.HyprlandToplevel.address}`
                     windowRounding: root.windowRounding
                     toplevel: modelData
-                    monitorData: this.monitor
+                    monitorData: window.monitor
                     scale: root.scaleRatio
                     widgetMonitor: HyprlandData.monitors.find(m => m.id == root.monitor.id) // used by overview window
                     windowData: windowByAddress[address]
@@ -401,8 +401,8 @@ Item {
 
                     property int wsCount: wsWindowsSorted.length || 1
 
-                    scrollWidth: windowData.size[0] * root.scaleRatio
-                    scrollHeight: windowData.size[1] * root.scaleRatio
+                    scrollWidth: windowData.size[0] * root.scaleRatio * window.widthRatio
+                    scrollHeight: windowData.size[1] * root.scaleRatio * window.heightRatio
 
                     scrollX: windowData.floating ? xOffset + xWithinWorkspaceWidget : calculateXPos(extraScrollX)
                     scrollY: windowData.floating ? yOffset + yWithinWorkspaceWidget : yOffset
@@ -412,8 +412,8 @@ Item {
                     property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
                     xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex - root.normalWindowOffset
                     yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
-                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (monitor?.x ?? 0) - (monitorData?.reserved?.[0] ?? 0)) * root.scaleRatio, 0) - root.workspaceImplicitWidth / 2
-                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (monitor?.y ?? 0) - (monitorData?.reserved?.[1] ?? 0)) * root.scaleRatio, 0)
+                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (window.monitor?.x ?? 0) - (window.monitor?.reserved?.[0] ?? 0)) * window.widthRatio * root.scaleRatio, 0) - root.workspaceImplicitWidth / 2
+                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (window.monitor?.y ?? 0) - (window.monitor?.reserved?.[1] ?? 0)) * window.heightRatio * root.scaleRatio, 0)
 
                     property int hoveringDir: 0 // 0: none, 1: right, 2: left
                     property bool hovering: false

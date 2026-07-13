@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Services.UPower
@@ -9,6 +10,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.shared
 
 Item { // Bar content region
     id: root
@@ -17,10 +19,10 @@ Item { // Bar content region
     property int monitorIndex
     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
     property bool hasActiveWindows: false
-    property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+    property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
     Connections {
-        enabled: Config.options.bar.barBackgroundStyle === 2
+        enabled: Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 3
         target: HyprlandData
         function onWindowListChanged() {
             const monitorName = root.screen ? root.screen.name : "";
@@ -54,130 +56,220 @@ Item { // Bar content region
     readonly property var centerList: centerIdx === -1 ? fullModel.slice() : [fullModel[centerIdx]]
     readonly property var rightList: centerIdx === -1 ? root._emptyLayout : fullModel.slice(centerIdx + 1)
 
-    // Background shadow
-    Loader {
-        active: root.showBarBackground && Config.options.bar.cornerStyle === 1 && Config.options.bar.floatStyleShadow
-        anchors.fill: barBackground
-        sourceComponent: StyledRectangularShadow {
-            anchors.fill: undefined // The loader's anchors act on this, and this should not have any anchor
-            target: barBackground
-        }
-    }
-    Bar.BarThemes {
+
+    BarThemes {
         id: barThemes
     }
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
+    readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
     readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property bool isHugIslandMode: root.isIslandMode && Config.options.bar.cornerStyle === 0
+    readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
-    // === Transparent bar background: simple color gradient (no blur) ===
-    // Uses a semi-transparent solid color that fades from a subtle tint at the
-    // screen edge to fully transparent at the content edge.
-    Rectangle {
-        id: transparentGradientLayer
-        z: -11
-        anchors.fill: parent
-        visible: Config.options.bar.barBackgroundStyle === 0
-        readonly property bool barAtLeft: !Config.options.bar.bottom
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: transparentGradientLayer.barAtLeft ? 0.0 : 1.0; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.30) }
-            GradientStop { position: transparentGradientLayer.barAtLeft ? 1.0 : 0.0; color: "transparent" }
-        }
-    }
+    property color islandFillColor: Config.options.bar.expressiveColors
+        ? root.activeTheme.barBackground
+        : Appearance.colors.colLayer0
 
-    Item {
-        id: backgroundGroup
+
+
+    // Background
+    Rectangle {
+        id: barBackground
         z: -10
-        anchors.fill: parent
+        anchors {
+            fill: root.isDynamicIsland ? undefined : parent
+            centerIn: root.isDynamicIsland ? parent : undefined
+            margins: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+        }
 
         property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
         Behavior on actualColor {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(backgroundGroup)
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(barBackground)
         }
 
-        opacity: actualColor.a
-        layer.enabled: actualColor.a > 0.0 && actualColor.a < 1.0
+        opacity: 1.0
 
-        // Background
-        Rectangle {
-            id: barBackground
-            anchors {
-                fill: root.isDynamicIsland ? undefined : parent
-                centerIn: root.isDynamicIsland ? parent : undefined
-            }
-
-            readonly property int islandSectionSpacing: {
-                const screenHeight = root.screen ? root.screen.height : 1080;
-                const frameThick = root.frameThickness;
-                const maxAllowedHeight = screenHeight - 2 * frameThick - 64; // 32px padding on top/bottom
-                
-                const topH = topSectionLayout.implicitHeight;
-                const centerH = centerSectionLayout.implicitHeight;
-                const bottomH = bottomSectionLayout.implicitHeight;
-                
-                const remaining = maxAllowedHeight - 24 - topH - centerH - bottomH;
-                
-                if (Config.options.bar.dynamicIslandLoadBalance) {
-                    return Math.min(60, Math.max(8, Math.floor(remaining / 2)));
-                } else {
-                    const preferred = Config.options.bar.dynamicIslandSpacingVertical ?? 16;
-                    const maxSpacing = Math.max(8, Math.floor(remaining / 2));
-                    return Math.min(preferred, maxSpacing);
-                }
-            }
-
-            width: parent.width
-            height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
-
-            color: Qt.rgba(backgroundGroup.actualColor.r, backgroundGroup.actualColor.g, backgroundGroup.actualColor.b, 1.0)
-            property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.windowRounding : 0)
-
-            // In vertical mode (Left/Right), the edges touching the screen are left/right.
-            // For Left bar (bottom: false): left edges are 0.
-            // For Right bar (bottom: true): right edges are 0.
-            topLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-            bottomLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-            topRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-            bottomRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
-
-            border.width: (Config.options.bar.cornerStyle === 1) ? 1 : 0
-            border.color: root.showBarBackground ? Appearance.colors.colLayer0Border : "transparent"
-
-            Behavior on height {
-                enabled: !root.isDynamicIsland
-                NumberAnimation {
-                    duration: 450
-                    easing.type: Easing.OutExpo
-                }
+        readonly property int islandSectionSpacing: {
+            const screenHeight = root.screen ? root.screen.height : 1080;
+            const frameThick = root.frameThickness;
+            const maxAllowedHeight = screenHeight - 2 * frameThick - 64; // 32px padding on top/bottom
+            
+            const topH = topSectionLayout.implicitHeight;
+            const centerH = centerSectionLayout.implicitHeight;
+            const bottomH = bottomSectionLayout.implicitHeight;
+            
+            const remaining = maxAllowedHeight - 24 - topH - centerH - bottomH;
+            
+            if (Config.options.bar.dynamicIslandLoadBalance) {
+                return Math.min(60, Math.max(8, Math.floor(remaining / 2)));
+            } else {
+                const preferred = Config.options.bar.dynamicIslandSpacingVertical ?? 16;
+                const maxSpacing = Math.max(8, Math.floor(remaining / 2));
+                return Math.min(preferred, maxSpacing);
             }
         }
 
-        // Concave Corners (HUD Mode)
-        RoundCorner {
-            anchors.bottom: barBackground.top
-            anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
-            anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-            implicitSize: barBackground.baseRadius
-            extendVertical: true
-            color: barBackground.color
-            corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
-            visible: root.isDynamicIsland && root.showBarBackground
-            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        width: parent.width
+        height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
+
+        color: root.isIslandMode ? "transparent" : barBackground.actualColor
+        property real baseRadius: root.isDynamicIsland ? width / 2 : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
+
+        // In vertical mode (Left/Right), the edges touching the screen are left/right.
+        // For Left bar (bottom: false): left edges are 0.
+        // For Right bar (bottom: true): right edges are 0.
+        topLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+        bottomLeftRadius: (!Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+        topRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+        bottomRightRadius: (Config.options.bar.bottom && (root.isDynamicIsland || Config.options.appearance.fakeScreenRounding === 4)) ? 0 : baseRadius
+
+        border.width: 0
+        border.color: "transparent"
+
+        Behavior on height {
+            enabled: !root.isDynamicIsland
+            NumberAnimation {
+                duration: 450
+                easing.type: Easing.OutExpo
+            }
         }
-        RoundCorner {
-            anchors.top: barBackground.bottom
-            anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
-            anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
-            implicitSize: barBackground.baseRadius
-            extendVertical: true
-            color: barBackground.color
-            corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
-            visible: root.isDynamicIsland && root.showBarBackground
-            anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-            anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+
+        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowHorizontalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: 0
+            shadowBlur: 1.0
+        }
+    }
+
+    // Concave Corners (HUD Mode)
+    RoundCorner {
+        anchors.bottom: barBackground.top
+        anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
+        anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
+        implicitSize: barBackground.baseRadius
+        extendHorizontal: false
+        extendVertical: false
+        color: barBackground.color
+        corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
+        visible: root.isDynamicIsland && root.showBarBackground
+        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+    }
+    RoundCorner {
+        anchors.top: barBackground.bottom
+        anchors.left: Config.options.bar.bottom ? undefined : barBackground.left
+        anchors.right: Config.options.bar.bottom ? barBackground.right : undefined
+        implicitSize: barBackground.baseRadius
+        extendHorizontal: false
+        extendVertical: false
+        color: barBackground.color
+        corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
+        visible: root.isDynamicIsland && root.showBarBackground
+        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
+        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+    }
+
+    // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
+    // Pill islands for Float/Rect styles.
+    Rectangle {
+        id: topIsland
+        z: -9
+        visible: root.isIslandMode && !root.isHugIslandMode && (Config.options.bar.layouts.left || []).length > 0
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: topSection.top; topMargin: -6
+            bottom: topSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(topIsland)
+        }
+    }
+
+    Rectangle {
+        id: middleIsland
+        z: -9
+        visible: root.isIslandMode && !root.isHugIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: middleSection.top; topMargin: -6
+            bottom: middleSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(middleIsland)
+        }
+    }
+
+    Rectangle {
+        id: bottomIsland
+        z: -9
+        visible: root.isIslandMode && !root.isHugIslandMode && (Config.options.bar.layouts.right || []).length > 0
+        anchors {
+            left: parent.left; leftMargin: 4
+            right: parent.right; rightMargin: 4
+            top: bottomSection.top; topMargin: -6
+            bottom: bottomSection.bottom; bottomMargin: -6
+        }
+        color: root.islandFillColor
+        radius: Appearance.rounding.full
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(bottomIsland)
+        }
+    }
+
+    // Hug-style islands: connected to the screen edge with concave transitions.
+    HugIslandGroup {
+        id: topHugIsland
+        z: -9
+        visible: root.isHugIslandMode && (Config.options.bar.layouts.left || []).length > 0
+        edge: root.barEdge
+        role: "first"
+        fillColor: barBackground.actualColor
+        anchors {
+            top: parent.top
+            bottom: topSection.bottom; bottomMargin: -6
+            left: parent.left
+            right: parent.right
+        }
+    }
+
+    HugIslandGroup {
+        id: middleHugIsland
+        z: -9
+        visible: root.isHugIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
+        edge: root.barEdge
+        role: "middle"
+        fillColor: barBackground.actualColor
+        anchors {
+            top: middleSection.top; topMargin: -6
+            bottom: middleSection.bottom; bottomMargin: -6
+            left: parent.left
+            right: parent.right
+        }
+    }
+
+    HugIslandGroup {
+        id: bottomHugIsland
+        z: -9
+        visible: root.isHugIslandMode && (Config.options.bar.layouts.right || []).length > 0
+        edge: root.barEdge
+        role: "last"
+        fillColor: barBackground.actualColor
+        anchors {
+            top: bottomSection.top; topMargin: -6
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
         }
     }
 
@@ -244,7 +336,7 @@ Item { // Bar content region
 
         ColumnLayout { // Bottom items
             id: bottomSectionLayout
-            spacing: 8
+            spacing: 4
             Repeater {
                 model: Config.options.bar.layouts.right
                 delegate: Bar.BarComponent {
@@ -267,7 +359,7 @@ Item { // Bar content region
         }
         implicitWidth: Appearance.sizes.baseVerticalBarWidth
         height: (root.height - middleSection.height) / 2
-        width: Appearance.sizes.verticalBarWidth
+        width: Appearance.sizes.verticalBarWindowWidth
 
         onScrollDown: if (Config.options.bar.enableBrightnessScroll) Brightness.decreaseBrightness()
         onScrollUp: if (Config.options.bar.enableBrightnessScroll) Brightness.increaseBrightness()
@@ -278,24 +370,13 @@ Item { // Bar content region
         }
     }
 
-    Item {
-        id: topStopper
-        visible: !root.isDynamicIsland
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
-            topMargin: Math.ceil(Appearance.rounding.screenRounding / 2.5)
-        }
-        height: 1
-    }
-
     ColumnLayout { // Top section
         id: topSection
         visible: !root.isDynamicIsland
         anchors {
-            top: topStopper.bottom
-            horizontalCenter: parent.horizontalCenter
+            top: barBackground.top
+            topMargin: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
+            horizontalCenter: barBackground.horizontalCenter
         }
         spacing: 4
 
@@ -317,8 +398,19 @@ Item { // Bar content region
             horizontalCenter: parent.horizontalCenter
             verticalCenter: parent.verticalCenter
         }
+        readonly property real middleChildrenHeight: {
+            const ch = centerCenter.implicitHeight;
+            const lh = middleLeftColumn.implicitHeight;
+            const rh = middleRightColumn.implicitHeight;
+            let total = ch;
+            if (lh > 0) total += lh + 4;
+            if (rh > 0) total += rh + 4;
+            return Math.max(1, total);
+        }
+        height: middleChildrenHeight
 
         ColumnLayout {
+            id: middleLeftColumn
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 bottom: centerCenter.top
@@ -354,6 +446,7 @@ Item { // Bar content region
         }
 
         ColumnLayout {
+            id: middleRightColumn
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 top: centerCenter.bottom
@@ -376,10 +469,11 @@ Item { // Bar content region
         id: bottomSection
         visible: !root.isDynamicIsland
         anchors {
-            horizontalCenter: parent.horizontalCenter
-            bottom: bottomStopper.top
+            horizontalCenter: barBackground.horizontalCenter
+            bottom: barBackground.bottom
+            bottomMargin: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
         }
-        spacing: 8
+        spacing: 4
 
         Repeater {
             id: rightRepeater
@@ -390,18 +484,6 @@ Item { // Bar content region
                 barSection: 2
             }
         }
-    }
-
-    Item {
-        id: bottomStopper
-        visible: !root.isDynamicIsland
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-            bottomMargin: Math.ceil(Appearance.rounding.screenRounding / 2.5)
-        }
-        height: 1
     }
 
     FocusedScrollMouseArea { // Bottom section | scroll to change volume

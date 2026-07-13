@@ -14,7 +14,7 @@ Item {
     property real tintAmount: 0
     property real shadowOpacity: 0.55
     property int blurAmount: 24
-    property int verticalOffset: 6
+    property int verticalOffset: 2
 
     readonly property color _color: tintAmount > 0
         ? Qt.rgba(
@@ -32,9 +32,10 @@ Item {
         bodyHeight: root.bodyHeight
         topRadius: root.topRadius
         bottomRadius: root.bottomRadius
-        fillColor: root._color
+        fillColor: "#000000"
         visible: false
         layer.enabled: true
+        opacity: 0.5
     }
 
     MultiEffect {

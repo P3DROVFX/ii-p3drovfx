@@ -5,13 +5,14 @@ import qs.services
 import QtQuick
 import QtQuick.Layouts
 
-Rectangle {
+Item {
     id: root
     required property var device
     property bool isFirst: false
     property bool isLast: false
     property bool isPairedSection: true
-    property bool hovered: itemMouseArea.containsMouse
+    property int index: 0
+    property int totalCount: 0
     property bool isProcessing: false
 
     Connections {
@@ -23,378 +24,452 @@ Rectangle {
 
     property bool isActive: root.device?.connected ?? false
 
-    implicitHeight: contentColumn.implicitHeight + 32
-    color: {
-        let base = isActive ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer;
-        if (root.isProcessing)
-            return ColorUtils.mix(base, Appearance.colors.colOutline, 0.15);
-        if (itemMouseArea.containsPress)
-            return isActive ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive;
-        if (hovered)
-            return isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover;
-        return base;
-    }
+    implicitHeight: 56
+    height: implicitHeight
 
-    Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-    }
+    readonly property real rFull: height / 2
+    readonly property real rOuter: Appearance?.rounding?.large ?? 23
+    readonly property real rInner: Appearance?.rounding?.normal ?? 17
 
-    topLeftRadius: (root.isPairedSection && !root.isFirst) ? 0 : 24
-    topRightRadius: (root.isPairedSection && !root.isFirst) ? 0 : 24
-    bottomLeftRadius: (root.isPairedSection && !root.isLast) ? 0 : 24
-    bottomRightRadius: (root.isPairedSection && !root.isLast) ? 0 : 24
-
-    MouseArea {
-        id: itemMouseArea
+    // Sliding Flickable for Connected/Paired devices
+    Flickable {
+        id: flick
+        visible: root.isPairedSection
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        enabled: !root.isProcessing
-    }
+        contentWidth: flick.width * 2 + 8
+        contentHeight: flick.height
+        interactive: false
+        clip: true
 
-    ColumnLayout {
-        id: contentColumn
-        anchors {
-            fill: parent
-            margins: 16
-            leftMargin: 24
-            rightMargin: 24
+        property bool showActions: false
+        contentX: showActions ? (flick.width + 8) : 0
+
+        Behavior on contentX {
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutExpo
+            }
         }
-        spacing: 10
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+        Row {
+            height: flick.height
+            spacing: 8
 
-            // Device icon container
-            Item {
-                width: 48
-                height: 48
+            // PAGE 1: Main Connected Info & Toggle button
+            RowLayout {
+                width: flick.width
+                height: flick.height
+                spacing: 8
 
-                // Device icon
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    iconSize: 48
-                    text: Icons.getBluetoothDeviceMaterialSymbol(root.device?.icon || "")
-                    color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-
-                    scale: root.isProcessing ? 0 : 1
-                    opacity: root.isProcessing ? 0 : 1
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.5
+                // Device Info Card
+                Rectangle {
+                    id: mainInfoCard
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: rFull
+                    
+                    color: {
+                        if (isActive) {
+                            return cardMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                   : cardMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                   : Appearance.colors.colPrimary;
+                        } else {
+                            return cardMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                                   : cardMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+                                   : Appearance.colors.colSurfaceContainerHighest;
                         }
                     }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.InOutQuad
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    MouseArea {
+                        id: cardMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: root.isProcessing ? Qt.WaitCursor : Qt.PointingHandCursor
+                        enabled: !root.isProcessing
+                        onClicked: {
+                            if (isActive) {
+                                flick.showActions = true;
+                            } else {
+                                root.isProcessing = true;
+                                root.device?.connect();
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 20
+                        anchors.rightMargin: 20
+                        spacing: 12
+
+                        // Left Device Icon (Always static and clean)
+                        Item {
+                            width: 24
+                            height: 24
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                iconSize: 24
+                                text: Icons.getBluetoothDeviceMaterialSymbol(root.device?.icon || "")
+                                color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            }
+                        }
+
+                        // Name
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.device?.name || Translation.tr("Unknown device")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            elide: Text.ElideRight
+                        }
+
+                        // Battery
+                        StyledText {
+                            visible: root.device?.connected && (root.device?.batteryAvailable ?? false)
+                            text: Math.round((root.device?.battery ?? 0) * 100) + "%"
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: true
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                         }
                     }
                 }
 
-                // M3 Expressive Loading Indicator
-                Item {
-                    id: loaderContainer
-                    anchors.centerIn: parent
-                    width: 24
-                    height: 24
+                // Action Button (Slide to Quick Settings / Cancel Connection)
+                Rectangle {
+                    id: actionBtn
+                    Layout.preferredWidth: 56
+                    Layout.fillHeight: true
+                    radius: rFull
+                    color: actionBtnMouse.containsPress ? (isActive ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive)
+                            : actionBtnMouse.containsMouse ? (isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover)
+                            : (isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest)
 
-                    scale: root.isProcessing ? 1 : 0
-                    opacity: root.isProcessing ? 1 : 0
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.OutBack
-                            easing.overshoot: 1.5
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.InOutQuad
-                        }
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
                     }
 
-                    // M3 Cookie shape loader
-                    MaterialShape {
+                    MouseArea {
+                        id: actionBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (root.isProcessing) {
+                                root.isProcessing = false;
+                                root.device?.disconnect();
+                            } else {
+                                flick.showActions = true;
+                            }
+                        }
+                    }
+
+                    Item {
                         anchors.centerIn: parent
                         width: 24
                         height: 24
-                        shape: MaterialShape.Shape.Cookie7Sided
-                        color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
 
-                        RotationAnimator on rotation {
-                            from: 0
-                            to: 360
-                            duration: 2000
-                            loops: Animation.Infinite
-                            running: root.isProcessing
+                        // Checkmark/Bluetooth Icon
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: isActive ? "check" : "bluetooth"
+                            iconSize: 24
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            visible: !root.isProcessing
+                            opacity: actionBtnMouse.containsMouse ? 0 : 1
+                            scale: actionBtnMouse.containsMouse ? 0.5 : 1
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                        }
+
+                        // Arrow Back
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "arrow_back"
+                            iconSize: 24
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            visible: !root.isProcessing
+                            opacity: actionBtnMouse.containsMouse ? 1 : 0
+                            scale: actionBtnMouse.containsMouse ? 1 : 0.5
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                        }
+
+                        // Rotating Cookie Loading shape
+                        MaterialShape {
+                            anchors.centerIn: parent
+                            width: 20
+                            height: 20
+                            shape: MaterialShape.Shape.Cookie7Sided
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            visible: root.isProcessing
+                            opacity: actionBtnMouse.containsMouse ? 0 : 1
+                            scale: actionBtnMouse.containsMouse ? 0.5 : 1
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+
+                            RotationAnimator on rotation {
+                                from: 0
+                                to: 360
+                                duration: 2000
+                                loops: Animation.Infinite
+                                running: root.isProcessing
+                            }
+                        }
+
+                        // Close symbol to abort connection
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "close"
+                            iconSize: 24
+                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            visible: root.isProcessing
+                            opacity: actionBtnMouse.containsMouse ? 1 : 0
+                            scale: actionBtnMouse.containsMouse ? 1 : 0.5
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                            Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
                         }
                     }
                 }
             }
 
-            // Content for paired devices
-            ColumnLayout {
-                visible: root.isPairedSection
-                Layout.fillWidth: true
-                spacing: 10
+            // PAGE 2: Quick Settings buttons
+            RowLayout {
+                width: flick.width
+                height: flick.height
+                spacing: 8
 
-                // Name and status row
-                RowLayout {
-                    Layout.fillWidth: true
+                // Back Button (arrow_forward)
+                Rectangle {
+                    id: backBtn
+                    Layout.preferredWidth: 56
+                    Layout.fillHeight: true
+                    radius: rFull
+                    color: backBtnMouse.containsPress ? (isActive ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive)
+                            : backBtnMouse.containsMouse ? (isActive ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover)
+                            : (isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest)
 
-                    StyledText {
-                        text: root.device?.name || Translation.tr("Unknown device")
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        font.weight: Font.Bold
-                        color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
                     }
 
-                    Item { // Spacer
-                        Layout.fillWidth: true
+                    MouseArea {
+                        id: backBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: flick.showActions = false
                     }
 
-                    StyledText {
-                        text: {
-                            if (root.isProcessing)
-                                return root.device?.connected ? Translation.tr("Disconnecting...") : Translation.tr("Connecting...");
-                            return root.device?.connected ? Translation.tr("Connected") : Translation.tr("Paired");
-                        }
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: root.device?.connected && !root.isProcessing ? Font.Bold : Font.Medium
-                        color: ColorUtils.transparentize(isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2, 0.25)
-                    }
-                }
-
-                // Battery bar (only for connected devices with battery)
-                RowLayout {
-                    visible: root.device?.connected && (root.device?.batteryAvailable ?? false)
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    StyledProgressBar {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        valueBarHeight: 12
-                        value: root.device?.battery ?? 0
-                        highlightColor: {
-                            if (root.device?.battery <= 0.15)
-                                return Appearance.m3colors.m3error;
-                            return isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary;
-                        }
-                        trackColor: ColorUtils.transparentize(isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2, 0.7)
-                    }
-
-                    StyledText {
-                        text: Math.round((root.device?.battery ?? 0) * 100) + "%"
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        font.weight: Font.Bold
-                        color: ColorUtils.transparentize(isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2, 0.15)
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "arrow_forward"
+                        iconSize: 24
+                        color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                     }
                 }
 
-                // Action buttons - M3 Expressive connected style
-                Row {
-                    Layout.alignment: Qt.AlignRight
-                    spacing: 2
+                // Connect/Disconnect Button (outline / border and no fill)
+                Rectangle {
+                    id: disconnectBtn
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: disconnectRow.implicitWidth + 32
+                    Layout.fillHeight: true
+                    radius: rFull
+                    color: "transparent"
+                    
+                    border.width: 2
+                    border.color: disconnectBtnMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
 
-                    // Forget button (left pill)
-                    Item {
-                        id: forgetBtn
-                        height: 26
-                        width: forgetText.implicitWidth + 24
+                    Behavior on border.color {
+                        ColorAnimation { duration: 150 }
+                    }
 
-                        scale: forgetMouseArea.containsPress ? 0.95 : 1
-                        Behavior on scale {
-                            animation: Appearance.animation.clickBounce.numberAnimation.createObject(forgetBtn)
-                        }
-
-                        // Filter transparent overlap by clipping a single rectangle
-                        Item {
-                            anchors.fill: parent
-                            clip: true
-                            Rectangle {
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.left: parent.left
-                                width: parent.width + parent.height / 2
-                                radius: parent.height / 2
-                                color: {
-                                    if (forgetMouseArea.containsPress)
-                                        return Appearance.colors.colSecondaryContainerActive;
-                                    if (forgetMouseArea.containsMouse)
-                                        return Appearance.colors.colSecondaryContainerHover;
-                                    return Appearance.colors.colSecondaryContainer;
-                                }
-
-                                Behavior on color {
-                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                                }
+                    MouseArea {
+                        id: disconnectBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: root.isProcessing ? Qt.WaitCursor : Qt.PointingHandCursor
+                        onClicked: {
+                            root.isProcessing = true;
+                            if (isActive) {
+                                root.device?.disconnect();
+                            } else {
+                                root.device?.connect();
                             }
+                            flick.showActions = false;
                         }
+                    }
 
+                    RowLayout {
+                        id: disconnectRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        
+                        MaterialSymbol {
+                            text: isActive ? "bluetooth_disabled" : "bluetooth"
+                            iconSize: 18
+                            color: disconnectBtnMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                        
                         StyledText {
-                            id: forgetText
-                            anchors.centerIn: parent
+                            text: isActive ? Translation.tr("Disconnect") : Translation.tr("Connect")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: true
+                            color: disconnectBtnMouse.containsMouse ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                            elide: Text.ElideRight
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                        }
+                    }
+                }
+
+                // Forget Button (filled red error color)
+                Rectangle {
+                    id: forgetBtn
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: forgetRow.implicitWidth + 32
+                    Layout.fillHeight: true
+                    radius: rFull
+                    color: forgetBtnMouse.containsPress ? Appearance.colors.colErrorContainerActive
+                            : forgetBtnMouse.containsMouse ? Appearance.colors.colErrorContainerHover
+                            : Appearance.colors.colErrorContainer
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    MouseArea {
+                        id: forgetBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.device?.forget();
+                            flick.showActions = false;
+                        }
+                    }
+
+                    RowLayout {
+                        id: forgetRow
+                        anchors.centerIn: parent
+                        spacing: 6
+                        
+                        MaterialSymbol {
+                            text: "delete"
+                            iconSize: 18
+                            color: Appearance.colors.colOnErrorContainer
+                        }
+                        
+                        StyledText {
                             text: Translation.tr("Forget")
                             font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Bold
-                            color: isActive ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
-                        }
-
-                        MouseArea {
-                            id: forgetMouseArea
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            hoverEnabled: true
-                            enabled: !root.isProcessing
-                            onClicked: root.device?.forget()
-                        }
-                    }
-
-                    // Disconnect button (right pill)
-                    Item {
-                        id: disconnectBtn
-                        height: 26
-                        width: disconnectText.implicitWidth + 24
-
-                        scale: disconnectMouseArea.containsPress ? 0.95 : 1
-                        Behavior on scale {
-                            animation: Appearance.animation.clickBounce.numberAnimation.createObject(disconnectBtn)
-                        }
-
-                        // Filter transparent overlap by clipping a single rectangle
-                        Item {
-                            anchors.fill: parent
-                            clip: true
-                            Rectangle {
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.right: parent.right
-                                width: parent.width + parent.height / 2
-                                radius: parent.height / 2
-                                color: {
-                                    if (root.isProcessing)
-                                        return ColorUtils.mix(Appearance.colors.colSecondary, Appearance.colors.colOutline, 0.4);
-                                    if (disconnectMouseArea.containsPress)
-                                        return Appearance.colors.colSecondaryActive;
-                                    if (disconnectMouseArea.containsMouse)
-                                        return Appearance.colors.colSecondaryHover;
-                                    return Appearance.colors.colSecondaryContainer;
-                                }
-
-                                Behavior on color {
-                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                                }
-                            }
-                        }
-
-                        StyledText {
-                            id: disconnectText
-                            anchors.centerIn: parent
-                            text: root.device?.connected ? Translation.tr("Disconnect") : Translation.tr("Connect")
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: Font.Bold
-                            color: root.isProcessing ? ColorUtils.transparentize(Appearance.colors.colOnSecondary, 0.5) : Appearance.colors.colOnSecondaryContainer
-                        }
-
-                        MouseArea {
-                            id: disconnectMouseArea
-                            anchors.fill: parent
-                            cursorShape: root.isProcessing ? Qt.WaitCursor : Qt.PointingHandCursor
-                            hoverEnabled: true
-                            enabled: !root.isProcessing
-                            onClicked: {
-                                if (root.device?.connected) {
-                                    root.isProcessing = true;
-                                    root.device.disconnect();
-                                } else {
-                                    root.isProcessing = true;
-                                    root.device.connect();
-                                }
-                            }
+                            font.bold: true
+                            color: Appearance.colors.colOnErrorContainer
+                            elide: Text.ElideRight
                         }
                     }
                 }
             }
+        }
+    }
 
-            // Content for available devices (horizontal layout)
-            ColumnLayout {
-                visible: !root.isPairedSection
-                Layout.fillWidth: true
-                spacing: 4
+    // Available devices list view card with dynamic corner radius
+    Rectangle {
+        id: availableCard
+        visible: !root.isPairedSection
+        anchors.fill: parent
 
-                StyledText {
-                    text: root.device?.name || Translation.tr("Unknown device")
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnLayer2
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
+        topLeftRadius: root.isFirst ? rOuter : rInner
+        topRightRadius: root.isFirst ? rOuter : rInner
+        bottomLeftRadius: root.isLast ? rOuter : rInner
+        bottomRightRadius: root.isLast ? rOuter : rInner
 
-                StyledText {
-                    text: root.isProcessing ? Translation.tr("Connecting...") : Translation.tr("Available")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: root.isProcessing ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.25)
-                }
+        color: availMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+               : availMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+               : Appearance.colors.colSurfaceContainerHighest
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
+        MouseArea {
+            id: availMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: root.isProcessing ? Qt.WaitCursor : Qt.PointingHandCursor
+            enabled: !root.isProcessing
+            onClicked: {
+                root.isProcessing = true;
+                root.device?.connect();
             }
+        }
 
-            // Connect button for available devices
-            Rectangle {
-                id: connectBtn
-                visible: !root.isPairedSection
-                height: 32
-                width: connectText.implicitWidth + 48
-                radius: 16
-                color: {
-                    if (root.isProcessing)
-                        return ColorUtils.mix(Appearance.colors.colLayer2, Appearance.colors.colOutline, 0.4);
-                    if (connectMouseArea.containsPress)
-                        return Appearance.colors.colPrimaryActive;
-                    if (connectMouseArea.containsMouse)
-                        return Appearance.colors.colPrimaryHover;
-                    return Appearance.colors.colPrimary;
-                }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 20
+            anchors.rightMargin: 20
+            spacing: 12
 
-                scale: connectMouseArea.containsPress ? 0.95 : 1
-                Behavior on scale {
-                    animation: Appearance.animation.clickBounce.numberAnimation.createObject(connectBtn)
-                }
+            // Left icon or Loading cookie
+            Item {
+                width: 24
+                height: 24
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-
-                StyledText {
-                    id: connectText
+                MaterialSymbol {
                     anchors.centerIn: parent
-                    text: Translation.tr("Connect")
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.Bold
-                    color: root.isProcessing ? ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5) : Appearance.colors.colOnPrimary
+                    iconSize: 24
+                    text: Icons.getBluetoothDeviceMaterialSymbol(root.device?.icon || "")
+                    color: Appearance.colors.colOnSurface
+                    opacity: root.isProcessing ? 0 : 1
+                    scale: root.isProcessing ? 0.5 : 1
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
                 }
 
-                MouseArea {
-                    id: connectMouseArea
-                    anchors.fill: parent
-                    cursorShape: root.isProcessing ? Qt.WaitCursor : Qt.PointingHandCursor
-                    hoverEnabled: true
-                    enabled: !root.isProcessing
-                    onClicked: {
-                        root.isProcessing = true;
-                        root.device?.connect();
+                MaterialShape {
+                    anchors.centerIn: parent
+                    width: 20
+                    height: 20
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    color: Appearance.colors.colOnSurface
+                    opacity: root.isProcessing ? 1 : 0
+                    scale: root.isProcessing ? 1 : 0.5
+                    Behavior on opacity { NumberAnimation { duration: 150 } }
+                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+
+                    RotationAnimator on rotation {
+                        from: 0
+                        to: 360
+                        duration: 2000
+                        loops: Animation.Infinite
+                        running: root.isProcessing
                     }
                 }
+            }
+
+            // Name
+            StyledText {
+                Layout.fillWidth: true
+                text: root.device?.name || Translation.tr("Unknown device")
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.bold: true
+                color: Appearance.colors.colOnSurface
+                elide: Text.ElideRight
+            }
+
+            // Chevron on the right
+            MaterialSymbol {
+                text: "chevron_right"
+                iconSize: 24
+                color: Appearance.colors.colSubtext
+                opacity: root.isProcessing ? 0 : 0.7
+                Behavior on opacity { NumberAnimation { duration: 150 } }
             }
         }
     }

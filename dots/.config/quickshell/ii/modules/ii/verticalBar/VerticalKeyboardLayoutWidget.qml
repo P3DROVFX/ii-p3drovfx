@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.popups.keyboard
 
 MouseArea {
     id: root
@@ -122,7 +123,7 @@ MouseArea {
         }
     }
 
-    Bar.KeyboardLayoutPopup {
+    KeyboardLayoutPopup {
         id: popup
         hoverTarget: root
     }

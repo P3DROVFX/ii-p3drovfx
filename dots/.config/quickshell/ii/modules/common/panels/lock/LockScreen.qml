@@ -27,12 +27,16 @@ Scope {
         id: sessionLockSurface
         color: "transparent"
 
-
-
         Loader {
-            active: GlobalStates.screenLocked
+            id: lockSurfaceLoader
+            property bool wasLockedOnce: false
+            active: wasLockedOnce || GlobalStates.screenLocked
+            onActiveChanged: {
+                if (active) wasLockedOnce = true;
+            }
+            visible: GlobalStates.screenLocked || opacity > 0.01
             anchors.fill: parent
-            opacity: active ? 1 : 0
+            opacity: GlobalStates.screenLocked ? 1 : 0
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
@@ -49,10 +53,10 @@ Scope {
     function unlockKeyring() {
         unlockKeyringProc.exec({
             environment: ({
-                "UNLOCK_PASSWORD": lockContext.currentText
-            }),
+                    "UNLOCK_PASSWORD": lockContext.currentText
+                }),
             command: ["bash", "-c", Quickshell.shellPath("scripts/keyring/unlock.sh")]
-        })
+        });
     }
 
     // This stores all the information shared between the lock surfaces on each screen.
@@ -73,7 +77,7 @@ Scope {
             }
         }
 
-        onUnlocked: (targetAction) => {
+        onUnlocked: targetAction => {
             // Perform the target action if it's not just unlocking
             if (targetAction == LockContext.ActionEnum.Poweroff) {
                 Session.poweroff();
@@ -84,7 +88,8 @@ Scope {
             }
 
             // Unlock the keyring if configured to do so
-            if (Config.options.lock.security.unlockKeyring) root.unlockKeyring(); // Async
+            if (Config.options.lock.security.unlockKeyring)
+                root.unlockKeyring(); // Async
 
             // Unlock the screen before exiting, or the compositor will display a
             // fallback lock you can't interact with.
@@ -131,14 +136,13 @@ Scope {
         description: "Locks the screen"
 
         onPressed: {
-            root.lock()
+            root.lock();
         }
     }
 
     GlobalShortcut {
         name: "lockFocus"
-        description: "Re-focuses the lock screen. This is because Hyprland after waking up for whatever reason"
-            + "decides to keyboard-unfocus the lock screen"
+        description: "Re-focuses the lock screen. This is because Hyprland after waking up for whatever reason" + "decides to keyboard-unfocus the lock screen"
 
         onPressed: {
             lockContext.shouldReFocus();
@@ -146,7 +150,8 @@ Scope {
     }
 
     function initIfReady() {
-        if (!Config.ready || !Persistent.ready) return;
+        if (!Config.ready || !Persistent.ready)
+            return;
         if (Config.options.lock.launchOnStartup && Persistent.isNewHyprlandInstance) {
             root.lock();
         } else {

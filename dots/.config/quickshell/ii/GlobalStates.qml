@@ -53,6 +53,24 @@ Singleton {
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
 
+    function isScreenAllowedForBar(screen) {
+        if (!screen) return false;
+        if (!Config.ready) return true;
+        if (Config.options.bar.onlyShowOnSingleMonitor) {
+            return screen.name === Config.options.bar.singleMonitorName;
+        }
+        const list = Config.options.bar.screenList;
+        if (list && list.length > 0) {
+            return list.includes(screen.name);
+        }
+        return true;
+    }
+
+    readonly property var allowedScreens: {
+        if (!Config.ready) return Quickshell.screens;
+        return Quickshell.screens.filter(screen => root.isScreenAllowedForBar(screen));
+    }
+
     readonly property string effectiveLeftMonitor: {
         if (!Config.ready) return "";
         switch (Config.options.sidebar.position) {
@@ -85,6 +103,8 @@ Singleton {
         }
     }
     property string activeSearchMonitor: ""
+    property real activeSearchHeight: 0
+    property real activeSearchWidth: 0
     property string activeSearchQuery: ""
     property bool searchDropActive: false
     property real searchDropExclusionX: 0
@@ -109,9 +129,34 @@ Singleton {
     property bool policiesPinned: false
     property bool policiesDetached: false
 
+    // Bluetooth connection OSD override
+    property bool blockVolumeOsdForBluetooth: false
+    Connections {
+        target: BluetoothStatus
+        ignoreUnknownSignals: true
+        function onDeviceConnected(device) {
+            root.blockVolumeOsdForBluetooth = true;
+            blockOsdTimer.restart();
+        }
+        function onDeviceDisconnected(device) {
+            root.blockVolumeOsdForBluetooth = true;
+            blockOsdTimer.restart();
+        }
+    }
+    property Timer blockOsdTimer: Timer {
+        id: blockOsdTimer
+        interval: 4000
+        onTriggered: root.blockVolumeOsdForBluetooth = false
+    }
+
     // Bluetooth connection popup
     property bool bluetoothConnectionPopupOpen: false
     property var bluetoothConnectionPopupDevice: null
+
+    // Floating Notch Bluetooth notification
+    property var floatingNotchBtDevice: null
+    property string floatingNotchBtAction: "connected"
+    property bool floatingNotchBtNotifActive: false
 
     // LocalSend transfer popup
     property bool localSendPopupOpen: false
@@ -121,7 +166,8 @@ Singleton {
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)
     property bool mediaWidgetHovered: false
     property Timer mediaWidgetHoverTimer: Timer {
-        interval: 100
+        id: mediaWidgetHoverTimer
+        interval: 4000
         repeat: false
         onTriggered: {
             root.mediaWidgetHovered = false;
@@ -401,6 +447,8 @@ Singleton {
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
 
+    property bool requestVolumeDialog: false
+
     readonly property bool effectiveLeftOpen: {
         switch (Config.options.sidebar.position) {
         case "default":
@@ -473,10 +521,10 @@ Singleton {
     }
 
     onOverviewOpenChanged: {
-        if (root.overviewOpen && root.searchConnectActive && root.activeSearchMonitor === "") {
+        if (root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable) && root.activeSearchMonitor === "") {
             root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
         }
-        if (!root.overviewOpen && root.searchConnectActive) {
+        if (!root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable)) {
             root.activeSearchMonitor = "";
             // Overview.qml's PanelWindow (which resets searchOnlyMode) is inactive in
             // connect mode — reset it here so the next SUPER press opens the full overview.

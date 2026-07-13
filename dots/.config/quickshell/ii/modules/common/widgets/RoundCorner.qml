@@ -36,6 +36,7 @@ Item {
         id: shape
         width: parent.width + (extendHorizontal ? 1 : 0)
         height: parent.height + (extendVertical ? 1 : 0)
+        antialiasing: true
         anchors {
             top: root.isTop ? parent.top : undefined
             bottom: root.isBottom ? parent.bottom : undefined

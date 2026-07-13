@@ -4,12 +4,14 @@ import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.popups.resources
 
 MouseArea {
     id: root
+
     property bool alwaysShowAllResources: false
 
-    implicitWidth: mainCol.implicitWidth
+    implicitWidth: Appearance.sizes.verticalBarWidth
     implicitHeight: mainCol.implicitHeight
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
@@ -121,7 +123,7 @@ MouseArea {
         }
     }
 
-    Bar.ExpressiveResourcesPopup {
+    ExpressiveResourcesPopup {
         hoverTarget: root
         Component.onCompleted: {
             activeChanged.connect(() => {

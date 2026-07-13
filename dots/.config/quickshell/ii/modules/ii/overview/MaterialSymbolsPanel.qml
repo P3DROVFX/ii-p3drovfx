@@ -17,9 +17,8 @@ Item {
     id: root
     property string searchQuery: ""
 
-    readonly property int panelWidth: 560
+    readonly property int panelWidth: 80
     readonly property int gridColumns: 4
-    readonly property int cellSize: 123
     readonly property int maxItems: 100
 
     implicitWidth: panelWidth
@@ -42,9 +41,10 @@ Item {
     readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
     readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
-    readonly property int cellWidth: Math.floor(gridFlickable.width / root.gridColumns)
+    readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
+    readonly property int cellSize: root.cellWidth - 4
     readonly property int cellHeight: root.cellSize + 8
-    readonly property int gridSpacing: 0
+    readonly property int gridSpacing: 8
 
     function loadData() {
         symbolsFileView.reload();
@@ -321,6 +321,7 @@ Item {
     function updatePositions() {
         const cols = root.gridColumns;
         const ch = root.cellHeight;
+        const spacing = root.gridSpacing;
         let visibleCount = 0;
         for (let i = 0; i < iconRepeater.count; i++) {
             const slot = iconRepeater.itemAt(i);
@@ -330,7 +331,8 @@ Item {
             }
         }
         const totalRows = Math.ceil(visibleCount / cols);
-        contentContainer.height = Math.max(0, totalRows * ch);
+        const totalHeight = totalRows > 0 ? totalRows * ch + (totalRows - 1) * spacing : 0;
+        contentContainer.height = Math.max(0, totalHeight);
     }
 
     property string copyFeedbackIcon: ""
@@ -520,13 +522,18 @@ Item {
                                 property var iconData: root.iconMap[uniqueId] || null
                                 property bool hasData: iconData !== null
 
-                                readonly property bool isFocused: root.focusedControlIndex === currentPosition && hasData
-                                readonly property bool isHovered: iconMouseArea.containsMouse
+                                readonly property bool isFocused: {
+                                    const fi = root.focusedControlIndex;
+                                    const cp = currentPosition;
+                                    if (fi < 0 || cp < 0) return false;
+                                    return (fi === cp) && hasData;
+                                }
+                                property bool isHovered: false
 
                                 readonly property int targetCol: currentPosition >= 0 ? currentPosition % root.gridColumns : 0
                                 readonly property int targetRow: currentPosition >= 0 ? Math.floor(currentPosition / root.gridColumns) : 0
-                                x: targetCol * root.cellWidth
-                                y: targetRow * root.cellHeight
+                                x: targetCol * (root.cellWidth + root.gridSpacing)
+                                y: targetRow * (root.cellHeight + root.gridSpacing)
                                 width: root.cellWidth
                                 height: hasData ? root.cellHeight : 0
                                 opacity: hasData ? 1.0 : 0.0

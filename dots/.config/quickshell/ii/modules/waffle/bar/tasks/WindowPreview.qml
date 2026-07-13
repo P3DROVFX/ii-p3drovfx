@@ -83,7 +83,7 @@ Button {
             ScreencopyView {
                 id: screencopyView
                 anchors.centerIn: parent
-                captureSource: root.toplevel
+                captureSource: Config.options.overview.showWindowPreviews ? root.toplevel : null
                 live: true
                 paintCursor: true
                 constraintSize: Qt.size(root.previewWidthConstraint, root.previewHeightConstraint)

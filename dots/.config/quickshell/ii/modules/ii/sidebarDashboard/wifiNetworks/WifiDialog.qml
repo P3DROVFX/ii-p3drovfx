@@ -3,6 +3,7 @@ import qs.services
 import qs.services.network
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -11,114 +12,97 @@ WindowDialog {
     id: root
     backgroundHeight: 600
 
-    // Header
+    // ── Header ────────────────────────────────────────────
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
-        
-        // Icon with rounded background
-        Rectangle {
-            width: 24
-            height: 24
-            radius: 6
-            color: Appearance.colors.colPrimaryContainer
-            
-            MaterialSymbol {
-                anchors.centerIn: parent
-                iconSize: 16
-                text: "wifi"
-                color: Appearance.colors.colOnPrimaryContainer
-            }
-        }
-        
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        spacing: 0
+
         StyledText {
             Layout.fillWidth: true
-            text: Translation.tr("Connect to Wi-Fi")
-            font.pixelSize: Appearance.font.pixelSize.normal
+            text: Translation.tr("Wi-Fi")
+            font.pixelSize: Appearance.font.pixelSize.larger
             font.weight: Font.Bold
             color: Appearance.colors.colOnLayer1
         }
-        
+
         StyledSwitch {
-            checked: Network.wifiStatus !== "disabled"
+            checked: Network.wifiEnabled
             onToggled: Network.toggleWifi()
         }
     }
 
-    StyledIndeterminateProgressBar {
-        visible: Network.wifiScanning
+    // ── Content (scrollable) ──────────────────────────────
+    WifiDialogContent {
         Layout.fillWidth: true
+        Layout.fillHeight: true
         Layout.topMargin: -4
-        Layout.bottomMargin: -4
     }
 
-    StyledListView {
-        Layout.fillHeight: true
-        Layout.fillWidth: true
-        Layout.topMargin: 4
-        Layout.bottomMargin: 8
-        Layout.leftMargin: -Appearance.rounding.large
-        Layout.rightMargin: -Appearance.rounding.large
-        visible: Network.wifiStatus !== "disabled" && Network.friendlyWifiNetworks.length > 0
-
-        clip: true
-        spacing: 4
-        animateAppearance: false
-
-        model: ScriptModel {
-            values: Network.friendlyWifiNetworks
-        }
-        delegate: WifiNetworkItem {
-            required property WifiAccessPoint modelData
-            required property int index
-            wifiNetwork: modelData
-            isFirst: index === 0
-            isLast: index === ListView.view.count - 1
-
-            anchors {
-                left: parent?.left
-                right: parent?.right
-                leftMargin: Appearance.rounding.large
-                rightMargin: Appearance.rounding.large
-            }
-        }
-    }
-    
-    PagePlaceholder {
-        Layout.fillHeight: true
-        Layout.fillWidth: true
-        icon: "wifi_off"
-        title: Translation.tr("Wi-Fi is off")
-        description: Translation.tr("Turn on Wi-Fi to see networks")
-        shape: MaterialShape.Shape.Cookie7Sided
-        shown: Network.wifiStatus === "disabled"
-    }
-
-    PagePlaceholder {
-        Layout.fillHeight: true
-        Layout.fillWidth: true
-        icon: "wifi_find"
-        title: Translation.tr("No networks found")
-        shape: MaterialShape.Shape.Cookie7Sided
-        shown: Network.wifiStatus !== "disabled" && Network.friendlyWifiNetworks.length === 0 && !Network.wifiScanning
-    }
-
-    WindowDialogSeparator {}
+    // ── Bottom buttons ────────────────────────────────────
     WindowDialogButtonRow {
-        DialogButton {
-            buttonText: Translation.tr("Details")
+        Layout.leftMargin: 0
+        Layout.rightMargin: 0
+        Layout.bottomMargin: -8
+
+        RippleButton {
+            id: detailsBtn
+            buttonRadius: Appearance.rounding.full
+            colBackground: "transparent"
+            colBackgroundHover: "transparent"
+            colRipple: "transparent"
+            implicitHeight: 36
+            implicitWidth: detailsText.implicitWidth + 48
+
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.width: 1
+                border.color: detailsBtn.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                radius: parent.buttonEffectiveRadius
+                Behavior on border.color {
+                    ColorAnimation { duration: 150 }
+                }
+            }
+
+            contentItem: StyledText {
+                id: detailsText
+                text: Translation.tr("Details")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({"wght": 500})
+                color: detailsBtn.hovered ? Appearance.colors.colOnSurface : Appearance.colors.colOutline
+                Behavior on color { ColorAnimation { duration: 150 } }
+            }
             onClicked: {
-                Quickshell.execDetached(["bash", "-c", `${Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network}`]);
+                Quickshell.execDetached(["bash", "-c",
+                    `${Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network}`]);
                 GlobalStates.sidebarRightOpen = false;
             }
         }
 
-        Item {
-            Layout.fillWidth: true
-        }
+        Item { Layout.fillWidth: true }
 
-        DialogButton {
-            buttonText: Translation.tr("Done")
+        RippleButton {
+            id: doneBtn
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colPrimary
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            colRipple: Appearance.colors.colPrimaryActive
+            implicitHeight: 36
+            implicitWidth: doneText.implicitWidth + 48
+
+            contentItem: StyledText {
+                id: doneText
+                text: Translation.tr("Done")
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.variableAxes: ({"wght": 700})
+                color: Appearance.colors.colOnPrimary
+            }
             onClicked: root.dismiss()
         }
     }

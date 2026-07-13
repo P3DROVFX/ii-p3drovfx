@@ -41,6 +41,13 @@ Item {
     // the main content is shown.
     property url activeSubPage: ""
 
+    property var stagedFiles: []
+    readonly property bool hasStagedFiles: stagedFiles.length > 0
+    readonly property bool showOverlay: phoneDropArea.containsDrag || root.hasStagedFiles || root.isSending
+    property bool isSending: false
+    property int sendingIndex: 0
+
+
     readonly property bool emptyStateVisible: !KdeConnectService.available
                                                || (KdeConnectService.hasDevices
                                                    && KdeConnectService.devices
@@ -55,6 +62,31 @@ Item {
 
     function closeSubPage(): void {
         root.activeSubPage = ""
+    }
+
+    function sendNextFile(): void {
+        if (root.sendingIndex >= root.stagedFiles.length) {
+            const count = root.stagedFiles.length
+            root.isSending = false
+            root.sendingIndex = 0
+            root.stagedFiles = []
+            toastLayer.show(
+                count === 1 ? Translation.tr("File sent successfully")
+                            : Translation.tr("%1 files sent successfully").arg(String(count)),
+                true
+            )
+            return
+        }
+        KdeConnectService.shareUrl(KdeConnectService.activeDeviceId, root.stagedFiles[root.sendingIndex])
+        root.sendingIndex++
+        sendTimer.restart()
+    }
+
+    Timer {
+        id: sendTimer
+        interval: 300
+        repeat: false
+        onTriggered: root.sendNextFile()
     }
 
     Rectangle {
@@ -591,6 +623,17 @@ Item {
             anchors.fill: parent
             anchors.margins: 10
             spacing: 10
+            opacity: root.showOverlay ? 0.0 : 1.0
+            visible: opacity > 0.0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
 
             // ───────── HEADER (device + battery/signal pills) ─────────
             PhoneHeader {
@@ -931,6 +974,307 @@ Item {
                 onRequestOpenSubPage: (url) => root.openSubPage(url)
             }
         }
+
+        // Drag-and-drop target zone
+        DropArea {
+            id: phoneDropArea
+            anchors.fill: parent
+            enabled: KdeConnectService.available && KdeConnectService.activeReachable && root.activeSubPage.toString() === ""
+
+            onEntered: drag => {
+                if (drag.hasUrls) {
+                    drag.accepted = true
+                    drag.acceptProposedAction()
+                }
+            }
+
+            onDropped: drag => {
+                if (drag.urls && drag.urls.length > 0) {
+                    let urls = []
+                    for (let i = 0; i < drag.urls.length; i++) {
+                        urls.push(drag.urls[i].toString())
+                    }
+                    root.stagedFiles = urls
+                }
+                drag.accepted = true
+            }
+        }
+
+        // Drag-and-Drop / Share Overlay
+        Rectangle {
+            id: dndOverlay
+            anchors.fill: parent
+            color: "transparent"
+            visible: opacity > 0.0
+            opacity: root.showOverlay ? 1.0 : 0.0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
+            // State 1: Dragging (containsDrag)
+            ColumnLayout {
+                id: readyStateLayout
+                anchors.centerIn: parent
+                spacing: 24
+                visible: phoneDropArea.containsDrag && !root.isSending
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "upload_file"
+                    iconSize: 96
+                    color: Appearance.colors.colPrimary
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Drop the file here")
+                    font.pixelSize: 28
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer2
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Ready to send via KDE Connect")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colSubtext
+                    opacity: 0.8
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+
+            // State 2: Dropped/Staged files confirmation
+            ColumnLayout {
+                id: stagedStateLayout
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 28
+                visible: !phoneDropArea.containsDrag && root.hasStagedFiles && !root.isSending
+
+                Item {
+                    Layout.fillHeight: true
+                }
+
+                // File Preview Info
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    spacing: 20
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: root.stagedFiles.length > 1 ? "file_copy" : "draft"
+                        iconSize: 84
+                        padding: 24
+                        fill: 1.0
+                        color: Appearance.colors.colPrimaryContainer
+                        colSymbol: Appearance.colors.colOnPrimaryContainer
+                        shape: MaterialShape.Shape.Cookie12Sided
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.maximumWidth: parent.width - 24
+                        text: {
+                            if (root.stagedFiles.length === 0) return ""
+                            if (root.stagedFiles.length === 1) {
+                                const urlStr = root.stagedFiles[0]
+                                return decodeURIComponent(urlStr.substring(urlStr.lastIndexOf("/") + 1))
+                            }
+                            return Translation.tr("%1 files selected").arg(String(root.stagedFiles.length))
+                        }
+                        font.pixelSize: 26
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnLayer2
+                        elide: Text.ElideMiddle
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: {
+                            if (root.stagedFiles.length === 0) return ""
+                            if (root.stagedFiles.length === 1) {
+                                return Translation.tr("Ready to send")
+                            }
+                            return Translation.tr("Ready to send all files")
+                        }
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colSubtext
+                        opacity: 0.8
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
+
+                // Action Buttons Row (Cancelar & Enviar)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    // Cancel button: no fill, border only
+                    Rectangle {
+                        id: cancelBtn
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 48
+                        radius: Appearance.rounding.normal
+                        color: "transparent"
+                        border.color: Appearance.colors.colSubtext
+                        border.width: 1.5
+                        scale: cancelBtnMouse.pressed ? 0.97 : (cancelBtnMouse.containsMouse ? 1.01 : 1.0)
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "close"
+                                iconSize: 20
+                                color: Appearance.colors.colOnLayer2
+                            }
+                            StyledText {
+                                text: Translation.tr("Cancel")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnLayer2
+                            }
+                        }
+
+                        MouseArea {
+                            id: cancelBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                root.stagedFiles = []
+                            }
+                        }
+                    }
+
+                    // Send button: filled with colPrimary
+                    Rectangle {
+                        id: sendBtn
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 48
+                        radius: Appearance.rounding.normal
+                        color: Appearance.colors.colPrimary
+                        scale: sendBtnMouse.pressed ? 0.97 : (sendBtnMouse.containsMouse ? 1.01 : 1.0)
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: 150
+                                easing.type: Easing.OutQuad
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "send"
+                                iconSize: 20
+                                color: Appearance.colors.colOnPrimary
+                            }
+                            StyledText {
+                                text: Translation.tr("Send")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnPrimary
+                            }
+                        }
+
+                        MouseArea {
+                            id: sendBtnMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: !root.isSending
+                            onClicked: {
+                                if (root.stagedFiles.length > 0) {
+                                    root.isSending = true
+                                    root.sendingIndex = 0
+                                    sendNextFile()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // State 3: Sending files
+            ColumnLayout {
+                id: sendingStateLayout
+                anchors.centerIn: parent
+                spacing: 20
+                visible: root.isSending
+
+                Item {
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 80
+
+                    CircularProgress {
+                        anchors.centerIn: parent
+                        width: 80
+                        height: 80
+                        value: root.stagedFiles.length > 0 ? root.sendingIndex / root.stagedFiles.length : 0
+                        colPrimary: Appearance.colors.colPrimary
+                        colSecondary: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
+                    }
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: root.stagedFiles.length > 0
+                              ? "%1/%2".arg(String(root.sendingIndex)).arg(String(root.stagedFiles.length))
+                              : "0"
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Sending files...")
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer2
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: parent.width - 48
+                    text: {
+                        if (root.sendingIndex > 0 && root.sendingIndex <= root.stagedFiles.length) {
+                            const urlStr = root.stagedFiles[root.sendingIndex - 1]
+                            return decodeURIComponent(urlStr.substring(urlStr.lastIndexOf("/") + 1))
+                        }
+                        return ""
+                    }
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignHCenter
+                    opacity: 0.8
+                }
+            }
+        }
+
 
         // ─── Sub-page overlay (slides in from right when activeSubPage != "") ───
         // Mirrors the pattern from CoreServicesConfig.qml — slides in over the

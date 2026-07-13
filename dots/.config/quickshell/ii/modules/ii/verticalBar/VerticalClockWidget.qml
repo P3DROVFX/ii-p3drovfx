@@ -4,6 +4,7 @@ import qs.services
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.popups.clock
 
 Item {
     id: root
@@ -165,7 +166,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-        Bar.ClockWidgetPopup {
+        ClockWidgetPopup {
             compact: Config.options.bar.tooltips.compactPopups
             hoverTarget: mouseArea
         }

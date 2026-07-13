@@ -12,6 +12,7 @@ import Quickshell.Services.Mpris
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import "../bar" as Bar
+import "../bar/widgets/media"
 
 Scope {
     id: root
@@ -33,7 +34,7 @@ Scope {
     property QtObject _timers: QtObject {
         property Timer grace: Timer {
             id: graceTimer
-            interval: 200 // 200ms grace period to transit from widget to popup
+            interval: 400 // 400ms grace period to transit from widget to popup
             repeat: false
             onTriggered: {
                 if (!GlobalStates.mediaControlsPinned) {
@@ -153,9 +154,9 @@ Scope {
             readonly property var rect: GlobalStates.mediaPopupRect
             readonly property real barThickness: {
                 if (Config.options.bar.vertical) {
-                    return Config.options.bar.sizes.width || 40;
+                    return Appearance.sizes.verticalBarWidth;
                 } else {
-                    return Config.options.bar.sizes.height || 40;
+                    return Appearance.sizes.barHeight;
                 }
             }
             anchors {
@@ -165,37 +166,35 @@ Scope {
             }
             margins {
                 top: {
-                    if (rect.width === 0)
-                        return 0;
                     if (Config.options.bar.vertical) {
+                        if (rect.height === 0)
+                            return 0;
                         let targetY = rect.y + (rect.height / 2) - (panelWindow.implicitHeight / 2);
                         return Math.max(0, Math.min(targetY, screen.height - panelWindow.implicitHeight));
                     } else {
                         if (!Config.options.bar.bottom) {
-                            return barThickness;
+                            return barThickness + 2;
                         } else {
-                            return screen.height - barThickness - panelWindow.implicitHeight;
+                            return screen.height - barThickness - panelWindow.implicitHeight - 2;
                         }
                     }
                 }
                 left: {
-                    if (rect.width === 0)
-                        return 0;
                     if (Config.options.bar.vertical) {
                         if (!Config.options.bar.bottom) {
-                            return barThickness;
+                            return barThickness + 2;
                         }
                         return 0;
                     } else {
+                        if (rect.width === 0)
+                            return 0;
                         let targetX = rect.x + (rect.width / 2) - (panelWindow.implicitWidth / 2);
                         return Math.max(0, Math.min(targetX, screen.width - panelWindow.implicitWidth));
                     }
                 }
                 right: {
-                    if (rect.width === 0)
-                        return 0;
                     if (Config.options.bar.vertical && Config.options.bar.bottom) {
-                        return barThickness;
+                        return barThickness + 2;
                     }
                     return 0;
                 }
@@ -252,12 +251,28 @@ Scope {
                         id: delegateLoader
                         required property MprisPlayer modelData
 
-                        sourceComponent: Config.options.bar.mediaPlayer.expressivePopup ? expressiveComp : standardComp
+                        sourceComponent: {
+                            switch (Config.options.bar.mediaPlayer.popupStyle) {
+                            case "expressive": return expressiveComp;
+                            case "android": return androidComp;
+                            default: return standardComp;
+                            }
+                        }
 
                         Component {
                             id: expressiveComp
-                            Bar.ExpressiveMediaCard {
+                            ExpressiveMediaCard {
                                 player: delegateLoader.modelData
+                            }
+                        }
+
+                        Component {
+                            id: androidComp
+                            AndroidMediaPopup {
+                                player: delegateLoader.modelData
+                                visualizerPoints: root.visualizerPoints
+                                implicitWidth: root.widgetWidth
+                                implicitHeight: root.widgetHeight
                             }
                         }
 

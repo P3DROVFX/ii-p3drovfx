@@ -67,8 +67,10 @@ Singleton {
             const index = root.list.findIndex((notif) => notif.notificationId === notificationId);
             const notifObject = root.list[index];
             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
-            if (notifObject.isTransient) root.discardNotification(notificationId);
-            else root.timeoutNotification(notificationId);
+            if (notifObject) {
+                if (notifObject.isTransient) root.discardNotification(notificationId);
+                else root.timeoutNotification(notificationId);
+            }
             destroy()
         }
     }
@@ -84,6 +86,44 @@ Singleton {
     property real initTimestamp: Date.now()
     property int missingFileGracePeriod: 2000
     property int missingFileRetryInterval: 1500
+
+    // Debounced disk write timer - batches rapid notification changes
+    property bool _pendingDiskWrite: false
+    Timer {
+        id: diskWriteTimer
+        interval: 100
+        repeat: false
+        onTriggered: {
+            notifFileView.setText(stringifyList(root.list));
+            root._pendingDiskWrite = false;
+        }
+    }
+    function scheduleDiskWrite() {
+        root._pendingDiskWrite = true;
+        diskWriteTimer.restart();
+    }
+    function flushDiskWrite() {
+        diskWriteTimer.stop();
+        if (root._pendingDiskWrite) {
+            notifFileView.setText(stringifyList(root.list));
+            root._pendingDiskWrite = false;
+        }
+    }
+
+    // Pending notifications queue for batching
+    property var _pendingNotifications: []
+    Timer {
+        id: batchNotificationTimer
+        interval: 50
+        repeat: false
+        onTriggered: {
+            if (root._pendingNotifications.length > 0) {
+                const pending = root._pendingNotifications.slice();
+                root._pendingNotifications = [];
+                root.list = root.list.concat(pending);
+            }
+        }
+    }
     Component {
         id: notifComponent
         Notif {}
@@ -98,18 +138,20 @@ Singleton {
     }
     
     onListChanged: {
-        // Update latest time for each app
+        // Update latest time for each app reactively via reassignment
+        const nextLatestTime = Object.assign({}, root.latestTimeForApp);
         root.list.forEach((notif) => {
-            if (!root.latestTimeForApp[notif.appName] || notif.time > root.latestTimeForApp[notif.appName]) {
-                root.latestTimeForApp[notif.appName] = Math.max(root.latestTimeForApp[notif.appName] || 0, notif.time);
+            if (!nextLatestTime[notif.appName] || notif.time > nextLatestTime[notif.appName]) {
+                nextLatestTime[notif.appName] = Math.max(nextLatestTime[notif.appName] || 0, notif.time);
             }
         });
         // Remove apps that no longer have notifications
-        Object.keys(root.latestTimeForApp).forEach((appName) => {
+        Object.keys(nextLatestTime).forEach((appName) => {
             if (!root.list.some((notif) => notif.appName === appName)) {
-                delete root.latestTimeForApp[appName];
+                delete nextLatestTime[appName];
             }
         });
+        root.latestTimeForApp = nextLatestTime;
     }
 
     function appNameListForGroups(groups) {
@@ -147,6 +189,7 @@ Singleton {
         return groups;
     }
 
+    // Computed group bindings - automatically cached by the QML engine and re-evaluated reactively.
     property var groupsByAppName: groupsForList(root.list)
     property var popupGroupsByAppName: groupsForList(root.popupList)
     property list<string> appNameList: appNameListForGroups(root.groupsByAppName)
@@ -191,7 +234,10 @@ Singleton {
                 "notification": notification,
                 "time": Date.now(),
             });
-			root.list = [...root.list, newNotifObject];
+
+            // Batch notifications to avoid rapid list updates
+            root._pendingNotifications.push(newNotifObject);
+            batchNotificationTimer.restart();
 
             // Popup
             if (!root.popupInhibited) {
@@ -205,8 +251,8 @@ Singleton {
                 root.unread++;
             }
             root.notify(newNotifObject);
-            // console.log(notifToString(newNotifObject));
-            notifFileView.setText(stringifyList(root.list));
+            // Schedule disk write instead of immediate write
+            root.scheduleDiskWrite();
         }
     }
 
@@ -220,7 +266,7 @@ Singleton {
         const notifServerIndex = notifServer.trackedNotifications.values.findIndex((notif) => notif.id + root.idOffset === id);
         if (index !== -1) {
             root.list.splice(index, 1);
-            notifFileView.setText(stringifyList(root.list));
+            root.scheduleDiskWrite();
             triggerListChange()
         }
         if (notifServerIndex !== -1) {
@@ -232,7 +278,7 @@ Singleton {
     function discardAllNotifications() {
         root.list = []
         triggerListChange()
-        notifFileView.setText(stringifyList(root.list));
+        root.scheduleDiskWrite();
         notifServer.trackedNotifications.values.forEach((notif) => {
             notif.dismiss()
         })
@@ -320,8 +366,8 @@ Singleton {
         }
         onLoadFailed: (error) => {
             if(error != FileViewError.FileNotFound) {
-                console.log("[Notifications] Error loading file: " + error)
-                return
+                console.log("[Notifications] Error loading file: " + error);
+                return;
             }
             // Lazy-rstoration: a transient missing file (hot-reload / restart /
             // partial disk I/O) should not erase the user's existing
@@ -330,7 +376,7 @@ Singleton {
             if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
                 console.log("[Notifications] File genuinely missing, creating new file.")
                 root.list = []
-                notifFileView.setText(stringifyList(root.list));
+                root.scheduleDiskWrite();
             } else {
                 missingFileRetryTimer.restart()
             }

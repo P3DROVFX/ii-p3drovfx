@@ -21,6 +21,44 @@ AbstractBackgroundWidget {
 
     configEntryName: "media"
 
+    visibleWhenLocked: (Config.options.lock.centerWidget === "media")
+
+    readonly property bool forceCenter: (GlobalStates.screenLocked && Config.options.lock.centerWidget === "media")
+    readonly property real centeringX: (root.screenWidth - root.implicitWidth) / 2
+    readonly property real centeringY: (root.screenHeight - root.implicitHeight) / 2
+
+    property real lastStaticWidth: 240
+    property real lastStaticHeight: 240
+
+    implicitHeight: (typeof bgRoot !== 'undefined' && bgRoot.lockAnimationActive) ? lastStaticHeight : contentItem.implicitHeight
+    implicitWidth: (typeof bgRoot !== 'undefined' && bgRoot.lockAnimationActive) ? lastStaticWidth : contentItem.implicitWidth
+
+    onImplicitHeightChanged: {
+        if (typeof bgRoot === 'undefined' || !bgRoot.lockAnimationActive) {
+            lastStaticHeight = contentItem.implicitHeight;
+        }
+    }
+    onImplicitWidthChanged: {
+        if (typeof bgRoot === 'undefined' || !bgRoot.lockAnimationActive) {
+            lastStaticWidth = contentItem.implicitWidth;
+        }
+    }
+
+    onForceCenterChanged: {
+        root.animDuration = 700;
+        animResetTimer.restart();
+    }
+
+    Timer {
+        id: animResetTimer
+        interval: 750
+        repeat: false
+        onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
+    }
+
+    targetX: forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width)) : calculatedX)
+    targetY: forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height)) : calculatedY)
+
     readonly property bool useAlbumColors: Config.options.background.widgets.media.useAlbumColors
     readonly property bool useDynamicColors: root.useAlbumColors && root.currentPlayer != null
     readonly property bool showPreviousToggle: Config.options.background.widgets.media.showPreviousToggle
@@ -68,9 +106,6 @@ AbstractBackgroundWidget {
     property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
     property list<real> visualizerPoints: []
-
-    implicitHeight: contentItem.implicitHeight
-    implicitWidth: contentItem.implicitWidth
 
     // 'Switch button' visiblity on hover
     property bool hovering: false

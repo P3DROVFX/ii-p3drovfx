@@ -45,6 +45,16 @@ ContentPage {
             }
 
             ConfigSwitch {
+                enabled: Config.options.overview.enable
+                buttonIcon: "photo"
+                text: Translation.tr("Show window previews (screencopy)")
+                checked: Config.options.overview.showWindowPreviews
+                onCheckedChanged: {
+                    Config.options.overview.showWindowPreviews = checked;
+                }
+            }
+
+            ConfigSwitch {
                 enabled: Config.options.overview.enable && Config.options.overview.showIcons
                 buttonIcon: "vertical_align_center"
                 text: Translation.tr("Center icons")

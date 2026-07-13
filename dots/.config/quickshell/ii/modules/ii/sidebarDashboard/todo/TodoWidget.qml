@@ -128,7 +128,7 @@ Item {
             if (Todo.useTickTick) {
                 Todo.refresh();
             } else {
-                GlobalStates.settingsPendingPage = 16; // Core Services
+                GlobalStates.settingsPendingPage = 17; // Core Services
                 GlobalStates.settingsPendingSubPage = "widgets/CoreTickTickConfig.qml";
                 GlobalStates.openSettings();
             }

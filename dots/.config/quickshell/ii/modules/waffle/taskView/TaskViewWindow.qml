@@ -136,7 +136,7 @@ WMouseAreaButton {
                 animation: Looks.transition.enter.createObject(this)
             }
 
-            captureSource: root.toplevel ?? null
+            captureSource: Config.options.overview.showWindowPreviews ? (root.toplevel ?? null) : null
             live: true
         }
     }

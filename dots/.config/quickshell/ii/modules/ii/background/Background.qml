@@ -105,6 +105,31 @@ Scope {
 
             // Workspaces
             property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
+            property int activeWorkspaceId: 1
+            onMonitorChanged: {
+                let activeId = monitor?.activeWorkspace?.id;
+                if (activeId !== undefined && activeId !== null && activeId > 0) {
+                    if (activeId > 1000000) {
+                        bgRoot.activeWorkspaceId = 2147483647 - activeId;
+                    } else {
+                        bgRoot.activeWorkspaceId = activeId;
+                    }
+                }
+            }
+            Connections {
+                target: bgRoot.monitor ? bgRoot.monitor : null
+                ignoreUnknownSignals: true
+                function onActiveWorkspaceChanged() {
+                    let activeId = bgRoot.monitor?.activeWorkspace?.id;
+                    if (activeId !== undefined && activeId !== null && activeId > 0) {
+                        if (activeId > 1000000) {
+                            bgRoot.activeWorkspaceId = 2147483647 - activeId;
+                        } else {
+                            bgRoot.activeWorkspaceId = activeId;
+                        }
+                    }
+                }
+            }
             readonly property bool isMonitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
             readonly property bool loopEnabled: Config.options.background.parallax.loop
             readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
@@ -121,7 +146,7 @@ Scope {
             readonly property int workspaceGroup: {
                 if (!loopEnabled)
                     return 0;
-                let activeId = monitor?.activeWorkspace?.id;
+                let activeId = activeWorkspaceId;
                 if (!activeId)
                     return 0;
                 if (activeId <= workspaceOffset)
@@ -154,13 +179,19 @@ Scope {
                 const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
                 return enabled && sensitiveWallpaper && sensitiveNetwork;
             }
+
+            property var shaderList: ["circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"]
+            property string currentShader: "pixelate"
+            property real transitionProgress: 1.0
+            property bool transitionEverStarted: false
+
             property real wallpaperToScreenRatio: {
                 if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || screen.width <= 0 || screen.height <= 0 || isNaN(wallpaperWidth) || isNaN(wallpaperHeight))
                     return 1.0;
                 return Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height);
             }
             property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
-            property real effectiveWallpaperScale: 1 // Some reasonable init value, to be updated
+            property real effectiveWallpaperScale: preferredWallpaperScale
             property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
             property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
             property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.width) / 2
@@ -213,10 +244,114 @@ Scope {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
+            property real lockZoomScale: 1.0
+            Behavior on lockZoomScale {
+                NumberAnimation {
+                    id: lockZoomAnim
+                    duration: 700
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Connections {
+                target: Config.options.background.parallax
+                function onWorkspaceZoomChanged() {
+                    if (GlobalStates.screenLocked) {
+                        let zoom = Config.options.background.parallax.workspaceZoom;
+                        lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
+                    }
+                }
+            }
+
+            Timer {
+                id: lockZoomStartTimer
+                interval: 16
+                repeat: false
+                onTriggered: {
+                    if (GlobalStates.screenLocked) {
+                        let zoom = Config.options.background.parallax.workspaceZoom;
+                        lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
+                    } else {
+                        lockZoomScale = 1.0;
+                    }
+                }
+            }
+
+            Timer {
+                id: blurFadeOutTimer
+                interval: 30
+                repeat: false
+                onTriggered: bgRoot.blurLockTarget = 0
+            }
+
             // Layer props
             screen: modelData
             exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Top : WlrLayer.Bottom
+            property bool lockAnimationComplete: true
+            Timer {
+                id: lockAnimationTimer
+                interval: 800
+                repeat: false
+                onTriggered: bgRoot.lockAnimationComplete = true
+            }
+            // Suppress expensive widget canvas transitions during lock zoom.
+            // The state change repositioning triggers layout recalculations
+            // on every child (clock, weather, media) each frame — the main
+            // source of lock-animation stutter.
+            property bool lockAnimationActive: false
+            Timer {
+                id: canvasAnimSuppressTimer
+                interval: 800
+                repeat: false
+                onTriggered: bgRoot.lockAnimationActive = false
+            }
+            // Controls blur visibility: during lock, blur fades in starting
+            // partway through the zoom for a smooth blended transition.
+            // During unlock, blur fades out after a short defer.
+            property real blurLockTarget: 0
+            Timer {
+                id: blurAppearTimer
+                interval: 300
+                repeat: false
+                onTriggered: bgRoot.blurLockTarget = 1.0
+            }
+            onShouldBlurChanged: {
+                if (shouldBlur) {
+                    bgRoot.lockAnimationComplete = false
+                    lockAnimationTimer.restart()
+                }
+            }
+
+            // Freeze the blur source before lock/unlock zoom animation starts.
+            // scheduleUpdate() runs in the signal phase, before lockZoomScale's
+            // binding is re-evaluated, so ShaderEffectSource captures the
+            // wallpaper at its pre-animation scale. This prevents the MultiEffect
+            // from re-sampling the wallpaper every frame during the zoom.
+            //
+            // Lock transition is split into phases to avoid competing work in
+            // the same frame:
+            //   1. Snap widget positions instantly (lockAnimationActive → duration 0)
+            //   2. Defer wallpaper zoom start by 1 frame (lockZoomStartTimer)
+            //   3. Show blur after zoom completes (blurAppearTimer, 700ms)
+            Connections {
+                target: GlobalStates
+                function onScreenLockedChanged() {
+                    if (lockBlurCapture) {
+                        lockBlurCapture.scheduleUpdate();
+                    }
+                    bgRoot.lockAnimationActive = true;
+                    canvasAnimSuppressTimer.restart();
+                    if (GlobalStates.screenLocked) {
+                        blurAppearTimer.restart();
+                        lockZoomStartTimer.restart();
+                    } else {
+                        blurAppearTimer.stop();
+                        blurFadeOutTimer.start();
+                        lockZoomStartTimer.restart();
+                    }
+                }
+            }
+            WlrLayershell.layer: WlrLayer.Bottom
             WlrLayershell.namespace: "quickshell:background"
             anchors {
                 top: true
@@ -237,7 +372,33 @@ Scope {
 
             onWallpaperPathChanged: {
                 bgRoot.updateZoomScale();
-                // Clock position gets updated after zoom scale is updated
+                if (wallpaperSafetyTriggered || Config.options.background.wallpaperAnimation === "" || !Config.options.background.animateWallpaperChanges || wallpaperIsVideo) {
+                    bgRoot.transitionProgress = 1.0
+                    return
+                }
+                if (bgRoot.transitionProgress >= 1.0) {
+                    bgRoot.transitionEverStarted = true
+                    if (Config.options.background.wallpaperAnimation === "random") {
+                        bgRoot.currentShader = bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
+                    } else {
+                        bgRoot.currentShader = Config.options.background.wallpaperAnimation
+                    }
+                    bgRoot.transitionProgress = 0.0
+                    transitionAnim.restart()
+                }
+            }
+
+            NumberAnimation {
+                id: transitionAnim
+                target: bgRoot
+                property: "transitionProgress"
+                from: 0.0
+                to: 1.0
+                duration: 1400
+                easing.type: Easing.InOutCubic
+                onFinished: {
+                    bgRoot.transitionProgress = 1.0
+                }
             }
 
             // Wallpaper zoom scale
@@ -271,18 +432,6 @@ Scope {
 
                         bgRoot.wallpaperWidth = width;
                         bgRoot.wallpaperHeight = height;
-
-                        if (Config.options.background.scaleLargeWallpapers) {
-                            if (width <= screenWidth || height <= screenHeight) {
-                                // Undersized/perfectly sized wallpapers
-                                bgRoot.effectiveWallpaperScale = Math.max(screenWidth / width, screenHeight / height);
-                            } else {
-                                // Oversized = can be zoomed for parallax, yay
-                                bgRoot.effectiveWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenWidth, height / screenHeight);
-                            }
-                        } else {
-                            bgRoot.effectiveWallpaperScale = 1.0;
-                        }
                     }
                 }
             }
@@ -298,6 +447,10 @@ Scope {
             Component.onCompleted: {
                 if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
+                }
+                if (GlobalStates.screenLocked) {
+                    let zoom = Config.options.background.parallax.workspaceZoom;
+                    lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
                 }
             }
 
@@ -330,6 +483,7 @@ Scope {
                         anchors.fill: parent
                         imageSource: ((wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperSafetyTriggered) ? bgRoot.wallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
+                        animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                         fillMode: Image.PreserveAspectCrop
                         // Visible for both styles during zoom out & return animation to avoid any black fallback margins
                         visible: Config.options.background.zoomOutStyle !== 2 && (wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperIsVideo
@@ -547,10 +701,18 @@ Scope {
                             }
 
                             Behavior on x {
-                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                NumberAnimation {
+                                    duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
+                                    easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
+                                    easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
+                                }
                             }
                             Behavior on y {
-                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                NumberAnimation {
+                                    duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
+                                    easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
+                                    easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
+                                }
                             }
                             Behavior on width {
                                 NumberAnimation {
@@ -589,8 +751,8 @@ Scope {
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
 
                                 visible: opacity > 0 && !bgRoot.wallpaperIsVideo
-                                opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
-                                sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                                opacity: (!bgRoot.wallpaperIsVideo) ? 1 : 0
+                                sourceSize: Qt.size(-1, -1)
 
                                 property int chunkSize: bgRoot.chunkSize
                                 property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
@@ -599,7 +761,7 @@ Scope {
                                 property real valueX: {
                                     let result = 0.5;
                                     if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) {
-                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                        let ratio = ((bgRoot.activeWorkspaceId - lower) / range);
                                         result = Config.options.background.parallax.invertHorizontal ? (1.0 - ratio) : ratio;
                                     }
                                     return result;
@@ -612,7 +774,7 @@ Scope {
                                 property real valueY: {
                                     let result = 0.5;
                                     if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) {
-                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
+                                        let ratio = ((bgRoot.activeWorkspaceId - lower) / range);
                                         result = Config.options.background.parallax.invertVertical ? (1.0 - ratio) : ratio;
                                     }
                                     return result;
@@ -622,21 +784,21 @@ Scope {
 
                                 imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
                                 animated: Config.options.background.animateWallpaperChanges
+                                animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                                 fillMode: Image.PreserveAspectCrop
-                                // Performance: disable mipmapping on the central wallpaper
-                                mipmap: false
-                                antialiasing: false
 
                                 Behavior on x {
                                     NumberAnimation {
-                                        duration: 400
-                                        easing.type: Easing.OutCubic
+                                        duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
+                                        easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
+                                        easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
                                     }
                                 }
                                 Behavior on y {
                                     NumberAnimation {
-                                        duration: 400
-                                        easing.type: Easing.OutCubic
+                                        duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
+                                        easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
+                                        easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
                                     }
                                 }
                                 Behavior on width {
@@ -651,22 +813,48 @@ Scope {
                                         easing.type: Easing.OutCubic
                                     }
                                 }
+                                scale: bgRoot.lockZoomScale
+                                transformOrigin: Item.Center
+                            }
+
+                            ShaderEffect {
+                                id: transitionShaderEffect
+                                anchors.fill: wallpaper
+                                visible: (bgRoot.transitionProgress < 1.0 || (bgRoot.transitionEverStarted && wallpaper.status !== Image.Ready)) && Config.options.background.wallpaperAnimation !== "" && !bgRoot.wallpaperSafetyTriggered && !bgRoot.wallpaperIsVideo
+                                property var fromImage: wallpaper.fromImage
+                                property var toImage: wallpaper.toImage
+                                property real progress: bgRoot.transitionProgress
+                                property real aspectX: width / height
+                                property real aspectY: 1.0
+                                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+                                property vector2d origin: Qt.vector2d(0.5, 0.5)
+                                fragmentShader: Config.options.background.wallpaperAnimation !== ""
+                                    ? Qt.resolvedUrl(`shaders/${bgRoot.currentShader}.frag.qsb`)
+                                    : ""
+                            }
+
+                            // --- Frozen blur source ---
+                            // Captures the wallpaper once when the lock activates, preventing the
+                            // MultiEffect from re-sampling the wallpaper every frame during the
+                            // lock zoom animation. This is the primary performance fix for lock
+                            // animation stutter.
+                            ShaderEffectSource {
+                                id: lockBlurCapture
+                                sourceItem: wallpaper
+                                anchors.fill: wallpaper
+                                // Don't update every frame — freeze at capture moment.
+                                // The lock blur does not need to track wallpaper changes.
+                                live: false
+                                hideSource: false
+                                visible: false
                             }
 
                             Loader {
                                 id: blurLoader
-                                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
+                                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || bgRoot.blurLockTarget > 0)
                                 anchors.fill: wallpaper
-                                scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
-                                Behavior on scale {
-                                    NumberAnimation {
-                                        id: scaleAnim
-                                        duration: 400
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
-                                    }
-                                }
-                                opacity: GlobalStates.screenLocked ? 1.0 : 0.0
+                                scale: (1.0 + (Config.options.lock.blur.extraZoom - 1.0) * opacity) * bgRoot.lockZoomScale
+                                opacity: bgRoot.blurLockTarget
                                 Behavior on opacity {
                                     NumberAnimation {
                                         duration: 400
@@ -674,11 +862,11 @@ Scope {
                                     }
                                 }
                                 sourceComponent: MultiEffect {
-                                    source: wallpaper
+                                    source: lockBlurCapture
                                     blurEnabled: true
                                     // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
                                     blurMax: 64
-                                    blur: Math.min(Config.options.lock.blur.radius / 4, 24) / 64
+                                    blur: Math.min(Config.options.lock.blur.radius / 4, 48) / 64
 
                                     Rectangle {
                                         opacity: 1.0
@@ -693,7 +881,11 @@ Scope {
                                 visible: !Config.options.background.useWallpaperEngine
                                 scale: 1 - (defaultRatio - 1)
                                 Behavior on scale {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                    NumberAnimation {
+                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
+                                        easing.type: Appearance.animation.elementMove.type
+                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                    }
                                 }
                                 anchors {
                                     left: parent.left
@@ -714,10 +906,18 @@ Scope {
                                         return yOnWallpaper - extraMove;
                                     }
                                     Behavior on leftMargin {
-                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                        NumberAnimation {
+                                            duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
+                                            easing.type: Appearance.animation.elementMove.type
+                                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                        }
                                     }
                                     Behavior on topMargin {
-                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                        NumberAnimation {
+                                            duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
+                                            easing.type: Appearance.animation.elementMove.type
+                                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                        }
                                     }
                                 }
                                 width: parent.width
@@ -750,12 +950,12 @@ Scope {
                                 transitions: Transition {
                                     PropertyAnimation {
                                         properties: "width,height,leftMargin,rightMargin,topMargin,bottomMargin"
-                                        duration: Appearance.animation.elementMove.duration
+                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
                                         easing.type: Appearance.animation.elementMove.type
                                         easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                                     }
                                     AnchorAnimation {
-                                        duration: Appearance.animation.elementMove.duration
+                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
                                         easing.type: Appearance.animation.elementMove.type
                                         easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                                     }
@@ -763,6 +963,7 @@ Scope {
 
                                 FadeLoader {
                                     shown: Config.options.background.widgets.weather.enable
+                                    visible: !bgRoot.lockAnimationActive
                                     sourceComponent: Config.options.background.widgets.weather.style === "expressive" ? expressiveWeatherWidget : defaultWeatherWidget
 
                                     Component {
@@ -789,7 +990,7 @@ Scope {
                                 }
 
                                 FadeLoader {
-                                    shown: Config.options.background.widgets.clock.enable
+                                    shown: Config.options.background.widgets.clock.enable && !(GlobalStates.screenLocked && Config.options.background.widgets.clock.disableAnimationOnLock)
                                     sourceComponent: ClockWidget {
                                         screenWidth: bgRoot.screen.width
                                         screenHeight: bgRoot.screen.height
@@ -802,6 +1003,7 @@ Scope {
 
                                 FadeLoader {
                                     shown: Config.options.background.widgets.date.enable
+                                    visible: !bgRoot.lockAnimationActive
                                     sourceComponent: DateWidget {
                                         screenWidth: bgRoot.screen.width
                                         screenHeight: bgRoot.screen.height
@@ -821,6 +1023,7 @@ Scope {
                                     id: mediaLoader
                                     property bool enableLoading: true
                                     shown: Config.options.background.widgets.media.enable && enableLoading
+                                    visible: !bgRoot.lockAnimationActive || Config.options.lock.centerWidget === "media"
                                     sourceComponent: Config.options.background.widgets.media.style === "expressive" ? expressiveMediaWidget : circularMediaWidget
 
                                     Component {

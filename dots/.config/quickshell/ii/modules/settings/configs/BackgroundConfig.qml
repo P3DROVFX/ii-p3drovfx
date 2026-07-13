@@ -83,15 +83,27 @@ ContentPage {
             }
         }
 
-        ConfigSpinBox {
-            icon: "loupe"
+        ConfigSlider {
+            buttonIcon: "loupe"
             text: Translation.tr("Preferred wallpaper zoom (%)")
-            value: Config.options.background.parallax.workspaceZoom * 100
-            from: 10
-            to: 200
+            from: 100
+            to: 150
             stepSize: 1
+            value: Config.options.background.parallax.workspaceZoom * 100
             onValueChanged: {
                 Config.options.background.parallax.workspaceZoom = value / 100;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "timer_off"
+            text: Translation.tr("Disable clock animation on lock")
+            checked: Config.options.background.widgets.clock.disableAnimationOnLock
+            onCheckedChanged: {
+                Config.options.background.widgets.clock.disableAnimationOnLock = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Skip loading the clock widget during lock screen for better animation performance.")
             }
         }
     }
@@ -106,6 +118,67 @@ ContentPage {
             checked: Config.options.background.animateWallpaperChanges
             onCheckedChanged: {
                 Config.options.background.animateWallpaperChanges = checked;
+            }
+        }
+
+        ContentSubsection {
+            visible: Config.options.background.animateWallpaperChanges
+            title: Translation.tr("Transition style")
+            icon: "style"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.background.wallpaperAnimation
+                onSelected: newValue => {
+                    Config.options.background.wallpaperAnimation = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Random"),
+                        icon: "shuffle",
+                        value: "random"
+                    },
+                    {
+                        displayName: Translation.tr("Crossfade"),
+                        icon: "blur_on",
+                        value: ""
+                    },
+                    {
+                        displayName: Translation.tr("Circle Pit"),
+                        icon: "circle",
+                        value: "circlePit"
+                    },
+                    {
+                        displayName: Translation.tr("Circle Select"),
+                        icon: "radio_button_checked",
+                        value: "circleSelect"
+                    },
+                    {
+                        displayName: Translation.tr("Magic"),
+                        icon: "auto_awesome",
+                        value: "magic"
+                    },
+                    {
+                        displayName: Translation.tr("Peel"),
+                        icon: "sticky_note_2",
+                        value: "Peel"
+                    },
+                    {
+                        displayName: Translation.tr("Transition"),
+                        icon: "swap_horiz",
+                        value: "transition"
+                    },
+                    {
+                        displayName: Translation.tr("Pixelate"),
+                        icon: "grid_on",
+                        value: "pixelate"
+                    },
+                    {
+                        displayName: Translation.tr("Stripes"),
+                        icon: "view_column",
+                        value: "stripes"
+                    }
+                ]
             }
         }
 
@@ -188,23 +261,6 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Shows scaled ScreencopyView of windows zooming out with the wallpaper when the overview opens.\nWindows on the active workspace follow the wallpaper zoom animation.\nWorkspace switching slides the window previews alongside the workspace animation.")
-            }
-        }
-    }
-
-    ContentSection {
-        title: Translation.tr("Wallpaper settings")
-        icon: "wallpaper"
-
-        ConfigSwitch {
-            buttonIcon: "photo_size_select_large"
-            text: Translation.tr("Smooth wallpapers")
-            checked: Config.options.background.scaleLargeWallpapers
-            onCheckedChanged: {
-                Config.options.background.scaleLargeWallpapers = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("Reduces the resolution of wallpapers larger than the screen to save memory. Disabling i you can have some jagged edges on the wallpaper.")
             }
         }
     }

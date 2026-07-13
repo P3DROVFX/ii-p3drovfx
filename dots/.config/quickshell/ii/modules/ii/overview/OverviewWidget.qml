@@ -335,8 +335,8 @@ Item {
 
                     property int wsCount: wsWindowsSorted.length || 1
 
-                    scrollWidth: windowData.floating ? windowData.size[0] * root.scale : root.workspaceImplicitWidth * windowWidthRatio
-                    scrollHeight: windowData.floating ? windowData.size[1] * root.scale : root.workspaceImplicitHeight
+                    scrollWidth: windowData.floating ? window.targetWindowWidth : root.workspaceImplicitWidth * windowWidthRatio
+                    scrollHeight: windowData.floating ? window.targetWindowHeight : root.workspaceImplicitHeight
 
                     scrollX: windowData.floating ? xOffset + xWithinWorkspaceWidget : calculateXPos()
                     scrollY: windowData.floating ? yOffset + yWithinWorkspaceWidget : yOffset
@@ -361,8 +361,8 @@ Item {
                     property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
                     xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex
                     yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
-                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (windowMonitorData?.x ?? 0) - (monitorData?.reserved?.[0] ?? 0)) * root.scale, 0)
-                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (windowMonitorData?.y ?? 0) - (monitorData?.reserved?.[1] ?? 0)) * root.scale, 0)
+                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (windowMonitorData?.x ?? 0) - (windowMonitorData?.reserved?.[0] ?? 0)) * window.widthRatio * root.scale, 0)
+                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (windowMonitorData?.y ?? 0) - (windowMonitorData?.reserved?.[1] ?? 0)) * window.heightRatio * root.scale, 0)
 
                     // Radius
                     property real minRadius: Appearance.rounding.small

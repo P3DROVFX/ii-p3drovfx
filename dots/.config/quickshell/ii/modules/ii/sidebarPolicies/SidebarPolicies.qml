@@ -3,6 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.shared
 import QtQuick
 import Quickshell.Io
 import Quickshell
@@ -16,7 +17,7 @@ Scope { // Scope
     property Component contentComponent: SidebarPoliciesContent {}
     property Item sidebarContent
 
-    Bar.BarThemes { id: barThemes }
+    BarThemes { id: barThemes }
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     readonly property bool isOnLeft: {

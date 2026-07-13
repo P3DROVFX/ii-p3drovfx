@@ -282,7 +282,7 @@ PanelWindow {
     Process {
         id: checkRecordingProc
         running: isRecording
-        command: ["pidof", "wf-recorder"]
+        command: ["bash", "-c", "pidof wf-recorder > /dev/null 2>&1 || (pgrep -x obs > /dev/null 2>&1 && python3 '" + Directories.scriptPath + "/videos/obs_control.py' status 2>/dev/null | grep -q active)"]
         onExited: (exitCode, exitStatus) => {
             root.preparationDone = !screenshotProc.running;
             root.recordingShouldStop = (exitCode === 0);

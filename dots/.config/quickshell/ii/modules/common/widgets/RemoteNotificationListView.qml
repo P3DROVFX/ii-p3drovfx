@@ -63,7 +63,7 @@ StyledListView {
                     && (KdeConnectService.activeDevice.supportedPlugins
                             || []).indexOf("kdeconnect_notifications") >= 0) {
                 return Translation.tr(
-                    "No notifications\nMake sure KDE Connect has Notification Access on your phone")
+                    "No notifications\nMake sure KDE Connect has \nNotification Access on your phone")
             }
             return Translation.tr("No notifications from phone")
         }

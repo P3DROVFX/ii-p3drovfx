@@ -11,6 +11,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
+import qs.modules.ii.bar.shared
 import qs.modules.ii.wrappedFrame
 
 Scope {
@@ -19,13 +20,7 @@ Scope {
     Variants {
         id: barVariant
         // For each monitor
-        property var variantModel: {
-            const screens = Quickshell.screens;
-            const list = Config.options.bar.screenList;
-            if (!list || list.length === 0)
-                return screens;
-            return screens.filter(screen => list.includes(screen.name));
-        }
+        readonly property var variantModel: GlobalStates.allowedScreens
         model: variantModel
         LazyLoader {
             id: barLoader
@@ -54,7 +49,7 @@ Scope {
 
                     exclusiveZone: (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0))
 
-                    implicitWidth: Appearance.sizes.verticalBarWidth + Appearance.rounding.screenRounding
+                    implicitWidth: Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding
                     color: "transparent"
                     mask: Region {}
                 }
@@ -70,15 +65,15 @@ Scope {
 
                     property int monitorIndex: barLoader.monitorIndex
                     property bool hasActiveWindows: false
-                    property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1
+                    property bool showBarBackground: barRoot.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
-                    Bar.BarThemes {
+                    BarThemes {
                         id: barThemes
                     }
                     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
                     Connections {
-                        enabled: Config.options.bar.barBackgroundStyle === 2
+                        enabled: Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 3
                         target: HyprlandData
                         function onWindowListChanged() {
                             const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
@@ -113,7 +108,7 @@ Scope {
                     }
                     property bool superShow: false
                     property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-                    property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWidth : 0
+                    property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
                     }
@@ -127,6 +122,19 @@ Scope {
                         item: hoverMaskRegion
                     }
                     color: "transparent"
+
+                    TransparentBarGlow {
+                        z: -20
+                        vertical: true
+                        isBottom: Config.options.bar.bottom
+                        targetScreen: barRoot.screen
+                        anchors {
+                            top: parent.top
+                            bottom: parent.bottom
+                            left: !Config.options.bar.bottom ? parent.left : undefined
+                            right: Config.options.bar.bottom ? parent.right : undefined
+                        }
+                    }
 
                     // Positioning FULL SCREEN
                     anchors {
@@ -167,17 +175,19 @@ Scope {
 
                         Item {
                             id: hoverMaskRegion
+                            readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
+                            readonly property real sideMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : Config.options.bar.autoHide.hoverRegionWidth
                             anchors {
                                 fill: barContent
-                                leftMargin: -Config.options.bar.autoHide.hoverRegionWidth
-                                rightMargin: -Config.options.bar.autoHide.hoverRegionWidth
+                                leftMargin: -sideMaskExtend
+                                rightMargin: -sideMaskExtend
                             }
                         }
 
                         VerticalBarContent {
                             id: barContent
                             monitorIndex: barRoot.monitorIndex
-                            implicitWidth: Appearance.sizes.verticalBarWidth
+                            implicitWidth: Appearance.sizes.verticalBarWindowWidth
                             anchors {
                                 top: parent.top
                                 bottom: parent.bottom
@@ -223,7 +233,7 @@ Scope {
                                 right: undefined
                             }
                             width: Appearance.rounding.screenRounding
-                            active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.appearance.fakeScreenRounding != 3 // Hug
+                            active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3 // Hug
 
                             states: State {
                                 name: "right"

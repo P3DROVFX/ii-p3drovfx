@@ -97,6 +97,10 @@ Item {
                     return Translation.tr("Click to see missing dependencies and install guide")
                 if (!root._deviceOnline)
                     return Translation.tr("Pair a reachable device to mirror its screen")
+                if (KdeConnectService.scrcpyLaunchError.length > 0)
+                    return KdeConnectService.scrcpyLaunchError.split("\n")[0]
+                if (!KdeConnectService.adbReachable && !KdeConnectService.scrcpyRunning)
+                    return Translation.tr("Connect via USB (ADB debugging) or set wireless IP in settings")
                 if (KdeConnectService.scrcpyRunning)
                     return Translation.tr("Mirror is running · click to focus window")
                 if (KdeConnectService.scrcpyLaunching)
@@ -105,6 +109,7 @@ Item {
             }
             state: !root._scrcpyPresent ? "unavailable"
                 : !root._deviceOnline ? "offline"
+                : KdeConnectService.scrcpyLaunchError.length > 0 ? "offline"
                 : KdeConnectService.scrcpyRunning ? "active"
                 : KdeConnectService.scrcpyLaunching ? "connecting"
                 : "ready"
@@ -347,8 +352,8 @@ Item {
             return "unknown"
         }
         headerTitle: root._installGuideTitle
-        onVisibleChanged: {
-            if (!visible) root._installGuideVisible = false
+        onCloseRequested: {
+            root._installGuideVisible = false
         }
         onRefreshRequested: {
             // Re-check all 3 services — the user may have installed deps
@@ -357,6 +362,7 @@ Item {
             PhoneMicService.refresh()
             KdeConnectService.checkScrcpyProc.running = true
             KdeConnectService.checkAdbProc.running = true
+            KdeConnectService.checkPythonDbusProc.running = true
         }
     }
 }

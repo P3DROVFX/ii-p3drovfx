@@ -48,12 +48,20 @@ ContentPage {
         icon: "music_cast"
         title: Translation.tr("Media Player")
 
-        ConfigSwitch {
-            buttonIcon: "fluid_med"
-            text: Translation.tr("Expressive media popup")
-            checked: Config.options.bar.mediaPlayer.expressivePopup
-            onCheckedChanged: {
-                Config.options.bar.mediaPlayer.expressivePopup = checked;
+        ContentSubsection {
+            title: Translation.tr("Popup style")
+            icon: "style"
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.mediaPlayer.popupStyle
+                onSelected: newValue => {
+                    Config.options.bar.mediaPlayer.popupStyle = newValue;
+                }
+                options: [
+                    { displayName: Translation.tr("Default"),     icon: "dashboard",     value: "default" },
+                    { displayName: Translation.tr("Expressive"),  icon: "auto_awesome",  value: "expressive" },
+                    { displayName: Translation.tr("Android"),     icon: "smart_display", value: "android" }
+                ]
             }
         }
 

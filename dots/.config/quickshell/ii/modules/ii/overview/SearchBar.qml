@@ -9,6 +9,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.bar
+import qs.modules.ii.bar.shared
 
 RowLayout {
     id: root
@@ -324,6 +325,11 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            if (event.key === Qt.Key_Escape) {
+                GlobalStates.overviewOpen = false;
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
                 root.ctrlKPressed();
                 event.accepted = true;
