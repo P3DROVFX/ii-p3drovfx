@@ -564,32 +564,31 @@ apply_fork_branch() {
     # Step 6: restore protected files (overwrites just-copied versions)
     restore_protected_files "$TARGET_DIR"
 
-    # Step 7: mirror setup scripts to standard location so UI keeps working
-    if [ "$SCRIPT_DIR" != "$STANDARD_SCRIPT_DIR" ]; then
-        mkdir -p "$STANDARD_SCRIPT_DIR"
-        cp "$SOURCE" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh" 2>/dev/null || cp "$SCRIPT_DIR/setup-ii-vynx.sh" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
-        chmod +x "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
-        for s in update-fork.sh; do
-            if [ -f "$SCRIPT_DIR/$s" ]; then
-                cp "$SCRIPT_DIR/$s" "$STANDARD_SCRIPT_DIR/$s"
-                chmod +x "$STANDARD_SCRIPT_DIR/$s"
-            fi
-        done
-        # Prune obsolete scripts that we no longer ship but may linger from older installs.
-        for obsolete in update-with-customs.sh; do
-            if [ -f "$STANDARD_SCRIPT_DIR/$obsolete" ] && [ ! -f "$SCRIPT_DIR/$obsolete" ]; then
-                rm -f "$STANDARD_SCRIPT_DIR/$obsolete"
-                log_verbose "Pruned obsolete script: $STANDARD_SCRIPT_DIR/$obsolete"
-            fi
-        done
-        # sdata cli libs (for vynx subcommands)
-        if [ -d "$SCRIPT_DIR/sdata" ]; then
-            mkdir -p "$STANDARD_SCRIPT_DIR/sdata/cli/lib"
-            cp -r "$SCRIPT_DIR/sdata/cli/lib/." "$STANDARD_SCRIPT_DIR/sdata/cli/lib/" 2>/dev/null
-            chmod +x "$STANDARD_SCRIPT_DIR/sdata/cli/lib/"*.sh 2>/dev/null
+    # Step 7: always mirror setup scripts from the fresh clone
+    # (not from $SCRIPT_DIR, which may be a stale mirror itself).
+    mkdir -p "$STANDARD_SCRIPT_DIR"
+    cp "$clone_dir/setup-ii-vynx.sh" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
+    chmod +x "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
+    for s in update-fork.sh; do
+        if [ -f "$clone_dir/$s" ]; then
+            cp "$clone_dir/$s" "$STANDARD_SCRIPT_DIR/$s"
+            chmod +x "$STANDARD_SCRIPT_DIR/$s"
         fi
-        log_verbose "Mirrored scripts to $STANDARD_SCRIPT_DIR"
+    done
+    # Prune obsolete scripts
+    for obsolete in update-with-customs.sh; do
+        if [ -f "$STANDARD_SCRIPT_DIR/$obsolete" ]; then
+            rm -f "$STANDARD_SCRIPT_DIR/$obsolete"
+            log_verbose "Pruned obsolete script: $STANDARD_SCRIPT_DIR/$obsolete"
+        fi
+    done
+    # sdata cli libs (for vynx subcommands)
+    if [ -d "$clone_dir/sdata" ]; then
+        mkdir -p "$STANDARD_SCRIPT_DIR/sdata/cli/lib"
+        cp -r "$clone_dir/sdata/cli/lib/." "$STANDARD_SCRIPT_DIR/sdata/cli/lib/" 2>/dev/null
+        chmod +x "$STANDARD_SCRIPT_DIR/sdata/cli/lib/"*.sh 2>/dev/null
     fi
+    log_verbose "Mirrored scripts to $STANDARD_SCRIPT_DIR"
 
     # Cleanup clone
     rm -rf "$clone_dir"
