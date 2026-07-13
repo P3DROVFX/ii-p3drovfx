@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
+# update-fork.sh — thin wrapper around setup-ii-vynx.sh --update.
+#
+# Kept for backwards compatibility. Use `vynx update` or
+# `setup-ii-vynx.sh --update` directly for new code.
 set -euo pipefail
+SCRIPT_DIR="$(cd -P "$(dirname "$0")" >/dev/null 2>&1 && pwd)"
 
-SCRIPT_DIR="$(dirname "$0")"
-UPDATER="$SCRIPT_DIR/update-with-customs.sh"
+# Resolve the canonical script: prefer ~/Downloads/ii-vynx (dev clone),
+# then ~/.local/share/ii-vynx (installed copy used by UI buttons),
+# then this dir.
+SETUP=""
+for candidate in \
+    "$HOME/Downloads/ii-vynx/setup-ii-vynx.sh" \
+    "$HOME/.local/share/ii-vynx/setup-ii-vynx.sh" \
+    "$SCRIPT_DIR/setup-ii-vynx.sh"; do
+    if [ -f "$candidate" ]; then
+        SETUP="$candidate"
+        break
+    fi
+done
 
-echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-echo '  Your fork: Checking for conflicts (dry-run)...'
-echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-echo ''
-
-if bash "$UPDATER" --dry-run -v; then
-  echo ''
-  echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-  echo '  No conflicts! Applying update...'
-  echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-  echo ''
-  bash "$UPDATER" -v
-else
-  echo ''
-  echo '⚠ Conflicts or errors detected.'
-  echo '  Update NOT applied.'
+if [ -z "$SETUP" ]; then
+    echo "✗ Could not locate setup-ii-vynx.sh" >&2
+    exit 1
 fi
 
-echo ''
-echo 'Press Enter to close...'
-read
+exec bash "$SETUP" --update --no-confirm --preserve-config "$@"

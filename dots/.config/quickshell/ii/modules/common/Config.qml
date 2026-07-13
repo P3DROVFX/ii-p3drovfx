@@ -131,7 +131,7 @@ Singleton {
         // SIGKILL during shell update).
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
-        onAdapterUpdated: fileWriteTimer.restart()
+        onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {

@@ -49,7 +49,7 @@ MaterialShape { // App icon
         sourceComponent: IconImage {
             id: appIconImage
             implicitSize: root.appIconSize
-            asynchronous: true
+            asynchronous: false
             source: Quickshell.iconPath(root.appIcon, "image-missing")
         }
     }
@@ -86,7 +86,7 @@ MaterialShape { // App icon
                 anchors.right: parent.right
                 sourceComponent: IconImage {
                     implicitSize: root.smallAppIconSize
-                    asynchronous: true
+                    asynchronous: false
                     source: Quickshell.iconPath(root.appIcon, "image-missing")
                 }
             }

@@ -83,7 +83,7 @@ Singleton {
         atomicWrites: true
         blockWrites: root.blockWrites
         onFileChanged: fileReloadTimer.restart()
-        onAdapterUpdated: fileWriteTimer.restart()
+        onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
         onLoaded: root.ready = true
         onLoadFailed: error => {
             console.log("Failed to load persistent states file:", error);

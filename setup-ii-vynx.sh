@@ -1,5 +1,29 @@
 #!/bin/bash
 
+# ii-vynx setup / update / fork / branch manager
+#
+# Always downloads the latest version from GitHub and replaces the ii folder.
+# No local cache — ~/.local/share is used only for backups of the previous ii.
+#
+# Usage:
+#   ./setup-ii-vynx.sh                              # Install/Setup legacy (uses local clone)
+#   ./setup-ii-vynx.sh --update                     # Update current fork+branch from GitHub
+#   ./setup-ii-vynx.sh --fork <preset|url>          # Switch fork (default branch)
+#   ./setup-ii-vynx.sh --branch <name>             # Switch branch on current fork
+#   ./setup-ii-vynx.sh --fork end4 --branch main   # Switch fork + branch together
+#   ./setup-ii-vynx.sh --switch                     # Used with --fork/--branch: only switch, no full install
+#   ./setup-ii-vynx.sh --list-branches              # List current fork's remote branches
+#   ./setup-ii-vynx.sh --list-forks                 # List known fork presets
+#
+# Flags:
+#   -v, --verbose            Verbose output
+#   --no-backup              Skip ~/.local backup of previous ii
+#   --force-install          Skip illogical-impulse presence check
+#   --no-confirm             Skip all confirmations
+#   --preserve-config        Keep existing config.json (useful for updates/branch switch)
+#   --rebuild-quickshell     Rebuild Quickshell from source
+#   --ii-subdir <name>       Override auto-detection of ii* folder (rarely needed)
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,8 +38,6 @@ while [ -L "$SOURCE" ]; do
     SOURCE="$(readlink "$SOURCE")"
     [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
-
-
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 
 # ── Log to file for debugging (called from QML Process) ─────────────────────
@@ -40,7 +62,7 @@ if [[ "$INVOKED_AS" == "vynx" ]]; then
 
     COMMAND="$1"; shift
     case "$COMMAND" in
-        run|restart|update|remove-cli|hyprset)
+        run|restart|update|remove-cli|hyprset|fork|branch|switch|list-forks|list-branches)
             if [ -f "$LIB_DIR/${COMMAND}.sh" ]; then
                 source "$LIB_DIR/${COMMAND}.sh" "$@"
                 exit $?
@@ -49,142 +71,236 @@ if [[ "$INVOKED_AS" == "vynx" ]]; then
             fi
             ;;
         "")
-            echo "Usage: vynx [-v] {run|restart|update|remove-cli|hyprset}"; exit 1 ;;
+            echo "Usage: vynx [-v] {run|restart|update|remove-cli|hyprset|fork|branch|switch|list-forks|list-branches}"; exit 1 ;;
         *)
-            echo -e "${RED}Invalid command: $COMMAND${NC}"; exit 1 ;;
+            echo -e "${RED}Invalid command: $COMMAND${NC}"; exit 1
     esac
 fi
 
-# ── Default flags ────────────────────────────────────────────────────────────
-DO_PULL=true
-VERBOSE=false
-FORCE_INSTALL=false
-BACKUP=true
-FULL_INSTALL=false
-NO_CONFIRM=false
-USE_II_VYNX=false
-UPDATE_ONLY=false
-PRESERVE_CONFIG=false
-DELETE_CACHE=false
-REBUILD_QS=false
-
-UPSTREAM_REPO="https://github.com/vaguesyntax/ii-vynx"
-UPSTREAM_DIR="$HOME/.local/share/ii-vynx-upstream"
+# ── Paths ────────────────────────────────────────────────────────────────────
 STANDARD_SCRIPT_DIR="$HOME/.local/share/ii-vynx"
-
-# Auto-detect fork directory:
-# 1. Check if SCRIPT_DIR is a git repo and its remote does NOT point to upstream
-# 2. Check ~/.local/share/ii-vynx-fork
-# 3. Check ~/Downloads/ii-vynx
-# 4. Fallback to SCRIPT_DIR
-IS_UPSTREAM=false
-if [ -d "$SCRIPT_DIR/.git" ]; then
-    REMOTE_URL=$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null)
-    if [[ "$REMOTE_URL" == *"vaguesyntax/ii-vynx"* ]]; then
-        IS_UPSTREAM=true
-    fi
-fi
-
-if [ -d "$SCRIPT_DIR/.git" ] && [ "$IS_UPSTREAM" = false ]; then
-    FORK_DIR="$SCRIPT_DIR"
-elif [ -d "$HOME/.config/quickshell/ii-vynx-repo/.git" ]; then
-    FORK_DIR="$HOME/.config/quickshell/ii-vynx-repo"
-elif [ -d "$HOME/Downloads/ii-vynx/.git" ]; then
-    FORK_DIR="$HOME/Downloads/ii-vynx"
-elif [ -d "$HOME/.local/share/ii-vynx-fork/.git" ]; then
-    FORK_DIR="$HOME/.local/share/ii-vynx-fork"
-else
-    FORK_DIR="$SCRIPT_DIR"
-fi
-
-if [ -d "$SCRIPT_DIR/.git" ] && [ "$IS_UPSTREAM" = true ]; then
-    UPSTREAM_DIR="$SCRIPT_DIR"
-else
-    UPSTREAM_DIR="$HOME/.local/share/ii-vynx-upstream"
-fi
-
+BACKUP_BASE_DIR="$HOME/.local/share/ii-backups"
 CONFIG_DIR="$HOME/.config"
 CHECK_DIR="$CONFIG_DIR/illogical-impulse"
 TARGET_DIR="$CONFIG_DIR/quickshell/ii"
+STATE_DIR="$TARGET_DIR"  # state files (.active-*) live inside ii/
 
+# ── Fork presets ─────────────────────────────────────────────────────────────
+declare -A PRESET_URLS=(
+    ["p3drovfx"]="https://github.com/P3DROVFX/ii-vynx"
+    ["mine"]="https://github.com/P3DROVFX/ii-vynx"
+    ["end4"]="https://github.com/end-4/dots-hyprland"
+    ["vynx"]="https://github.com/vaguesyntax/ii-vynx"
+    ["upstream"]="https://github.com/vaguesyntax/ii-vynx"
+)
+declare -A PRESET_DEFAULT_BRANCH=(
+    ["p3drovfx"]="main" ["mine"]="main"
+    ["end4"]="main"
+    ["vynx"]="main" ["upstream"]="main"
+)
+
+# ── Default flags ─────────────────────────────────────────────────────────────
+VERBOSE=false
+BACKUP=true
+FORCE_INSTALL=false
+NO_CONFIRM=false
+PRESERVE_CONFIG=false
+REBUILD_QS=false
+ACTION=""            # "update" | "switch"
+FORK_ARG=""
+BRANCH_ARG=""
+II_SUBDIR_OVERRIDE=""
+LIST_BRANCHES=false
+LIST_FORKS=false
 
 # ── Parse arguments ──────────────────────────────────────────────────────────
-for arg in "$@"; do
-    case $arg in
-        --no-pull)        DO_PULL=false ;;
-        --no-backup)      BACKUP=false ;;
-        -v|--verbose)     VERBOSE=true ;;
-        --force-install)  FORCE_INSTALL=true ;;
-        --full-install)   FULL_INSTALL=true ;;
-        --no-confirm)     NO_CONFIRM=true; FORCE_INSTALL=true ;;
-        --ii-vynx)        USE_II_VYNX=true ;;
-        --update-only)    UPDATE_ONLY=true; DO_PULL=true ;;
-        --preserve-config)  PRESERVE_CONFIG=true ;;
-        --delete-cache)  DELETE_CACHE=true ;;
-        --rebuild-quickshell) REBUILD_QS=true ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -v|--verbose)         VERBOSE=true; shift ;;
+        --no-backup)          BACKUP=false; shift ;;
+        --force-install)      FORCE_INSTALL=true; shift ;;
+        --no-confirm)         NO_CONFIRM=true; FORCE_INSTALL=true; shift ;;
+        --preserve-config)    PRESERVE_CONFIG=true; shift ;;
+        --rebuild-quickshell) REBUILD_QS=true; shift ;;
+        --update)             ACTION="update"; shift ;;
+        --switch)             ACTION="switch"; shift ;;
+        --fork)               FORK_ARG="$2"; ACTION="${ACTION:-switch}"; shift 2 ;;
+        --branch)             BRANCH_ARG="$2"; ACTION="${ACTION:-switch}"; shift 2 ;;
+        --ii-subdir)          II_SUBDIR_OVERRIDE="$2"; shift 2 ;;
+        --list-branches)      LIST_BRANCHES=true; shift ;;
+        --list-forks)         LIST_FORKS=true; shift ;;
+        -h|--help|help)
+            sed -n '1,30p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
         *)
-            echo -e "${RED}Unknown flag: $arg${NC}"
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --no-pull            Skip git pull (use local repos as-is)"
-            echo "  --no-backup          Skip backup of existing config"
-            echo "  --force-install      Skip illogical-impulse check"
-            echo "  --full-install       Install original dots first, then ii-vynx"
-            echo "  --no-confirm         Skip all confirmations"
-            echo "  --ii-vynx            Switch to official vaguesyntax/ii-vynx quickshell"
-            echo "  --update-only        Pull latest changes for current source, no switch"
-            echo "  --preserve-config     Keep existing config.json (use with --no-confirm for update buttons)"
-            echo "  --delete-cache       Clean local cache directories in ~/.local/share"
-            echo "  --rebuild-quickshell  Compile Quickshell from source matching system Qt ABI"
-            echo "  -v, --verbose        Enable verbose output"
-            exit 1
-            ;;
+            echo -e "${RED}Unknown flag: $1${NC}"
+            echo "Run '$0 --help' for usage."
+            exit 1 ;;
     esac
 done
-# ── Delete Cache ─────────────────────────────────────────────────────────────
-if [ "$DELETE_CACHE" = true ]; then
-    echo -e "${BLUE}• Cleaning up local cache directories in ~/.local/share/...${NC}"
-    if [ -d "$HOME/.local/share/ii-vynx-fork" ]; then
-        rm -rf "$HOME/.local/share/ii-vynx-fork"
-        echo -e "${GREEN}✓ Removed ~/.local/share/ii-vynx-fork${NC}"
-    fi
-    if [ -d "$HOME/.local/share/ii-vynx-upstream" ]; then
-        rm -rf "$HOME/.local/share/ii-vynx-upstream"
-        echo -e "${GREEN}✓ Removed ~/.local/share/ii-vynx-upstream${NC}"
-    fi
-    if [ -d "$HOME/.local/share/ii-vynx" ]; then
-        if [ "$SCRIPT_DIR" = "$HOME/.local/share/ii-vynx" ]; then
-            find "$HOME/.local/share/ii-vynx" -mindepth 1 -not -name "setup-ii-vynx.sh" -exec rm -rf {} + 2>/dev/null
-        else
-            rm -rf "$HOME/.local/share/ii-vynx"
-        fi
-        echo -e "${GREEN}✓ Cleaned ~/.local/share/ii-vynx${NC}"
-    fi
-    echo -e "${GREEN}✓ Cache cleanup complete!${NC}"
-    exit 0
-fi
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 log_verbose() {
-    if [ "$VERBOSE" = true ]; then
-        echo -e "${BLUE}[VERBOSE] $1${NC}"
+    [ "$VERBOSE" = true ] && echo -e "${BLUE}[VERBOSE] $1${NC}"
+}
+
+# Normalize git@github.com:USER/REPO[.git] and https://github.com/USER/REPO[.git]
+# to canonical https URL: https://github.com/USER/REPO
+normalize_github_url() {
+    local raw="$1"
+    raw="${raw%.git}"
+    raw="${raw%/}"
+    if [[ "$raw" == git@github.com:* ]]; then
+        raw="https://github.com/${raw#git@github.com:}"
+    elif [[ "$raw" == https://github.com/* ]]; then
+        : # already canonical-ish
+    elif [[ "$raw" == http://github.com/* ]]; then
+        raw="https://${raw#http://}"
+    fi
+    echo "$raw"
+}
+
+# Always clone over HTTPS (more portable, supports anonymous public clones)
+clone_url_for() {
+    local url="$1"
+    echo "$url"
+}
+
+# Match a normalized URL back to a preset id (or "custom")
+fork_id_from_url() {
+    local norm_url
+    norm_url="$(normalize_github_url "$1")"
+    for id in "${!PRESET_URLS[@]}"; do
+        if [ "$(normalize_github_url "${PRESET_URLS[$id]}")" = "$norm_url" ]; then
+            echo "$id"
+            return 0
+        fi
+    done
+    echo "custom"
+}
+
+# Resolve a --fork argument (preset id or raw URL) into (url, default_branch)
+# Returns "url|branch" on stdout.
+resolve_fork_arg() {
+    local arg="$1"
+    local key
+    # case-insensitive preset match
+    key="$(echo "$arg" | tr '[:upper:]' '[:lower:]')"
+    if [ -n "${PRESET_URLS[$key]:-}" ]; then
+        echo "${PRESET_URLS[$key]}|${PRESET_DEFAULT_BRANCH[$key]}"
+        return 0
+    fi
+    # Not a preset — treat as URL (normalize)
+    local norm
+    norm="$(normalize_github_url "$arg")"
+    if [[ "$norm" == https://github.com/* ]]; then
+        echo "$norm|main"
+        return 0
+    fi
+    echo -e "${RED}Invalid fork: $arg${NC}" >&2
+    return 1
+}
+
+# Auto-detect the ii* directory inside a freshly cloned repo.
+# Honors $II_SUBDIR_OVERRIDE if set; otherwise picks first dots/.config/quickshell/ii*
+detect_ii_subdir() {
+    local repo="$1"
+    local base="$repo/dots/.config/quickshell"
+    if [ -n "$II_SUBDIR_OVERRIDE" ]; then
+        if [ -d "$base/$II_SUBDIR_OVERRIDE" ]; then
+            echo "$base/$II_SUBDIR_OVERRIDE"
+            return 0
+        fi
+        echo -e "${RED}--ii-subdir '$II_SUBDIR_OVERRIDE' not found under $base${NC}" >&2
+        return 1
+    fi
+    if [ ! -d "$base" ]; then
+        echo -e "${RED}No dots/.config/quickshell in repository${NC}" >&2
+        return 1
+    fi
+    local found
+    found="$(find "$base" -maxdepth 1 -type d -name 'ii*' ! -path "$base" | sort | head -n1)"
+    if [ -z "$found" ]; then
+        echo -e "${RED}No 'ii*' directory found under $base${NC}" >&2
+        return 1
+    fi
+    # Warn if multiple
+    local count
+    count="$(find "$base" -maxdepth 1 -type d -name 'ii*' ! -path "$base" | wc -l)"
+    if [ "$count" -gt 1 ]; then
+        echo -e "${YELLOW}• Found $count ii* dirs. Using: $(basename "$found")${NC}" >&2
+    fi
+    echo "$found"
+}
+
+# Read current state files (echoes `remote|branch|fork_id`)
+read_current_state() {
+    local remote="" branch="" fork_id=""
+    [ -f "$STATE_DIR/.active-remote" ] && remote="$(cat "$STATE_DIR/.active-remote" 2>/dev/null)"
+    [ -f "$STATE_DIR/.active-branch" ] && branch="$(cat "$STATE_DIR/.active-branch" 2>/dev/null)"
+    [ -f "$STATE_DIR/.active-fork" ] && fork_id="$(cat "$STATE_DIR/.active-fork" 2>/dev/null)"
+    [ -z "$fork_id" ] && [ -n "$remote" ] && fork_id="$(fork_id_from_url "$remote")"
+    [ -z "$branch" ] && branch="main"
+    [ -z "$remote" ] && remote="https://github.com/P3DROVFX/ii-vynx"
+    echo "$remote|$branch|$fork_id"
+}
+
+# Backup ~/.config/quickshell/ii to ~/.local/share/ii-backups/ii_<fork>_<branch>_<ts>
+# Keeps only the 3 most recent backups.
+backup_to_local() {
+    if [ "$BACKUP" = false ] || [ ! -d "$TARGET_DIR" ]; then
+        return 0
+    fi
+    mkdir -p "$BACKUP_BASE_DIR"
+    local ts fork_id branch
+    ts="$(date +%Y%m%d_%H%M%S)"
+    fork_id="$1"
+    branch="$2"
+    [ -z "$fork_id" ] && fork_id="unknown"
+    [ -z "$branch" ] && branch="unknown"
+    local dest="$BACKUP_BASE_DIR/ii_${fork_id}_${branch}_${ts}"
+    echo -e "${YELLOW}Backing up current ii to: $dest${NC}"
+    mv "$TARGET_DIR" "$dest"
+    # Keep only the 3 most recent
+    local n
+    n=$(ls -1d "$BACKUP_BASE_DIR"/ii_* 2>/dev/null | wc -l)
+    if [ "$n" -gt 3 ]; then
+        ls -1dt "$BACKUP_BASE_DIR"/ii_* 2>/dev/null | tail -n +4 | while read -r old; do
+            rm -rf "$old"
+            log_verbose "Pruned old backup: $old"
+        done
     fi
 }
 
-# Files that must NEVER be overwritten during any install or switch
-PROTECTED_FILES=(
-    "modules/settings/About.qml"
-    "config.json"
-)
-
+# ── Protected files (decided dynamically per destination fork) ───────────────
 # Patterns for files that must NEVER be overwritten (glob-style, relative to TARGET_DIR)
 PROTECTED_PATTERNS=(
     "*.env"
     ".env"
     "user/generated/*.json"
 )
+
+# populate PROTECTED_FILES array based on whether destination == current fork
+compute_protected_files() {
+    local dest_fork_id="$1"
+    local current_fork_id="$2"
+
+    PROTECTED_FILES=()
+
+    # config.json — handle separately via PRESERVE_CONFIG logic in backup/restore
+    # Always consider it for the explicit prompt-based reset flow
+    PROTECTED_FILES+=("config.json")
+
+    # Always preserve About.qml (header safe-room, may not exist in our fork but exists in end-4)
+    PROTECTED_FILES+=("modules/settings/About.qml")
+
+    # AboutConfig.qml — only protect when switching within the same fork
+    # (i.e. update or branch switch on P3DROVFX). When changing forks, let the
+    # new fork's AboutConfig replace ours.
+    if [ -n "$dest_fork_id" ] && [ "$dest_fork_id" = "$current_fork_id" ]; then
+        PROTECTED_FILES+=("modules/settings/configs/AboutConfig.qml")
+    fi
+}
 
 backup_protected_files() {
     local target="$1"
@@ -195,22 +311,16 @@ backup_protected_files() {
     for rel in "${PROTECTED_FILES[@]}"; do
         local src="$target/$rel"
         if [ -f "$src" ]; then
-            if [ "$rel" = "modules/settings/About.qml" ]; then
-                # Only preserve About.qml when switching/updating to official ii-vynx.
-                # If we are installing or updating the fork (USE_II_VYNX=false), we want to overwrite it
-                # so the user gets the updated About.qml from the fork repository.
-                if [ "$USE_II_VYNX" = "false" ]; then
-                    echo -e "${YELLOW}• Updating fork: Overwriting About.qml with updated repository version.${NC}"
-                    continue
-                fi
-                if ! grep -q "update-fork" "$src" 2>/dev/null; then
-                    echo -e "${YELLOW}• About.qml lacks update buttons. Replacing with repository version.${NC}"
-                    continue
-                fi
-            fi
-            if [ "$rel" = "config.json" ] && [ "$PRESERVE_CONFIG" = "false" ]; then
+            if [ "$rel" = "config.json" ] && [ "$PRESERVE_CONFIG" = false ]; then
                 echo -e "${YELLOW}• Resetting config.json (not preserving).${NC}"
                 continue
+            fi
+            if [ "$rel" = "modules/settings/configs/AboutConfig.qml" ]; then
+                # Only preserve our custom AboutConfig if the active one is ours (has 'update-fork' or '--fork' buttons)
+                if ! grep -q -e "update-fork" -e "Fork Switcher" -e "--fork" "$src" 2>/dev/null; then
+                    echo -e "${YELLOW}• AboutConfig lacks our switcher. Letting new fork's version replace it.${NC}"
+                    continue
+                fi
             fi
             local dest_dir="$tmpdir/$(dirname "$rel")"
             mkdir -p "$dest_dir"
@@ -248,6 +358,10 @@ restore_protected_files() {
     # Glob patterns
     find "$tmpdir" -type f 2>/dev/null | while read -r f; do
         local rel="${f#$tmpdir/}"
+        # skip files already restored by explicit list
+        case " ${PROTECTED_FILES[*]} " in
+            *" $rel "*) continue ;;
+        esac
         local dest_dir="$target/$(dirname "$rel")"
         mkdir -p "$dest_dir"
         cp "$f" "$target/$rel"
@@ -257,26 +371,7 @@ restore_protected_files() {
     rm -rf "$tmpdir"
 }
 
-fetch_upstream() {
-    if [ -d "$UPSTREAM_DIR/.git" ]; then
-        echo -e "${NC}• Updating official ii-vynx repo...${NC}"
-        git -C "$UPSTREAM_DIR" pull --ff-only && git -C "$UPSTREAM_DIR" submodule update --init --recursive
-        if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}⚠ git update failed for upstream, using cached version.${NC}"
-        else
-            echo -e "${GREEN}✓ Official ii-vynx repo updated${NC}"
-        fi
-    else
-        echo -e "${NC}• Cloning official ii-vynx repo (first time)...${NC}"
-        git clone --depth=1 --recurse-submodules "$UPSTREAM_REPO" "$UPSTREAM_DIR"
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}✗ Failed to clone: $UPSTREAM_REPO${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}✓ Official ii-vynx repo cloned${NC}"
-    fi
-}
-
+# ── Qt mismatch check + Quickshell rebuild (existing helpers) ────────────────
 check_qt_mismatch() {
     if command -v quickshell &>/dev/null; then
         local warning_msg=$(quickshell --version 2>&1 | grep -i -E "warning|mismatch|abi|symbol")
@@ -292,7 +387,6 @@ check_qt_mismatch() {
 
 build_quickshell() {
     echo -e "${BLUE}• Rebuilding Quickshell from source to match your system's Qt ABI...${NC}"
-    
     if [ -f /etc/fedora-release ]; then
         echo -e "${NC}• Fedora detected. Installing build dependencies...${NC}"
         sudo dnf install -y cmake extra-cmake-modules qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel wayland-devel libxkbcommon-devel gcc-c++ git
@@ -321,36 +415,29 @@ build_quickshell() {
         echo -e "${RED}✗ CMake configuration failed!${NC}"
         return 1
     fi
-
     echo -e "${NC}• Building DBus bindings first...${NC}"
     cmake --build build -t quickshell-dbus -j$(nproc)
-    
     echo -e "${NC}• Compiling Quickshell...${NC}"
     cmake --build build -j$(nproc)
     if [ $? -ne 0 ]; then
         echo -e "${RED}✗ Compilation failed!${NC}"
         return 1
     fi
-
     echo -e "${NC}• Installing binaries to ~/.local/bin/...${NC}"
     cmake --install build
     if [ $? -ne 0 ]; then
         echo -e "${RED}✗ Installation failed!${NC}"
         return 1
     fi
-
     echo -e "${GREEN}✓ Quickshell compiled and installed successfully to ~/.local/bin!${NC}"
     cd - >/dev/null
     rm -rf "$temp_dir"
 }
 
-
-
 run_bundled_setup() {
     echo -e "${RED}This fork's base dotfiles are not installed yet. Install them now? (y/n): ${NC}"
     read -r setup_response
     [[ ! "$setup_response" =~ ^[Yy]$ ]] && echo -e "${RED}✗ Setup cancelled.${NC}" && exit 1
-
     bash "$SCRIPT_DIR/setup" "install"
     [ $? -eq 0 ] || { echo -e "${RED}✗ Setup failed!${NC}"; exit 1; }
 }
@@ -358,27 +445,174 @@ run_bundled_setup() {
 install_cli() {
     local BIN_PATH="$HOME/.local/bin"
     local TARGET="$BIN_PATH/vynx"
-    local CLI_SRC=""
-
-    if [ "$USE_II_VYNX" = true ]; then
-        CLI_SRC="$UPSTREAM_DIR/setup-ii-vynx.sh"
-    else
-        CLI_SRC="$FORK_DIR/setup-ii-vynx.sh"
-    fi
-
     echo -e "${BLUE}• Installing Vynx CLI...${NC}"
     mkdir -p "$BIN_PATH"
-
     if [[ ":$PATH:" != *":$BIN_PATH:"* ]]; then
         echo -e "${YELLOW}⚠ $BIN_PATH is not in PATH. Add to ~/.bashrc or ~/.zshrc:${NC}"
         echo -e "${GREEN}   export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
     fi
-
-    chmod +x "$CLI_SRC"
-    local CLI_SCRIPT_DIR="$(dirname "$CLI_SRC")"
-    [ -d "$CLI_SCRIPT_DIR/sdata/cli/lib" ] && chmod +x "$CLI_SCRIPT_DIR/sdata/cli/lib/"*.sh
-    ln -sf "$CLI_SRC" "$TARGET"
+    chmod +x "$SCRIPT_DIR/setup-ii-vynx.sh"
+    [ -d "$SCRIPT_DIR/sdata/cli/lib" ] && chmod +x "$SCRIPT_DIR/sdata/cli/lib/"*.sh
+    ln -sf "$SCRIPT_DIR/setup-ii-vynx.sh" "$TARGET"
     echo -e "${GREEN}✓ Symlinked vynx → $TARGET${NC}"
+}
+
+# ── Core pipeline: clone → backup → rsync → restore state ────────────────────
+# Usage: apply_fork_branch <remote_https_url> <branch_name> [<dest_fork_id>]
+apply_fork_branch() {
+    local remote_url="$1"
+    local branch="$2"
+    local dest_fork_id="${3:-}"
+
+    [ -z "$remote_url" ] && { echo -e "${RED}apply_fork_branch: empty remote URL${NC}"; return 1; }
+    [ -z "$branch" ]    && branch="main"
+
+    # Normalize to canonical HTTPS URL — always clone over HTTPS
+    remote_url="$(normalize_github_url "$remote_url")"
+
+    # If fork_id not provided, infer from URL
+    [ -z "$dest_fork_id" ] && dest_fork_id="$(fork_id_from_url "$remote_url")"
+
+    # Read current state for protected-files decision
+    local current_state current_remote current_branch current_fork_id
+    current_state="$(read_current_state)"
+    current_remote="${current_state%%|*}"
+    local rest="${current_state#*|}"
+    current_branch="${rest%%|*}"
+    current_fork_id="${rest##*|}"
+
+    local clone_url
+    clone_url="$(clone_url_for "$remote_url")"
+    local clone_dir="/tmp/ii-switch-$$"
+
+    echo -e "${BLUE}• Cloning $clone_url (branch: $branch)…${NC}"
+    rm -rf "$clone_dir"
+    if ! git clone --depth=1 --recurse-submodules --branch "$branch" "$clone_url" "$clone_dir"; then
+        echo -e "${RED}✗ Clone failed. Check that branch '$branch' exists on $clone_url${NC}"
+        echo -e "${RED}  Try: $0 --list-branches${NC}"
+        rm -rf "$clone_dir"
+        return 1
+    fi
+    # Defensive: ensure submodules are initialized even when --recurse-submodules
+    # silently skipped some (e.g. submodule pinned to a SHA not reachable via --depth=1).
+    git -C "$clone_dir" submodule update --init --recursive --depth=1 2>/dev/null || true
+    log_verbose "Cloned to $clone_dir"
+
+    # Record the remote HEAD commit SHA (best-effort, for update badges)
+    local remote_head=""
+    remote_head="$(git -C "$clone_dir" rev-parse HEAD 2>/dev/null || true)"
+
+    # Auto-detect ii* subdir inside the fresh clone
+    local source_dir
+    if ! source_dir="$(detect_ii_subdir "$clone_dir")"; then
+        echo -e "${RED}✗ Could not locate ii* in $clone_dir${NC}"
+        rm -rf "$clone_dir"
+        return 1
+    fi
+    log_verbose "Source ii dir: $source_dir"
+
+    # Decide which files to protect dynamically
+    compute_protected_files "$dest_fork_id" "$current_fork_id"
+    log_verbose "PROTECTED_FILES: ${PROTECTED_FILES[*]}"
+
+    # Step 1: backup protected files from current TARGET_DIR (if exists)
+    if [ -d "$TARGET_DIR" ]; then
+        backup_protected_files "$TARGET_DIR"
+    fi
+
+    # Step 2: backup whole dir to ~/.local/share/ii-backups/
+    backup_to_local "$current_fork_id" "$current_branch"
+
+    # Step 3: ensure parent exists
+    mkdir -p "$(dirname "$TARGET_DIR")"
+
+    # Step 4: rsync (or cp fallback) the fresh source into TARGET_DIR
+    echo -e "${NC}• Replacing $TARGET_DIR with fresh source…${NC}"
+    if command -v rsync &>/dev/null; then
+        rsync -a --exclude=".git" "$source_dir/" "$TARGET_DIR/"
+    else
+        cp -r "$source_dir/." "$TARGET_DIR/"
+        find "$TARGET_DIR" -name ".git" -exec rm -rf {} + 2>/dev/null
+    fi
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Copy failed!${NC}"
+        rm -rf "$clone_dir"
+        return 1
+    fi
+
+    # Step 5: persist new state files in TARGET_DIR
+    mkdir -p "$TARGET_DIR"
+    echo "$remote_url" > "$TARGET_DIR/.active-remote"
+    echo "$branch"     > "$TARGET_DIR/.active-branch"
+    echo "$dest_fork_id" > "$TARGET_DIR/.active-fork"
+    [ -n "$remote_head" ] && echo "$remote_head" > "$TARGET_DIR/.active-commit"
+    log_verbose "State written: $dest_fork_id @ $branch (HEAD=$remote_head)"
+
+    # Ensure all scripts are executable
+    find "$TARGET_DIR/scripts" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) -exec chmod +x {} + 2>/dev/null
+
+    # Step 6: restore protected files (overwrites just-copied versions)
+    restore_protected_files "$TARGET_DIR"
+
+    # Step 7: mirror setup scripts to standard location so UI keeps working
+    if [ "$SCRIPT_DIR" != "$STANDARD_SCRIPT_DIR" ]; then
+        mkdir -p "$STANDARD_SCRIPT_DIR"
+        cp "$SOURCE" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh" 2>/dev/null || cp "$SCRIPT_DIR/setup-ii-vynx.sh" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
+        chmod +x "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
+        for s in update-fork.sh; do
+            if [ -f "$SCRIPT_DIR/$s" ]; then
+                cp "$SCRIPT_DIR/$s" "$STANDARD_SCRIPT_DIR/$s"
+                chmod +x "$STANDARD_SCRIPT_DIR/$s"
+            fi
+        done
+        # Prune obsolete scripts that we no longer ship but may linger from older installs.
+        for obsolete in update-with-customs.sh; do
+            if [ -f "$STANDARD_SCRIPT_DIR/$obsolete" ] && [ ! -f "$SCRIPT_DIR/$obsolete" ]; then
+                rm -f "$STANDARD_SCRIPT_DIR/$obsolete"
+                log_verbose "Pruned obsolete script: $STANDARD_SCRIPT_DIR/$obsolete"
+            fi
+        done
+        # sdata cli libs (for vynx subcommands)
+        if [ -d "$SCRIPT_DIR/sdata" ]; then
+            mkdir -p "$STANDARD_SCRIPT_DIR/sdata/cli/lib"
+            cp -r "$SCRIPT_DIR/sdata/cli/lib/." "$STANDARD_SCRIPT_DIR/sdata/cli/lib/" 2>/dev/null
+            chmod +x "$STANDARD_SCRIPT_DIR/sdata/cli/lib/"*.sh 2>/dev/null
+        fi
+        log_verbose "Mirrored scripts to $STANDARD_SCRIPT_DIR"
+    fi
+
+    # Cleanup clone
+    rm -rf "$clone_dir"
+    echo -e "${GREEN}✓ Switched to $dest_fork_id @ $branch${NC}"
+    return 0
+}
+
+# ── List helpers ─────────────────────────────────────────────────────────────
+do_list_forks() {
+    echo -e "${CYAN}Available fork presets:${NC}"
+    local seen=()
+    for id in "${!PRESET_URLS[@]}"; do
+        local url="${PRESET_URLS[$id]}"
+        # de-dup aliases that point to the same URL
+        local dup=false
+        for s in "${seen[@]}"; do [ "$s" = "$url" ] && dup=true && break; done
+        if [ "$dup" = false ]; then
+            seen+=("$url")
+            printf "  ${GREEN}%-12s${NC}  %s\n" "$id" "$url"
+        fi
+    done
+    echo ""
+    echo "Custom forks are supported by passing a GitHub URL to --fork."
+}
+
+do_list_branches() {
+    local remote_url="$1"
+    [ -z "$remote_url" ] && remote_url="$(read_current_state | cut -d'|' -f1)"
+    echo -e "${CYAN}Remote branches of $remote_url:${NC}"
+    if ! git ls-remote --heads "$remote_url" 2>/dev/null | sed 's@^.*refs/heads/@@' | sed 's/^/  /'; then
+        echo -e "${RED}✗ Failed to reach remote $remote_url${NC}"
+        return 1
+    fi
 }
 
 # ── Banner ───────────────────────────────────────────────────────────────────
@@ -388,152 +622,27 @@ echo -e "${CYAN}          ii-vynx setup     ${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# ── Bootstrap: ensure standard locations exist for new users ─────────────────
-# About.qml calls the script from ~/.local/share/ii-vynx/setup-ii-vynx.sh
-# If the script is being run from a different location (e.g. ~/Downloads/my-fork),
-# copy it to the standard location so the UI buttons keep working after install.
-if [ "$SCRIPT_DIR" != "$STANDARD_SCRIPT_DIR" ]; then
-    echo -e "${BLUE}• Syncing setup script to standard location...${NC}"
-    mkdir -p "$STANDARD_SCRIPT_DIR"
-    cp "$SOURCE" "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
-    chmod +x "$STANDARD_SCRIPT_DIR/setup-ii-vynx.sh"
-    echo -e "${GREEN}✓ Script updated in $STANDARD_SCRIPT_DIR${NC}"
-fi
-
-UPDATE_SCRIPT_SRC="$SCRIPT_DIR/update-with-customs.sh"
-UPDATE_SCRIPT_DST="$STANDARD_SCRIPT_DIR/update-with-customs.sh"
-if [ -f "$UPDATE_SCRIPT_SRC" ]; then
-    cp "$UPDATE_SCRIPT_SRC" "$UPDATE_SCRIPT_DST"
-    chmod +x "$UPDATE_SCRIPT_DST"
-    log_verbose "Update script installed to $UPDATE_SCRIPT_DST"
-fi
-
-UPDATE_FORK_SRC="$SCRIPT_DIR/update-fork.sh"
-UPDATE_FORK_DST="$STANDARD_SCRIPT_DIR/update-fork.sh"
-if [ -f "$UPDATE_FORK_SRC" ]; then
-    cp "$UPDATE_FORK_SRC" "$UPDATE_FORK_DST"
-    chmod +x "$UPDATE_FORK_DST"
-    log_verbose "Fork update wrapper installed to $UPDATE_FORK_DST"
-fi
-
-# If ii-vynx-fork doesn't exist yet, bootstrap it from SCRIPT_DIR
-if [ ! -d "$HOME/.local/share/ii-vynx-fork/.git" ] && [ -d "$SCRIPT_DIR/.git" ] && [ "$SCRIPT_DIR" != "$HOME/.local/share/ii-vynx-upstream" ]; then
-    echo -e "${BLUE}• Setting up local fork at ~/.local/share/ii-vynx-fork...${NC}"
-    cp -r "$SCRIPT_DIR" "$HOME/.local/share/ii-vynx-fork"
-    FORK_DIR="$HOME/.local/share/ii-vynx-fork"
-    echo -e "${GREEN}✓ Fork bootstrapped at $FORK_DIR${NC}"
-fi
-
-# ── Handle --update-only: just pull, no switch ───────────────────────────────
-if [ "$UPDATE_ONLY" = true ]; then
-    echo -e "${BLUE}• Update-only mode: pulling latest changes...${NC}"
-    if [ "$USE_II_VYNX" = true ]; then
-        fetch_upstream
-    else
-        if [ -d "$FORK_DIR/.git" ]; then
-            cd "$FORK_DIR" && git pull
-            if [ $? -ne 0 ]; then
-                echo -e "${RED}✗ git pull failed. Please check for branch conflicts or network issues.${NC}"
-                exit 1
-            fi
-        else
-            echo -e "${RED}✗ Fork not found at $FORK_DIR${NC}"
-            exit 1
-        fi
-    fi
-    
-    # Save active remote URL
-    mkdir -p "$TARGET_DIR"
-    if [ "$USE_II_VYNX" = true ]; then
-        echo "$UPSTREAM_REPO" > "$TARGET_DIR/.active-remote"
-    else
-        if [ -d "$FORK_DIR/.git" ]; then
-            git -C "$FORK_DIR" remote get-url origin > "$TARGET_DIR/.active-remote" 2>/dev/null || echo "fork" > "$TARGET_DIR/.active-remote"
-        else
-            echo "fork" > "$TARGET_DIR/.active-remote"
-        fi
-    fi
-    
-    echo -e "${GREEN}✓ Update complete. Run without --update-only to apply.${NC}"
+# ── Handle --list-forks / --list-branches ───────────────────────────────────
+if [ "$LIST_FORKS" = true ]; then
+    do_list_forks
     exit 0
 fi
-
-# ── Resolve source directory ─────────────────────────────────────────────────
-
-
-if [ "$USE_II_VYNX" = true ]; then
-    # Official upstream source (local cache only when --no-pull)
-    if [ "$DO_PULL" = false ]; then
-        if [ -d "$UPSTREAM_DIR/dots/.config/quickshell/ii" ]; then
-            SOURCE_DIR="$UPSTREAM_DIR/dots/.config/quickshell/ii"
-            echo -e "${YELLOW}Using cached official ii-vynx quickshell at $SOURCE_DIR${NC}"
-        else
-            echo -e "${RED}✗ Official ii-vynx not cached locally yet.${NC}"
-            echo -e "${RED}  Click 'Update ii-vynx' first to download it.${NC}"
-            exit 1
-        fi
-    else
-        fetch_upstream
-        SOURCE_DIR="$UPSTREAM_DIR/dots/.config/quickshell/ii"
-    fi
-else
-    # Fork source: ~/Downloads/ii-vynx (P3DROVFX/ii-vynx)
-    if [ ! -d "$FORK_DIR/dots/.config/quickshell/ii" ]; then
-        echo -e "${RED}✗ Fork not found at $FORK_DIR${NC}"
-        echo -e "${RED}  Expected your fork at ~/Downloads/ii-vynx${NC}"
-        exit 1
-    fi
-    SOURCE_DIR="$FORK_DIR/dots/.config/quickshell/ii"
-    if [ "$DO_PULL" = true ]; then
-        echo -e "${NC}• Updating your fork...${NC}"
-        git -C "$FORK_DIR" pull --ff-only && git -C "$FORK_DIR" submodule update --init --recursive
-        if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}⚠ git update failed for fork, using local version.${NC}"
-        else
-            echo -e "${GREEN}✓ Fork updated and submodules synced${NC}"
-        fi
-    else
-        # Even if not pulling, ensure submodules are initialized if they exist in the repo
-        if [ -d "$FORK_DIR/.git" ]; then
-            echo -e "${NC}• Ensuring fork submodules are initialized...${NC}"
-            git -C "$FORK_DIR" submodule update --init --recursive >/dev/null 2>&1
-        fi
-    fi
+if [ "$LIST_BRANCHES" = true ]; then
+    remote_url=""
+    [ -n "$FORK_ARG" ] && remote_url="$(resolve_fork_arg "$FORK_ARG" | cut -d'|' -f1)" || remote_url="$(read_current_state | cut -d'|' -f1)"
+    do_list_branches "$remote_url"
+    exit $?
 fi
 
-echo ""
-log_verbose "TARGET_DIR=$TARGET_DIR"
-log_verbose "SOURCE_DIR=$SOURCE_DIR"
-log_verbose "USE_II_VYNX=$USE_II_VYNX"
-log_verbose "DO_PULL=$DO_PULL"
-
-# ── Confirm (interactive mode only) ─────────────────────────────────────────
-if [ "$NO_CONFIRM" = false ]; then
-    echo -e "${BLUE}This will switch your Quickshell config to:${NC}"
-    [ "$USE_II_VYNX" = true ] && \
-        echo -e "${CYAN}  Official ii-vynx${NC}" || \
-        echo -e "${CYAN}  Your fork${NC}"
-    echo -e "${BLUE}Protected files (About.qml, .env) will NOT be overwritten.${NC}"
-    echo -e "${RED}Continue? (y/n): ${NC}"
-    read -r response
-    [[ ! "$response" =~ ^[Yy]$ ]] && echo -e "${RED}Cancelled.${NC}" && exit 0
-    echo ""
-fi
-
-# ── Check source exists ──────────────────────────────────────────────────────
-if [ ! -d "$SOURCE_DIR" ]; then
-    echo -e "${RED}✗ Source directory not found: $SOURCE_DIR${NC}"
-    exit 1
-fi
-
-# ── Check illogical-impulse ──────────────────────────────────────────────────
-if [ "$FORCE_INSTALL" = false ] && [ "$FULL_INSTALL" = false ]; then
+# ── Validate illogical-impulse presence (skip with --force-install) ──────────
+if [ "$FORCE_INSTALL" = false ]; then
     if [ ! -d "$CHECK_DIR" ]; then
+        echo -e "${YELLOW}• illogical-impulse base dotfiles not found. Running the bundled setup install…${NC}"
         run_bundled_setup
     fi
 fi
 
-# ── Check Quickshell Qt ABI compatibility ────────────────────────────────────
+# ── Quickshell Qt ABI check ──────────────────────────────────────────────────
 if [ "$REBUILD_QS" = true ]; then
     build_quickshell
 elif check_qt_mismatch; then
@@ -543,101 +652,160 @@ elif check_qt_mismatch; then
     else
         echo -ne "${CYAN}Do you want to automatically rebuild Quickshell from source now to fix this mismatch? (y/n): ${NC}"
         read -r qs_response
-        if [[ "$qs_response" =~ ^[Yy]$ ]]; then
-            build_quickshell
-        else
-            echo -e "${YELLOW}⚠ Skipping rebuild. Warning/crashes might persist if system Qt version does not match Quickshell binary.${NC}"
+        if [[ "$qs_response" =~ ^[Yy]$ ]]; then build_quickshell
+        else echo -e "${YELLOW}⚠ Skipping rebuild. Warning/crashes might persist if system Qt version does not match Quickshell binary.${NC}"
         fi
     fi
 fi
 
-# ── CLI install ──────────────────────────────────────────────────────────────
-if command -v vynx &>/dev/null || [ "$NO_CONFIRM" = true ]; then
-    install_cli
-fi
+# ── Resolve action ────────────────────────────────────────────────────────────
+# Build the (remote_url, branch, dest_fork_id) tuple from flags / current state.
+RESOLVED_URL=""
+RESOLVED_BRANCH=""
+RESOLVED_FORK_ID=""
 
-# ── Backup + Copy (preserving protected files) ───────────────────────────────
-echo ""
-echo -e "${NC}• Switching quickshell source...${NC}"
-mkdir -p "$(dirname "$TARGET_DIR")"
+if [ "$ACTION" = "update" ]; then
+    # Read current state and apply
+    current_state="$(read_current_state)"
+    RESOLVED_URL="${current_state%%|*}"
+    rest="${current_state#*|}"
+    RESOLVED_BRANCH="${rest%%|*}"
+    RESOLVED_FORK_ID="${rest##*|}"
+    if [ -z "$RESOLVED_URL" ]; then
+        echo -e "${RED}✗ No active fork recorded ($STATE_DIR/.active-remote missing). Pass --fork <preset|url>.${NC}"
+        exit 1
+    fi
+elif [ "$ACTION" = "switch" ]; then
+    if [ -z "$FORK_ARG" ] && [ -z "$BRANCH_ARG" ]; then
+        echo -e "${RED}✗ --switch requires --fork <x> and/or --branch <name>${NC}"
+        exit 1
+    fi
 
-# Step 1: Save protected files from current TARGET_DIR
-if [ -d "$TARGET_DIR" ]; then
-    backup_protected_files "$TARGET_DIR"
-fi
-
-# Step 2: Backup the whole directory
-if [ "$BACKUP" = true ] && [ -d "$TARGET_DIR" ]; then
-    BACKUP_DIR="${TARGET_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
-    echo -e "${YELLOW}Backing up current config to: $BACKUP_DIR${NC}"
-    mv "$TARGET_DIR" "$BACKUP_DIR"
-fi
-
-# Step 3: Copy new source
-if command -v rsync &>/dev/null; then
-    rsync -a --exclude=".git" "$SOURCE_DIR/" "$TARGET_DIR/"
-else
-    cp -r "$SOURCE_DIR/." "$TARGET_DIR/"
-    find "$TARGET_DIR" -name ".git" -exec rm -rf {} + 2>/dev/null
-fi
-if [ $? -ne 0 ]; then
-    echo -e "${RED}✗ Copy failed!${NC}"
-    exit 1
-fi
-
-# Save active remote URL
-if [ "$USE_II_VYNX" = true ]; then
-    echo "$UPSTREAM_REPO" > "$TARGET_DIR/.active-remote"
-else
-    if [ -d "$FORK_DIR/.git" ]; then
-        git -C "$FORK_DIR" remote get-url origin > "$TARGET_DIR/.active-remote" 2>/dev/null || echo "fork" > "$TARGET_DIR/.active-remote"
+    # Resolve FORK_ARG (if provided) or fall back to current state
+    if [ -n "$FORK_ARG" ]; then
+        resolved_pair="$(resolve_fork_arg "$FORK_ARG")" || exit 1
+        RESOLVED_URL="${resolved_pair%|*}"
+        default_branch="${resolved_pair#*|}"
+        RESOLVED_FORK_ID="$(fork_id_from_url "$RESOLVED_URL")"
     else
-        echo "fork" > "$TARGET_DIR/.active-remote"
+        current_state="$(read_current_state)"
+        RESOLVED_URL="${current_state%%|*}"
+        rest="${current_state#*|}"
+        default_branch="${rest%%|*}"
+        RESOLVED_FORK_ID="${rest##*|}"
+    fi
+
+    # Branch override
+    if [ -n "$BRANCH_ARG" ]; then
+        RESOLVED_BRANCH="$BRANCH_ARG"
+    else
+        RESOLVED_BRANCH="$default_branch"
     fi
 fi
 
-# Ensure all scripts are executable
-find "$TARGET_DIR/scripts" -type f \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) -exec chmod +x {} + 2>/dev/null
+# ── Confirm (interactive mode only) ─────────────────────────────────────────
+if [ "$ACTION" != "" ] && [ "$NO_CONFIRM" = false ]; then
+    echo -e "${BLUE}This will pull & replace ${CYAN}$TARGET_DIR${NC}${BLUE} with:${NC}"
+    echo -e "  fork:   ${CYAN}$RESOLVED_FORK_ID${NC}"
+    echo -e "  branch: ${CYAN}$RESOLVED_BRANCH${NC}"
+    echo -e "  remote: ${CYAN}$RESOLVED_URL${NC}"
+    if [ "$PRESERVE_CONFIG" = true ]; then
+        echo -e "${BLUE}config.json will be preserved.${NC}"
+    else
+        echo -e "${YELLOW}config.json will be reset (you'll be asked to confirm).${NC}"
+    fi
+    echo -e "${RED}Continue? (y/n): ${NC}"
+    read -r response
+    [[ ! "$response" =~ ^[Yy]$ ]] && echo -e "${RED}Cancelled.${NC}" && exit 0
+    echo ""
+fi
 
-# Step 4: Restore protected files (overwrite what was just copied)
-restore_protected_files "$TARGET_DIR"
+# ── Pre-action: CLI install (best-effort) ────────────────────────────────────
+if [ "$NO_CONFIRM" = true ]; then
+    install_cli 2>/dev/null || true
+fi
 
-echo -e "${GREEN}✓ Quickshell source switched successfully${NC}"
+# ── Execute ──────────────────────────────────────────────────────────────────
+EXIT_CODE=0
+if [ "$ACTION" != "" ]; then
+    # Switch / Update path
+    apply_fork_branch "$RESOLVED_URL" "$RESOLVED_BRANCH" "$RESOLVED_FORK_ID"
+    EXIT_CODE=$?
+else
+    # ── Install legacy path: detect local origin, switch from there ──────────
+    LOCAL_REMOTE=""
+    LOCAL_BRANCH=""
+    LOCAL_FORK_ID=""
 
-# ── Config Reset ─────────────────────────────────────────────────────────────
+    if [ -d "$SCRIPT_DIR/.git" ]; then
+        raw_remote="$(git -C "$SCRIPT_DIR" remote get-url origin 2>/dev/null)"
+        [ -n "$raw_remote" ] && LOCAL_REMOTE="$(normalize_github_url "$raw_remote")"
+        LOCAL_BRANCH="$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+        [ -z "$LOCAL_BRANCH" ] && LOCAL_BRANCH="main"
+        LOCAL_FORK_ID="$(fork_id_from_url "$LOCAL_REMOTE")"
+    fi
+
+    if [ -z "$LOCAL_REMOTE" ]; then
+        # No git remote in SCRIPT_DIR — fall back to default preset
+        echo -e "${YELLOW}• SCRIPT_DIR is not a git repo. Defaulting to P3DROVFX/ii-vynx @ main.${NC}"
+        LOCAL_REMOTE="https://github.com/P3DROVFX/ii-vynx"
+        LOCAL_BRANCH="main"
+        LOCAL_FORK_ID="p3drovfx"
+    fi
+
+    # Confirm legacy install
+    if [ "$NO_CONFIRM" = false ]; then
+        echo -e "${BLUE}Installing illogical-impulse from:${NC}"
+        echo -e "  fork:   ${CYAN}$LOCAL_FORK_ID${NC}"
+        echo -e "  branch: ${CYAN}$LOCAL_BRANCH${NC}"
+        echo -e "  remote: ${CYAN}$LOCAL_REMOTE${NC}"
+        echo -e "${RED}Continue? (y/n): ${NC}"
+        read -r response
+        [[ ! "$response" =~ ^[Yy]$ ]] && echo -e "${RED}Cancelled.${NC}" && exit 0
+        echo ""
+    fi
+
+    # Ensure CLI is installed in legacy path too
+    install_cli 2>/dev/null || true
+
+    apply_fork_branch "$LOCAL_REMOTE" "$LOCAL_BRANCH" "$LOCAL_FORK_ID"
+    EXIT_CODE=$?
+fi
+
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo -e "${RED}✗ Action failed with code $EXIT_CODE${NC}"
+    exit $EXIT_CODE
+fi
+
+# ── Config Reset (interactive prompt when not preserving) ────────────────────
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
-if [ "$UPDATE_ONLY" = false ] && [ "$PRESERVE_CONFIG" = false ] && [ -f "$CONFIG_FILE" ]; then
+if [ "$PRESERVE_CONFIG" = false ] && [ -f "$CONFIG_FILE" ]; then
     echo -e "${YELLOW}• Existing config detected at: $CONFIG_FILE${NC}"
-    echo -e "${YELLOW}⚠ This fork uses a different config structure (pages vs toggles). Keeping the old file may cause crashes.${NC}"
-    
     do_reset=false
     if [ "$NO_CONFIRM" = true ]; then
         do_reset=true
     else
-        echo -ne "${CYAN}Reset config.json now? (The file will be renamed as backup) (y/n): ${NC}"
+        echo -ne "${CYAN}Reset config.json now? (Backup will be made) (y/n): ${NC}"
         read -r response
         [[ "$response" =~ ^[Yy]$ ]] && do_reset=true
     fi
-
     if [ "$do_reset" = true ]; then
         BACKUP_CFG="${CONFIG_FILE}_backup_$(date +%Y%m%d_%H%M%S)"
         mv "$CONFIG_FILE" "$BACKUP_CFG"
         echo -e "${GREEN}✓ Config reset complete (Backup: $(basename "$BACKUP_CFG"))${NC}"
     else
-        echo -e "${RED}⚠ Warning: You chose NOT to reset. If Quickshell crashes, delete config.json manually.${NC}"
+        echo -e "${YELLOW}Kept existing config.json. If Quickshell crashes, reset it manually.${NC}"
     fi
 fi
 
-
-
-# ── Restart ──────────────────────────────────────────────────────────────────
+# ── Restart Quickshell ───────────────────────────────────────────────────────
 echo ""
 echo -e "${NC}• Restarting Quickshell...${NC}"
 pkill -x qs
 sleep 0.5
 hyprctl reload
 sleep 0.5
-nohup qs --path "$HOME/.config/quickshell/ii" >/dev/null 2>&1 &
+nohup qs --path "$TARGET_DIR" >/dev/null 2>&1 &
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
