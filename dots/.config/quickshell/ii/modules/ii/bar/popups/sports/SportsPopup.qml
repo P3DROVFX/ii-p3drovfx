@@ -191,26 +191,35 @@ StyledPopup {
                             }
                         }
 
-                        scale: gamesColumn.draggedIndex === index ? 1.03 : ((root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.92)
-                        opacity: gamesColumn.draggedIndex === index ? 0.9 : ((root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.0)
+                        scale: gamesColumn.draggedIndex === index ? 1.03 : 1.0
+                        opacity: gamesColumn.draggedIndex === index ? 0.9 : 1.0
                         
-                        transform: Translate {
-                            y: (gamesColumn.draggedIndex !== index && root.opened && root.popupOpenProgress > 0.6) ? 0 : (gamesColumn.draggedIndex === index ? 0 : 15)
-                            Behavior on y {
-                                SequentialAnimation {
-                                    PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                                    NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutCubic }
-                                }
+                        readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6 && gamesColumn.draggedIndex === -1
+                        
+                        onStartAnimChanged: {
+                            if (startAnim) {
+                                card.opacity = 0.0;
+                                card.scale = 0.85;
+                                cardTranslate.y = 25;
+                                
+                                Qt.callLater(function() {
+                                    cardAnim.start();
+                                });
                             }
                         }
-
-                        Behavior on scale {
-                            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        
+                        transform: Translate {
+                            id: cardTranslate
+                            y: (gamesColumn.draggedIndex !== index && root.opened && root.popupOpenProgress > 0.6) ? 0 : (gamesColumn.draggedIndex === index ? 0 : 25)
                         }
-                        Behavior on opacity {
-                            SequentialAnimation {
-                                PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                                NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 250 : 180 }
+                        
+                        SequentialAnimation {
+                            id: cardAnim
+                            PauseAnimation { duration: 40 + index * 100 }
+                            ParallelAnimation {
+                                NumberAnimation { target: card; property: "opacity"; to: 1.0; duration: 300 }
+                                NumberAnimation { target: card; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                NumberAnimation { target: cardTranslate; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                             }
                         }
 

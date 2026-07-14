@@ -99,6 +99,43 @@ StyledPopup {
         implicitWidth: 380
 
         readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+        
+        onStartAnimChanged: {
+            if (startAnim) {
+                heroCard.opacity = 0.0;
+                heroCard.scale = 0.85;
+                heroCardTransform.y = 25;
+                
+                cpuGpuCardsRow.opacity = 0.0;
+                cpuGpuCardsRow.scale = 0.85;
+                cpuGpuCardsRowTransform.y = 25;
+                
+                ramCard.opacity = 0.0;
+                ramCard.scale = 0.85;
+                ramCardTransform.y = 25;
+                
+                swapCard.opacity = 0.0;
+                swapCard.scale = 0.85;
+                swapCardTransform.y = 25;
+                
+                diskCard.opacity = 0.0;
+                diskCard.scale = 0.85;
+                diskCardTransform.y = 25;
+                
+                dockerLayout.opacity = 0.0;
+                dockerLayout.scale = 0.85;
+                dockerLayoutTransform.y = 25;
+                
+                Qt.callLater(function() {
+                    heroCardAnim.start();
+                    cpuGpuCardsRowAnim.start();
+                    ramCardAnim.start();
+                    swapCardAnim.start();
+                    diskCardAnim.start();
+                    dockerLayoutAnim.start();
+                });
+            }
+        }
 
         readonly property var _visList: [
             true, // Hero Card
@@ -114,7 +151,7 @@ StyledPopup {
             for (let i = 0; i < index; i++) {
                 if (_visList[i]) visIndex++;
             }
-            const delays = [25, 75, 125, 200, 275, 350];
+            const delays = [40, 100, 160, 220, 280, 340];
             return delays[Math.min(visIndex, delays.length - 1)];
         }
 
@@ -126,27 +163,20 @@ StyledPopup {
             radius: Appearance.rounding.large
             color: Appearance.colors.colPrimaryContainer
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: heroCardTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: heroCardAnim
+                PauseAnimation { duration: contentLayout.getDelay(0) }
+                ParallelAnimation {
+                    NumberAnimation { target: heroCard; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: heroCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: heroCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -241,27 +271,20 @@ StyledPopup {
             implicitWidth: 380
             spacing: 12
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: cpuGpuCardsRowTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: cpuGpuCardsRowAnim
+                PauseAnimation { duration: contentLayout.getDelay(1) }
+                ParallelAnimation {
+                    NumberAnimation { target: cpuGpuCardsRow; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: cpuGpuCardsRow; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: cpuGpuCardsRowTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -424,27 +447,20 @@ StyledPopup {
             radius: Appearance.rounding.full
             color: Appearance.colors.colSecondaryContainer
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: ramCardTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: ramCardAnim
+                PauseAnimation { duration: contentLayout.getDelay(2) }
+                ParallelAnimation {
+                    NumberAnimation { target: ramCard; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: ramCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: ramCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -505,27 +521,20 @@ StyledPopup {
             radius: Appearance.rounding.full
             color: Appearance.colors.colSecondaryContainer
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: swapCardTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: swapCardAnim
+                PauseAnimation { duration: contentLayout.getDelay(3) }
+                ParallelAnimation {
+                    NumberAnimation { target: swapCard; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: swapCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: swapCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -585,27 +594,20 @@ StyledPopup {
             radius: Appearance.rounding.full
             color: Appearance.colors.colSecondaryContainer
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(4) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: diskCardTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(4) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(4) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: diskCardAnim
+                PauseAnimation { duration: contentLayout.getDelay(4) }
+                ParallelAnimation {
+                    NumberAnimation { target: diskCard; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: diskCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: diskCardTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -664,27 +666,20 @@ StyledPopup {
             visible: Config.options.bar.resources.showDocker
             spacing: 12
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(5) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: dockerLayoutTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(5) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(5) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: dockerLayoutAnim
+                PauseAnimation { duration: contentLayout.getDelay(5) }
+                ParallelAnimation {
+                    NumberAnimation { target: dockerLayout; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: dockerLayout; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: dockerLayoutTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 

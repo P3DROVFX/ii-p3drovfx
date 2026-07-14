@@ -127,27 +127,34 @@ StyledPopup {
                         return yPos;
                     }
 
-                    opacity: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.0
-                    scale: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.92
+                    readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+                    
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            deviceCard.opacity = 0.0;
+                            deviceCard.scale = 0.85;
+                            deviceCardTranslate.y = 25;
+                            
+                            Qt.callLater(function() {
+                                deviceCardAnim.start();
+                            });
+                        }
+                    }
+                    
+                    opacity: 0.0
+                    scale: 1.0
                     transform: Translate {
-                        y: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 15
-                        Behavior on y {
-                            SequentialAnimation {
-                                PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                                NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutCubic }
-                            }
-                        }
+                        id: deviceCardTranslate
+                        y: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 25
                     }
-                    Behavior on opacity {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 250 : 180 }
-                        }
-                    }
-                    Behavior on scale {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutBack }
+                    
+                    SequentialAnimation {
+                        id: deviceCardAnim
+                        PauseAnimation { duration: 40 + index * 100 }
+                        ParallelAnimation {
+                            NumberAnimation { target: deviceCard; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: deviceCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: deviceCardTranslate; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                         }
                     }
 

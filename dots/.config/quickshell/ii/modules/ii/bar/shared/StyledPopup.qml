@@ -177,7 +177,7 @@ LazyLoader {
 
         readonly property bool isBarVertical: Config.options.bar.vertical
         readonly property bool isBarBottom: Config.options.bar.bottom
-        readonly property real slideOffset: 20
+        readonly property real slideOffset: 35
 
         readonly property real slideX: {
             if (!isBarVertical) return 0;
@@ -201,14 +201,17 @@ LazyLoader {
         }
         readonly property real heroHeight: heroItem ? heroItem.implicitHeight : 0
 
-        NumberAnimation {
-            id: openAnim
-            target: popupWindow
-            property: "animProgress"
-            from: 0.0
-            to: 1.0
-            duration: 320
-            easing.type: Easing.OutCubic
+        SequentialAnimation {
+            id: openAnimSeq
+            PauseAnimation { duration: 50 }
+            NumberAnimation {
+                target: popupWindow
+                property: "animProgress"
+                from: 0.0
+                to: 1.0
+                duration: 380
+                easing.type: Easing.OutQuart
+            }
         }
 
         NumberAnimation {
@@ -236,21 +239,21 @@ LazyLoader {
             function onActiveChanged() {
                 if (root.active) {
                     popupWindow.animProgress = 0.0;
-                    openAnim.start();
+                    openAnimSeq.start();
                 } else {
                     popupWindow.animProgress = 0.0;
                 }
             }
             function on_IsClosingChanged() {
                 if (root._isClosing) {
-                    openAnim.stop();
+                    openAnimSeq.stop();
                     closeAnim.from = popupWindow.animProgress;
                     closeAnim.start();
                 } else {
                     closeAnim.stop();
                     destroyTimer.stop();
                     popupWindow.animProgress = 0.0;
-                    openAnim.start();
+                    openAnimSeq.start();
                 }
             }
         }
@@ -260,7 +263,7 @@ LazyLoader {
                 grabDelayTimer.start();
             }
             popupWindow.animProgress = 0.0;
-            openAnim.start();
+            openAnimSeq.start();
         }
 
         Timer {

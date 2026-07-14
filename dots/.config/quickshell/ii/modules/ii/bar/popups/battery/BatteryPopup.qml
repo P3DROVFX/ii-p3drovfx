@@ -37,6 +37,41 @@ StyledPopup {
         spacing: 16
 
         readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+        
+        onStartAnimChanged: {
+            if (startAnim) {
+                batteryHero.opacity = 0.0;
+                batteryHero.scale = 0.85;
+                batteryHeroTransform.y = 25;
+                
+                divider.opacity = 0.0;
+                
+                cellHealth.opacity = 0.0;
+                cellHealth.scale = 0.85;
+                cellHealthTransform.y = 25;
+                
+                cellWattage.opacity = 0.0;
+                cellWattage.scale = 0.85;
+                cellWattageTransform.y = 25;
+                
+                cellCycles.opacity = 0.0;
+                cellCycles.scale = 0.85;
+                cellCyclesTransform.y = 25;
+                
+                cellStatus.opacity = 0.0;
+                cellStatus.scale = 0.85;
+                cellStatusTransform.y = 25;
+                
+                Qt.callLater(function() {
+                    batteryHeroAnim.start();
+                    dividerAnim.start();
+                    cellHealthAnim.start();
+                    cellWattageAnim.start();
+                    cellCyclesAnim.start();
+                    cellStatusAnim.start();
+                });
+            }
+        }
 
         readonly property var _visList: [
             true, // HERO
@@ -48,7 +83,7 @@ StyledPopup {
         ]
 
         function getDelay(index) {
-            const delays = [25, 75, 125, 200, 275, 350];
+            const delays = [40, 100, 160, 220, 280, 340];
             return delays[Math.min(index, delays.length - 1)];
         }
 
@@ -60,27 +95,20 @@ StyledPopup {
             radius: Appearance.rounding.normal
             color: Appearance.colors.colSurfaceContainerHigh
 
-            opacity: mainLayout.startAnim ? 1.0 : 0.0
-            scale: mainLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: mainLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(0) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: batteryHeroTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: batteryHeroAnim
+                PauseAnimation { duration: mainLayout.getDelay(0) }
+                ParallelAnimation {
+                    NumberAnimation { target: batteryHero; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: batteryHero; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: batteryHeroTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -212,17 +240,18 @@ StyledPopup {
         }
 
         Rectangle {
+            id: divider
             Layout.fillWidth: true
             height: 2
             radius: 1
             color: Appearance.colors.colSurfaceContainerHighest
 
-            opacity: mainLayout.startAnim ? 1.0 : 0.0
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(1) : 0 }
-                    NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                }
+            opacity: 0.0
+            
+            SequentialAnimation {
+                id: dividerAnim
+                PauseAnimation { duration: mainLayout.getDelay(1) }
+                NumberAnimation { target: divider; property: "opacity"; to: 1.0; duration: 300 }
             }
         }
 
@@ -240,27 +269,20 @@ StyledPopup {
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colSurfaceContainerHigh
 
-                opacity: mainLayout.startAnim ? 1.0 : 0.0
-                scale: mainLayout.startAnim ? 1.0 : 0.92
+                opacity: 0.0
+                scale: 0.85
                 transform: Translate {
-                    y: mainLayout.startAnim ? 0 : 15
-                    Behavior on y {
-                        SequentialAnimation {
-                            PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(2) : 0 }
-                            NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                        }
-                    }
+                    id: cellHealthTransform
+                    y: 25
                 }
-                Behavior on opacity {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(2) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                    }
-                }
-                Behavior on scale {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(2) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+                
+                SequentialAnimation {
+                    id: cellHealthAnim
+                    PauseAnimation { duration: mainLayout.getDelay(2) }
+                    ParallelAnimation {
+                        NumberAnimation { target: cellHealth; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: cellHealth; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: cellHealthTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                     }
                 }
 
@@ -313,27 +335,20 @@ StyledPopup {
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colSurfaceContainerHigh
 
-                opacity: mainLayout.startAnim ? 1.0 : 0.0
-                scale: mainLayout.startAnim ? 1.0 : 0.92
+                opacity: 0.0
+                scale: 0.85
                 transform: Translate {
-                    y: mainLayout.startAnim ? 0 : 15
-                    Behavior on y {
-                        SequentialAnimation {
-                            PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(3) : 0 }
-                            NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                        }
-                    }
+                    id: cellWattageTransform
+                    y: 25
                 }
-                Behavior on opacity {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(3) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                    }
-                }
-                Behavior on scale {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(3) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+                
+                SequentialAnimation {
+                    id: cellWattageAnim
+                    PauseAnimation { duration: mainLayout.getDelay(3) }
+                    ParallelAnimation {
+                        NumberAnimation { target: cellWattage; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: cellWattage; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: cellWattageTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                     }
                 }
 
@@ -386,27 +401,20 @@ StyledPopup {
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colSurfaceContainerHigh
 
-                opacity: mainLayout.startAnim ? 1.0 : 0.0
-                scale: mainLayout.startAnim ? 1.0 : 0.92
+                opacity: 0.0
+                scale: 0.85
                 transform: Translate {
-                    y: mainLayout.startAnim ? 0 : 15
-                    Behavior on y {
-                        SequentialAnimation {
-                            PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(4) : 0 }
-                            NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                        }
-                    }
+                    id: cellCyclesTransform
+                    y: 25
                 }
-                Behavior on opacity {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(4) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                    }
-                }
-                Behavior on scale {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(4) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+                
+                SequentialAnimation {
+                    id: cellCyclesAnim
+                    PauseAnimation { duration: mainLayout.getDelay(4) }
+                    ParallelAnimation {
+                        NumberAnimation { target: cellCycles; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: cellCycles; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: cellCyclesTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                     }
                 }
 
@@ -464,27 +472,20 @@ StyledPopup {
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colSurfaceContainerHigh
 
-                opacity: mainLayout.startAnim ? 1.0 : 0.0
-                scale: mainLayout.startAnim ? 1.0 : 0.92
+                opacity: 0.0
+                scale: 0.85
                 transform: Translate {
-                    y: mainLayout.startAnim ? 0 : 15
-                    Behavior on y {
-                        SequentialAnimation {
-                            PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(5) : 0 }
-                            NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                        }
-                    }
+                    id: cellStatusTransform
+                    y: 25
                 }
-                Behavior on opacity {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(5) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 250 : 180 }
-                    }
-                }
-                Behavior on scale {
-                    SequentialAnimation {
-                        PauseAnimation { duration: mainLayout.startAnim ? mainLayout.getDelay(5) : 0 }
-                        NumberAnimation { duration: mainLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+                
+                SequentialAnimation {
+                    id: cellStatusAnim
+                    PauseAnimation { duration: mainLayout.getDelay(5) }
+                    ParallelAnimation {
+                        NumberAnimation { target: cellStatus; property: "opacity"; to: 1.0; duration: 300 }
+                        NumberAnimation { target: cellStatus; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        NumberAnimation { target: cellStatusTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                     }
                 }
 

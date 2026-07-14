@@ -77,27 +77,34 @@ StyledPopup {
                         }
                     }
 
-                    opacity: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.0
-                    scale: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.92
+                    readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+                    
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            layoutCard.opacity = 0.0;
+                            layoutCard.scale = 0.85;
+                            layoutCardTranslate.x = 25;
+                            
+                            Qt.callLater(function() {
+                                layoutCardAnim.start();
+                            });
+                        }
+                    }
+                    
+                    opacity: 0.0
+                    scale: 1.0
                     transform: Translate {
-                        x: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 15
-                        Behavior on x {
-                            SequentialAnimation {
-                                PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                                NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutCubic }
-                            }
-                        }
+                        id: layoutCardTranslate
+                        x: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 25
                     }
-                    Behavior on opacity {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 250 : 180 }
-                        }
-                    }
-                    Behavior on scale {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutBack }
+                    
+                    SequentialAnimation {
+                        id: layoutCardAnim
+                        PauseAnimation { duration: 40 + index * 100 }
+                        ParallelAnimation {
+                            NumberAnimation { target: layoutCard; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: layoutCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: layoutCardTranslate; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                         }
                     }
 

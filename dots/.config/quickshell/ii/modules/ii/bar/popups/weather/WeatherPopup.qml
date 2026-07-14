@@ -110,11 +110,38 @@ StyledPopup {
             for (let i = 0; i < index; i++) {
                 if (_visList[i]) visIndex++;
             }
-            const delays = [25, 75, 125, 200];
+            const delays = [40, 100, 160, 220];
             return delays[Math.min(visIndex, delays.length - 1)];
         }
 
         readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+        
+        onStartAnimChanged: {
+            if (startAnim) {
+                weatherHero.opacity = 0.0;
+                weatherHero.scale = 0.85;
+                weatherHeroTransform.y = 25;
+                
+                hourlyForecast.opacity = 0.0;
+                hourlyForecast.scale = 0.85;
+                hourlyForecastTransform.y = 25;
+                
+                metricsGrid.opacity = 0.0;
+                metricsGrid.scale = 0.85;
+                metricsGridTransform.y = 25;
+                
+                inDayForecast.opacity = 0.0;
+                inDayForecast.scale = 0.85;
+                inDayForecastTransform.y = 25;
+                
+                Qt.callLater(function() {
+                    weatherHeroAnim.start();
+                    hourlyForecastAnim.start();
+                    metricsGridAnim.start();
+                    inDayForecastAnim.start();
+                });
+            }
+        }
 
         HeroCard {
             id: weatherHero
@@ -127,27 +154,20 @@ StyledPopup {
             title: Weather.data.temp
             subtitle: Weather.data.wDesc
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: weatherHeroTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(0) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: weatherHeroAnim
+                PauseAnimation { duration: contentLayout.getDelay(0) }
+                ParallelAnimation {
+                    NumberAnimation { target: weatherHero; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: weatherHero; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: weatherHeroTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
         }
@@ -169,27 +189,20 @@ StyledPopup {
             Layout.minimumWidth: 360
             margins: root.cardMargins
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: hourlyForecastTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(1) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: hourlyForecastAnim
+                PauseAnimation { duration: contentLayout.getDelay(1) }
+                ParallelAnimation {
+                    NumberAnimation { target: hourlyForecast; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: hourlyForecast; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: hourlyForecastTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
         }
@@ -204,27 +217,20 @@ StyledPopup {
             columnSpacing: 8
             uniformCellWidths: true
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: metricsGridTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(2) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: metricsGridAnim
+                PauseAnimation { duration: contentLayout.getDelay(2) }
+                ParallelAnimation {
+                    NumberAnimation { target: metricsGrid; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: metricsGrid; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: metricsGridTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
         }
@@ -243,27 +249,20 @@ StyledPopup {
             title: Translation.tr("Forecast")
             icon: "calendar_month"
 
-            opacity: contentLayout.startAnim ? 1.0 : 0.0
-            scale: contentLayout.startAnim ? 1.0 : 0.92
+            opacity: 0.0
+            scale: 0.85
             transform: Translate {
-                y: contentLayout.startAnim ? 0 : 15
-                Behavior on y {
-                    SequentialAnimation {
-                        PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                        NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutCubic }
-                    }
-                }
+                id: inDayForecastTransform
+                y: 25
             }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 250 : 180 }
-                }
-            }
-            Behavior on scale {
-                SequentialAnimation {
-                    PauseAnimation { duration: contentLayout.startAnim ? contentLayout.getDelay(3) : 0 }
-                    NumberAnimation { duration: contentLayout.startAnim ? 320 : 180; easing.type: Easing.OutBack }
+            
+            SequentialAnimation {
+                id: inDayForecastAnim
+                PauseAnimation { duration: contentLayout.getDelay(3) }
+                ParallelAnimation {
+                    NumberAnimation { target: inDayForecast; property: "opacity"; to: 1.0; duration: 300 }
+                    NumberAnimation { target: inDayForecast; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: inDayForecastTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
         }
