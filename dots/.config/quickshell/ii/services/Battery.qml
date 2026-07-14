@@ -15,7 +15,6 @@ Singleton {
     property bool isPluggedIn: isCharging || chargeState == UPowerDeviceState.PendingCharge
     property real percentage: UPower.displayDevice?.percentage ?? 1
     readonly property bool allowAutomaticSuspend: Config.options.battery.automaticSuspend
-    readonly property bool soundEnabled: Config.options.sounds.battery
 
     property bool isLow: available && (percentage <= Config.options.battery.low / 100)
     property bool isCritical: available && (percentage <= Config.options.battery.critical / 100)
@@ -96,9 +95,10 @@ Singleton {
             "-u", "critical",
             "-a", "Shell",
             "--hint=int:transient:1",
+            "--hint=boolean:suppress-sound:true",
         ])
 
-        if (root.soundEnabled) Audio.playSystemSound("dialog-warning");
+        SoundService.playEvent("battery", ["battery-low", "dialog-warning"]);
     }
 
     onIsCriticalAndNotChargingChanged: {
@@ -110,9 +110,10 @@ Singleton {
             "-u", "critical",
             "-a", "Shell",
             "--hint=int:transient:1",
+            "--hint=boolean:suppress-sound:true",
         ]);
 
-        if (root.soundEnabled) Audio.playSystemSound("suspend-error");
+        SoundService.playEvent("battery", ["battery-caution", "suspend-error", "dialog-error"]);
     }
 
     onIsSuspendingAndNotChargingChanged: {
@@ -129,17 +130,18 @@ Singleton {
             Translation.tr("Please unplug the charger"),
             "-a", "Shell",
             "--hint=int:transient:1",
+            "--hint=boolean:suppress-sound:true",
         ]);
 
-        if (root.soundEnabled) Audio.playSystemSound("complete");
+        SoundService.playEvent("battery", ["battery-full", "complete", "dialog-information"]);
     }
 
     onIsPluggedInChanged: {
-        if (!root.available || !root.soundEnabled) return;
+        if (!root.available) return;
         if (isPluggedIn) {
-            Audio.playSystemSound("power-plug")
+            SoundService.playEvent("battery", "power-plug");
         } else {
-            Audio.playSystemSound("power-unplug")
+            SoundService.playEvent("battery", "power-unplug");
         }
     }
 }

@@ -195,6 +195,25 @@ Singleton {
     property list<string> appNameList: appNameListForGroups(root.groupsByAppName)
     property list<string> popupAppNameList: appNameListForGroups(root.popupGroupsByAppName)
 
+    // Follows the fdo notification spec: apps can suppress the sound or request
+    // a specific one via hints. Do-not-disturb (silent) mutes everything.
+    function playNotificationSound(notification) {
+        if (root.silent) return;
+        const hints = notification.hints ?? {};
+        if (hints["suppress-sound"]) return;
+
+        if (hints["sound-file"]) {
+            SoundService.playEventFile("notifications", hints["sound-file"]);
+            return;
+        }
+
+        const events = [];
+        if (hints["sound-name"]) events.push(hints["sound-name"]);
+        if (notification.urgency === NotificationUrgency.Critical) events.push("dialog-warning");
+        events.push("message-new-instant");
+        SoundService.playEvent("notifications", events);
+    }
+
     // Quickshell's notification IDs starts at 1 on each run, while saved notifications
     // can already contain higher IDs. This is for avoiding id collisions
     property int idOffset
@@ -229,6 +248,7 @@ Singleton {
             }
 
             notification.tracked = true
+            root.playNotificationSound(notification);
             const newNotifObject = notifComponent.createObject(root, {
                 "notificationId": notification.id + root.idOffset,
                 "notification": notification,

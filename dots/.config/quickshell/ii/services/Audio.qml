@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import qs.modules.common
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Services.Pipewire
@@ -16,7 +17,6 @@ Singleton {
     property PwNode sink: Pipewire.defaultAudioSink
     property PwNode source: Pipewire.defaultAudioSource
     readonly property real hardMaxValue: 2.00 // People keep joking about setting volume to 5172% so...
-    property string audioTheme: Config.options.sounds.theme
     property real value: 0
     property bool muted: false
     
@@ -107,7 +107,12 @@ Singleton {
         property real lastVolume: 0
         function onVolumeChanged() {
             if (sink && sink.audio) {
+                const oldValue = root.value;
                 root.value = sink.audio.volume;
+                // oldValue > 0 skips the initial readout on startup/reload
+                if (!isNaN(root.value) && oldValue > 0 && Math.abs(root.value - oldValue) > 0.0001) {
+                    SoundService.playEvent("volumeChange", "audio-volume-change");
+                }
             }
             if (!Config.options.audio.protection.enable) return;
             const newVolume = sink.audio.volume;
@@ -136,31 +141,15 @@ Singleton {
         }
         function onMutedChanged() {
             if (sink && sink.audio) {
+                const wasMuted = root.muted;
                 root.muted = sink.audio.muted;
+                // Blip on unmute as confirmation; a blip on mute would be
+                // inaudible through the now-muted sink anyway.
+                if (wasMuted && !root.muted) {
+                    SoundService.playEvent("volumeChange", "audio-volume-change");
+                }
             }
         }
     }
 
-    function playSystemSound(soundName) {
-        const ogaPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.oga`;
-        const oggPath = `/usr/share/sounds/${root.audioTheme}/stereo/${soundName}.ogg`;
-
-        // Try playing .oga first
-        let command = [
-            "ffplay",
-            "-nodisp",
-            "-autoexit",
-            ogaPath
-        ];
-        Quickshell.execDetached(command);
-
-        // Also try playing .ogg (ffplay will just fail silently if file doesn't exist)
-        command = [
-            "ffplay",
-            "-nodisp",
-            "-autoexit",
-            oggPath
-        ];
-        Quickshell.execDetached(command);
-    }
 }

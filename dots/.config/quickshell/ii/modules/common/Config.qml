@@ -1346,9 +1346,17 @@ Singleton {
             }
 
             property JsonObject sounds: JsonObject {
-                property bool battery: false
-                property bool pomodoro: false
+                property bool enable: true
                 property string theme: "freedesktop"
+                property int volume: 100
+
+                property bool notifications: true
+                property bool volumeChange: true
+                property bool battery: false
+                property bool screenshot: true
+                property bool pomodoro: false
+                property bool alarm: true
+                property bool session: false
             }
 
             property JsonObject soundcore: JsonObject {

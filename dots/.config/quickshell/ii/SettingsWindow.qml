@@ -118,7 +118,7 @@ FloatingWindow {
             icon: "rule",
             component: "modules/settings/configs/HyprlandRulesConfig.qml"
         },
-        // Group 4 – System & Services (indices 16..20)
+        // Group 4 – System & Services (indices 16..21)
         {
             name: Translation.tr("Monitors"),
             icon: "monitor",
@@ -128,6 +128,11 @@ FloatingWindow {
             name: Translation.tr("Core Services"),
             icon: "settings_suggest",
             component: "modules/settings/configs/CoreServicesConfig.qml"
+        },
+        {
+            name: Translation.tr("Sounds"),
+            icon: "volume_up",
+            component: "modules/settings/configs/SoundsConfig.qml"
         },
         {
             name: Translation.tr("Lock Screen"),
@@ -179,7 +184,7 @@ FloatingWindow {
         },
         {
             name: Translation.tr("System & Services"),
-            pages: [16, 17, 18, 19].map(i => ({
+            pages: [16, 17, 18, 19, 20].map(i => ({
                         name: pages[i].name,
                         icon: pages[i].icon,
                         pageIndex: i
@@ -276,8 +281,8 @@ FloatingWindow {
                 id: userHeader
                 Layout.preferredWidth: 230
                 Layout.fillHeight: true
-                isActive: root.currentPage === 20
-                onClicked: root.currentPage = 20
+                isActive: root.currentPage === 21
+                onClicked: root.currentPage = 21
             }
 
             SearchBar {
@@ -290,7 +295,7 @@ FloatingWindow {
 
                 onTextChanged: text => {
                     if (text === "") {
-                        if (root.currentPage === 21) {
+                        if (root.currentPage === 22) {
                             root.currentPage = root.previousPage;
                         }
                         root.activeSearchQuery = "";
@@ -307,7 +312,7 @@ FloatingWindow {
                         root.activeSearchQuery = "";
                         root.resultsCount = 0;
                         root.lastSearchIndex = -1;
-                        if (root.currentPage === 21) {
+                        if (root.currentPage === 22) {
                             root.currentPage = root.previousPage;
                         }
                         return;
@@ -324,12 +329,12 @@ FloatingWindow {
                     root.resultsCount = totalWidgets;
                     root.lastSearchIndex = 0;
 
-                    if (root.currentPage !== 21) {
+                    if (root.currentPage !== 22) {
                         root.previousPage = root.currentPage;
                     }
                     root.activeSearchQuery = text;
                     SearchRegistry.currentSearch = text;
-                    root.currentPage = 21;
+                    root.currentPage = 22;
                 }
 
                 onCloseRequested: GlobalStates.settingsOpen = false
