@@ -46,46 +46,30 @@ ContentPage {
         title: Translation.tr("Media Settings")
         icon: "music_note"
 
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: 250
+            visible: !Config.isWidgetActive("media_circular") && !Config.isWidgetActive("media_expressive")
+
+            PagePlaceholder {
+                anchors.fill: parent
+                icon: "music_off"
+                shape: MaterialShape.Shape.Circle
+                title: Translation.tr("Media widget disabled")
+                description: Translation.tr("Enable a media widget in Desktop Widgets settings to use this page.")
+            }
+        }
+
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
+            visible: Config.isWidgetActive("media_circular") || Config.isWidgetActive("media_expressive")
 
-            ContentSubsectionLabel { text: Translation.tr("General") }
-
-            ConfigSelectionArray {
-                currentValue: Config.options.background.widgets.media.placementStrategy
-                onSelected: newValue => {
-                    Config.options.background.widgets.media.placementStrategy = newValue;
-                }
-                options: [
-                    { displayName: Translation.tr("Draggable"), icon: "pan_tool", value: "draggable" },
-                    { displayName: Translation.tr("Least busy"), icon: "low_priority", value: "least_busy" },
-                    { displayName: Translation.tr("Most busy"), icon: "priority_high", value: "most_busy" }
-                ]
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Media style")
-                icon: "style"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.media.style
-                    onSelected: newValue => {
-                        Config.options.background.widgets.media.style = newValue;
-                    }
-                    options: [
-                        { displayName: Translation.tr("Circular"), icon: "album", value: "circular" },
-                        { displayName: Translation.tr("Expressive"), icon: "palette", value: "expressive" }
-                    ]
-                }
-            }
-
-            Item { Layout.preferredHeight: 16; visible: Config.options.background.widgets.media.style === "circular" }
+            Item { Layout.preferredHeight: 16; visible: Config.isWidgetActive("media_circular") }
 
             // Circular Style Settings
             ColumnLayout {
-                visible: Config.options.background.widgets.media.style === "circular"
+                visible: Config.isWidgetActive("media_circular")
                 Layout.fillWidth: true
                 spacing: 4
 
@@ -233,6 +217,38 @@ ContentPage {
                     stepSize: 1
                     onValueChanged: {
                         Config.options.background.widgets.media.visualizer.blur = value;
+                    }
+                }
+            }
+
+            Item {
+                Layout.preferredHeight: 16
+            }
+
+            // Visual Options (Shadows)
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                ContentSubsectionLabel {
+                    text: Translation.tr("Visual Options")
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "wb_sunny"
+                    text: Translation.tr("Enable Shadows")
+                    checked: Config.options.background.widgets.enableShadows ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.enableShadows = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "blur_on"
+                    text: Translation.tr("Enable Inner Shadows")
+                    checked: Config.options.background.widgets.enableInnerShadow ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.enableInnerShadow = checked;
                     }
                 }
             }

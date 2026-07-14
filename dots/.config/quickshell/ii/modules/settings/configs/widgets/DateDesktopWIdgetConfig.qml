@@ -49,7 +49,7 @@ ContentPage {
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.options.background.widgets.date.enable
+            visible: !Config.isWidgetActive("date_default")
 
             PagePlaceholder {
                 anchors.fill: parent
@@ -60,17 +60,31 @@ ContentPage {
             }
         }
 
-        Item {
+        ColumnLayout {
             Layout.fillWidth: true
-            implicitHeight: 250
-            visible: Config.options.background.widgets.date.enable
+            spacing: 4
+            visible: Config.isWidgetActive("date_default")
 
-            PagePlaceholder {
-                anchors.fill: parent
-                icon: "settings"
-                shape: MaterialShape.Shape.Circle
-                title: Translation.tr("No settings")
-                description: Translation.tr("There are no personalization settings for the date widget yet.")
+            ContentSubsectionLabel {
+                text: Translation.tr("Visual Options")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "wb_sunny"
+                text: Translation.tr("Enable Shadows")
+                checked: Config.options.background.widgets.enableShadows ?? true
+                onCheckedChanged: {
+                    Config.options.background.widgets.enableShadows = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Enable Inner Shadows")
+                checked: Config.options.background.widgets.enableInnerShadow ?? true
+                onCheckedChanged: {
+                    Config.options.background.widgets.enableInnerShadow = checked;
+                }
             }
         }
     }

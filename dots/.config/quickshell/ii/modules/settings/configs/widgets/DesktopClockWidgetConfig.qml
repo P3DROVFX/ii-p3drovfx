@@ -55,67 +55,6 @@ ContentPage {
             }
 
             ContentSubsection {
-                title: Translation.tr("Position")
-                Layout.fillWidth: true
-                icon: "arrows_output"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.placementStrategy
-                    onSelected: newValue => {
-                        Config.options.background.widgets.clock.placementStrategy = newValue;
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Draggable"),
-                            icon: "pan_tool",
-                            value: "draggable"
-                        },
-                        {
-                            displayName: Translation.tr("Least busy"),
-                            icon: "low_priority",
-                            value: "least_busy"
-                        },
-                        {
-                            displayName: Translation.tr("Most busy"),
-                            icon: "priority_high",
-                            value: "most_busy"
-                        }
-                    ]
-                }
-            }
-
-
-            ContentSubsection {
-                title: Translation.tr("Clock style")
-                icon: "style"
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.background.widgets.clock.style
-                    onSelected: newValue => {
-                        Config.options.background.widgets.clock.style = newValue;
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("Digital"),
-                            icon: "123",
-                            value: "digital"
-                        },
-                        {
-                            displayName: Translation.tr("Cookie"),
-                            icon: "cookie",
-                            value: "cookie"
-                        },
-                        {
-                            displayName: Translation.tr("Nagasaki"),
-                            icon: "sports_martial_arts",
-                            value: "nagasaki"
-                        }
-                    ]
-                }
-            }
-
-            ContentSubsection {
                 title: Translation.tr("Clock style (locked)")
                 icon: "lock_clock"
                 Layout.fillWidth: true
@@ -637,6 +576,40 @@ ContentPage {
                     inputText: Config.options.background.widgets.clock.quote.text
                     onInputTextChanged: {
                         Config.options.background.widgets.clock.quote.text = inputText;
+                    }
+                }
+            }
+
+            Item {
+                Layout.preferredHeight: 16
+                visible: Config.isWidgetActive("clock_cookie") || Config.isWidgetActive("clock_digital") || Config.isWidgetActive("clock_nagasaki")
+            }
+
+            // Visual Options (Shadows)
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: Config.isWidgetActive("clock_cookie") || Config.isWidgetActive("clock_digital") || Config.isWidgetActive("clock_nagasaki")
+
+                ContentSubsectionLabel {
+                    text: Translation.tr("Visual Options")
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "wb_sunny"
+                    text: Translation.tr("Enable Shadows")
+                    checked: Config.options.background.widgets.enableShadows ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.enableShadows = checked;
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "blur_on"
+                    text: Translation.tr("Enable Inner Shadows")
+                    checked: Config.options.background.widgets.enableInnerShadow ?? true
+                    onCheckedChanged: {
+                        Config.options.background.widgets.enableInnerShadow = checked;
                     }
                 }
             }
