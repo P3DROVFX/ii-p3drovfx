@@ -148,8 +148,21 @@ Item {
             property bool hovered: cardMouseArea.containsMouse
 
             readonly property var widgetData: modelData
-            readonly property bool isActive: Config.isWidgetActive(widgetData.widgetId)
-            readonly property string currentLockBehavior: Config.getWidgetLockBehavior(widgetData.widgetId)
+            readonly property var _activeWidgets: Config.options.background.activeWidgets
+            readonly property bool isActive: {
+                let list = _activeWidgets || [];
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i].widgetId === widgetData.widgetId) return true;
+                }
+                return false;
+            }
+            readonly property string currentLockBehavior: {
+                let list = _activeWidgets || [];
+                for (let i = 0; i < list.length; i++) {
+                    if (list[i].widgetId === widgetData.widgetId) return list[i].lockBehavior || "hide";
+                }
+                return "hide";
+            }
 
             MouseArea {
                 id: cardMouseArea
@@ -274,112 +287,90 @@ Item {
                             }
                         }
                     }
+                }
 
-                    Rectangle {
-                        id: dimOverlay
+                Rectangle {
+                    id: addBtn
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 6
+                    Layout.preferredHeight: 30
+                    radius: Appearance.rounding.full
+                    color: addBtnMouse.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer
+                    visible: !cardItem.isActive
+
+                    Behavior on color {
+                        ColorAnimation { duration: 100 }
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        MaterialSymbol {
+                            text: "add"
+                            iconSize: 14
+                            color: Appearance.colors.colOnPrimaryContainer
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        StyledText {
+                            text: Translation.tr("Add to Desktop")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: true
+                            color: Appearance.colors.colOnPrimaryContainer
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: addBtnMouse
                         anchors.fill: parent
-                        color: "black"
-                        opacity: cardItem.hovered ? 0.35 : 0
-                        radius: Appearance.rounding.normal
-                        visible: opacity > 0
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            Config.addWidgetToDesktop(cardItem.widgetData.widgetId);
+                        }
+                    }
+                }
 
-                        Behavior on opacity {
-                            NumberAnimation { duration: 150 }
+                Rectangle {
+                    id: removeBtn
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 6
+                    Layout.preferredHeight: 30
+                    radius: Appearance.rounding.full
+                    color: removeBtnMouse.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
+                    visible: cardItem.isActive
+
+                    Behavior on color {
+                        ColorAnimation { duration: 100 }
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        MaterialSymbol {
+                            text: "delete"
+                            iconSize: 14
+                            color: Appearance.colors.colOnErrorContainer
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        StyledText {
+                            text: Translation.tr("Remove from Desktop")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: true
+                            color: Appearance.colors.colOnErrorContainer
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
-                    Rectangle {
-                        id: removeBar
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: 6
-                        height: 30
-                        radius: Appearance.rounding.full
-                        color: removeBarMouse.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
-                        visible: cardItem.isActive
-                        opacity: cardItem.isActive ? 1 : 0
-
-                        Behavior on opacity {
-                            NumberAnimation { duration: 150 }
-                        }
-                        Behavior on color {
-                            ColorAnimation { duration: 100 }
-                        }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            MaterialSymbol {
-                                text: "delete"
-                                iconSize: 14
-                                color: Appearance.colors.colOnErrorContainer
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            StyledText {
-                                text: Translation.tr("Remove")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.bold: true
-                                color: Appearance.colors.colOnErrorContainer
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: removeBarMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                Config.removeWidgetFromDesktop(cardItem.widgetData.widgetId);
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        id: addBar
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.margins: 6
-                        height: 30
-                        radius: Appearance.rounding.full
-                        color: addBarMouse.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer
-                        opacity: (!cardItem.isActive && cardItem.hovered) ? 1 : 0
-
-                        Behavior on opacity {
-                            NumberAnimation { duration: 150 }
-                        }
-                        Behavior on color {
-                            ColorAnimation { duration: 100 }
-                        }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            MaterialSymbol {
-                                text: "add"
-                                iconSize: 14
-                                color: Appearance.colors.colOnPrimaryContainer
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                            StyledText {
-                                text: Translation.tr("Add")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.bold: true
-                                color: Appearance.colors.colOnPrimaryContainer
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
-
-                        MouseArea {
-                            id: addBarMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                Config.addWidgetToDesktop(cardItem.widgetData.widgetId);
-                            }
+                    MouseArea {
+                        id: removeBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            Config.removeWidgetFromDesktop(cardItem.widgetData.widgetId);
                         }
                     }
                 }

@@ -563,6 +563,15 @@ Singleton {
                         property real x: 249.21
                         property real y: 612.92
                         property bool useAlbumColors: true
+                        property bool enableGlassReflection: true
+                    }
+                    property JsonObject wearos_clock: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 400
+                        property real y: 100
+                        property bool useAlbumColors: true
+                        property bool enableGlassReflection: true
                     }
                     property JsonObject weather: JsonObject {
                         property bool enable: false

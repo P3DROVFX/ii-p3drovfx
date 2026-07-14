@@ -25,3 +25,7 @@ __pycache__/
 /dots/.config/quickshell/ii/graphify-out
 /dots/.config/quickshell/ii/GEMINI.md.old
 /dots/.config/quickshell/ii/.claude
+/dots/.config/quickshell/ii/.active-branch
+/dots/.config/quickshell/ii/.active-commit
+/dots/.config/quickshell/ii/.active-fork
+/dots/.config/quickshell/ii/.cortexkit

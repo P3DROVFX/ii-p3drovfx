@@ -371,6 +371,24 @@ Scope {
                 bgRoot.updateZoomScale();
                 // Clock position gets updated after zoom scale is updated
             }
+            onPreferredWallpaperScaleChanged: bgRoot.recalcWallpaperScale()
+
+            function recalcWallpaperScale() {
+                const width = bgRoot.wallpaperWidth;
+                const height = bgRoot.wallpaperHeight;
+                const screenW = bgRoot.screen.width;
+                const screenH = bgRoot.screen.height;
+                if (width <= 0 || height <= 0) return;
+                if (Config.options.background.scaleLargeWallpapers) {
+                    if (width <= screenW || height <= screenH) {
+                        bgRoot.effectiveWallpaperScale = Math.max(screenW / width, screenH / height);
+                    } else {
+                        bgRoot.effectiveWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
+                    }
+                } else {
+                    bgRoot.effectiveWallpaperScale = 1.0;
+                }
+            }
 
             // Wallpaper zoom scale
             function updateZoomScale() {
@@ -1075,6 +1093,17 @@ Scope {
                                 }
 
                                 Component {
+                                    id: component_clock_wearos
+                                    WearOSClockWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
+                                Component {
                                     id: component_media_circular
                                     MediaWidget {
                                         screenWidth: bgRoot.screen.width
@@ -1133,6 +1162,7 @@ Scope {
                                     "clock_cookie": component_clock_cookie,
                                     "clock_digital": component_clock_digital,
                                     "clock_nagasaki": component_clock_nagasaki,
+                                    "clock_wearos": component_clock_wearos,
                                     "circular_media": component_circular_media,
                                     "media_circular": component_media_circular,
                                     "media_expressive": component_media_expressive,
