@@ -69,6 +69,12 @@ Scope {
     property int prevWsId: activeWsId
     property bool clipboardNotifActive: false
     property string lastClipboardItem: ""
+    property bool batteryNotifActive: false
+    onBatteryNotifActiveChanged: {
+        console.log("[DI Battery] batteryNotifActive changed to:", batteryNotifActive);
+    }
+    property bool _prevChargingState: false
+    property var _prevPowerProfile: PowerProfile.Balanced
     property bool isDragOverNotch: false
     property bool rightClickHidden: false
     // Reference to the currently loaded FloatingNotchLocalSend widget
@@ -79,8 +85,31 @@ Scope {
     property var _lsQueueFiles: []
     readonly property var _cliphistRef: Cliphist
 
+    // ── Feature 2+13: Widget Morph Transition ──────────────────────────────
+    property string previousMode: "home"
+    property string previousWidgetType: ""
+    property string currentWidgetType: "home"
+    property real contentMorphScale: 1.0
+    property real contentMorphOpacity: 1.0
+    property real contentMorphTranslateY: 0.0
+    property bool morphActive: false
+    readonly property bool morphTriggered: root.currentWidgetType !== "" && root.previousWidgetType !== "" && root.currentWidgetType !== root.previousWidgetType
+
+    // ── Feature 14: Click to Expand ────────────────────────────────────────
+    readonly property bool clickToExpandEnabled: Config.options.bar.floatingNotch.clickToExpand ?? false
+    property bool clickedExpanded: false
+    property bool isPeeking: false
+    readonly property real peekGlowOpacity: root.isPeeking && !root.isHoverExpanded ? 0.12 : 0.0
+    readonly property real peekScaleBoost: root.isPeeking && !root.isHoverExpanded ? 1.02 : 1.0
+
     Component.onCompleted: {
         root.prevLayout = HyprlandXkb.currentLayoutName;
+        root.previousMode = root.mode;
+        root.previousWidgetType = root.mode;
+        root.currentWidgetType = root.mode;
+        root._prevChargingState = Battery.isCharging;
+        root._prevPowerProfile = PowerProfiles.profile;
+        console.log("[DI Battery] Init - available:", Battery.available, "isCharging:", Battery.isCharging, "chargeState:", Battery.chargeState, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "disableBattery:", Config.options.bar.floatingNotch.disableBattery);
     }
 
     // Bluetooth temporary notification status
@@ -154,6 +183,56 @@ Scope {
             } else {
                 root.wifiNotifActive = false;
                 wifiTimer.interval = 3000;
+            }
+        }
+    }
+
+    Connections {
+        target: Battery
+        function onChargeStateChanged() {
+            console.log("[DI Battery] chargeState changed:", Battery.chargeState, "isCharging:", Battery.isCharging, "available:", Battery.available);
+            if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
+                if (Battery.isCharging) {
+                    root.batteryNotifActive = true;
+                    batteryNotifTimer.stop();
+                    console.log("[DI Battery] Widget activated (charging detected)");
+                } else if (PowerProfiles.profile !== PowerProfile.PowerSaver) {
+                    batteryNotifTimer.interval = 5000;
+                    batteryNotifTimer.restart();
+                }
+            }
+            root._prevChargingState = Battery.isCharging;
+        }
+        function onAvailableChanged() {
+            console.log("[DI Battery] available changed:", Battery.available);
+        }
+        function onPercentageChanged() {
+            console.log("[DI Battery] percentage changed:", Battery.percentage);
+        }
+    }
+
+    Connections {
+        target: PowerProfiles
+        function onProfileChanged() {
+            if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery && root._prevPowerProfile !== PowerProfiles.profile) {
+                root.batteryNotifActive = true;
+                batteryNotifTimer.interval = 5000;
+                batteryNotifTimer.restart();
+            }
+            root._prevPowerProfile = PowerProfiles.profile;
+        }
+    }
+
+    property Timer batteryNotifTimer: Timer {
+        id: batteryNotifTimer
+        interval: 5000
+        onTriggered: {
+            if (root.isHoverExpanded) {
+                batteryNotifTimer.interval = 2000;
+                batteryNotifTimer.restart();
+            } else {
+                root.batteryNotifActive = false;
+                batteryNotifTimer.interval = 5000;
             }
         }
     }
@@ -360,6 +439,16 @@ Scope {
                 expandedW: 420
             };
         }
+        if (type === "battery") {
+            return {
+                type: "battery",
+                source: "widgets/FloatingNotchBattery.qml",
+                contractedH: Config.options.bar.floatingNotch.heightBattery ?? 36,
+                expandedH: 160,
+                contractedW: 120,
+                expandedW: 240
+            };
+        }
         if (type === "checklist") {
             return {
                 type: "checklist",
@@ -432,6 +521,7 @@ Scope {
     readonly property real searchPersistentStripHeight: searchPersistentWidgets.length > 0 ? 52 : 0
 
     readonly property var activeWidgetsList: {
+        console.log("[DI] activeWidgetsList recalculating - floatingNotch.enable:", Config.options.bar.floatingNotch.enable);
         if (searchActive)
             return [getWidgetDetails("search")];
         if (osdActive && !Config.options.bar.floatingNotch.disableOsd)
@@ -442,6 +532,10 @@ Scope {
         let showCalendar = !Config.options.bar.floatingNotch.disableCalendar;
         let showAudio = !Config.options.bar.floatingNotch.disableAudio && root.isHoverExpanded;
 
+        if ((root.batteryNotifActive || Battery.isCharging) && Battery.available && !Config.options.bar.floatingNotch.disableBattery) {
+            console.log("[DI Battery] Adding to activeWidgetsList - notifActive:", root.batteryNotifActive, "isCharging:", Battery.isCharging, "available:", Battery.available);
+            list.push(getWidgetDetails("battery"));
+        }
         if (notificationActive && !Config.options.bar.floatingNotch.disableNotification)
             list.push(getWidgetDetails("notification"));
         if ((LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root.isDragOverNotch || root._lsServiceChoice !== 0) && !Config.options.bar.floatingNotch.disableLocalSend)
@@ -512,32 +606,41 @@ Scope {
         return true;
     }
 
-    // Hover state for general expanding on hover
+    // ── Hover & Expand State (Features 2, 13, 14) ──────────────────────────
     property bool hoverActive: hoverHandler.hovered
-    // Expanded when hovering OR when localsend/KDE ready state is active
     property bool isHoverExpanded: false
+
+    function requestCollapse() {
+        if (root.clickToExpandEnabled && root.clickedExpanded) {
+            hoverCollapseTimer.restart();
+            return;
+        }
+        if (root._lsServiceChoice !== 0) {
+            lsReadyCollapseTimer.restart();
+        } else {
+            hoverCollapseTimer.restart();
+        }
+    }
 
     onHoverActiveChanged: {
         if (hoverActive) {
             hoverCollapseTimer.stop();
-            if (root._lsServiceChoice !== 0) {
-                lsReadyCollapseTimer.restart();
+            if (root._lsServiceChoice !== 0) lsReadyCollapseTimer.restart();
+            if (!root.clickToExpandEnabled) {
+                isHoverExpanded = true;
             }
-            isHoverExpanded = true;
+            root.isPeeking = root.clickToExpandEnabled;
         } else {
-            if (root._lsServiceChoice !== 0) {
-                lsReadyCollapseTimer.restart();
-            } else {
-                hoverCollapseTimer.restart();
-            }
+            root.isPeeking = false;
+            requestCollapse();
         }
     }
 
-    // Auto-expand when a service is chosen; auto-collapse after delay
     on_LsServiceChoiceChanged: {
         if (root._lsServiceChoice !== 0) {
             lsReadyCollapseTimer.restart();
             isHoverExpanded = true;
+            if (root.clickToExpandEnabled) root.clickedExpanded = true;
         } else {
             lsReadyCollapseTimer.stop();
             if (!hoverActive) {
@@ -546,10 +649,27 @@ Scope {
         }
     }
 
+    onIsHoverExpandedChanged: {
+        if (!isHoverExpanded && root.clickToExpandEnabled) {
+            root.clickedExpanded = false;
+        }
+    }
+
+    onIsPeekingChanged: {
+        if (!root.isPeeking && root.clickToExpandEnabled && root._lsServiceChoice === 0) {
+            hoverCollapseTimer.restart();
+        }
+    }
+
     property Timer hoverCollapseTimer: Timer {
         id: hoverCollapseTimer
         interval: 1500
-        onTriggered: isHoverExpanded = false
+        onTriggered: {
+            if (root.clickToExpandEnabled && root.clickedExpanded) {
+                root.clickedExpanded = false;
+            }
+            isHoverExpanded = false;
+        }
     }
 
     property Timer lsReadyCollapseTimer: Timer {
@@ -559,8 +679,110 @@ Scope {
         onTriggered: {
             const lsWidget = root._localSendWidget;
             if (!hoverActive && !(lsWidget && lsWidget.kdeSent)) {
+                if (root.clickToExpandEnabled) root.clickedExpanded = false;
                 isHoverExpanded = false;
             }
+        }
+    }
+
+    // ── Feature 2+13: Morph Transition System ──────────────────────────────
+    onCurrentWidgetTypeChanged: {
+        if (root.previousWidgetType !== "" && root.previousWidgetType !== root.currentWidgetType) {
+            morphTrigger.stop();
+            root.contentMorphScale = 1.0;
+            root.contentMorphOpacity = 1.0;
+            root.contentMorphTranslateY = 0.0;
+            morphTrigger.start();
+        }
+    }
+
+    onModeChanged: {
+        if (root.previousMode !== root.mode) {
+            root.previousWidgetType = root.previousMode;
+            root.previousMode = root.mode;
+            root.currentWidgetType = root.mode;
+        }
+    }
+
+    // Priority-sorted list of modes for accordion direction (Feature 13)
+    readonly property bool isPrioritySwapUpward: {
+        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
+        const oldIdx = priorities.indexOf(root.previousWidgetType);
+        const newIdx = priorities.indexOf(root.currentWidgetType);
+        return oldIdx !== -1 && newIdx !== -1 && newIdx < oldIdx;
+    }
+
+    SequentialAnimation {
+        id: morphTrigger
+        running: false
+        PropertyAction {
+            target: root
+            property: "morphActive"
+            value: true
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "contentMorphScale"
+                from: 1.0
+                to: 0.96
+                duration: 120
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: root
+                property: "contentMorphOpacity"
+                from: 1.0
+                to: 0.25
+                duration: 120
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: root
+                property: "contentMorphTranslateY"
+                from: 0
+                to: root.isPrioritySwapUpward ? -8 : 8
+                duration: 140
+                easing.type: Easing.OutQuad
+            }
+        }
+        PropertyAction {
+            target: root
+            property: "contentMorphTranslateY"
+            value: root.isPrioritySwapUpward ? 10 : -10
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: root
+                property: "contentMorphOpacity"
+                from: 0.25
+                to: 1.0
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: root
+                property: "contentMorphScale"
+                from: 0.96
+                to: 1.0
+                duration: 320
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.4
+            }
+            NumberAnimation {
+                target: root
+                property: "contentMorphTranslateY"
+                from: root.isPrioritySwapUpward ? 10 : -10
+                to: 0
+                duration: 280
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.3
+            }
+        }
+        PropertyAction {
+            target: root
+            property: "morphActive"
+            value: false
         }
     }
 
@@ -877,10 +1099,38 @@ Scope {
                 id: hoverHandler
             }
 
+            // Left-click: toggle expand when clickToExpand is enabled (Feature 14)
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                enabled: root.clickToExpandEnabled
+                onTapped: {
+                    if (root.clickedExpanded) {
+                        root.clickedExpanded = false;
+                        root.isHoverExpanded = false;
+                    } else {
+                        root.clickedExpanded = true;
+                        root.isHoverExpanded = true;
+                        root.hoverCollapseTimer.stop();
+                        root.lsReadyCollapseTimer.stop();
+                    }
+                }
+            }
+
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 onTapped: {
                     root.rightClickHidden = true;
+                }
+            }
+
+            // Peek glow overlay (Feature 14)
+            Rectangle {
+                anchors.fill: parent
+                radius: notchBackground.topRadius
+                color: Appearance.colors.colPrimary
+                opacity: root.peekGlowOpacity
+                Behavior on opacity {
+                    NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -1114,117 +1364,127 @@ Scope {
                 }
 
                 // Dynamic side-by-side loaders for active widgets/notifications
-                Row {
+                // Features 2, 13: Morph transition wrapper
+                Item {
                     id: activeWidgetsRow
                     anchors.centerIn: parent
-                    spacing: 0
+                    width: root.mode !== "search" && root.mode !== "osd" && root.mode !== "home" ? root.targetW : 0
+                    height: root.targetH
                     visible: root.mode !== "search" && root.mode !== "osd" && root.mode !== "home"
+                    clip: true
 
-                    Repeater {
-                        model: root.mode !== "search" && root.mode !== "osd" && root.mode !== "home" ? (root.isHoverExpanded ? root.activeWidgetsList : [root.activeWidgetsList[0]]) : []
-                        delegate: Item {
-                            width: root.isHoverExpanded ? (root.activeWidgetsList.length > 1 ? modelData.expandedW + 24 : modelData.expandedW) : root.targetW
-                            height: root.targetH
+                    // Morph animation props (Features 2+13)
+                    scale: root.contentMorphScale * root.peekScaleBoost
+                    opacity: root.contentMorphOpacity
+                    transform: Translate {
+                        y: root.contentMorphTranslateY
+                    }
+                    Behavior on scale {
+                        enabled: !root.morphActive
+                        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                    }
 
-                            Rectangle {
-                                id: widgetBg
-                                anchors.fill: parent
-                                anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 2 : 2
-                                radius: Appearance.rounding.windowRounding
-                                // Suppress background when widget provides its own (LocalSend drag/expanded
-                                // uses per-service tinted columns).  Stacking the panel's card on top of those
-                                // causes the "rectangles duplos" issue.
-                                readonly property bool widgetOwnsBackground: (modelData.type === "localsend" && (root.isDragOverNotch || (root.isHoverExpanded && modelData.hasExpandedVersion !== false))) || modelData.type === "notification"
-                                color: {
-                                    if (widgetOwnsBackground)
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 0
+
+                        Repeater {
+                            model: root.mode !== "search" && root.mode !== "osd" && root.mode !== "home" ? (root.isHoverExpanded ? root.activeWidgetsList : [root.activeWidgetsList[0]]) : []
+                            delegate: Item {
+                                width: root.isHoverExpanded ? (root.activeWidgetsList.length > 1 ? modelData.expandedW + 24 : modelData.expandedW) : root.targetW
+                                height: root.targetH
+
+                                Rectangle {
+                                    id: widgetBg
+                                    anchors.fill: parent
+                                    anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 2 : 2
+                                    radius: Appearance.rounding.windowRounding
+                                    readonly property bool widgetOwnsBackground: (modelData.type === "localsend" && (root.isDragOverNotch || (root.isHoverExpanded && modelData.hasExpandedVersion !== false))) || modelData.type === "notification"
+                                    color: {
+                                        if (widgetOwnsBackground)
+                                            return "transparent";
+                                        if (root.isHoverExpanded && root.activeWidgetsList.length > 1)
+                                            return Appearance.colors.colSurfaceContainerLow;
                                         return "transparent";
-                                    if (root.isHoverExpanded && root.activeWidgetsList.length > 1)
-                                        return Appearance.colors.colSurfaceContainerLow;
-                                    return "transparent";
-                                }
-                                visible: color !== "transparent"
-
-                                Loader {
-                                    id: widgetLoader
-                                    anchors.centerIn: parent
-                                    width: root.isHoverExpanded ? modelData.expandedW : parent.width
-                                    height: root.isHoverExpanded ? modelData.expandedH : parent.height
-                                    active: true
-                                    source: modelData.source !== "" ? modelData.source : ""
-
-                                    // Enter/Exit scale/fade transition
-                                    opacity: 0.0
-                                    scale: 0.95
-                                    Component.onCompleted: {
-                                        opacity = 1.0;
-                                        scale = 1.0;
                                     }
+                                    visible: color !== "transparent"
 
-                                    // Track the loaded LocalSend widget so the
-                                    // DropArea can push serviceChoice/queueFiles.
-                                    onLoaded: {
-                                        if (modelData.type === "localsend") {
-                                            root._localSendWidget = item;
-                                            if (root._lsServiceChoice !== 0) {
-                                                item.serviceChoice = root._lsServiceChoice;
-                                                item.queueFiles = root._lsQueueFiles;
+                                    Loader {
+                                        id: widgetLoader
+                                        anchors.centerIn: parent
+                                        width: root.isHoverExpanded ? modelData.expandedW : parent.width
+                                        height: root.isHoverExpanded ? modelData.expandedH : parent.height
+                                        active: true
+                                        source: modelData.source !== "" ? modelData.source : ""
+
+                                        opacity: 0.0
+                                        scale: 0.95
+                                        Component.onCompleted: {
+                                            opacity = 1.0;
+                                            scale = 1.0;
+                                        }
+
+                                        onLoaded: {
+                                            if (modelData.type === "localsend") {
+                                                root._localSendWidget = item;
+                                                if (root._lsServiceChoice !== 0) {
+                                                    item.serviceChoice = root._lsServiceChoice;
+                                                    item.queueFiles = root._lsQueueFiles;
+                                                }
                                             }
                                         }
-                                    }
-                                    onItemChanged: {
-                                        if (modelData.type === "localsend") {
-                                            if (!item) {
-                                                root._localSendWidget = null;
-                                            } else if (root._lsServiceChoice !== 0) {
-                                                item.serviceChoice = root._lsServiceChoice;
-                                                item.queueFiles = root._lsQueueFiles;
+                                        onItemChanged: {
+                                            if (modelData.type === "localsend") {
+                                                if (!item) {
+                                                    root._localSendWidget = null;
+                                                } else if (root._lsServiceChoice !== 0) {
+                                                    item.serviceChoice = root._lsServiceChoice;
+                                                    item.queueFiles = root._lsQueueFiles;
+                                                }
                                             }
                                         }
-                                    }
-                                    Behavior on opacity {
-                                        NumberAnimation {
-                                            duration: 250
-                                            easing.type: Easing.InOutQuad
+                                        Behavior on opacity {
+                                            NumberAnimation {
+                                                duration: 250
+                                                easing.type: Easing.InOutQuad
+                                            }
                                         }
-                                    }
-                                    Behavior on scale {
-                                        NumberAnimation {
-                                            duration: 450
-                                            easing.type: Easing.OutBack
-                                            easing.overshoot: 0.6
+                                        Behavior on scale {
+                                            NumberAnimation {
+                                                duration: 450
+                                                easing.type: Easing.OutBack
+                                                easing.overshoot: 0.6
+                                            }
                                         }
-                                    }
 
-                                    // Bind isExpanded property
-                                    Binding {
-                                        target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isExpanded") ? widgetLoader.item : null
-                                        property: "isExpanded"
-                                        value: root.isHoverExpanded
-                                    }
+                                        Binding {
+                                            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isExpanded") ? widgetLoader.item : null
+                                            property: "isExpanded"
+                                            value: root.isHoverExpanded
+                                        }
 
-                                    // Bind isDragOverNotch (panel-level state)
-                                    Binding {
-                                        target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isDragOverNotch") ? widgetLoader.item : null
-                                        property: "isDragOverNotch"
-                                        value: root.isDragOverNotch
-                                    }
+                                        Binding {
+                                            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isDragOverNotch") ? widgetLoader.item : null
+                                            property: "isDragOverNotch"
+                                            value: root.isDragOverNotch
+                                        }
 
-                                    // Bind activeWidgetsList (panel-level state)
-                                    Binding {
-                                        target: widgetLoader.item && widgetLoader.item.hasOwnProperty("panelWidgetsCount") ? widgetLoader.item : null
-                                        property: "panelWidgetsCount"
-                                        value: root.activeWidgetsList.length
-                                    }
+                                        Binding {
+                                            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("panelWidgetsCount") ? widgetLoader.item : null
+                                            property: "panelWidgetsCount"
+                                            value: root.activeWidgetsList.length
+                                        }
 
-                                    Connections {
-                                        target: widgetLoader.item && modelData.type === "localsend" ? widgetLoader.item : null
-                                        enabled: target !== null
-                                        function onServiceChoiceChanged() {
-                                            if (target && target.serviceChoice === 0) {
-                                                root._lsServiceChoice = 0;
-                                                root._lsQueueFiles = [];
-                                                root._localSendWidget = target;
-                                                target.queueFiles = [];
+                                        Connections {
+                                            target: widgetLoader.item && modelData.type === "localsend" ? widgetLoader.item : null
+                                            enabled: target !== null
+                                            function onServiceChoiceChanged() {
+                                                if (target && target.serviceChoice === 0) {
+                                                    root._lsServiceChoice = 0;
+                                                    root._lsQueueFiles = [];
+                                                    root._localSendWidget = target;
+                                                    target.queueFiles = [];
+                                                }
                                             }
                                         }
                                     }

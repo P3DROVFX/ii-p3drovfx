@@ -282,6 +282,47 @@ ContentPage {
                     }
                 ]
             }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                text: Translation.tr("Tip: You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colTertiary
+                wrapMode: Text.WordWrap
+            }
+
+            ConfigSlider {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                text: Translation.tr("Center spacing")
+                value: Config.options.lock.centerSpacing ?? 20
+                from: 0
+                to: 100
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.lock.centerSpacing = value;
+                }
+            }
+
+            ConfigSelectionArray {
+                currentValue: Config.options.lock.centerAlignment ?? "vertical"
+                onSelected: newValue => {
+                    Config.options.lock.centerAlignment = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Vertical"),
+                        icon: "view_column",
+                        value: "vertical"
+                    },
+                    {
+                        displayName: Translation.tr("Horizontal"),
+                        icon: "view_stream",
+                        value: "horizontal"
+                    }
+                ]
+            }
         }
 
         ConfigSwitch {

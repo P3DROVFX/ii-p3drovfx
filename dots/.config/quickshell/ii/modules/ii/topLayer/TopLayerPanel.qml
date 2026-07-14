@@ -92,6 +92,32 @@ PanelWindow {
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.effectiveLeftMonitor && !GlobalStates.policiesDetached
     readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.effectiveRightMonitor
+
+    readonly property bool leftSidebarDialogDimmed: leftSidebarContentLoader.status === Loader.Ready && leftSidebarContentLoader.item && leftSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && leftSidebarContentLoader.item.anyDialogVisible
+    readonly property bool rightSidebarDialogDimmed: rightSidebarContentLoader.status === Loader.Ready && rightSidebarContentLoader.item && rightSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && rightSidebarContentLoader.item.anyDialogVisible
+
+    readonly property color leftSidebarCornerColor: {
+        var base = Qt.color(Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0);
+        if (!leftSidebarDialogDimmed) return base;
+        var scrim = Qt.color(Appearance.colors.colScrim);
+        return Qt.rgba(
+            base.r * (1 - scrim.a) + scrim.r * scrim.a,
+            base.g * (1 - scrim.a) + scrim.g * scrim.a,
+            base.b * (1 - scrim.a) + scrim.b * scrim.a,
+            base.a
+        );
+    }
+    readonly property color rightSidebarCornerColor: {
+        var base = Qt.color(Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0);
+        if (!rightSidebarDialogDimmed) return base;
+        var scrim = Qt.color(Appearance.colors.colScrim);
+        return Qt.rgba(
+            base.r * (1 - scrim.a) + scrim.r * scrim.a,
+            base.g * (1 - scrim.a) + scrim.g * scrim.a,
+            base.b * (1 - scrim.a) + scrim.b * scrim.a,
+            base.a
+        );
+    }
     readonly property bool searchOpenOnMonitor: GlobalStates.overviewOpen
         && GlobalStates.searchConnectActive
         && screen.name === GlobalStates.activeSearchMonitor
@@ -599,6 +625,7 @@ PanelWindow {
         layer.enabled: GlobalStates.leftSidebarAnimating
 
         Loader {
+            id: leftSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached && topPanel.leftSidebarWarmOnMonitor
             asynchronous: true
             anchors.fill: parent
@@ -682,6 +709,7 @@ PanelWindow {
         layer.enabled: GlobalStates.rightSidebarAnimating
 
         Loader {
+            id: rightSidebarContentLoader
             active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor
             asynchronous: true
             anchors.fill: parent
@@ -718,7 +746,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopLeft
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.leftSidebarCornerColor
         }
     }
 
@@ -746,7 +774,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomLeft
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.leftSidebarCornerColor
         }
     }
 
@@ -761,7 +789,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomLeft
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.leftSidebarCornerColor
         }
     }
 
@@ -777,7 +805,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopRight
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.rightSidebarCornerColor
         }
     }
 
@@ -805,7 +833,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomRight
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.rightSidebarCornerColor
         }
     }
 
@@ -821,7 +849,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomRight
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.rightSidebarCornerColor
         }
     }
 
@@ -836,7 +864,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomLeft
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.leftSidebarCornerColor
         }
     }
 
@@ -852,7 +880,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.BottomRight
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.rightSidebarCornerColor
         }
     }
 
@@ -867,7 +895,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopLeft
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.leftSidebarCornerColor
         }
     }
 
@@ -895,7 +923,7 @@ PanelWindow {
         sourceComponent: RoundCorner {
             implicitSize: Appearance.rounding.screenRounding
             corner: RoundCorner.CornerEnum.TopRight
-            color: Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0
+            color: topPanel.rightSidebarCornerColor
         }
     }
 

@@ -126,7 +126,7 @@ Item {
     // Signals to DynamicIslandStyle that the open animation is stable (no active resize)
     // When true, the DI pill disables its own behaviors and follows SearchWidget's animations directly.
     // In notch mode we always return false so the DI pill remains responsible for all animations.
-    readonly property bool openStateStable: root.inNotchMode ? false : (!searchHeightBehavior.animation.running && !searchWidthBehavior.animation.running)
+    readonly property bool openStateStable: root.inNotchMode ? false : ((!searchHeightBehavior.animation || !searchHeightBehavior.animation.running) && (!searchWidthBehavior.animation || !searchWidthBehavior.animation.running))
 
     function focusFirstItem() {
         if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {

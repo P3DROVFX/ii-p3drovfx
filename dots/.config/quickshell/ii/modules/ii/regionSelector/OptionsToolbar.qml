@@ -29,9 +29,25 @@ Toolbar {
             {"icon": "activity_zone", "name": Translation.tr("Rect")},
             {"icon": "gesture", "name": Translation.tr("Circle")}
         ]
-        currentIndex: root.selectionMode === RegionSelection.SelectionMode.RectCorners ? 0 : 1
+        Component.onCompleted: {
+            currentIndex = root.selectionMode === RegionSelection.SelectionMode.RectCorners ? 0 : 1;
+        }
         onCurrentIndexChanged: {
-            root.selectionMode = currentIndex === 0 ? RegionSelection.SelectionMode.RectCorners : RegionSelection.SelectionMode.Circle;
+            const targetMode = currentIndex === 0 ? RegionSelection.SelectionMode.RectCorners : RegionSelection.SelectionMode.Circle;
+            if (root.selectionMode !== targetMode) {
+                root.selectionMode = targetMode;
+            }
+        }
+    }
+
+    Connections {
+        target: root
+        ignoreUnknownSignals: true
+        function onSelectionModeChanged() {
+            const targetIndex = root.selectionMode === RegionSelection.SelectionMode.RectCorners ? 0 : 1;
+            if (tabBar.currentIndex !== targetIndex) {
+                tabBar.currentIndex = targetIndex;
+            }
         }
     }
 }

@@ -161,6 +161,9 @@ Scope {
     }
     PanelLoader {
         extraCondition: Config.ready && Config.options.bar.floatingNotch.enable
+        Component.onCompleted: {
+            console.log("[IllogicalImpulseFamily] DynamicIsland PanelLoader - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "extraCondition:", Config.ready && Config.options.bar.floatingNotch.enable);
+        }
         component: DynamicIsland {}
     }
 }

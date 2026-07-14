@@ -26,7 +26,17 @@ Item {
         orientation: ListView.Horizontal
         spacing: 12
         clip: true
+        interactive: true
+        boundsBehavior: Flickable.DragAndOvershootBounds
         model: Config.options.time.worldClocks
+
+        WheelHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: (event) => {
+                let delta = event.angleDelta.y !== 0 ? event.angleDelta.y : event.angleDelta.x;
+                listView.contentX = Math.max(0, Math.min(listView.contentWidth - listView.width, listView.contentX - delta));
+            }
+        }
 
         delegate: Rectangle {
             id: card

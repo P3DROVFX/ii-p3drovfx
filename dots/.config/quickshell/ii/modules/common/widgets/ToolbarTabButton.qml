@@ -10,14 +10,14 @@ RippleButton {
     id: root
     required property string materialSymbol
     required property bool current
-    horizontalPadding: 10
+    horizontalPadding: 14
 
     implicitHeight: 40
     implicitWidth: implicitContentWidth + horizontalPadding * 2
     buttonRadius: height / 2
 
-    colBackground: ColorUtils.transparentize(Appearance.colors.colSurfaceContainer)
-    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, current ? 1 : 0.95)
+    colBackground: "transparent"
+    colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnSurface, root.current ? 0.88 : 0.95)
     colRipple: ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.95)
 
     contentItem: Row {
@@ -30,7 +30,7 @@ RippleButton {
             anchors.verticalCenter: parent.verticalCenter
             iconSize: 22
             text: root.materialSymbol
-            fill: root.current ? 1.0 : 0.0
+            fill: root.current ? 1.0 : (root.hovered ? 1.0 : 0.0)
         }
         StyledText {
             id: label

@@ -165,7 +165,7 @@ Item {
         NumberAnimation {
             duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
             easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutBack
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : null
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : []
         }
     }
 

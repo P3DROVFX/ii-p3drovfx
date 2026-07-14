@@ -117,6 +117,142 @@ Singleton {
         }
     }
 
+    function isWidgetActive(widgetId) {
+        let list = root.options.background.activeWidgets || [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].widgetId === widgetId) return true;
+        }
+        return false;
+    }
+
+    function getWidgetLockBehavior(widgetId) {
+        let list = root.options.background.activeWidgets || [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].widgetId === widgetId) return list[i].lockBehavior || "hide";
+        }
+        return "hide";
+    }
+
+    function setWidgetLockBehavior(widgetId, newLockBehavior) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].widgetId === widgetId) {
+                cloned[i].lockBehavior = newLockBehavior;
+                root.options.background.activeWidgets = cloned;
+                return;
+            }
+        }
+    }
+
+    function addWidgetToDesktop(widgetId, defaultX, defaultY) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].widgetId === widgetId) return;
+        }
+        
+        let startX = defaultX !== undefined ? defaultX : 200;
+        let startY = defaultY !== undefined ? defaultY : 200;
+        
+        if (defaultX === undefined && defaultY === undefined) {
+            let offset = 0;
+            while (true) {
+                let collision = false;
+                for (let i = 0; i < cloned.length; i++) {
+                    if (Math.abs(cloned[i].x - (startX + offset)) < 30 && Math.abs(cloned[i].y - (startY + offset)) < 30) {
+                        collision = true;
+                        break;
+                    }
+                }
+                if (!collision) {
+                    startX += offset;
+                    startY += offset;
+                    break;
+                }
+                offset += 80;
+            }
+        }
+        
+        let instanceId = "widget_" + widgetId + "_" + Date.now();
+        cloned.push({
+            "id": instanceId,
+            "widgetId": widgetId,
+            "x": startX,
+            "y": startY,
+            "placementStrategy": "free",
+            "lockBehavior": "hide"
+        });
+        root.options.background.activeWidgets = cloned;
+    }
+
+    function removeWidgetFromDesktop(widgetId) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let indexToRemove = -1;
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].widgetId === widgetId) {
+                indexToRemove = i;
+                break;
+            }
+        }
+        if (indexToRemove !== -1) {
+            cloned.splice(indexToRemove, 1);
+            root.options.background.activeWidgets = cloned;
+        }
+    }
+
+    function updateWidgetPosition(instanceId, newX, newY) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let found = false;
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].id === instanceId) {
+                cloned[i].x = newX;
+                cloned[i].y = newY;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            root.options.background.activeWidgets = cloned;
+        }
+    }
+
+    function updateWidgetLockBehavior(instanceId, newLockBehavior) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let found = false;
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].id === instanceId) {
+                cloned[i].lockBehavior = newLockBehavior;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            root.options.background.activeWidgets = cloned;
+        }
+    }
+
+    function migrateWidgetLockBehavior() {
+        if (Persistent.states.background.lockBehaviorMigrated) return;
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let centerWidget = root.options.lock.centerWidget || "none";
+        let changed = false;
+        for (let i = 0; i < cloned.length; i++) {
+            if (!cloned[i].lockBehavior) {
+                if (centerWidget === "clock" && cloned[i].widgetId && cloned[i].widgetId.startsWith("clock")) {
+                    cloned[i].lockBehavior = "center";
+                } else if (centerWidget === "media" && cloned[i].widgetId && cloned[i].widgetId.startsWith("media")) {
+                    cloned[i].lockBehavior = "center";
+                } else {
+                    cloned[i].lockBehavior = "hide";
+                }
+                changed = true;
+            }
+        }
+        if (changed) {
+            root.options.background.activeWidgets = cloned;
+        }
+        Persistent.states.background.lockBehaviorMigrated = true;
+    }
+
     Component.onDestruction: {
         root.blockWrites = true;
     }
@@ -352,6 +488,7 @@ Singleton {
 
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
+                property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
                     property JsonObject clock: JsonObject {
                         property bool enable: true
@@ -420,6 +557,13 @@ Singleton {
                             property int blur: 1
                         }
                     }
+                    property JsonObject circular_media: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 249.21
+                        property real y: 612.92
+                        property bool useAlbumColors: true
+                    }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
                         property string style: "default" // default, expressive
@@ -436,7 +580,15 @@ Singleton {
                     }
                     property bool enableInnerShadow: true
                     property bool enableShadows: true
+                    property bool enableGrid: false
+                    property bool enableSnap: false
+                    property real widgetsScale: 1.0
+                    property bool lockWidgetPositions: false
                 }
+                property list<var> activeWidgets: [
+                    { "id": "widget_clock_cookie", "widgetId": "clock_cookie", "x": 1518.98, "y": 168.8, "placementStrategy": "free", "lockBehavior": "center" },
+                    { "id": "widget_media_circular", "widgetId": "media_circular", "x": 249.21, "y": 612.92, "placementStrategy": "free", "lockBehavior": "hide" }
+                ]
                 property bool scaleLargeWallpapers: true
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
@@ -466,6 +618,11 @@ Singleton {
                 property int zoomOutStyle: 0 // 0: Blurred Backing | 1: Mirrored Plane
                 property bool blurWhenWindowsOpen: false
                 property int blurWhenWindowsOpenRadius: 80
+                property JsonObject gradientBlur: JsonObject {
+                    property bool enable: false
+                    property int radius: 50
+                    property string direction: "top-to-bottom"
+                }
                 property JsonObject parallax: JsonObject {
                     property bool vertical: false
                     property bool autoVertical: false
@@ -575,6 +732,8 @@ Singleton {
                     property bool disableCalendar: false
                     property bool disableAudio: true
                     property bool disableProgress: false
+                    property bool disableBattery: false
+                    property bool clickToExpand: false
 
                     // Contracted Heights
                     property int heightHome: 36
@@ -592,6 +751,7 @@ Singleton {
                     property int heightCalendar: 48
                     property int heightAudio: 36
                     property int heightProgress: 48
+                    property int heightBattery: 36
                 }
 
                 property int barGroupStyle: 1 // 0: Pills | 1: Island (opaque) | 2: Transparent (or maybe line-separated in the future)
@@ -993,6 +1153,8 @@ Singleton {
                     property real extraZoom: 1.1
                 }
                 property string centerWidget: "clock" // "clock" | "media" | "none"
+                property real centerSpacing: 20 // spacing between multiple centered widgets
+                property string centerAlignment: "vertical" // "vertical" | "horizontal"
                 property bool showLockedText: true
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
@@ -1118,7 +1280,7 @@ Singleton {
                 property int updateInterval: 3000
                 property int historyLength: 60
                 // New keys (zero-cost on AMD; only NVIDIA/Intel invoke nvidia-smi one-shot)
-                property int diskInterval: 5000
+                property int diskInterval: 30000
                 property int gpuInterval: 3000
                 // Toggle for Docker section popup. When false, all Docker
                 // polls (docker stats, docker ps) are suppressed and the

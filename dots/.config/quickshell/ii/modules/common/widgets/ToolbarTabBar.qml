@@ -61,35 +61,15 @@ Item {
         AnimatedTabIndexPair {
             id: leftBound
             idx1Duration: 150
-            idx2Duration: 300
-            easingType: Easing.OutBack
-            
-            property real lastIndex: index
-            property real jumpDistance: 100
-            
-            onIndexChanged: {
-                jumpDistance = Math.max(1, Math.abs(index - lastIndex));
-                lastIndex = index;
-            }
-            
-            easingOvershoot: jumpDistance <= 120 ? 1.4 : Math.max(0.4, 1.4 * (120 / jumpDistance))
+            idx2Duration: 250
+            easingType: Easing.OutQuad
             index: activeIndicator.targetItem ? activeIndicator.targetItem.x : 0
         }
         AnimatedTabIndexPair {
             id: rightBound
             idx1Duration: 150
-            idx2Duration: 300
-            easingType: Easing.OutBack
-            
-            property real lastIndex: index
-            property real jumpDistance: 100
-            
-            onIndexChanged: {
-                jumpDistance = Math.max(1, Math.abs(index - lastIndex));
-                lastIndex = index;
-            }
-            
-            easingOvershoot: jumpDistance <= 120 ? 1.4 : Math.max(0.4, 1.4 * (120 / jumpDistance))
+            idx2Duration: 250
+            easingType: Easing.OutQuad
             index: activeIndicator.targetItem ? activeIndicator.targetItem.x + activeIndicator.targetItem.width : 0
         }
         x: Math.min(leftBound.idx1, leftBound.idx2)
