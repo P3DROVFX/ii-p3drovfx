@@ -33,6 +33,7 @@ Item {
     property bool showWifiDialog: false
     property bool showDarkModeDialog: false
     property bool showLocalSendDialog: false
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog
     property bool editMode: false
 
     readonly property bool isDynamicIslandTop: !Config.options.bar.vertical && !Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
@@ -228,6 +229,11 @@ Item {
             if (active) {
                 item.show = true;
                 item.forceActiveFocus();
+            }
+        }
+        onLoaded: {
+            if (item && item.hasOwnProperty("radius")) {
+                item.radius = sidebarRightBackground.defaultRadius;
             }
         }
         Connections {

@@ -1,6 +1,7 @@
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.models
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -45,15 +46,18 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        SecondaryTabBar {
-            id: tabBar
-            currentIndex: swipeView.currentIndex
-
-            Repeater {
-                model: root.tabButtonList
-                delegate: SecondaryTabButton {
-                    buttonText: modelData.name
-                    buttonIcon: modelData.icon
+        Toolbar {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredHeight: 48
+            enableShadow: false
+            colBackground: Appearance.colors.colSurfaceContainer
+            ToolbarTabBar {
+                id: tabBar
+                tabButtonList: root.tabButtonList
+                currentIndex: swipeView.currentIndex
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0 && currentIndex < root.tabButtonList.length)
+                        swipeView.currentIndex = currentIndex;
                 }
             }
         }

@@ -26,6 +26,7 @@ WindowDialog {
     }
 
     Column {
+        spacing: 4
         Layout.topMargin: -16
         Layout.fillWidth: true
 

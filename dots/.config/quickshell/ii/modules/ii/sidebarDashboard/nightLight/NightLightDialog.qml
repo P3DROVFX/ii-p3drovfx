@@ -33,6 +33,7 @@ WindowDialog {
 
     Column {
         id: nightLightColumn
+        spacing: 4
         Layout.topMargin: -16
         Layout.fillWidth: true
 
@@ -93,6 +94,7 @@ WindowDialog {
 
     Column {
         id: antiFlashbangColumn
+        spacing: 4
         Layout.topMargin: -16
         Layout.fillWidth: true
 
