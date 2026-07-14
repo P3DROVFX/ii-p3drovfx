@@ -19,7 +19,7 @@ Singleton {
         }
     }
     property string time: Qt.locale().toString(clock.date, Config.options?.time.format ?? "hh:mm")
-    property string seconds: Qt.locale().toString(clock.seconds, Config.options?.time.secondsFormat ?? "ss")
+    property string seconds: Qt.locale().toString(clock.date, Config.options?.time.secondsFormat ?? "ss")
     property string shortDate: Qt.locale().toString(clock.date, Config.options?.time.shortDateFormat ?? "dd/MM")
     property string dayNameShort: Qt.locale().toString(clock.date, "ddd")
     property string date: Qt.locale().toString(clock.date, Config.options?.time.dateWithYearFormat ?? "dd/MM/yyyy")

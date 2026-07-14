@@ -57,7 +57,7 @@ ContentPage {
     }
 
     ContentSection {
-        enabled: Config.options.bar.styles.clock === "material"
+        enabled: Config.options.bar.styles.keyboard === "material"
         icon: "interests"
         title: Translation.tr("Material 3 Design")
 

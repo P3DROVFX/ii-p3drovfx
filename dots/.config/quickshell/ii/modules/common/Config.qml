@@ -505,7 +505,7 @@ Singleton {
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
-                    property string clock: "material" // default, expressive, material
+                    property string clock: "expressive" // default, expressive, material
                     property string media: "expressive"
                     property string notification: "default"
                     property string utilButtons: "expressive"
@@ -515,10 +515,10 @@ Singleton {
                     property string resources: "expressive"
                     property string policies: "default"
                     property string power: "expressive"
-                    property string battery: "material"
+                    property string battery: "expressive"
                     property string systray: "default"
                     property string bluetooth: "expressive"
-                    property string keyboard: "material"
+                    property string keyboard: "expressive"
                     property string sports: "expressive"
                 }
 
