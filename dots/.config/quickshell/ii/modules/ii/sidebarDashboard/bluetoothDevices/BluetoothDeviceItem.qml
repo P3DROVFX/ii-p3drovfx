@@ -4,6 +4,7 @@ import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
@@ -67,8 +68,14 @@ Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     radius: rFull
-                    
+
+                    readonly property bool showBatteryFill: isActive && (root.device?.batteryAvailable ?? false)
+                    readonly property real batteryLevel: Math.min(1.0, Math.max(0, root.device?.battery ?? 0))
+
                     color: {
+                        if (showBatteryFill) {
+                            return ColorUtils.transparentize(Appearance.colors.colPrimary, 0.4);
+                        }
                         if (isActive) {
                             return cardMouse.containsPress ? Appearance.colors.colPrimaryActive
                                    : cardMouse.containsMouse ? Appearance.colors.colPrimaryHover
@@ -82,6 +89,37 @@ Item {
 
                     Behavior on color {
                         ColorAnimation { duration: 150 }
+                    }
+
+                    layer.enabled: showBatteryFill
+                    layer.samples: 8
+                    layer.smooth: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: mainInfoCard.width
+                            height: mainInfoCard.height
+                            radius: mainInfoCard.radius
+                        }
+                    }
+
+                    Rectangle {
+                        id: batteryFill
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        radius: rFull
+                        width: parent.showBatteryFill ? (parent.width * parent.batteryLevel) : 0
+                        color: cardMouse.containsPress ? Appearance.colors.colPrimaryActive
+                                : cardMouse.containsMouse ? Appearance.colors.colPrimaryHover
+                                : Appearance.colors.colPrimary
+                        visible: parent.showBatteryFill
+
+                        Behavior on width {
+                            NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
                     }
 
                     MouseArea {
