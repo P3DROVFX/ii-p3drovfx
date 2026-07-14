@@ -25,7 +25,7 @@ AbstractBackgroundWidget {
         anchors.fill: parent
         shape: MaterialShape.Shape.Pill
         color: Appearance.colors.colPrimaryContainer
-        implicitSize: 200
+        implicitSize: 240
 
         StyledText {
             font {

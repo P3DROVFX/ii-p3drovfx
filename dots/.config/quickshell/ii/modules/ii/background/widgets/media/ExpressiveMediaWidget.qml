@@ -16,11 +16,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "media"
 
-    visibleWhenLocked: (Config.options.lock.centerWidget === "media")
-
-    readonly property bool forceCenter: (GlobalStates.screenLocked && Config.options.lock.centerWidget === "media")
-    readonly property real centeringX: (root.screenWidth - root.implicitWidth) / 2
-    readonly property real centeringY: (root.screenHeight - root.implicitHeight) / 2
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     property real lastStaticWidth: 400
     property real lastStaticHeight: 240
@@ -41,21 +37,6 @@ AbstractBackgroundWidget {
             lastStaticHeight = computedHeight;
         }
     }
-
-    onForceCenterChanged: {
-        root.animDuration = 700;
-        animResetTimer.restart();
-    }
-
-    Timer {
-        id: animResetTimer
-        interval: 750
-        repeat: false
-        onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
-    }
-
-    targetX: forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width)) : calculatedX)
-    targetY: forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height)) : calculatedY)
 
     property MprisPlayer player: MprisController.activePlayer
 

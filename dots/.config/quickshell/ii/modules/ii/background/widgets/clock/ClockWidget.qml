@@ -30,32 +30,25 @@ AbstractBackgroundWidget {
         }
     }
 
-    readonly property string clockStyle: GlobalStates.screenLocked ? Config.options.background.widgets.clock.styleLocked : Config.options.background.widgets.clock.style
-    readonly property bool forceCenter: (GlobalStates.screenLocked && Config.options.lock.centerWidget === "clock")
+    readonly property string clockStyle: {
+        if (root.styleOverride !== "") return root.styleOverride;
+        return GlobalStates.screenLocked ? Config.options.background.widgets.clock.styleLocked : Config.options.background.widgets.clock.style;
+    }
     readonly property bool shouldShow: (!Config.options.background.widgets.clock.showOnlyWhenLocked || GlobalStates.screenLocked)
     property bool wallpaperSafetyTriggered: false
-    readonly property real centeringX: (root.screenWidth - root.implicitWidth) / 2
-    readonly property real centeringY: (root.screenHeight - root.implicitHeight) / 2
 
-    onForceCenterChanged: {
-        root.animDuration = 700;
-        animResetTimer.restart();
-    }
-
-    Timer {
-        id: animResetTimer
-        interval: 750
-        repeat: false
-        onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock")
+    opacity: {
+        if (!root.shouldShow) return 0;
+        if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
+        if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;
+        return 1;
     }
 
     needsColText: clockStyle === "digital"
-    targetX: forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width)) : calculatedX)
-    targetY: forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height)) : calculatedY)
-    visibleWhenLocked: (Config.options.lock.centerWidget === "clock")
 
     property var textHorizontalAlignment: {
-        if ((typeof bgRoot !== 'undefined' && bgRoot.lockAnimationActive) || !Config.options.background.widgets.clock.digital.adaptiveAlignment || root.forceCenter || Config.options.background.widgets.clock.digital.vertical) 
+        if (root.forceCenter || !Config.options.background.widgets.clock.digital.adaptiveAlignment || Config.options.background.widgets.clock.digital.vertical) 
             return Text.AlignHCenter;
         if (root.x < root.scaledScreenWidth / 3)
             return Text.AlignLeft;

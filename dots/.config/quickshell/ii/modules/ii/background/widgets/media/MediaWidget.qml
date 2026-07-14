@@ -21,11 +21,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "media"
 
-    visibleWhenLocked: (Config.options.lock.centerWidget === "media")
-
-    readonly property bool forceCenter: (GlobalStates.screenLocked && Config.options.lock.centerWidget === "media")
-    readonly property real centeringX: (root.screenWidth - root.implicitWidth) / 2
-    readonly property real centeringY: (root.screenHeight - root.implicitHeight) / 2
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     property real lastStaticWidth: 240
     property real lastStaticHeight: 240
@@ -43,21 +39,6 @@ AbstractBackgroundWidget {
             lastStaticWidth = contentItem.implicitWidth;
         }
     }
-
-    onForceCenterChanged: {
-        root.animDuration = 700;
-        animResetTimer.restart();
-    }
-
-    Timer {
-        id: animResetTimer
-        interval: 750
-        repeat: false
-        onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
-    }
-
-    targetX: forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.x, scaledScreenWidth - width)) : calculatedX)
-    targetY: forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(configEntry.y, scaledScreenHeight - height)) : calculatedY)
 
     readonly property bool useAlbumColors: Config.options.background.widgets.media.useAlbumColors
     readonly property bool useDynamicColors: root.useAlbumColors && root.currentPlayer != null

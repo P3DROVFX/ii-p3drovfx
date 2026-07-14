@@ -9,7 +9,7 @@ import qs.modules.common.widgets
 Item {
     id: root
 
-    property int implicitSize: 230
+    property int implicitSize: 240
     width: implicitSize
     height: implicitSize
 

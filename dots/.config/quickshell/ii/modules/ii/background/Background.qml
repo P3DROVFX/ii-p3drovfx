@@ -25,6 +25,176 @@ import qs.modules.ii.background.widgets.DateWidget
 Scope {
     id: backgroundScope
 
+    ListModel {
+        id: widgetListModel
+        onCountChanged: console.log("[Background] widgetListModel count changed to: " + count)
+    }
+
+    function syncActiveWidgets() {
+        let configList = Config.options.background.activeWidgets || [];
+        console.log("[Background] syncActiveWidgets called. Config activeWidgets count: " + configList.length + ", current model count: " + widgetListModel.count);
+        
+        // 1. Remove items from ListModel that are no longer in Config
+        for (let i = widgetListModel.count - 1; i >= 0; i--) {
+            let modelId = widgetListModel.get(i).instanceId;
+            let found = false;
+            for (let j = 0; j < configList.length; j++) {
+                if (configList[j].id === modelId) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                widgetListModel.remove(i);
+            }
+        }
+        
+        // 2. Add or update items in ListModel
+        for (let j = 0; j < configList.length; j++) {
+            let configItem = configList[j];
+            let modelIndex = -1;
+            for (let i = 0; i < widgetListModel.count; i++) {
+                if (widgetListModel.get(i).instanceId === configItem.id) {
+                    modelIndex = i;
+                    break;
+                }
+            }
+            
+            if (modelIndex === -1) {
+                widgetListModel.append({
+                    "instanceId": configItem.id,
+                    "widgetId": configItem.widgetId,
+                    "widgetX": configItem.x,
+                    "widgetY": configItem.y,
+                    "placementStrategy": configItem.placementStrategy || "free",
+                    "lockBehavior": configItem.lockBehavior || "hide"
+                });
+            } else {
+                let modelItem = widgetListModel.get(modelIndex);
+                if (modelItem.widgetId !== configItem.widgetId) {
+                    modelItem.widgetId = configItem.widgetId;
+                }
+                if (Math.abs(modelItem.widgetX - configItem.x) > 0.01) modelItem.widgetX = configItem.x;
+                if (Math.abs(modelItem.widgetY - configItem.y) > 0.01) modelItem.widgetY = configItem.y;
+                if (modelItem.placementStrategy !== configItem.placementStrategy) {
+                    modelItem.placementStrategy = configItem.placementStrategy || "free";
+                }
+                if (modelItem.lockBehavior !== (configItem.lockBehavior || "hide")) {
+                    modelItem.lockBehavior = configItem.lockBehavior || "hide";
+                }
+            }
+        }
+    }
+
+    function maybeMigrateWidgets() {
+        if (Persistent.states.background.widgetsMigrated) return;
+        
+        console.log("[Background] Migrating legacy desktop widgets configuration...");
+        let migrated = [];
+        let centerWidget = Config.options.lock.centerWidget || "none";
+        
+        // Clock widget
+        if (Config.options.background.widgets.clock.enable) {
+            let style = Config.options.background.widgets.clock.style || "cookie";
+            let widgetId = "clock_" + style;
+            let lockBehavior = (centerWidget === "clock") ? "center" : "hide";
+            migrated.push({
+                "id": "widget_" + widgetId + "_migrated",
+                "widgetId": widgetId,
+                "x": Config.options.background.widgets.clock.x ?? 1518.98,
+                "y": Config.options.background.widgets.clock.y ?? 168.8,
+                "placementStrategy": Config.options.background.widgets.clock.placementStrategy || "free",
+                "lockBehavior": lockBehavior
+            });
+        }
+        
+        // Media widget
+        if (Config.options.background.widgets.media.enable) {
+            let style = Config.options.background.widgets.media.style || "circular";
+            let widgetId = "media_" + style;
+            let lockBehavior = (centerWidget === "media") ? "center" : "hide";
+            migrated.push({
+                "id": "widget_" + widgetId + "_migrated",
+                "widgetId": widgetId,
+                "x": Config.options.background.widgets.media.x ?? 249.21,
+                "y": Config.options.background.widgets.media.y ?? 612.92,
+                "placementStrategy": Config.options.background.widgets.media.placementStrategy || "free",
+                "lockBehavior": lockBehavior
+            });
+        }
+
+        // Circular Media widget
+        if (Config.options.background.widgets.circular_media && Config.options.background.widgets.circular_media.enable) {
+            let lockBehavior = (centerWidget === "media") ? "center" : "hide";
+            migrated.push({
+                "id": "widget_circular_media_migrated",
+                "widgetId": "circular_media",
+                "x": Config.options.background.widgets.circular_media.x ?? 249.21,
+                "y": Config.options.background.widgets.circular_media.y ?? 612.92,
+                "placementStrategy": Config.options.background.widgets.circular_media.placementStrategy || "free",
+                "lockBehavior": lockBehavior
+            });
+        }
+        
+        // Weather widget
+        if (Config.options.background.widgets.weather.enable) {
+            let style = Config.options.background.widgets.weather.style || "default";
+            let widgetId = "weather_" + style;
+            migrated.push({
+                "id": "widget_" + widgetId + "_migrated",
+                "widgetId": widgetId,
+                "x": Config.options.background.widgets.weather.x ?? 400,
+                "y": Config.options.background.widgets.weather.y ?? 100,
+                "placementStrategy": Config.options.background.widgets.weather.placementStrategy || "free",
+                "lockBehavior": "hide"
+            });
+        }
+        
+        // Date widget
+        if (Config.options.background.widgets.date.enable) {
+            migrated.push({
+                "id": "widget_date_default_migrated",
+                "widgetId": "date_default",
+                "x": Config.options.background.widgets.date.x ?? 100,
+                "y": Config.options.background.widgets.date.y ?? 100,
+                "placementStrategy": Config.options.background.widgets.date.placementStrategy || "free",
+                "lockBehavior": "hide"
+            });
+        }
+        
+        Config.options.background.activeWidgets = migrated;
+        Persistent.states.background.widgetsMigrated = true;
+        console.log("[Background] Widget migration complete. Migrated widgets count: " + migrated.length);
+    }
+
+    Connections {
+        target: Config.ready ? Config.options.background : null
+        ignoreUnknownSignals: true
+        function onActiveWidgetsChanged() {
+            backgroundScope.syncActiveWidgets();
+        }
+    }
+
+    Connections {
+        target: Config
+        ignoreUnknownSignals: true
+        function onReadyChanged() {
+            if (Config.ready) {
+                backgroundScope.maybeMigrateWidgets();
+                Config.migrateWidgetLockBehavior();
+                backgroundScope.syncActiveWidgets();
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        if (Config.ready) {
+            backgroundScope.maybeMigrateWidgets();
+            Config.migrateWidgetLockBehavior();
+            backgroundScope.syncActiveWidgets();
+        }
+    }
+
     Variants {
         id: root
         model: Quickshell.screens
@@ -34,64 +204,32 @@ Scope {
 
             required property var modelData
 
+            property bool anyWidgetIsDragging: false
+            property bool lockAnimationActive: false
+
+            Connections {
+                target: GlobalStates
+                function onScreenLockedChanged() {
+                    if (GlobalStates.screenLocked) {
+                        bgRoot.lockAnimationActive = true;
+                    } else {
+                        lockAnimResetTimer.restart();
+                    }
+                }
+            }
+            Timer {
+                id: lockAnimResetTimer
+                interval: 800
+                repeat: false
+                onTriggered: bgRoot.lockAnimationActive = false
+            }
+
             // Hide when fullscreen
             property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && workspace.monitor.name == monitor.name)
             property var activeWorkspaceWithFullscreen: workspacesForMonitor.filter(workspace => ((workspace.toplevels.values.filter(window => window.wayland?.fullscreen)[0] != undefined) && workspace.active))[0]
             property bool isFullscreen: activeWorkspaceWithFullscreen != undefined
             property var activeWorkspace: workspacesForMonitor.filter(workspace => workspace.active)[0]
             property bool hasWindowsInActiveWorkspace: activeWorkspace != undefined && HyprlandData.windowList.some(w => w.workspace.id === activeWorkspace.id)
-
-            property bool wpeShouldPause: Config.options.background.useWallpaperEngine && Config.options.background.wpePauseWhenWindowsOpen && hasWindowsInActiveWorkspace
-            onWpeShouldPauseChanged: {
-                if (wpeShouldPause) {
-                    if (Config.options.background.wpeScreenSpan !== "") {
-                        if (bgRoot.monitorIndex === 0) {
-                            wpeSignalProc.runSignal("STOP", "--screen-span");
-                        }
-                    } else {
-                        wpeSignalProc.runSignal("STOP", bgRoot.monitor.name);
-                    }
-                } else {
-                    if (Config.options.background.wpeScreenSpan !== "") {
-                        if (bgRoot.monitorIndex === 0) {
-                            wpeSignalProc.runSignal("CONT", "--screen-span");
-                        }
-                    } else {
-                        wpeSignalProc.runSignal("CONT", bgRoot.monitor.name);
-                    }
-                }
-            }
-
-            Process {
-                id: wpeSignalProc
-                function runSignal(sig, pattern) {
-                    command = ["pkill", "-" + sig, "-f", "linux-wallpaperengine.*" + pattern];
-                    running = true;
-                }
-            }
-            // Tracks whether the linux-wallpaperengine process is actually running.
-            // Used only to drive the widgets-overlay visibility (Bug 3 fix) so that desktop
-            // widgets reappear above the WPE surface. Does NOT touch wallpaperItem.opacity
-            // or PanelWindow.color, preserving blur / GNOME-Like animations on the static
-            // wallpaper (no regression for the default, non-WPE case).
-            property bool wpeRunning: false
-            Timer {
-                id: wpeCheckTimer
-                interval: 1500
-                repeat: true
-                running: Config.options.background.useWallpaperEngine
-                onTriggered: wpeRunningCheckProc.running = true
-            }
-            Process {
-                id: wpeRunningCheckProc
-                command: ["bash", "-c", "pgrep -f '[l]inux-wallpaperengine' | wc -l"]
-                stdout: StdioCollector {
-                    onStreamFinished: {
-                        const count = parseInt(text.trim())
-                        bgRoot.wpeRunning = !isNaN(count) && count > 0
-                    }
-                }
-            }
             // Deferred to avoid Wayland dispatch reentrancy crash in PanelWindow visibility
             property bool deferredFullscreen: false
             Timer {
@@ -105,31 +243,6 @@ Scope {
 
             // Workspaces
             property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
-            property int activeWorkspaceId: 1
-            onMonitorChanged: {
-                let activeId = monitor?.activeWorkspace?.id;
-                if (activeId !== undefined && activeId !== null && activeId > 0) {
-                    if (activeId > 1000000) {
-                        bgRoot.activeWorkspaceId = 2147483647 - activeId;
-                    } else {
-                        bgRoot.activeWorkspaceId = activeId;
-                    }
-                }
-            }
-            Connections {
-                target: bgRoot.monitor ? bgRoot.monitor : null
-                ignoreUnknownSignals: true
-                function onActiveWorkspaceChanged() {
-                    let activeId = bgRoot.monitor?.activeWorkspace?.id;
-                    if (activeId !== undefined && activeId !== null && activeId > 0) {
-                        if (activeId > 1000000) {
-                            bgRoot.activeWorkspaceId = 2147483647 - activeId;
-                        } else {
-                            bgRoot.activeWorkspaceId = activeId;
-                        }
-                    }
-                }
-            }
             readonly property bool isMonitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
             readonly property bool loopEnabled: Config.options.background.parallax.loop
             readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
@@ -146,7 +259,7 @@ Scope {
             readonly property int workspaceGroup: {
                 if (!loopEnabled)
                     return 0;
-                let activeId = activeWorkspaceId;
+                let activeId = monitor?.activeWorkspace?.id;
                 if (!activeId)
                     return 0;
                 if (activeId <= workspaceOffset)
@@ -179,19 +292,9 @@ Scope {
                 const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
                 return enabled && sensitiveWallpaper && sensitiveNetwork;
             }
-
-            property var shaderList: ["circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"]
-            property string currentShader: "pixelate"
-            property real transitionProgress: 1.0
-            property bool transitionEverStarted: false
-
-            property real wallpaperToScreenRatio: {
-                if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || screen.width <= 0 || screen.height <= 0 || isNaN(wallpaperWidth) || isNaN(wallpaperHeight))
-                    return 1.0;
-                return Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height);
-            }
+            property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
             property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
-            property real effectiveWallpaperScale: preferredWallpaperScale
+            property real effectiveWallpaperScale: 1 // Some reasonable init value, to be updated
             property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
             property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
             property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.width) / 2
@@ -244,114 +347,10 @@ Scope {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
-            property real lockZoomScale: 1.0
-            Behavior on lockZoomScale {
-                NumberAnimation {
-                    id: lockZoomAnim
-                    duration: 700
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Connections {
-                target: Config.options.background.parallax
-                function onWorkspaceZoomChanged() {
-                    if (GlobalStates.screenLocked) {
-                        let zoom = Config.options.background.parallax.workspaceZoom;
-                        lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
-                    }
-                }
-            }
-
-            Timer {
-                id: lockZoomStartTimer
-                interval: 16
-                repeat: false
-                onTriggered: {
-                    if (GlobalStates.screenLocked) {
-                        let zoom = Config.options.background.parallax.workspaceZoom;
-                        lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
-                    } else {
-                        lockZoomScale = 1.0;
-                    }
-                }
-            }
-
-            Timer {
-                id: blurFadeOutTimer
-                interval: 30
-                repeat: false
-                onTriggered: bgRoot.blurLockTarget = 0
-            }
-
             // Layer props
             screen: modelData
             exclusionMode: ExclusionMode.Ignore
-            property bool lockAnimationComplete: true
-            Timer {
-                id: lockAnimationTimer
-                interval: 800
-                repeat: false
-                onTriggered: bgRoot.lockAnimationComplete = true
-            }
-            // Suppress expensive widget canvas transitions during lock zoom.
-            // The state change repositioning triggers layout recalculations
-            // on every child (clock, weather, media) each frame — the main
-            // source of lock-animation stutter.
-            property bool lockAnimationActive: false
-            Timer {
-                id: canvasAnimSuppressTimer
-                interval: 800
-                repeat: false
-                onTriggered: bgRoot.lockAnimationActive = false
-            }
-            // Controls blur visibility: during lock, blur fades in starting
-            // partway through the zoom for a smooth blended transition.
-            // During unlock, blur fades out after a short defer.
-            property real blurLockTarget: 0
-            Timer {
-                id: blurAppearTimer
-                interval: 300
-                repeat: false
-                onTriggered: bgRoot.blurLockTarget = 1.0
-            }
-            onShouldBlurChanged: {
-                if (shouldBlur) {
-                    bgRoot.lockAnimationComplete = false
-                    lockAnimationTimer.restart()
-                }
-            }
-
-            // Freeze the blur source before lock/unlock zoom animation starts.
-            // scheduleUpdate() runs in the signal phase, before lockZoomScale's
-            // binding is re-evaluated, so ShaderEffectSource captures the
-            // wallpaper at its pre-animation scale. This prevents the MultiEffect
-            // from re-sampling the wallpaper every frame during the zoom.
-            //
-            // Lock transition is split into phases to avoid competing work in
-            // the same frame:
-            //   1. Snap widget positions instantly (lockAnimationActive → duration 0)
-            //   2. Defer wallpaper zoom start by 1 frame (lockZoomStartTimer)
-            //   3. Show blur after zoom completes (blurAppearTimer, 700ms)
-            Connections {
-                target: GlobalStates
-                function onScreenLockedChanged() {
-                    if (lockBlurCapture) {
-                        lockBlurCapture.scheduleUpdate();
-                    }
-                    bgRoot.lockAnimationActive = true;
-                    canvasAnimSuppressTimer.restart();
-                    if (GlobalStates.screenLocked) {
-                        blurAppearTimer.restart();
-                        lockZoomStartTimer.restart();
-                    } else {
-                        blurAppearTimer.stop();
-                        blurFadeOutTimer.start();
-                        lockZoomStartTimer.restart();
-                    }
-                }
-            }
-            WlrLayershell.layer: WlrLayer.Bottom
+            WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Top : WlrLayer.Bottom
             WlrLayershell.namespace: "quickshell:background"
             anchors {
                 top: true
@@ -360,8 +359,6 @@ Scope {
                 right: true
             }
             color: {
-                if (Config.options.background.useWallpaperEngine && bgRoot.wpeRunning)
-                    return "transparent";
                 if (!bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
                     return "transparent";
                 return CF.ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colPrimary, 0.75);
@@ -372,33 +369,7 @@ Scope {
 
             onWallpaperPathChanged: {
                 bgRoot.updateZoomScale();
-                if (wallpaperSafetyTriggered || Config.options.background.wallpaperAnimation === "" || !Config.options.background.animateWallpaperChanges || wallpaperIsVideo) {
-                    bgRoot.transitionProgress = 1.0
-                    return
-                }
-                if (bgRoot.transitionProgress >= 1.0) {
-                    bgRoot.transitionEverStarted = true
-                    if (Config.options.background.wallpaperAnimation === "random") {
-                        bgRoot.currentShader = bgRoot.shaderList[Math.floor(Math.random() * bgRoot.shaderList.length)]
-                    } else {
-                        bgRoot.currentShader = Config.options.background.wallpaperAnimation
-                    }
-                    bgRoot.transitionProgress = 0.0
-                    transitionAnim.restart()
-                }
-            }
-
-            NumberAnimation {
-                id: transitionAnim
-                target: bgRoot
-                property: "transitionProgress"
-                from: 0.0
-                to: 1.0
-                duration: 1400
-                easing.type: Easing.InOutCubic
-                onFinished: {
-                    bgRoot.transitionProgress = 1.0
-                }
+                // Clock position gets updated after zoom scale is updated
             }
 
             // Wallpaper zoom scale
@@ -413,44 +384,38 @@ Scope {
                 stdout: StdioCollector {
                     id: wallpaperSizeOutputCollector
                     onStreamFinished: {
-                        const output = wallpaperSizeOutputCollector.text.trim();
+                        const output = wallpaperSizeOutputCollector.text;
+                        const [width, height] = output.split(" ").map(Number);
                         const [screenWidth, screenHeight] = [bgRoot.screen.width, bgRoot.screen.height];
-                        let width = screenWidth;
-                        let height = screenHeight;
-
-                        if (output !== "") {
-                            const parts = output.split(" ");
-                            if (parts.length >= 2) {
-                                const w = Number(parts[0]);
-                                const h = Number(parts[1]);
-                                if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
-                                    width = w;
-                                    height = h;
-                                }
-                            }
-                        }
-
                         bgRoot.wallpaperWidth = width;
                         bgRoot.wallpaperHeight = height;
+
+                        if (Config.options.background.scaleLargeWallpapers) {
+                            if (width <= screenWidth || height <= screenHeight) {
+                                // Undersized/perfectly sized wallpapers
+                                bgRoot.effectiveWallpaperScale = Math.max(screenWidth / width, screenHeight / height);
+                            } else {
+                                // Oversized = can be zoomed for parallax, yay
+                                bgRoot.effectiveWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenWidth, height / screenHeight);
+                            }
+                        } else {
+                            bgRoot.effectiveWallpaperScale = 1.0;
+                        }
                     }
                 }
             }
 
             property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
             onMediaModeOpenChanged: {
-                if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
+                if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
                     LyricsService.shellColorChanged = false;
                 }
             }
 
             Component.onCompleted: {
-                if (!mediaModeOpen && !Config.options.background.useWallpaperEngine && Config.options.appearance.palette.type.startsWith("scheme")) {
+                if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
-                }
-                if (GlobalStates.screenLocked) {
-                    let zoom = Config.options.background.parallax.workspaceZoom;
-                    lockZoomScale = zoom > 0 ? 1.0 / zoom : 1.0;
                 }
             }
 
@@ -463,8 +428,8 @@ Scope {
                     id: wallpaperItem
                     anchors.fill: parent
                     clip: true
-                    scale: (!Config.options.background.useWallpaperEngine && showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout) ? zoomedRatio : defaultRatio
-                    opacity: (Config.options.background.useWallpaperEngine || mediaModeOpen) ? 0 : 1
+                    scale: showOpeningAnimation && overviewOpen && bgRoot.isScrollingLayout ? zoomedRatio : defaultRatio
+                    opacity: mediaModeOpen ? 0 : 1
 
                     Behavior on opacity {
                         NumberAnimation {
@@ -483,7 +448,6 @@ Scope {
                         anchors.fill: parent
                         imageSource: ((wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperSafetyTriggered) ? bgRoot.wallpaperPath : ""
                         animated: Config.options.background.animateWallpaperChanges
-                        animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                         fillMode: Image.PreserveAspectCrop
                         // Visible for both styles during zoom out & return animation to avoid any black fallback margins
                         visible: Config.options.background.zoomOutStyle !== 2 && (wallpaperItem.wallpaperZoomedOut || wallpaperItem.wallpaperClipRadius > 0) && !bgRoot.wallpaperIsVideo
@@ -523,7 +487,7 @@ Scope {
                             return false;
                         return HyprlandData.monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
                     }
-                    readonly property bool wallpaperZoomedOut: !Config.options.background.useWallpaperEngine && Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && bgRoot.isMonitorFocused
+                    readonly property bool wallpaperZoomedOut: Config.options.background.zoomOutEnabled && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen || scratchpadOpen) && bgRoot.isMonitorFocused
 
                     // Animated clip radius — drives both the border-radius clip and tile visibility
                     property real wallpaperClipRadius: wallpaperZoomedOut ? Appearance.rounding.windowRounding : 0
@@ -701,18 +665,10 @@ Scope {
                             }
 
                             Behavior on x {
-                                NumberAnimation {
-                                    duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
-                                    easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
-                                    easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
-                                }
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                             }
                             Behavior on y {
-                                NumberAnimation {
-                                    duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
-                                    easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
-                                    easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
-                                }
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                             }
                             Behavior on width {
                                 NumberAnimation {
@@ -751,8 +707,8 @@ Scope {
                                 height: Config.options.background.zoomOutStyle !== 1 ? wallpaperPlanes.wallpaperH : parent.height
 
                                 visible: opacity > 0 && !bgRoot.wallpaperIsVideo
-                                opacity: (!bgRoot.wallpaperIsVideo) ? 1 : 0
-                                sourceSize: Qt.size(-1, -1)
+                                opacity: (wallpaper.status === Image.Ready && !bgRoot.wallpaperIsVideo) ? 1 : 0
+                                sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(bgRoot.screen.width > 0 ? Math.round(bgRoot.screen.width * bgRoot.preferredWallpaperScale) : 1920, bgRoot.screen.height > 0 ? Math.round(bgRoot.screen.height * bgRoot.preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
 
                                 property int chunkSize: bgRoot.chunkSize
                                 property int lower: Math.floor(bgRoot.firstWorkspaceId / chunkSize) * chunkSize
@@ -761,7 +717,7 @@ Scope {
                                 property real valueX: {
                                     let result = 0.5;
                                     if (Config.options.background.parallax.enableWorkspace && !bgRoot.verticalParallax) {
-                                        let ratio = ((bgRoot.activeWorkspaceId - lower) / range);
+                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
                                         result = Config.options.background.parallax.invertHorizontal ? (1.0 - ratio) : ratio;
                                     }
                                     return result;
@@ -774,7 +730,7 @@ Scope {
                                 property real valueY: {
                                     let result = 0.5;
                                     if (Config.options.background.parallax.enableWorkspace && bgRoot.verticalParallax) {
-                                        let ratio = ((bgRoot.activeWorkspaceId - lower) / range);
+                                        let ratio = ((bgRoot.monitor.activeWorkspace?.id - lower) / range);
                                         result = Config.options.background.parallax.invertVertical ? (1.0 - ratio) : ratio;
                                     }
                                     return result;
@@ -784,21 +740,21 @@ Scope {
 
                                 imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
                                 animated: Config.options.background.animateWallpaperChanges
-                                animationDuration: Config.options.background.wallpaperAnimation !== "" ? 1400 : 1000
                                 fillMode: Image.PreserveAspectCrop
+                                // Performance: disable mipmapping on the central wallpaper
+                                mipmap: false
+                                antialiasing: false
 
                                 Behavior on x {
                                     NumberAnimation {
-                                        duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
-                                        easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
-                                        easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
                                     }
                                 }
                                 Behavior on y {
                                     NumberAnimation {
-                                        duration: bgRoot.lockAnimationActive ? 700 : Appearance.animation.elementMove.duration
-                                        easing.type: bgRoot.lockAnimationActive ? Easing.OutCubic : Appearance.animation.elementMove.type
-                                        easing.bezierCurve: bgRoot.lockAnimationActive ? [] : Appearance.animation.elementMove.bezierCurve
+                                        duration: 400
+                                        easing.type: Easing.OutCubic
                                     }
                                 }
                                 Behavior on width {
@@ -813,48 +769,22 @@ Scope {
                                         easing.type: Easing.OutCubic
                                     }
                                 }
-                                scale: bgRoot.lockZoomScale
-                                transformOrigin: Item.Center
-                            }
-
-                            ShaderEffect {
-                                id: transitionShaderEffect
-                                anchors.fill: wallpaper
-                                visible: (bgRoot.transitionProgress < 1.0 || (bgRoot.transitionEverStarted && wallpaper.status !== Image.Ready)) && Config.options.background.wallpaperAnimation !== "" && !bgRoot.wallpaperSafetyTriggered && !bgRoot.wallpaperIsVideo
-                                property var fromImage: wallpaper.fromImage
-                                property var toImage: wallpaper.toImage
-                                property real progress: bgRoot.transitionProgress
-                                property real aspectX: width / height
-                                property real aspectY: 1.0
-                                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
-                                property vector2d origin: Qt.vector2d(0.5, 0.5)
-                                fragmentShader: Config.options.background.wallpaperAnimation !== ""
-                                    ? Qt.resolvedUrl(`shaders/${bgRoot.currentShader}.frag.qsb`)
-                                    : ""
-                            }
-
-                            // --- Frozen blur source ---
-                            // Captures the wallpaper once when the lock activates, preventing the
-                            // MultiEffect from re-sampling the wallpaper every frame during the
-                            // lock zoom animation. This is the primary performance fix for lock
-                            // animation stutter.
-                            ShaderEffectSource {
-                                id: lockBlurCapture
-                                sourceItem: wallpaper
-                                anchors.fill: wallpaper
-                                // Don't update every frame — freeze at capture moment.
-                                // The lock blur does not need to track wallpaper changes.
-                                live: false
-                                hideSource: false
-                                visible: false
                             }
 
                             Loader {
                                 id: blurLoader
-                                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || bgRoot.blurLockTarget > 0)
+                                active: Config.options.lock.blur.enable && (GlobalStates.screenLocked || scaleAnim.running)
                                 anchors.fill: wallpaper
-                                scale: (1.0 + (Config.options.lock.blur.extraZoom - 1.0) * opacity) * bgRoot.lockZoomScale
-                                opacity: bgRoot.blurLockTarget
+                                scale: GlobalStates.screenLocked ? Config.options.lock.blur.extraZoom : 1
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        id: scaleAnim
+                                        duration: 400
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
+                                    }
+                                }
+                                opacity: GlobalStates.screenLocked ? 1.0 : 0.0
                                 Behavior on opacity {
                                     NumberAnimation {
                                         duration: 400
@@ -862,11 +792,11 @@ Scope {
                                     }
                                 }
                                 sourceComponent: MultiEffect {
-                                    source: lockBlurCapture
+                                    source: wallpaper
                                     blurEnabled: true
                                     // Performance: MultiEffect uses separable blur, ~2-3x faster than GaussianBlur
                                     blurMax: 64
-                                    blur: Math.min(Config.options.lock.blur.radius / 4, 48) / 64
+                                    blur: Math.min(Config.options.lock.blur.radius / 4, 24) / 64
 
                                     Rectangle {
                                         opacity: 1.0
@@ -876,16 +806,157 @@ Scope {
                                 }
                             }
 
+                            Rectangle {
+                                id: wallpaperDimLayer
+                                anchors.fill: wallpaper
+                                color: "black"
+                                opacity: bgRoot.anyWidgetIsDragging ? 0.45 : 0.0
+                                visible: opacity > 0
+                                
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 350
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                            }
+
+                            Loader {
+                                id: gradientBlurLoader
+                                active: Config.options.background.gradientBlur.enable
+                                anchors.fill: wallpaper
+                                visible: active
+                                sourceComponent: Item {
+                                    anchors.fill: parent
+                                    
+                                    ShaderEffectSource {
+                                        id: gradientBlurSource
+                                        sourceItem: wallpaper
+                                        sourceRect: Qt.rect(wallpaper.x, wallpaper.y, wallpaper.width, wallpaper.height)
+                                        width: wallpaper.width
+                                        height: wallpaper.height
+                                        live: true
+                                        hideSource: Config.options.background.gradientBlur.enable
+                                        visible: false
+                                    }
+                                    
+                                    MultiEffect {
+                                        id: lightBlur
+                                        anchors.fill: parent
+                                        source: gradientBlurSource
+                                        blurEnabled: true
+                                        blurMax: 32
+                                        blur: Config.options.background.gradientBlur.radius / 200.0
+                                        
+                                        layer.enabled: true
+                                        layer.effect: OpacityMask {
+                                            maskSource: lightBlurMask
+                                        }
+                                    }
+                                    
+                                    Item {
+                                        id: lightBlurMask
+                                        anchors.fill: parent
+                                        visible: false
+                                        
+                                        Canvas {
+                                            anchors.fill: parent
+                                            readonly property string dir: Config.options.background.gradientBlur.direction
+                                            
+                                            onPaint: {
+                                                var ctx = getContext("2d");
+                                                ctx.reset();
+                                                
+                                                var gradient;
+                                                if (dir === "left-to-right") {
+                                                    gradient = ctx.createLinearGradient(0, 0, width, 0);
+                                                } else if (dir === "right-to-left") {
+                                                    gradient = ctx.createLinearGradient(width, 0, 0, 0);
+                                                } else if (dir === "bottom-to-top") {
+                                                    gradient = ctx.createLinearGradient(0, height, 0, 0);
+                                                } else {
+                                                    gradient = ctx.createLinearGradient(0, 0, 0, height);
+                                                }
+                                                
+                                                gradient.addColorStop(0.0, "rgba(255, 255, 255, 1)");
+                                                gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
+                                                gradient.addColorStop(1.0, "rgba(255, 255, 255, 0)");
+                                                
+                                                ctx.fillStyle = gradient;
+                                                ctx.fillRect(0, 0, width, height);
+                                            }
+                                            
+                                            onWidthChanged: requestPaint()
+                                            onHeightChanged: requestPaint()
+                                        }
+                                    }
+                                    
+                                    MultiEffect {
+                                        id: heavyBlur
+                                        anchors.fill: parent
+                                        source: gradientBlurSource
+                                        blurEnabled: true
+                                        blurMax: 64
+                                        blur: Config.options.background.gradientBlur.radius / 100.0
+                                        
+                                        layer.enabled: true
+                                        layer.effect: OpacityMask {
+                                            maskSource: heavyBlurMask
+                                        }
+                                    }
+                                    
+                                    Item {
+                                        id: heavyBlurMask
+                                        anchors.fill: parent
+                                        visible: false
+                                        
+                                        Canvas {
+                                            anchors.fill: parent
+                                            readonly property string dir: Config.options.background.gradientBlur.direction
+                                            
+                                            onPaint: {
+                                                var ctx = getContext("2d");
+                                                ctx.reset();
+                                                
+                                                var gradient;
+                                                if (dir === "left-to-right") {
+                                                    gradient = ctx.createLinearGradient(0, 0, width, 0);
+                                                } else if (dir === "right-to-left") {
+                                                    gradient = ctx.createLinearGradient(width, 0, 0, 0);
+                                                } else if (dir === "bottom-to-top") {
+                                                    gradient = ctx.createLinearGradient(0, height, 0, 0);
+                                                } else {
+                                                    gradient = ctx.createLinearGradient(0, 0, 0, height);
+                                                }
+                                                
+                                                gradient.addColorStop(0.0, "rgba(255, 255, 255, 0)");
+                                                gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
+                                                gradient.addColorStop(1.0, "rgba(255, 255, 255, 1)");
+                                                
+                                                ctx.fillStyle = gradient;
+                                                ctx.fillRect(0, 0, width, height);
+                                            }
+                                            
+                                            onWidthChanged: requestPaint()
+                                            onHeightChanged: requestPaint()
+                                            
+                                            Connections {
+                                                target: Config.options.background.gradientBlur
+                                                function onDirectionChanged() {
+                                                    lightBlurMask.requestPaint();
+                                                    heavyBlurMask.requestPaint();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             WidgetCanvas {
                                 id: widgetCanvas
-                                visible: !Config.options.background.useWallpaperEngine
                                 scale: 1 - (defaultRatio - 1)
                                 Behavior on scale {
-                                    NumberAnimation {
-                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
-                                        easing.type: Appearance.animation.elementMove.type
-                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                    }
+                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                 }
                                 anchors {
                                     left: parent.left
@@ -906,18 +977,10 @@ Scope {
                                         return yOnWallpaper - extraMove;
                                     }
                                     Behavior on leftMargin {
-                                        NumberAnimation {
-                                            duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
-                                            easing.type: Appearance.animation.elementMove.type
-                                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                        }
+                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                     }
                                     Behavior on topMargin {
-                                        NumberAnimation {
-                                            duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
-                                            easing.type: Appearance.animation.elementMove.type
-                                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                        }
+                                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                     }
                                 }
                                 width: parent.width
@@ -950,48 +1013,21 @@ Scope {
                                 transitions: Transition {
                                     PropertyAnimation {
                                         properties: "width,height,leftMargin,rightMargin,topMargin,bottomMargin"
-                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
+                                        duration: Appearance.animation.elementMove.duration
                                         easing.type: Appearance.animation.elementMove.type
                                         easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                                     }
                                     AnchorAnimation {
-                                        duration: bgRoot.lockAnimationActive ? 0 : Appearance.animation.elementMove.duration
+                                        duration: Appearance.animation.elementMove.duration
                                         easing.type: Appearance.animation.elementMove.type
                                         easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
                                     }
                                 }
 
-                                FadeLoader {
-                                    shown: Config.options.background.widgets.weather.enable
-                                    visible: !bgRoot.lockAnimationActive
-                                    sourceComponent: Config.options.background.widgets.weather.style === "expressive" ? expressiveWeatherWidget : defaultWeatherWidget
-
-                                    Component {
-                                        id: defaultWeatherWidget
-                                        WeatherWidget {
-                                            screenWidth: bgRoot.screen.width
-                                            screenHeight: bgRoot.screen.height
-                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                            wallpaperScale: bgRoot.effectiveWallpaperScale
-                                        }
-                                    }
-
-                                    Component {
-                                        id: expressiveWeatherWidget
-                                        ExpressiveWeatherWidget {
-                                            screenWidth: bgRoot.screen.width
-                                            screenHeight: bgRoot.screen.height
-                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                            wallpaperScale: bgRoot.effectiveWallpaperScale
-                                        }
-                                    }
-                                }
-
-                                FadeLoader {
-                                    shown: Config.options.background.widgets.clock.enable && !(GlobalStates.screenLocked && Config.options.background.widgets.clock.disableAnimationOnLock)
-                                    sourceComponent: ClockWidget {
+                                Component {
+                                    id: component_clock_cookie
+                                    ClockWidget {
+                                        styleOverride: "cookie"
                                         screenWidth: bgRoot.screen.width
                                         screenHeight: bgRoot.screen.height
                                         scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
@@ -1001,10 +1037,35 @@ Scope {
                                     }
                                 }
 
-                                FadeLoader {
-                                    shown: Config.options.background.widgets.date.enable
-                                    visible: !bgRoot.lockAnimationActive
-                                    sourceComponent: DateWidget {
+                                Component {
+                                    id: component_clock_digital
+                                    ClockWidget {
+                                        styleOverride: "digital"
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+                                    }
+                                }
+
+                                Component {
+                                    id: component_clock_nagasaki
+                                    ClockWidget {
+                                        styleOverride: "nagasaki"
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+                                    }
+                                }
+
+                                Component {
+                                    id: component_circular_media
+                                    CircularMediaWidget {
                                         screenWidth: bgRoot.screen.width
                                         screenHeight: bgRoot.screen.height
                                         scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
@@ -1013,46 +1074,111 @@ Scope {
                                     }
                                 }
 
-                                Timer {
-                                    id: mediaTimer
-                                    interval: 200
-                                    onTriggered: mediaLoader.enableLoading = true
+                                Component {
+                                    id: component_media_circular
+                                    MediaWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
                                 }
 
-                                FadeLoader {
-                                    id: mediaLoader
-                                    property bool enableLoading: true
-                                    shown: Config.options.background.widgets.media.enable && enableLoading
-                                    visible: !bgRoot.lockAnimationActive || Config.options.lock.centerWidget === "media"
-                                    sourceComponent: Config.options.background.widgets.media.style === "expressive" ? expressiveMediaWidget : circularMediaWidget
-
-                                    Component {
-                                        id: circularMediaWidget
-                                        MediaWidget {
-                                            screenWidth: bgRoot.screen.width
-                                            screenHeight: bgRoot.screen.height
-                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                            wallpaperScale: bgRoot.effectiveWallpaperScale
-                                        }
+                                Component {
+                                    id: component_media_expressive
+                                    ExpressiveMediaWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
                                     }
+                                }
 
-                                    Component {
-                                        id: expressiveMediaWidget
-                                        ExpressiveMediaWidget {
-                                            screenWidth: bgRoot.screen.width
-                                            screenHeight: bgRoot.screen.height
-                                            scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
-                                            scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
-                                            wallpaperScale: bgRoot.effectiveWallpaperScale
-                                        }
+                                Component {
+                                    id: component_weather_default
+                                    WeatherWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
                                     }
-                                    onLoaded: {
-                                        if (item && item.requestReset) {
-                                            item.requestReset.connect(() => { // hard reset
-                                                mediaLoader.enableLoading = false;
-                                                mediaTimer.running = true;
-                                            });
+                                }
+
+                                Component {
+                                    id: component_weather_expressive
+                                    ExpressiveWeatherWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
+                                Component {
+                                    id: component_date_default
+                                    DateWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
+                                property var widgetComponentMap: ({
+                                    "clock_cookie": component_clock_cookie,
+                                    "clock_digital": component_clock_digital,
+                                    "clock_nagasaki": component_clock_nagasaki,
+                                    "circular_media": component_circular_media,
+                                    "media_circular": component_media_circular,
+                                    "media_expressive": component_media_expressive,
+                                    "weather_default": component_weather_default,
+                                    "weather_expressive": component_weather_expressive,
+                                    "date_default": component_date_default
+                                })
+
+                                Repeater {
+                                    model: widgetListModel
+                                    delegate: Item {
+                                        id: delegateRoot
+                                        
+                                        required property int index
+                                        required property string widgetId
+                                        required property string instanceId
+                                        required property real widgetX
+                                        required property real widgetY
+                                        required property string placementStrategy
+                                        required property string lockBehavior
+
+                                        FadeLoader {
+                                            id: widgetLoader
+                                            shown: true
+                                            visible: !bgRoot.lockAnimationActive 
+                                                || (delegateRoot.widgetId && delegateRoot.widgetId.startsWith("clock") && !Config.options.background.widgets.clock.disableAnimationOnLock) 
+                                                || delegateRoot.lockBehavior === "center" 
+                                                || delegateRoot.lockBehavior === "keep"
+                                            
+                                            sourceComponent: widgetCanvas.widgetComponentMap[delegateRoot.widgetId] || null
+
+                                            Binding {
+                                                target: widgetLoader.item
+                                                property: "widgetInstance"
+                                                value: {
+                                                    return {
+                                                        "id": delegateRoot.instanceId,
+                                                        "widgetId": delegateRoot.widgetId,
+                                                        "x": delegateRoot.widgetX,
+                                                        "y": delegateRoot.widgetY,
+                                                        "placementStrategy": delegateRoot.placementStrategy,
+                                                        "lockBehavior": delegateRoot.lockBehavior
+                                                    };
+                                                }
+                                                when: widgetLoader.status == Loader.Ready
+                                            }
                                         }
                                     }
                                 }
@@ -1115,92 +1241,160 @@ Scope {
                     }
                 }
 
-                // Transparent bar gradient overlay
-                Rectangle {
+                // Transparent bar gradient — exact copy of experimental gradientBlur component, full screen
+                Loader {
                     id: barGradientOverlay
-                    visible: Config.options.bar.barBackgroundStyle === 0 && Config.options.bar.transparentGlow && GlobalStates.barOpen && !GlobalStates.screenLocked
+                    active: Config.options.bar.barBackgroundStyle === 0 && Config.options.bar.transparentGlow && GlobalStates.barOpen && !GlobalStates.screenLocked
+                    anchors.fill: wallpaperItem
+                    visible: active
 
                     readonly property bool isVertical: Config.options.bar.vertical
                     readonly property bool isBottom: Config.options.bar.bottom
-                    readonly property real glowDepth: isVertical ? 50 : 40
-                    readonly property real blurValue: 80
-                    readonly property real dimOpacity: 0.15
-                    readonly property color dimColor: "#000000"
 
-                    // Position and size based on bar location
-                    width: isVertical ? glowDepth : parent.width
-                    height: isVertical ? parent.height : glowDepth
-                    x: isVertical ? (isBottom ? parent.width - glowDepth : 0) : 0
-                    y: isVertical ? 0 : (isBottom ? parent.height - glowDepth : 0)
-
-                    // Gradient mask using the same strategy as AndroidMediaPopup
-                    Item {
-                        id: gradientMask
+                    sourceComponent: Item {
                         anchors.fill: parent
-                        visible: false
 
-                        // Primary gradient (perpendicular to bar direction)
-                        Rectangle {
-                            id: perpMask
-                            anchors.fill: parent
-                            gradient: Gradient {
-                                orientation: barGradientOverlay.isVertical ? Gradient.Horizontal : Gradient.Vertical
-                                GradientStop { position: 0.0; color: barGradientOverlay.isBottom ? "white" : "transparent" }
-                                GradientStop { position: 1.0; color: barGradientOverlay.isBottom ? "transparent" : "white" }
-                            }
+                        ShaderEffectSource {
+                            id: barBlurSource
+                            sourceItem: wallpaper
+                            sourceRect: Qt.rect(wallpaper.x, wallpaper.y, wallpaper.width, wallpaper.height)
+                            width: wallpaper.width
+                            height: wallpaper.height
+                            live: true
+                            hideSource: true
+                            visible: false
                         }
 
-                        // Secondary gradient (parallel to bar direction) - crossed with primary
-                        Rectangle {
+                        // Light blur
+                        MultiEffect {
                             anchors.fill: parent
-                            gradient: Gradient {
-                                orientation: barGradientOverlay.isVertical ? Gradient.Vertical : Gradient.Horizontal
-                                GradientStop { position: 0.0; color: "transparent" }
-                                GradientStop { position: 0.5; color: "white" }
-                                GradientStop { position: 1.0; color: "transparent" }
-                            }
+                            source: barBlurSource
+                            blurEnabled: true
+                            blurMax: 32
+                            blur: Config.options.background.gradientBlur.radius / 200.0
+
                             layer.enabled: true
                             layer.effect: OpacityMask {
-                                maskSource: perpMask
+                                maskSource: lightMask
                             }
                         }
-                    }
 
-                    // Blurred wallpaper layer
-                    Item {
-                        anchors.fill: parent
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: gradientMask
-                        }
-
-                        Image {
-                            source: bgRoot.wallpaperPath
-                            fillMode: Image.PreserveAspectCrop
-                            width: bgRoot.screen.width
-                            height: bgRoot.screen.height
-                            x: barGradientOverlay.isVertical ? (barGradientOverlay.isBottom ? -(bgRoot.screen.width - barGradientOverlay.width) : 0) : 0
-                            y: barGradientOverlay.isVertical ? 0 : (barGradientOverlay.isBottom ? -(bgRoot.screen.height - barGradientOverlay.height) : 0)
-                            layer.enabled: barGradientOverlay.blurValue > 0
-                            layer.effect: MultiEffect {
-                                blurEnabled: barGradientOverlay.blurValue > 0
-                                blurMax: 128
-                                blur: barGradientOverlay.blurValue / 128
-                            }
-                        }
-                    }
-
-                    // Dim layer
-                    Item {
-                        anchors.fill: parent
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: gradientMask
-                        }
-
-                        Rectangle {
+                        Item {
+                            id: lightMask
                             anchors.fill: parent
-                            color: CF.ColorUtils.applyAlpha(barGradientOverlay.dimColor, barGradientOverlay.dimOpacity)
+                            visible: false
+
+                            Canvas {
+                                anchors.fill: parent
+                                readonly property bool isV: barGradientOverlay.isVertical
+                                readonly property bool isB: barGradientOverlay.isBottom
+
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+                                    var g;
+                                    if (isV)
+                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
+                                    else
+                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
+                                    g.addColorStop(0.0, "rgba(255, 255, 255, 1)");
+                                    g.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
+                                    g.addColorStop(1.0, "rgba(255, 255, 255, 0)");
+                                    ctx.fillStyle = g;
+                                    ctx.fillRect(0, 0, width, height);
+                                }
+
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                            }
+                        }
+
+                        // Heavy blur (inverted mask)
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: barBlurSource
+                            blurEnabled: true
+                            blurMax: 64
+                            blur: Config.options.background.gradientBlur.radius / 100.0
+
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: heavyMask
+                            }
+                        }
+
+                        Item {
+                            id: heavyMask
+                            anchors.fill: parent
+                            visible: false
+
+                            Canvas {
+                                anchors.fill: parent
+                                readonly property bool isV: barGradientOverlay.isVertical
+                                readonly property bool isB: barGradientOverlay.isBottom
+
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+                                    var g;
+                                    if (isV)
+                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
+                                    else
+                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
+                                    g.addColorStop(0.0, "rgba(255, 255, 255, 0)");
+                                    g.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
+                                    g.addColorStop(1.0, "rgba(255, 255, 255, 1)");
+                                    ctx.fillStyle = g;
+                                    ctx.fillRect(0, 0, width, height);
+                                }
+
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                            }
+                        }
+
+                        // Dim
+                        Item {
+                            anchors.fill: parent
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: dimMask
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Qt.rgba(0, 0, 0, 0.30)
+                            }
+                        }
+
+                        Item {
+                            id: dimMask
+                            anchors.fill: parent
+                            visible: false
+
+                            Canvas {
+                                anchors.fill: parent
+                                readonly property bool isV: barGradientOverlay.isVertical
+                                readonly property bool isB: barGradientOverlay.isBottom
+
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+                                    var g;
+                                    if (isV)
+                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
+                                    else
+                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
+                                    g.addColorStop(0.0, "rgba(255, 255, 255, 1)");
+                                    g.addColorStop(0.7, "rgba(255, 255, 255, 0.3)");
+                                    g.addColorStop(1.0, "rgba(255, 255, 255, 0)");
+                                    ctx.fillStyle = g;
+                                    ctx.fillRect(0, 0, width, height);
+                                }
+
+                                onWidthChanged: requestPaint()
+                                onHeightChanged: requestPaint()
+                            }
                         }
                     }
                 }
@@ -1302,200 +1496,6 @@ Scope {
                     NumberAnimation {
                         duration: 200
                         easing.type: Easing.OutCubic
-                    }
-                }
-            }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // WPE widgets overlay — Bug 3 fix.
-    //
-    // linux-wallpaperengine binds its own wlr-layer-shell surface ABOVE
-    // quickshell:background (WlrLayer.Bottom). The desktop widgets (clock,
-    // weather, date, media) live inside wallpaperItem on the Bottom panel
-    // and were being occluded by the WPE surface.
-    //
-    // To restore them without regressing blur / GNOME-Like animations on
-    // the static wallpaper (which depend on wallpaperItem.opacity and the
-    // windowBlurEffect pipeline), we spawn a SECOND, transparent
-    // PanelWindow on WlrLayer.Top that reproduces the same widgets layout
-    // only while the WPE process is confirmed alive. The Bottom widgetCanvas
-    // hides itself in the same window so we do not double-render.
-    // ─────────────────────────────────────────────────────────────────────
-    Variants {
-        id: wpeWidgetsOverlay
-        model: Quickshell.screens
-
-        PanelWindow {
-            id: wpeWidgetsRoot
-
-            required property var modelData
-            screen: modelData
-
-            exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.namespace: "quickshell:bgwidgetsoverlay"
-            color: "transparent"
-            // Empty mask: make this overlay fully click-through so mouse events
-            // reach the linux-wallpaperengine surface underneath (WlrLayer.Bottom).
-            // Without this, the Top-layer surface swallows all pointer events,
-            // breaking WPE mouse interactivity (parallax, hover, clicks).
-            mask: Region {}
-
-            anchors {
-                top: true
-                bottom: true
-                left: true
-                right: true
-            }
-
-            readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
-            readonly property int monitorIndex: Quickshell.screens.indexOf(modelData)
-            
-            // Widgets só aparecem quando NÃO há janelas no workspace ativo (mesma lógica do wallpaper estático)
-            property list<HyprlandWorkspace> workspacesForMonitor: Hyprland.workspaces.values.filter(workspace => workspace.monitor && workspace.monitor.name == monitor?.name)
-            property var activeWorkspace: workspacesForMonitor.filter(workspace => workspace.active)[0]
-            property bool hasWindowsInActiveWorkspace: activeWorkspace != undefined && HyprlandData.windowList.some(w => w.workspace.id === activeWorkspace.id)
-
-            // Mirror the Bottom panel's wpeRunning state by polling the same
-            // process independently of bgRoot (each monitor has its own bgRoot).
-            property bool wpeRunning: false
-            Timer {
-                id: wpeOverlayCheckTimer
-                interval: 1500
-                repeat: true
-                running: Config.options.background.useWallpaperEngine
-                onTriggered: wpeOverlayCheckProc.running = true
-            }
-            Process {
-                id: wpeOverlayCheckProc
-                command: ["bash", "-c", "pgrep -f '[l]inux-wallpaperengine' | wc -l"]
-                stdout: StdioCollector {
-                    onStreamFinished: {
-                        const count = parseInt(text.trim())
-                        wpeWidgetsRoot.wpeRunning = !isNaN(count) && count > 0
-                    }
-                }
-            }
-
-            visible: false
-            property bool deferredFullscreen: false
-            Timer {
-                id: wpeOverlayFullscreenDefer
-                interval: 50
-                repeat: false
-                onTriggered: wpeWidgetsRoot.deferredFullscreen = wpeWidgetsRoot.fullscreenActive
-            }
-            readonly property bool fullscreenActive: {
-                const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name == wpeWidgetsRoot.monitor?.name)
-                return workspaces.some(w => w.active && w.toplevels.values.some(t => t.wayland?.fullscreen))
-            }
-            onFullscreenActiveChanged: wpeOverlayFullscreenDefer.restart()
-
-            // Hide when a fullscreen app is active on this monitor (matches Bottom panel behavior)
-            Item {
-                id: wpeOverlayContent
-                anchors.fill: parent
-                visible: wpeWidgetsRoot.visible
-
-                WidgetCanvas {
-                    id: wpeWidgetCanvas
-                    anchors.fill: parent
-                    width: parent.width
-                    height: parent.height
-
-                    FadeLoader {
-                        shown: Config.options.background.widgets.weather.enable && wpeWidgetsRoot.visible
-                        sourceComponent: Config.options.background.widgets.weather.style === "expressive" ? wpeExpressiveWeatherWidget : wpeDefaultWeatherWidget
-
-                        Component {
-                            id: wpeDefaultWeatherWidget
-                            WeatherWidget {
-                                screenWidth: wpeWidgetsRoot.screen.width
-                                screenHeight: wpeWidgetsRoot.screen.height
-                                scaledScreenWidth: wpeWidgetsRoot.screen.width
-                                scaledScreenHeight: wpeWidgetsRoot.screen.height
-                                wallpaperScale: 1
-                            }
-                        }
-
-                        Component {
-                            id: wpeExpressiveWeatherWidget
-                            ExpressiveWeatherWidget {
-                                screenWidth: wpeWidgetsRoot.screen.width
-                                screenHeight: wpeWidgetsRoot.screen.height
-                                scaledScreenWidth: wpeWidgetsRoot.screen.width
-                                scaledScreenHeight: wpeWidgetsRoot.screen.height
-                                wallpaperScale: 1
-                            }
-                        }
-                    }
-
-                    FadeLoader {
-                        shown: Config.options.background.widgets.clock.enable && wpeWidgetsRoot.visible
-                        sourceComponent: ClockWidget {
-                            screenWidth: wpeWidgetsRoot.screen.width
-                            screenHeight: wpeWidgetsRoot.screen.height
-                            scaledScreenWidth: wpeWidgetsRoot.screen.width
-                            scaledScreenHeight: wpeWidgetsRoot.screen.height
-                            wallpaperScale: 1
-                            wallpaperSafetyTriggered: false
-                        }
-                    }
-
-                    FadeLoader {
-                        shown: Config.options.background.widgets.date.enable && wpeWidgetsRoot.visible
-                        sourceComponent: DateWidget {
-                            screenWidth: wpeWidgetsRoot.screen.width
-                            screenHeight: wpeWidgetsRoot.screen.height
-                            scaledScreenWidth: wpeWidgetsRoot.screen.width
-                            scaledScreenHeight: wpeWidgetsRoot.screen.height
-                            wallpaperScale: 1
-                        }
-                    }
-
-                    Timer {
-                        id: wpeMediaTimer
-                        interval: 200
-                        onTriggered: wpeMediaLoader.enableLoading = true
-                    }
-
-                    FadeLoader {
-                        id: wpeMediaLoader
-                        property bool enableLoading: true
-                        shown: Config.options.background.widgets.media.enable && enableLoading && wpeWidgetsRoot.visible
-                        sourceComponent: Config.options.background.widgets.media.style === "expressive" ? wpeExpressiveMediaWidget : wpeCircularMediaWidget
-
-                        Component {
-                            id: wpeCircularMediaWidget
-                            MediaWidget {
-                                screenWidth: wpeWidgetsRoot.screen.width
-                                screenHeight: wpeWidgetsRoot.screen.height
-                                scaledScreenWidth: wpeWidgetsRoot.screen.width
-                                scaledScreenHeight: wpeWidgetsRoot.screen.height
-                                wallpaperScale: 1
-                            }
-                        }
-
-                        Component {
-                            id: wpeExpressiveMediaWidget
-                            ExpressiveMediaWidget {
-                                screenWidth: wpeWidgetsRoot.screen.width
-                                screenHeight: wpeWidgetsRoot.screen.height
-                                scaledScreenWidth: wpeWidgetsRoot.screen.width
-                                scaledScreenHeight: wpeWidgetsRoot.screen.height
-                                wallpaperScale: 1
-                            }
-                        }
-                        onLoaded: {
-                            if (item && item.requestReset) {
-                                item.requestReset.connect(() => {
-                                    wpeMediaLoader.enableLoading = false;
-                                    wpeMediaTimer.running = true;
-                                });
-                            }
-                        }
                     }
                 }
             }

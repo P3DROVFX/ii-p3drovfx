@@ -17,7 +17,7 @@ Item {
 
     readonly property string clockStyle: Config.options.background.widgets.clock.style
 
-    property real implicitSize: 230
+    property real implicitSize: 240
 
     property color colShadow: Appearance.colors.colShadow
     property color colBackground: Appearance.colors.colPrimaryContainer
