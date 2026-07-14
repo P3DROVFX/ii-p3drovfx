@@ -19,6 +19,9 @@ Singleton {
     property bool crosshairOpen: false
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
+    // Names of screens currently blacked out by the OLED saver overlay. Independent
+    // per monitor: toggling one monitor doesn't affect the others.
+    property var oledSaverMonitors: []
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false

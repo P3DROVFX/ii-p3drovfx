@@ -12,25 +12,22 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
-    // Names of screens currently blacked out. Independent per monitor:
-    // toggling affects only Hyprland's currently focused monitor.
-    property var activeMonitors: []
-
     function toggle() {
         const name = Hyprland.focusedMonitor?.name;
         if (!name) return;
-        root.activeMonitors = root.activeMonitors.includes(name) ? root.activeMonitors.filter(n => n !== name) : [...root.activeMonitors, name];
+        const monitors = GlobalStates.oledSaverMonitors;
+        GlobalStates.oledSaverMonitors = monitors.includes(name) ? monitors.filter(n => n !== name) : [...monitors, name];
     }
 
     function close(name) {
-        root.activeMonitors = root.activeMonitors.filter(n => n !== name);
+        GlobalStates.oledSaverMonitors = GlobalStates.oledSaverMonitors.filter(n => n !== name);
     }
 
     // Inhibits sleep/lock/DPMS while at least one monitor is blacked out.
     // Kept independent from the shared Idle.inhibit toggle so this feature
     // never clobbers the user's own manual idle-inhibit preference.
     IdleInhibitor {
-        enabled: root.activeMonitors.length > 0
+        enabled: GlobalStates.oledSaverMonitors.length > 0
         window: PanelWindow {
             implicitWidth: 0
             implicitHeight: 0
@@ -140,7 +137,7 @@ Scope {
         delegate: Loader {
             id: oledSaverLoader
             required property var modelData
-            active: root.activeMonitors.includes(modelData.name)
+            active: GlobalStates.oledSaverMonitors.includes(modelData.name)
 
             sourceComponent: OledSaverWindow {
                 screen: oledSaverLoader.modelData
