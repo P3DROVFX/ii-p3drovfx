@@ -133,7 +133,7 @@ MouseArea {
                         TextMetrics {
                             id: metrics
                             font: keyboardText.font
-                            text: root.uppercaseLayout ? "UU" : "uu"
+                            text: root.uppercaseLayout ? "UU UU" : "uu uu"
                         }
                     }
                 }

@@ -153,7 +153,7 @@ Item {
                 pill.height - root.primaryPadding
 
             implicitWidth:
-                root.primaryIsCircle
+                root.primaryIsCircle && !root.swapPrimaryWithSecondary
                     ? implicitHeight
                     : (content.item
                         ? content.item.implicitWidth
