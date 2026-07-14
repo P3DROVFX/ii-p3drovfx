@@ -1,3 +1,4 @@
+// Contract animation v3: removed Behavior conflicts (forced reload 2026-07-13-18:30)
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -16,6 +17,7 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
     anchors.fill: parent
+    transformOrigin: Item.Center
 
     readonly property MprisPlayer player: MprisController.activePlayer
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
@@ -26,6 +28,13 @@ Item {
     readonly property var activeTrackRef: MprisController.activeTrack
 
     property bool isExpanded: false
+    property real expandContractRatio: 1.4
+
+    // Drives the whole-widget scale-down during contract. Independent from the
+    // individual layout scales so the size change is always visible even if
+    // Behavior on scale is dormant on child items.
+    property real _contractScale: 1.0
+    scale: _contractScale
 
     readonly property Item widgetBg: {
         var p = root.parent;
@@ -208,10 +217,85 @@ Item {
         }
     }
 
+    // Cached widget widths to compute a meaningful expand/contract ratio.
+    // expandedBg.width and root.width are both equal when expanded (no useful ratio),
+    // so we track the actual expanded and contracted widths separately across
+    // hover cycles to derive the real size ratio for the contract animation.
+    property real _lastExpandedWidth: 0
+    property real _lastContractedWidth: 0
+    readonly property real _effectiveExpandContractRatio: {
+        if (root._lastExpandedWidth > 0 && root._lastContractedWidth > 0) {
+            return Math.max(1.0, root._lastExpandedWidth / root._lastContractedWidth);
+        }
+        return root.expandContractRatio;
+    }
+
+    // Waits for the container's Behavior on width (500ms) to settle, then samples
+    // root.width and stores it in the appropriate bucket for the ratio computation.
+    Timer {
+        id: widthCaptureTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            if (root.width <= 0)
+                return;
+            if (root.isExpanded)
+                root._lastExpandedWidth = root.width;
+            else
+                root._lastContractedWidth = root.width;
+            if (root._lastExpandedWidth > 0 && root._lastContractedWidth > 0) {
+                root.expandContractRatio = Math.max(1.0, root._lastExpandedWidth / root._lastContractedWidth);
+            }
+        }
+    }
+
     onIsExpandedChanged: {
         if (root.isExpanded) {
             LyricsService.initiliazeLyrics();
             root.activeLyricText = root.displaySongText;
+            contractAnim.stop();
+            expandAnim.restart();
+        } else {
+            expandAnim.stop();
+            contractAnim.restart();
+        }
+        // Sample the settled width after the container's 500ms width Behavior
+        widthCaptureTimer.restart();
+    }
+
+    ParallelAnimation {
+        id: expandAnim
+        NumberAnimation { target: contractedLayout; property: "opacity"; to: 0.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: contractedLayout; property: "scale"; to: 0.95; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: expandedBg; property: "opacity"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: expandedBg; property: "scale"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: expandedLayout; property: "opacity"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: expandedLayout; property: "scale"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+        NumberAnimation { target: root; property: "_contractScale"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+    }
+
+    SequentialAnimation {
+        id: contractAnim
+        // Initial state: contractedLayout invisible, whole widget scaled up to expanded size.
+        // Both layouts stay loaded during the animation; the whole-widget scale on root
+        // gives a visible "scale together" effect independent of child Behavior fallbacks.
+        PropertyAction { target: contractedLayout; property: "scale"; value: root._effectiveExpandContractRatio }
+        PropertyAction { target: contractedLayout; property: "opacity"; value: 0.0 }
+        PropertyAction { target: expandedBg; property: "scale"; value: 1.0 }
+        PropertyAction { target: expandedBg; property: "opacity"; value: 1.0 }
+        PropertyAction { target: expandedLayout; property: "opacity"; value: 1.0 }
+        PropertyAction { target: expandedLayout; property: "scale"; value: 1.0 }
+        PropertyAction { target: root; property: "_contractScale"; value: root._effectiveExpandContractRatio }
+        // 500ms cross-fade + whole-widget scale matching the dynamic island's container animation.
+        // expanded scales down + fades out, contracted scales down + fades in, root shrinks.
+        ParallelAnimation {
+            NumberAnimation { target: expandedBg; property: "opacity"; to: 0.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: expandedBg; property: "scale"; to: 1.0 / root._effectiveExpandContractRatio; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: expandedLayout; property: "opacity"; to: 0.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: expandedLayout; property: "scale"; to: 0.95; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: contractedLayout; property: "opacity"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: contractedLayout; property: "scale"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
+            NumberAnimation { target: root; property: "_contractScale"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
         }
     }
 
@@ -522,7 +606,14 @@ Item {
     Item {
         id: contractedLayout
         anchors.fill: parent
-        visible: !root.isExpanded
+        visible: true
+        opacity: 1.0
+        scale: 1.0
+
+        // No Behavior on opacity/scale: contractAnim/expandAnim are the sole drivers.
+        // Previous Behaviors had identical 500ms OutBack overshoot 0.5 easing that
+        // conflicted with contractAnim, causing the expanded art to "snap" out and
+        // the contracted scale to bounce back to its binding value (1.0).
 
         // OpacityMask to clip album art to rounded corners
         Rectangle {
@@ -825,7 +916,12 @@ Item {
         y: -(root.widgetBg.height - root.height) / 2
         width: root.widgetBg.width
         height: root.widgetBg.height
-        visible: root.isExpanded
+        visible: true
+        opacity: 0.0
+        scale: 0.95
+
+        // No Behavior on opacity/scale: contractAnim/expandAnim are the sole drivers.
+        // See note on contractedLayout above for rationale.
 
         // Mask shape defining the rounded sections
         Rectangle {
@@ -1028,7 +1124,12 @@ Item {
             return (p && p.activeWidgetsList.length > 1) ? 4 : 8;
         }
         spacing: 6
-        visible: root.isExpanded
+        visible: true
+        opacity: 0.0
+        scale: 0.95
+
+        // No Behavior on opacity/scale: contractAnim/expandAnim are the sole drivers.
+        // See note on contractedLayout above for rationale.
 
         // Top Row: Brand Icon (left) + Audio Output Device (right)
         RowLayout {
