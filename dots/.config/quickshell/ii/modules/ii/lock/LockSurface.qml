@@ -34,6 +34,11 @@ MouseArea {
     acceptedButtons: Qt.LeftButton
     onPressed: mouse => {
         forceFieldFocus();
+        if (Config.options.lock.rippleEffect ?? true) {
+            // Emit via GlobalStates so Background.qml (WlrLayer.Top) renders the ripple
+            // — the WlSessionLock surface renders under the background panel when locked.
+            GlobalStates.lockScreenRipple(mouse.x, mouse.y);
+        }
     }
     onPositionChanged: mouse => {
         forceFieldFocus();
@@ -66,6 +71,9 @@ MouseArea {
         root.context.resetClearTimer();
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = true;
+        }
+        if (event.key === Qt.Key_CapsLock) {
+            GlobalStates.capsLockActive = !GlobalStates.capsLockActive;
         }
         if (event.key === Qt.Key_Escape) { // Esc to clear
             root.context.currentText = "";
@@ -112,6 +120,50 @@ MouseArea {
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
         sourceComponent: LockNotifications {}
+    }
+
+    // Caps Lock indicator chip — à esquerda da leftIsland
+    Rectangle {
+        id: capsLockChip
+        // Anchor to leftIsland, not mainIsland — avoids overlapping the left toolbar
+        anchors.right: leftIsland.left
+        anchors.rightMargin: 10
+        anchors.bottom: mainIsland.bottom
+        anchors.bottomMargin: GlobalStates.capsLockActive ? 0 : -16
+
+        // opacity drives visibility — never use `visible: condition` on animated elements
+        visible: opacity > 0
+        opacity: GlobalStates.capsLockActive ? 1 : 0
+        height: 56
+        width: capsLockRow.implicitWidth + 24
+        radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+        color: Appearance.colors.colTertiaryContainer
+
+        Behavior on opacity {
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
+        Behavior on anchors.bottomMargin {
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
+
+        Row {
+            id: capsLockRow
+            anchors.centerIn: parent
+            spacing: 6
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "keyboard_capslock"
+                iconSize: 18
+                color: Appearance.colors.colOnTertiaryContainer
+            }
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Translation.tr("Caps Lock")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnTertiaryContainer
+            }
+        }
     }
 
     // Main toolbar: password box
@@ -345,6 +397,7 @@ MouseArea {
         }
     }
 
+
     component PasswordGuardedIconToolbarButton: IconToolbarButton {
         id: guardedBtn
         required property var targetAction
@@ -366,7 +419,6 @@ MouseArea {
     }
 
     component IconAndTextPair: Row {
-        id: pair
         required property string icon
         required property string text
         property color color: Appearance.colors.colOnSurfaceVariant
@@ -380,15 +432,15 @@ MouseArea {
         MaterialSymbol {
             anchors.verticalCenter: parent.verticalCenter
             fill: 1
-            text: pair.icon
+            text: parent.icon
             iconSize: Appearance.font.pixelSize.huge
             animateChange: true
-            color: pair.color
+            color: parent.color
         }
         StyledText {
             anchors.verticalCenter: parent.verticalCenter
-            text: pair.text
-            color: pair.color
+            text: parent.text
+            color: parent.color
         }
     }
 }
