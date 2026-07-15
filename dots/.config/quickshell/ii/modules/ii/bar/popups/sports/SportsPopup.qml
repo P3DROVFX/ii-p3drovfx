@@ -202,8 +202,30 @@ StyledPopup {
                                 card.scale = 0.85;
                                 cardTranslate.y = 25;
                                 
+                                homeLogoCont.scale = 0.8;
+                                homeTeamName.opacity = 0.0;
+                                homeScore.opacity = 0.0;
+                                homeScore.scale = 0.9;
+
+                                awayLogoCont.scale = 0.8;
+                                awayTeamName.opacity = 0.0;
+                                awayScore.opacity = 0.0;
+                                awayScore.scale = 0.9;
+
+                                statusPill.opacity = 0.0;
+                                statusPill.scale = 0.9;
+                                leagueText.opacity = 0.0;
+                                
                                 Qt.callLater(function() {
                                     cardAnim.start();
+                                    homeLogoContAnim.start();
+                                    homeTeamNameAnim.start();
+                                    homeScoreAnim.start();
+                                    awayLogoContAnim.start();
+                                    awayTeamNameAnim.start();
+                                    awayScoreAnim.start();
+                                    statusPillAnim.start();
+                                    leagueTextAnim.start();
                                 });
                             }
                         }
@@ -307,6 +329,13 @@ StyledPopup {
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     anchors.top: parent.top
                                     anchors.horizontalCenter: parent.horizontalCenter
+                                    scale: 0.8
+
+                                    SequentialAnimation {
+                                        id: homeLogoContAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 60 }
+                                        NumberAnimation { target: homeLogoCont; property: "scale"; from: 0.8; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                    }
 
                                     StyledImage {
                                         anchors.fill: parent
@@ -319,6 +348,7 @@ StyledPopup {
                                 }
 
                                 StyledText {
+                                    id: homeTeamName
                                     anchors.top: homeLogoCont.bottom
                                     anchors.topMargin: 8
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -329,9 +359,17 @@ StyledPopup {
                                     elide: Text.ElideRight
                                     width: 130
                                     horizontalAlignment: Text.AlignHCenter
+                                    opacity: 0.0
+
+                                    SequentialAnimation {
+                                        id: homeTeamNameAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 120 }
+                                        NumberAnimation { target: homeTeamName; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    }
                                 }
 
                                 StyledText {
+                                    id: homeScore
                                     anchors.left: homeLogoCont.right
                                     anchors.leftMargin: (text.length > 3) ? 4 : 12
                                     anchors.verticalCenter: homeLogoCont.verticalCenter
@@ -341,6 +379,17 @@ StyledPopup {
                                     color: previewIndex === 0 ? Appearance.colors.colOnPrimaryContainer : root.colText
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     visible: modelData?.state !== "pre"
+                                    opacity: 0.0
+                                    scale: 0.9
+
+                                    SequentialAnimation {
+                                        id: homeScoreAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 180 }
+                                        ParallelAnimation {
+                                            NumberAnimation { target: homeScore; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                            NumberAnimation { target: homeScore; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                        }
+                                    }
                                 }
                             }
 
@@ -361,6 +410,17 @@ StyledPopup {
                                     
                                     readonly property int dynamicPadding: modelData?.state === "in" ? 20 : 6
                                     width: statusLabel.implicitWidth + (dynamicPadding * 2)
+                                    opacity: 0.0
+                                    scale: 0.9
+
+                                    SequentialAnimation {
+                                        id: statusPillAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 100 }
+                                        ParallelAnimation {
+                                            NumberAnimation { target: statusPill; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                            NumberAnimation { target: statusPill; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                        }
+                                    }
 
                                     StyledText {
                                         id: statusLabel
@@ -374,6 +434,7 @@ StyledPopup {
                                 }
 
                                 StyledText {
+                                    id: leagueText
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: modelData?.league ?? ""
                                     font.pixelSize: Appearance.font.pixelSize.smaller
@@ -383,6 +444,13 @@ StyledPopup {
                                     elide: Text.ElideRight
                                     width: 120
                                     horizontalAlignment: Text.AlignHCenter
+                                    opacity: 0.0
+
+                                    SequentialAnimation {
+                                        id: leagueTextAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 140 }
+                                        NumberAnimation { target: leagueText; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    }
                                 }
                             }
 
@@ -403,6 +471,13 @@ StyledPopup {
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     anchors.top: parent.top
                                     anchors.horizontalCenter: parent.horizontalCenter
+                                    scale: 0.8
+
+                                    SequentialAnimation {
+                                        id: awayLogoContAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 60 }
+                                        NumberAnimation { target: awayLogoCont; property: "scale"; from: 0.8; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                    }
 
                                     StyledImage {
                                         anchors.fill: parent
@@ -415,6 +490,7 @@ StyledPopup {
                                 }
 
                                 StyledText {
+                                    id: awayTeamName
                                     anchors.top: awayLogoCont.bottom
                                     anchors.topMargin: 8
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -425,9 +501,17 @@ StyledPopup {
                                     elide: Text.ElideRight
                                     width: 130
                                     horizontalAlignment: Text.AlignHCenter
+                                    opacity: 0.0
+
+                                    SequentialAnimation {
+                                        id: awayTeamNameAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 120 }
+                                        NumberAnimation { target: awayTeamName; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    }
                                 }
 
                                 StyledText {
+                                    id: awayScore
                                     anchors.right: awayLogoCont.left
                                     anchors.rightMargin: (text.length > 3) ? 4 : 12
                                     anchors.verticalCenter: awayLogoCont.verticalCenter
@@ -437,6 +521,17 @@ StyledPopup {
                                     color: previewIndex === 0 ? Appearance.colors.colOnPrimaryContainer : root.colText
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     visible: modelData?.state !== "pre"
+                                    opacity: 0.0
+                                    scale: 0.9
+
+                                    SequentialAnimation {
+                                        id: awayScoreAnim
+                                        PauseAnimation { duration: 40 + index * 100 + 180 }
+                                        ParallelAnimation {
+                                            NumberAnimation { target: awayScore; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                            NumberAnimation { target: awayScore; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                        }
+                                    }
                                 }
                             }
                         }

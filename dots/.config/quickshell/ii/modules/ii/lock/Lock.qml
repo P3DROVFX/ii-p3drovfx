@@ -30,6 +30,7 @@ LockScreen {
                 }
             }
             if (batch.length > 0) {
+                GlobalStates.workspaceRestoreInProgress = false;
                 Quickshell.execDetached(["bash", "-c", batch])
             }
         }
@@ -44,6 +45,7 @@ LockScreen {
         target: GlobalStates
         function onScreenLockedChanged() {
             if (GlobalStates.screenLocked) {
+                GlobalStates.workspaceRestoreInProgress = false;
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
                 var next = {}
                 var batch = "hyprctl keyword animation workspaces,1,7,menu_decel,slidevert; "
@@ -61,6 +63,7 @@ LockScreen {
                 root.savedWorkspaces = next
                 Quickshell.execDetached(["bash", "-c", batch])
             } else {
+                GlobalStates.workspaceRestoreInProgress = true;
                 restoreTimer.start()
             }
         }

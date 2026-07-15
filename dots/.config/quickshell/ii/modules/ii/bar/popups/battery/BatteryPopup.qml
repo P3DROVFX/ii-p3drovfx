@@ -17,18 +17,28 @@ StyledPopup {
     }
 
     readonly property bool hasTimeData: {
-        const timeValue = Battery.isCharging ? Battery.timeToFull : Battery.timeToEmpty;
+        const timeValue = Battery.isCharging ? Battery.timeToFullEffective : Battery.timeToEmpty;
         const power = Battery.energyRate;
-        return !(Battery.chargeState === 4 || timeValue <= 0 || power <= 0.01);
+        return !(Battery.chargeState === 4 || Battery.chargeLimitReached || timeValue <= 0 || power <= 0.01);
     }
+
+    // Hide the limit label when it would collide with the fixed 0/50/100 labels
+    readonly property bool showLimitLabel: Battery.chargeLimitActive && Battery.chargeLimit >= 8
+        && Battery.chargeLimit <= 92 && Math.abs(Battery.chargeLimit - 50) >= 8
 
     // Hero card glow color logic:
     readonly property color heroGlowColor: {
         if (Battery.percentage <= 0.15 && !Battery.isCharging)
             return Appearance.m3colors.m3error;
-        if (Battery.isCharging)
+        if (Battery.isCharging || Battery.chargeLimitReached)
             return "#10E055"; //using manually defined green
         return Appearance.colors.colPrimary;
+    }
+
+    component AxisLabel: StyledText {
+        font.pixelSize: Appearance.font.pixelSize.small
+        font.family: "Monospace"
+        color: Appearance.colors.colOnSurfaceVariant
     }
 
     ColumnLayout {
@@ -40,6 +50,7 @@ StyledPopup {
         
         onStartAnimChanged: {
             if (startAnim) {
+                // Reset parent cards
                 batteryHero.opacity = 0.0;
                 batteryHero.scale = 0.85;
                 batteryHeroTransform.y = 25;
@@ -61,14 +72,73 @@ StyledPopup {
                 cellStatus.opacity = 0.0;
                 cellStatus.scale = 0.85;
                 cellStatusTransform.y = 25;
+
+                // Reset internal sub-elements
+                batteryHero.animProgress = 0.0;
+                batteryHeroStatusText.opacity = 0.0;
+                batteryHeroStatusTextTrans.y = 10;
+                batteryHeroStatsRow.opacity = 0.0;
+                batteryHeroStatsRow.scale = 0.9;
+                axisLabelZero.opacity = 0.0;
+                axisLabel50.opacity = 0.0;
+                axisLabel100.opacity = 0.0;
+
+                cellHealthShape.scale = 0.8;
+                cellHealthShape.rotation = -10;
+                cellHealthTitle.opacity = 0.0;
+                cellHealthValue.opacity = 0.0;
+                cellHealthValue.scale = 0.9;
+
+                cellWattageShape.scale = 0.8;
+                cellWattageShape.rotation = -10;
+                cellWattageTitle.opacity = 0.0;
+                cellWattageValue.opacity = 0.0;
+                cellWattageValue.scale = 0.9;
+
+                cellCyclesShape.scale = 0.8;
+                cellCyclesShape.rotation = -10;
+                cellCyclesTitle.opacity = 0.0;
+                cellCyclesValue.opacity = 0.0;
+                cellCyclesValue.scale = 0.9;
+
+                cellStatusShape.scale = 0.8;
+                cellStatusShape.rotation = -10;
+                cellStatusTitle.opacity = 0.0;
+                cellStatusValue.opacity = 0.0;
+                cellStatusValue.scale = 0.9;
                 
                 Qt.callLater(function() {
+                    // Start parent card animations
                     batteryHeroAnim.start();
                     dividerAnim.start();
                     cellHealthAnim.start();
                     cellWattageAnim.start();
                     cellCyclesAnim.start();
                     cellStatusAnim.start();
+
+                    // Start internal sub-elements animations
+                    batteryHeroStatusTextAnim.start();
+                    batteryHeroStatsRowAnim.start();
+                    label0Anim.start();
+                    label50Anim.start();
+                    label100Anim.start();
+                    batteryFillAnim.start();
+
+                    cellHealthShapeAnim.start();
+                    cellHealthTitleAnim.start();
+                    cellHealthValueAnim.start();
+
+                    cellWattageShapeAnim.start();
+                    cellWattageTitleAnim.start();
+                    cellWattageValueAnim.start();
+
+                    cellCyclesShapeAnim.start();
+                    cellCyclesTitleAnim.start();
+                    cellCyclesValueAnim.start();
+
+                    cellStatusShapeAnim.start();
+                    cellStatusTitleAnim.start();
+                    cellStatusValueAnim.start();
                 });
             }
         }
@@ -101,6 +171,8 @@ StyledPopup {
                 id: batteryHeroTransform
                 y: 25
             }
+
+            property real animProgress: 0.0
             
             SequentialAnimation {
                 id: batteryHeroAnim
@@ -121,8 +193,10 @@ StyledPopup {
                     spacing: 8
 
                     StyledText {
+                        id: batteryHeroStatusText
                         text: {
                             if (Battery.chargeState === 4) return Translation.tr("Fully Charged");
+                            if (Battery.chargeLimitReached) return Translation.tr("Charge limit reached");
                             if (Battery.isCharging) return Translation.tr("Charging...");
                             return Translation.tr("Discharging...");
                         }
@@ -130,11 +204,39 @@ StyledPopup {
                         font.family: Appearance.font.family.title
                         font.weight: Font.Medium
                         color: Appearance.colors.colOnSurfaceVariant
+
+                        opacity: 0.0
+                        transform: Translate {
+                            id: batteryHeroStatusTextTrans
+                            y: 10
+                        }
+
+                        SequentialAnimation {
+                            id: batteryHeroStatusTextAnim
+                            PauseAnimation { duration: mainLayout.getDelay(0) + 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: batteryHeroStatusText; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                NumberAnimation { target: batteryHeroStatusTextTrans; property: "y"; from: 10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                            }
+                        }
                     }
                 }
 
                 RowLayout {
+                    id: batteryHeroStatsRow
                     spacing: 8
+                    opacity: 0.0
+                    scale: 0.9
+
+                    SequentialAnimation {
+                        id: batteryHeroStatsRowAnim
+                        PauseAnimation { duration: mainLayout.getDelay(0) + 120 }
+                        ParallelAnimation {
+                            NumberAnimation { target: batteryHeroStatsRow; property: "opacity"; from: 0.0; to: 1.0; duration: 380 }
+                            NumberAnimation { target: batteryHeroStatsRow; property: "scale"; from: 0.9; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                        }
+                    }
+
                     StyledText {
                         text: Math.floor(Battery.percentage * 100) + "%"
                         font.pixelSize: Appearance.font.pixelSize.huge
@@ -152,13 +254,15 @@ StyledPopup {
 
                     StyledText {
                         text: {
-                            if (!root.hasTimeData && Battery.chargeState !== 4)
+                            if (!root.hasTimeData && Battery.chargeState !== 4 && !Battery.chargeLimitReached)
                                 return Translation.tr("Calculating...");
-                            if (Battery.chargeState === 4)
+                            if (Battery.chargeState === 4 || Battery.chargeLimitReached)
                                 return "";
                             const time = root.formatTime(
-                                Battery.isCharging ? Battery.timeToFull : Battery.timeToEmpty
+                                Battery.isCharging ? Battery.timeToFullEffective : Battery.timeToEmpty
                             );
+                            if (Battery.isCharging && Battery.chargeLimitActive)
+                                return Translation.tr("%1 until %2%").arg(time).arg(Battery.chargeLimit);
                             return Translation.tr("%1 left").arg(time);
                         }
                         font.pixelSize: Appearance.font.pixelSize.large
@@ -170,32 +274,56 @@ StyledPopup {
 
                 Item { Layout.fillHeight: true }
 
-                RowLayout {
+                Item {
+                    id: axisLabels
                     Layout.fillWidth: true
+                    implicitHeight: axisLabelZero.implicitHeight
 
-                    StyledText {
+                    AxisLabel {
+                        id: axisLabelZero
                         text: "0"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.left: parent.left
+                        opacity: 0.0
+
+                        SequentialAnimation {
+                            id: label0Anim
+                            PauseAnimation { duration: mainLayout.getDelay(0) + 180 }
+                            NumberAnimation { target: axisLabelZero; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                        }
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    StyledText {
+                    AxisLabel {
+                        id: axisLabel50
                         text: "50"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        opacity: 0.0
+
+                        SequentialAnimation {
+                            id: label50Anim
+                            PauseAnimation { duration: mainLayout.getDelay(0) + 200 }
+                            NumberAnimation { target: axisLabel50; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                        }
                     }
 
-                    Item { Layout.fillWidth: true }
-
-                    StyledText {
+                    AxisLabel {
+                        id: axisLabel100
                         text: "100"
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.family: "Monospace"
-                        color: Appearance.colors.colOnSurfaceVariant
+                        anchors.right: parent.right
+                        opacity: 0.0
+
+                        SequentialAnimation {
+                            id: label100Anim
+                            PauseAnimation { duration: mainLayout.getDelay(0) + 220 }
+                            NumberAnimation { target: axisLabel100; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                        }
+                    }
+
+                    Loader {
+                        active: root.showLimitLabel
+                        x: axisLabels.width * (Battery.chargeLimit / 100) - width / 2
+                        sourceComponent: AxisLabel {
+                            text: Battery.chargeLimit
+                        }
                     }
                 }
 
@@ -213,16 +341,15 @@ StyledPopup {
 
                     Rectangle {
                         id: batteryFill
-                        width: parent.width * Battery.percentage
+                        width: parent.width * Battery.percentage * batteryHero.animProgress
                         height: parent.height
                         radius: 16
                         color: root.heroGlowColor
 
-                        Behavior on width {
-                            NumberAnimation {
-                                duration: 500
-                                easing.type: Easing.OutQuint
-                            }
+                        SequentialAnimation {
+                            id: batteryFillAnim
+                            PauseAnimation { duration: mainLayout.getDelay(0) + 100 }
+                            NumberAnimation { target: batteryHero; property: "animProgress"; from: 0.0; to: 1.0; duration: 500; easing.type: Easing.OutQuint }
                         }
                     }
 
@@ -234,6 +361,19 @@ StyledPopup {
                         radius: 1
                         color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.9)
                         z: 1  // to stay above the fill
+                    }
+
+                    Loader {
+                        active: Battery.chargeLimitActive
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: batteryBarContainer.width * (Battery.chargeLimit / 100) - width / 2
+                        z: 1  // to stay above the fill, same as the center marker
+                        sourceComponent: Rectangle {
+                            implicitWidth: 2
+                            implicitHeight: batteryBarContainer.height / 3
+                            radius: 1
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSurfaceVariant, 0.9)
+                        }
                     }
                 }
             }
@@ -292,10 +432,22 @@ StyledPopup {
                     spacing: 12
 
                     MaterialShape {
+                        id: cellHealthShape
                         shapeString: "Slanted"
                         implicitSize: 36
                         color: Appearance.colors.colPositiveContainer
                                ?? Appearance.colors.colPrimaryContainer
+                        scale: 0.8
+                        rotation: -10
+
+                        SequentialAnimation {
+                            id: cellHealthShapeAnim
+                            PauseAnimation { duration: mainLayout.getDelay(2) + 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: cellHealthShape; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                NumberAnimation { target: cellHealthShape; property: "rotation"; from: -10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
@@ -310,17 +462,37 @@ StyledPopup {
                         spacing: -2
 
                         StyledText {
+                            id: cellHealthTitle
                             text: Translation.tr("Health")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnSurfaceVariant
+                            opacity: 0.0
+
+                            SequentialAnimation {
+                                id: cellHealthTitleAnim
+                                PauseAnimation { duration: mainLayout.getDelay(2) + 120 }
+                                NumberAnimation { target: cellHealthTitle; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                            }
                         }
 
                         StyledText {
+                            id: cellHealthValue
                             text: `${Battery.health.toFixed(0)}%`
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
+                            opacity: 0.0
+                            scale: 0.9
+
+                            SequentialAnimation {
+                                id: cellHealthValueAnim
+                                PauseAnimation { duration: mainLayout.getDelay(2) + 180 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: cellHealthValue; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    NumberAnimation { target: cellHealthValue; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                }
+                            }
                         }
                     }
 
@@ -358,9 +530,21 @@ StyledPopup {
                     spacing: 12
 
                     MaterialShape {
+                        id: cellWattageShape
                         shapeString: "Slanted"
                         implicitSize: 36
                         color: Appearance.colors.colSecondaryContainer
+                        scale: 0.8
+                        rotation: -10
+
+                        SequentialAnimation {
+                            id: cellWattageShapeAnim
+                            PauseAnimation { duration: mainLayout.getDelay(3) + 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: cellWattageShape; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                NumberAnimation { target: cellWattageShape; property: "rotation"; from: -10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
@@ -374,19 +558,39 @@ StyledPopup {
                         spacing: -2
 
                         StyledText {
+                            id: cellWattageTitle
                             text: Battery.isCharging
                                   ? Translation.tr("Input")
                                   : Translation.tr("Draw")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnSurfaceVariant
+                            opacity: 0.0
+
+                            SequentialAnimation {
+                                id: cellWattageTitleAnim
+                                PauseAnimation { duration: mainLayout.getDelay(3) + 120 }
+                                NumberAnimation { target: cellWattageTitle; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                            }
                         }
 
                         StyledText {
+                            id: cellWattageValue
                             text: `${Math.abs(Battery.energyRate).toFixed(1)}W`
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
+                            opacity: 0.0
+                            scale: 0.9
+
+                            SequentialAnimation {
+                                id: cellWattageValueAnim
+                                PauseAnimation { duration: mainLayout.getDelay(3) + 180 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: cellWattageValue; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    NumberAnimation { target: cellWattageValue; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                }
+                            }
                         }
                     }
 
@@ -424,9 +628,21 @@ StyledPopup {
                     spacing: 12
 
                     MaterialShape {
+                        id: cellCyclesShape
                         shapeString: "Slanted"
                         implicitSize: 36
                         color: Appearance.colors.colTertiaryContainer
+                        scale: 0.8
+                        rotation: -10
+
+                        SequentialAnimation {
+                            id: cellCyclesShapeAnim
+                            PauseAnimation { duration: mainLayout.getDelay(4) + 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: cellCyclesShape; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                NumberAnimation { target: cellCyclesShape; property: "rotation"; from: -10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
@@ -440,13 +656,22 @@ StyledPopup {
                         spacing: -2
 
                         StyledText {
+                            id: cellCyclesTitle
                             text: Translation.tr("Cycles")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnSurfaceVariant
+                            opacity: 0.0
+
+                            SequentialAnimation {
+                                id: cellCyclesTitleAnim
+                                PauseAnimation { duration: mainLayout.getDelay(4) + 120 }
+                                NumberAnimation { target: cellCyclesTitle; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                            }
                         }
 
                         StyledText {
+                            id: cellCyclesValue
                             text: {
                                 if (Battery.cycles >= 0) {
                                     return Battery.cycles.toString();
@@ -458,6 +683,17 @@ StyledPopup {
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
+                            opacity: 0.0
+                            scale: 0.9
+
+                            SequentialAnimation {
+                                id: cellCyclesValueAnim
+                                PauseAnimation { duration: mainLayout.getDelay(4) + 180 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: cellCyclesValue; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    NumberAnimation { target: cellCyclesValue; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                }
+                            }
                         }
                     }
 
@@ -495,9 +731,21 @@ StyledPopup {
                     spacing: 12
 
                     MaterialShape {
+                        id: cellStatusShape
                         shapeString: "Slanted"
                         implicitSize: 36
                         color: Appearance.colors.colErrorContainer
+                        scale: 0.8
+                        rotation: -10
+
+                        SequentialAnimation {
+                            id: cellStatusShapeAnim
+                            PauseAnimation { duration: mainLayout.getDelay(5) + 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: cellStatusShape; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                NumberAnimation { target: cellStatusShape; property: "rotation"; from: -10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
@@ -511,16 +759,27 @@ StyledPopup {
                         spacing: -2
 
                         StyledText {
+                            id: cellStatusTitle
                             text: Translation.tr("Status")
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnSurfaceVariant
+                            opacity: 0.0
+
+                            SequentialAnimation {
+                                id: cellStatusTitleAnim
+                                PauseAnimation { duration: mainLayout.getDelay(5) + 120 }
+                                NumberAnimation { target: cellStatusTitle; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                            }
                         }
 
                         StyledText {
+                            id: cellStatusValue
                             text: {
                                 if (Battery.chargeState === 4)
                                     return Translation.tr("Full");
+                                if (Battery.chargeLimitReached)
+                                    return Translation.tr("Limit reached");
                                 if (Battery.isCharging)
                                     return Translation.tr("Charging");
                                 return Translation.tr("Discharging");
@@ -528,6 +787,17 @@ StyledPopup {
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
+                            opacity: 0.0
+                            scale: 0.9
+
+                            SequentialAnimation {
+                                id: cellStatusValueAnim
+                                PauseAnimation { duration: mainLayout.getDelay(5) + 180 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: cellStatusValue; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                                    NumberAnimation { target: cellStatusValue; property: "scale"; from: 0.9; to: 1.0; duration: 250; easing.type: Easing.OutBack }
+                                }
+                            }
                         }
                     }
 

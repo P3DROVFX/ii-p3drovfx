@@ -42,12 +42,25 @@ StyledPopup {
                         spacing: 12
 
                         MaterialSymbol {
+                            id: keyboardIcon
                             text: "keyboard"
                             iconSize: Appearance.font.pixelSize.hugeass
                             color: layoutCard.itemsColor
+                            scale: 0.8
+                            rotation: -10
+
+                            SequentialAnimation {
+                                id: keyboardIconAnim
+                                PauseAnimation { duration: 40 + index * 100 + 60 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: keyboardIcon; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                    NumberAnimation { target: keyboardIcon; property: "rotation"; from: -10; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                }
+                            }
                         }
 
                         StyledText {
+                            id: layoutText
                             // Convert like "BR" to "BR\nABNT" or simply capitalize
                             // We use a helper function to simulate the multiline split visually
                             text: {
@@ -59,6 +72,13 @@ StyledPopup {
                             font.pixelSize: Appearance.font.pixelSize.large
                             font.weight: Font.Black
                             color: layoutCard.itemsColor
+                            opacity: 0.0
+
+                            SequentialAnimation {
+                                id: layoutTextAnim
+                                PauseAnimation { duration: 40 + index * 100 + 120 }
+                                NumberAnimation { target: layoutText; property: "opacity"; from: 0.0; to: 1.0; duration: 250 }
+                            }
                         }
                     }
 
@@ -85,8 +105,14 @@ StyledPopup {
                             layoutCard.scale = 0.85;
                             layoutCardTranslate.x = 25;
                             
+                            keyboardIcon.scale = 0.8;
+                            keyboardIcon.rotation = -10;
+                            layoutText.opacity = 0.0;
+                            
                             Qt.callLater(function() {
                                 layoutCardAnim.start();
+                                keyboardIconAnim.start();
+                                layoutTextAnim.start();
                             });
                         }
                     }

@@ -534,8 +534,8 @@ Scope {
                         // Shared parallax + size properties used by all 9 tiles
                         property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
                         property real wallpaperH: bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
-                        property real parallaxX: GlobalStates.screenLocked ? -(bgRoot.movableXSpace) : -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
-                        property real parallaxY: GlobalStates.screenLocked ? -(bgRoot.movableYSpace) : -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
+                        property real parallaxX: (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress) ? -(bgRoot.movableXSpace) : -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
+                        property real parallaxY: (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress) ? -(bgRoot.movableYSpace) : -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
                         // Centered position (style 0: no parallax offset)
                         property real centeredX: -(bgRoot.movableXSpace)
                         property real centeredY: -(bgRoot.movableYSpace)
@@ -1005,7 +1005,7 @@ Scope {
                                 height: parent.height
                                 states: State {
                                     name: "centered"
-                                    when: GlobalStates.screenLocked || bgRoot.wallpaperSafetyTriggered
+                                    when: GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress || bgRoot.wallpaperSafetyTriggered
                                     PropertyChanges {
                                         target: widgetCanvas
                                         width: parent.width

@@ -20,6 +20,7 @@ StyledPopup {
     animate: false // We have to disable the animation if we have only one card
     contentItem: HeroCard {
         id: mediaHero
+        startAnim: root.opened && root.popupOpenProgress > 0.6
         compactMode: true
         adaptiveWidth: true
         anchors.centerIn: parent

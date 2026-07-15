@@ -21,6 +21,7 @@ ContentPage {
     property string remoteCommit: ""
     property bool hasUpdate: activeCommit !== "" && remoteCommit !== "" && activeCommit !== remoteCommit
     property bool checkingUpdates: false
+    property bool logAutoScroll: true
 
     // ── Custom fork URL input for the Fork Switcher ──
     property string customForkUrl: ""
@@ -157,6 +158,68 @@ command: ["bash", "-c",
         const cmd = ["bash", page.setupScript, ...args];
         actionProc.command = cmd;
         actionProc.running = true;
+    }
+
+    // ── ANSI → rich text for the log box (setup-ii-vynx.sh colors its stdout for a terminal) ──
+    function colorToHex(c) {
+        return "#" + [c.r, c.g, c.b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+    }
+
+    // Foreground color per ANSI SGR code, matched to the semantics setup-ii-vynx.sh uses them for.
+    // Mapped to theme roles (not fixed hex) so it stays legible across light/dark and dynamic accents.
+    function ansiFgColor(code) {
+        switch (code) {
+            case "31": return colorToHex(Appearance.colors.colError);     // red    — errors
+            case "32": return colorToHex(Appearance.colors.colPrimary);   // green  — success
+            case "33": return colorToHex(Appearance.colors.colTertiary);  // yellow — warnings
+            case "34": return colorToHex(Appearance.colors.colSecondary); // blue   — steps
+            case "36": return colorToHex(Appearance.colors.colSecondary); // cyan   — headers (bolded too)
+            default: return "";
+        }
+    }
+
+    function escapeHtml(s) {
+        return s
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/ {2,}/g, m => "&nbsp;".repeat(m.length))
+            .replace(/\n/g, "<br>");
+    }
+
+    function ansiToRich(raw) {
+        const csiPattern = /\x1b\[([0-9;]*)([A-Za-z])/g;
+        let out = "";
+        let last = 0;
+        let openSpan = false;
+        let bold = false;
+        let match;
+        while ((match = csiPattern.exec(raw)) !== null) {
+            out += escapeHtml(raw.substring(last, match.index));
+            last = csiPattern.lastIndex;
+            if (match[2] !== "m") continue; // drop non-color CSI sequences (cursor moves, clears, ...)
+            const codes = match[1].split(";").filter(c => c !== "");
+            if (codes.length === 0) codes.push("0");
+            for (const code of codes) {
+                if (code === "0") {
+                    if (openSpan) { out += "</font>"; openSpan = false; }
+                    if (bold) { out += "</b>"; bold = false; }
+                } else if (code === "1") {
+                    if (!bold) { out += "<b>"; bold = true; }
+                } else {
+                    const hex = ansiFgColor(code);
+                    if (hex !== "") {
+                        if (openSpan) out += "</font>";
+                        out += "<font color=\"" + hex + "\">";
+                        openSpan = true;
+                    }
+                }
+            }
+        }
+        out += escapeHtml(raw.substring(last));
+        if (openSpan) out += "</font>";
+        if (bold) out += "</b>";
+        return out;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -527,6 +590,7 @@ command: ["bash", "-c",
                     border.width: 0
 
                     StyledFlickable {
+                        id: logFlickable
                         anchors.fill: parent
                         anchors.margins: 8
                         clip: true
@@ -534,14 +598,27 @@ command: ["bash", "-c",
                         contentWidth: width
                         flickableDirection: Flickable.VerticalFlick
 
+                        Connections {
+                            target: logFlickable
+                            function onContentYChanged() {
+                                page.logAutoScroll = logFlickable.contentY >= Math.max(0, logFlickable.contentHeight - logFlickable.height) - 2;
+                            }
+                        }
+
                         Text {
                             id: logText
                             width: parent.width
-                            text: actionProc.logOutput
-                            font.family: "monospace"
+                            textFormat: Text.RichText
+                            text: page.ansiToRich(actionProc.logOutput)
+                            font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
                             color: Appearance.colors.colOnLayer1
                             wrapMode: Text.WrapAnywhere
+
+                            onTextChanged: Qt.callLater(() => {
+                                if (page.logAutoScroll)
+                                    logFlickable.contentY = Math.max(0, logFlickable.contentHeight - logFlickable.height);
+                            });
                         }
                     }
                 }

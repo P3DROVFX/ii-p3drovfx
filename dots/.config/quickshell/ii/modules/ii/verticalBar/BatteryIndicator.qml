@@ -39,6 +39,8 @@ MouseArea {
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
     readonly property bool effectivelyCharging: root.isCharging || root.isPluggedIn
+    readonly property bool chargeLimitReached: Battery.chargeLimitReached
+    readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
     property color textColor: Appearance.colors.colOnSurface
 
     readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
@@ -277,7 +279,7 @@ MouseArea {
                                                 return "#E53935";
                                             if (root.isLow && !root.effectivelyCharging)
                                                 return "#FB8C00";
-                                            if (root.effectivelyCharging)
+                                            if (root.effectivelyCharging || root.chargeLimitReached)
                                                 return "#43A047";
                                             if (root.isPowerSaving)
                                                 return "#FFC917";
@@ -303,12 +305,12 @@ MouseArea {
                                 }
 
                                 MaterialSymbol {
-                                    visible: root.effectivelyCharging
+                                    visible: root.effectivelyCharging || root.showCheck
                                     anchors.top: parent.top
-                                    anchors.topMargin: -5
+                                    anchors.topMargin: root.showCheck ? -3 : -5
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
-                                    text: "bolt"
+                                    text: root.showCheck ? "check" : "bolt"
                                     iconSize: 17
                                     fill: 1
                                     color: Appearance.colors.colLayer0
@@ -316,12 +318,12 @@ MouseArea {
                                 }
 
                                 MaterialSymbol {
-                                    visible: root.effectivelyCharging
+                                    visible: root.effectivelyCharging || root.showCheck
                                     anchors.top: parent.top
-                                    anchors.topMargin: -6
+                                    anchors.topMargin: root.showCheck ? -4 : -6
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.horizontalCenterOffset: -(parent.width * (4 / 28)) / 2
-                                    text: "bolt"
+                                    text: root.showCheck ? "check" : "bolt"
                                     iconSize: 16
                                     fill: 1
                                     color: root.textColor

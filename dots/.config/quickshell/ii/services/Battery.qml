@@ -62,6 +62,67 @@ Singleton {
 
     property int cycles: -1
 
+    // Charge limit: standard kernel ABI first, then known vendor-specific locations (TLP-style)
+    readonly property var chargeLimitCandidates: {
+        const paths = [];
+        if (batteryNativePath) {
+            paths.push({ path: `/sys/class/power_supply/${batteryNativePath}/charge_control_end_threshold`, type: "plain" });
+            paths.push({ path: `/sys/devices/platform/smapi/${batteryNativePath}/stop_charge_thresh`, type: "plain" });
+        }
+        paths.push({ path: "/sys/devices/platform/huawei-wmi/charge_control_thresholds", type: "last" });
+        paths.push({ path: "/sys/devices/platform/lg-laptop/battery_care_limit", type: "plain" });
+        paths.push({ path: "/sys/devices/platform/sony-laptop/battery_care_limiter", type: "plain" });
+        paths.push({ path: "/sys/devices/platform/samsung/battery_life_extender", type: "bool80" });
+        return paths;
+    }
+    property int chargeLimitCandidateIndex: 0
+    property int chargeLimit: 100 // 0 or 100 = no limit
+    readonly property bool chargeLimitActive: available && chargeLimit > 0 && chargeLimit < 100
+
+    // At the limit the firmware reports Discharging/PendingCharge at ~0W even though AC is plugged in,
+    // so the AC line (UPower.onBattery) is the reliable signal, not the battery state
+    readonly property bool chargeLimitReached: chargeLimitActive && !UPower.onBattery
+        && !isCharging && (percentage * 100 >= chargeLimit - 1)
+
+    // Time until the effective full point (charge limit if active, otherwise UPower's estimate)
+    readonly property real timeToFullEffective: {
+        if (!chargeLimitActive) return timeToFull;
+        const dev = UPower.displayDevice;
+        const rate = Math.abs(dev.changeRate);
+        if (dev.energyCapacity > 0 && rate > 0.01) {
+            const remaining = dev.energyCapacity * (chargeLimit / 100) - dev.energy;
+            return Math.max(0, remaining / rate * 3600);
+        }
+        if (percentage < 1 && timeToFull > 0) {
+            return timeToFull * Math.max(0, chargeLimit / 100 - percentage) / (1 - percentage);
+        }
+        return 0;
+    }
+
+    function parseChargeLimit(content, type) {
+        if (type === "bool80") return content === "1" ? 80 : 100;
+        const parts = content.split(/\s+/);
+        const val = parseInt(type === "last" ? parts[parts.length - 1] : parts[0], 10);
+        if (isNaN(val) || val <= 0) return 100;
+        return Math.min(val, 100);
+    }
+
+    FileView {
+        id: chargeLimitFile
+        path: root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.path ?? ""
+        onLoaded: {
+            const candidate = root.chargeLimitCandidates[root.chargeLimitCandidateIndex];
+            root.chargeLimit = root.parseChargeLimit(text().trim(), candidate.type);
+        }
+        onLoadFailed: {
+            if (root.chargeLimitCandidateIndex < root.chargeLimitCandidates.length - 1) {
+                root.chargeLimitCandidateIndex++;
+            } else {
+                root.chargeLimit = 100;
+            }
+        }
+    }
+
     FileView {
         id: cycleCountFile
         path: root.batteryNativePath ? `/sys/class/power_supply/${root.batteryNativePath}/cycle_count` : ""
@@ -81,10 +142,14 @@ Singleton {
 
     onBatteryNativePathChanged: {
         cycleCountFile.reload();
+        root.chargeLimitCandidateIndex = 0;
+        chargeLimitFile.reload();
     }
 
     onChargeStateChanged: {
         cycleCountFile.reload();
+        root.chargeLimitCandidateIndex = 0;
+        chargeLimitFile.reload();
     }
 
     onIsLowAndNotChargingChanged: {

@@ -134,9 +134,18 @@ StyledPopup {
                             deviceCard.opacity = 0.0;
                             deviceCard.scale = 0.85;
                             deviceCardTranslate.y = 25;
+
+                            iconContainer.scale = 0.8;
+                            iconContainer.opacity = 0.0;
+                            iconContainerTrans.x = -20;
+
+                            detailsCol.opacity = 0.0;
+                            detailsColTrans.x = 20;
                             
                             Qt.callLater(function() {
                                 deviceCardAnim.start();
+                                iconContainerAnim.start();
+                                detailsColAnim.start();
                             });
                         }
                     }
@@ -178,9 +187,27 @@ StyledPopup {
 
                         // Image / Icon inside MaterialCookie
                         Item {
+                            id: iconContainer
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredHeight: 80
                             Layout.preferredWidth: 80
+
+                            opacity: 0.0
+                            scale: 0.8
+                            transform: Translate {
+                                id: iconContainerTrans
+                                x: -20
+                            }
+
+                            SequentialAnimation {
+                                id: iconContainerAnim
+                                PauseAnimation { duration: 40 + index * 100 + 60 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: iconContainer; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                    NumberAnimation { target: iconContainer; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                    NumberAnimation { target: iconContainerTrans; property: "x"; from: -20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                }
+                            }
 
                             MaterialShape {
                                 id: bgShape
@@ -238,9 +265,25 @@ StyledPopup {
 
                         // Details column (Right aligned as in mockup)
                         ColumnLayout {
+                            id: detailsCol
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
                             spacing: 4
+
+                            opacity: 0.0
+                            transform: Translate {
+                                id: detailsColTrans
+                                x: 20
+                            }
+
+                            SequentialAnimation {
+                                id: detailsColAnim
+                                PauseAnimation { duration: 40 + index * 100 + 120 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: detailsCol; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                    NumberAnimation { target: detailsColTrans; property: "x"; from: 20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                }
+                            }
 
                             // Name
                             StyledText {
