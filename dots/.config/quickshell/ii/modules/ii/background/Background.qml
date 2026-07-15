@@ -630,29 +630,6 @@ Scope {
                             hideSource: false
                         }
 
-                        Item {
-                            id: windowBlurMask
-                            width: bgRoot.screen.width
-                            height: bgRoot.screen.height
-                            visible: false
-
-                            Rectangle {
-                                x: windowBlurEffect.wbLeft
-                                y: windowBlurEffect.wbTop
-                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
-                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
-                                color: "black"
-                                radius: {
-                                    if (wallpaperItem.wallpaperClipRadius > 0)
-                                        return wallpaperItem.wallpaperClipRadius;
-                                    if (Config.options.appearance.fakeScreenRounding > 0)
-                                        return Appearance.rounding.screenRounding;
-                                    return 0;
-                                }
-                            }
-                            layer.enabled: true
-                        }
-
                         StyledRectangularShadow {
                             id: centralWallpaperShadow
                             target: centralWallpaperClipRect
@@ -1219,21 +1196,6 @@ Scope {
                             id: windowBlurEffect
                             anchors.fill: parent
 
-                            readonly property bool barVertical: wallpaperPlanes.barVertical
-                            readonly property bool barBottom: wallpaperPlanes.barBottom
-                            readonly property int barSz: wallpaperPlanes.barSize
-                            readonly property int gp: wallpaperPlanes.gap
-                            readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
-
-                            readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gp
-                            readonly property real leftSidebarOffset: (GlobalStates.policiesPinned && !GlobalStates.policiesDetached && GlobalStates.animatedLeftSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
-                            readonly property real rightSidebarOffset: 0
-
-                            readonly property int wbLeft: Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSz : 0, leftSidebarOffset)
-                            readonly property int wbRight: Math.max(baseMargin, (barEffective && barVertical && barBottom) ? barSz : 0, rightSidebarOffset)
-                            readonly property int wbTop: Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSz : 0)
-                            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSz : 0)
-
                             property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !bgRoot.overviewOpen
                             visible: shouldBlur || opacity > 0.01
                             opacity: shouldBlur ? 1.0 : 0.0
@@ -1249,22 +1211,11 @@ Scope {
                             blurMax: 64
                             blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
 
-                            maskEnabled: true
-                            maskSource: windowBlurMask
+                            // Overscan slightly so the blur's edge fringe lands offscreen
+                            scale: 1 + (2 * blurMax * blur) / Math.max(Math.min(width, height), 1)
 
                             Rectangle {
-                                x: windowBlurEffect.wbLeft
-                                y: windowBlurEffect.wbTop
-                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
-                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
-                                radius: {
-                                    if (wallpaperItem.wallpaperClipRadius > 0)
-                                        return wallpaperItem.wallpaperClipRadius;
-                                    if (Config.options.appearance.fakeScreenRounding > 0)
-                                        return Appearance.rounding.screenRounding;
-                                    return 0;
-                                }
-                                opacity: 1.0
+                                anchors.fill: parent
                                 color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
                             }
                         }
