@@ -17,6 +17,32 @@ Item {
     property var weatherWidgets: (WidgetsRegistry.allWidgets || []).filter(function(w) { return w.category === "Weather"; })
     property var dateWidgets: (WidgetsRegistry.allWidgets || []).filter(function(w) { return w.category === "Date"; })
 
+    property var _previewQueue: []
+    property bool _previewStaggerActive: false
+
+    function _enqueuePreview(card) {
+        _previewQueue.push(card);
+        if (!_previewStaggerActive) {
+            _previewStaggerActive = true;
+            _previewStaggerTimer.start();
+        }
+    }
+
+    Timer {
+        id: _previewStaggerTimer
+        interval: 30
+        repeat: true
+        onTriggered: {
+            if (widgetsConfigRoot._previewQueue.length > 0) {
+                var card = widgetsConfigRoot._previewQueue.shift();
+                if (card) card._previewActive = true;
+            } else {
+                widgetsConfigRoot._previewStaggerActive = false;
+                stop();
+            }
+        }
+    }
+
     ContentPage {
         id: page
         anchors.fill: parent
@@ -145,7 +171,10 @@ Item {
             width: 220
             implicitHeight: mainColumn.implicitHeight + 12
 
+            property bool _previewActive: false
             property bool hovered: cardMouseArea.containsMouse
+
+            Component.onCompleted: widgetsConfigRoot._enqueuePreview(cardItem)
 
             readonly property var widgetData: modelData
             readonly property var _activeWidgets: Config.options.background.activeWidgets
@@ -248,7 +277,8 @@ Item {
                         Loader {
                             id: widgetPreviewLoader
                             anchors.fill: parent
-                            source: cardItem.widgetData.qmlPath
+                            active: cardItem._previewActive
+                            source: cardItem._previewActive ? cardItem.widgetData.qmlPath : ""
 
                             Binding {
                                 target: widgetPreviewLoader.item

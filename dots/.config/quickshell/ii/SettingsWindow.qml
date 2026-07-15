@@ -375,9 +375,16 @@ FloatingWindow {
                         source = root.pages[root.currentPage].component;
                     }
 
+                    property bool _waitingForLoad: false
+
                     onLoaded: {
                         if (root.pendingSectionHighlight !== "") {
                             pendingHighlightTimer.restart();
+                        }
+                        if (_waitingForLoad) {
+                            _waitingForLoad = false;
+                            pageLoadWaitTimer.stop();
+                            switchAnimIncoming.start();
                         }
                     }
 
@@ -396,8 +403,8 @@ FloatingWindow {
                     Connections {
                         target: root
                         function onCurrentPageChanged() {
-                            switchAnim.complete();
-                            switchAnim.start();
+                            switchAnimOutgoing.complete();
+                            switchAnimOutgoing.start();
                         }
                         function onScrollPosChanged() {
                             if (root.scrollPos == -1)
@@ -416,7 +423,7 @@ FloatingWindow {
                     }
 
                     SequentialAnimation {
-                        id: switchAnim
+                        id: switchAnimOutgoing
 
                         ParallelAnimation {
                             NumberAnimation {
@@ -447,16 +454,42 @@ FloatingWindow {
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
                             }
                         }
-                        PropertyAction {
-                            target: pageLoader
-                            property: "source"
-                            value: root.pages[root.currentPage].component
+                        onFinished: {
+                            pageLoader.source = root.pages[root.currentPage].component;
+                            pageLoader.x = -120;
+                            pageLoader._waitingForLoad = true;
+                            pageLoadWaitTimer.start();
                         }
-                        PropertyAction {
-                            target: pageLoader
-                            property: "x"
-                            value: -120
+                    }
+
+                    Timer {
+                        id: pageLoadWaitTimer
+                        interval: 16
+                        repeat: true
+                        property real _startTime: 0
+                        onTriggered: {
+                            if (!pageLoader._waitingForLoad) {
+                                stop();
+                                return;
+                            }
+                            if (pageLoader.status === Loader.Ready) {
+                                pageLoader._waitingForLoad = false;
+                                stop();
+                                switchAnimIncoming.start();
+                            } else if (Date.now() - _startTime > 2000) {
+                                pageLoader._waitingForLoad = false;
+                                stop();
+                                switchAnimIncoming.start();
+                            }
                         }
+                        onRunningChanged: {
+                            if (running) _startTime = Date.now();
+                        }
+                    }
+
+                    SequentialAnimation {
+                        id: switchAnimIncoming
+
                         ParallelAnimation {
                             NumberAnimation {
                                 target: pageLoader
@@ -485,7 +518,7 @@ FloatingWindow {
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
                         }
-                    } // closes SequentialAnimation
+                    }
                 } // closes Loader
             } // closes Rectangle (Content container)
         } // closes RowLayout (Window content)
