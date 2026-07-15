@@ -74,6 +74,15 @@ Item {
         edge: root.barEdge
         role: "first"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: parent.top
             bottom: parent.bottom
@@ -89,6 +98,15 @@ Item {
         edge: root.barEdge
         role: "middle"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: middleSection.top
             bottom: middleSection.bottom
@@ -104,6 +122,15 @@ Item {
         edge: root.barEdge
         role: "last"
         fillColor: root.actualColor
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         anchors {
             top: parent.top
             bottom: parent.bottom

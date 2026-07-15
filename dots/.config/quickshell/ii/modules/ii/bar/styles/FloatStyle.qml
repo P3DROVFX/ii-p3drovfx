@@ -88,6 +88,15 @@ Item {
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(leftIsland)
         }
@@ -103,6 +112,15 @@ Item {
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(middleIsland)
         }
@@ -118,6 +136,15 @@ Item {
         }
         color: root.islandFillColor
         radius: Appearance.rounding.full
+
+        layer.enabled: root.isIslandMode && Config.options.bar.dropShadow
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.28)
+            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowBlur: 1.0
+        }
+
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(rightIsland)
         }
