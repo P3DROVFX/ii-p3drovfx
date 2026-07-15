@@ -162,7 +162,7 @@ Scope {
 
                         Item {
                             id: hoverMaskRegion
-                            readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
+                            readonly property real shadowExtend: 0
                             readonly property real sideMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                             anchors {
                                 fill: barContent

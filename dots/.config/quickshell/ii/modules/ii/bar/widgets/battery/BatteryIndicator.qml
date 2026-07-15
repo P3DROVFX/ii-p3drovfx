@@ -97,9 +97,9 @@ MouseArea {
                             Layout.leftMargin: -2
                             Layout.rightMargin: -2
                             fill: 1
-                            text: "bolt"
+                            text: root.showCheck ? "check" : "bolt"
                             iconSize: Appearance.font.pixelSize.smaller
-                            visible: root.effectivelyCharging && root.percentage < 1
+                            visible: (root.effectivelyCharging || root.showCheck) && root.percentage < 1
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignVCenter
