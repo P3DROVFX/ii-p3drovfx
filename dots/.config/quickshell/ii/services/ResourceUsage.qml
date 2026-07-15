@@ -11,12 +11,14 @@ import Quickshell.Io
 //   in a single Timer tick - no bash forks.
 // - Disk usage is sampled every `diskInterval` ms through a one-shot
 //   Process (`df`) driven by a QML Timer.
-// - GPU monitoring auto-detects vendor on boot:
+// - GPU monitoring auto-detects vendor on boot; on hybrid systems the
+//   monitored GPU can be forced via Config.options.resources.gpuPreference:
 //   - NVIDIA = one-shot nvidia-smi triggered by a QML Timer.
 //   - AMD    = sysfs gpu_busy_percent and hwmon temp1_input via
 //              FileView (zero-cost, no fork).
-//   - Intel  = hwmon/thermal_zone fallback via one-shot bash by the
-//              same GPU Timer (temperature only, no usage metric).
+//   - Intel  = per-client DRM fdinfo counters aggregated by a one-shot
+//              bash+awk (xe: cycles/total-cycles, i915: engine ns);
+//              usage is computed here from deltas between ticks.
 Singleton {
     id: root
 	property real memoryTotal: 1
@@ -84,6 +86,7 @@ Singleton {
 		if (!gpuMonitoringEnabled) {
 			gpuUsage = 0
 			gpuTemp = 0
+			previousIntelGpuSample = null
 		}
 	}
 
@@ -91,9 +94,18 @@ Singleton {
     // Detected once on boot. Drives which subsystem we poll for stats.
     //   "nvidia" → nvidia-smi one-shot (Timer-driven)
     //   "amd"    → sysfs FileView (zero-cost, no fork)
-    //   "intel"  → thermal_zone fallback (temperature only)
+    //   "intel"  → DRM fdinfo engine counters + coretemp/thermal_zone
     //   "unknown" → no monitoring
     property string gpuVendor: "unknown"
+
+    // "auto" keeps the NVIDIA → AMD → Intel priority; anything else forces
+    // that vendor's probe first (hybrid iGPU+dGPU systems), falling back to
+    // the auto cascade if the preferred vendor isn't found.
+    property string gpuPreference: Config.options?.resources?.gpuPreference ?? "auto"
+    onGpuPreferenceChanged: {
+        gpuModelProc.running = false
+        gpuModelProc.running = true
+    }
 
     // AMD sysfs paths (resolved once after vendor detection)
     property string amdUsagePath: ""      // /sys/class/drm/card*/device/gpu_busy_percent
@@ -215,25 +227,40 @@ Singleton {
     Process {
         id: gpuModelProc
         command: ["bash", "-c",
-            "if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then " +
-            "  echo 'NVIDIA|'$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null); " +
-            "elif [ -d /sys/class/drm ] && ls /sys/class/drm/card*/device/gpu_busy_percent >/dev/null 2>&1; then " +
+            "detect_nvidia() { " +
+            "  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then " +
+            "    echo 'NVIDIA|'$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null); return 0; " +
+            "  fi; return 1; " +
+            "}; " +
+            "detect_amd() { " +
             "  for card in /sys/class/drm/card*/device; do " +
             "    if [ -f \"$card/gpu_busy_percent\" ]; then " +
             "      model=$(cat \"$card/device\" 2>/dev/null || basename $(dirname \"$card\")); " +
-            "      echo \"AMD|$model\"; exit 0; " +
+            "      echo \"AMD|$model\"; return 0; " +
             "    fi; " +
-            "  done; " +
-            "  echo 'AMD|AMD GPU'; " +
+            "  done; return 1; " +
+            "}; " +
+            "detect_intel() { " +
+            "  model=$(lspci 2>/dev/null | grep -i 'vga\\|3d\\|display' | grep -i -m1 intel | sed 's/.*: //'); " +
+            "  if [ -n \"$model\" ]; then echo \"INTEL|$model\"; return 0; fi; return 1; " +
+            "}; " +
+            "case \"$GPUPREF\" in " +
+            "  nvidia) detect_nvidia && exit 0 ;; " +
+            "  amd) detect_amd && exit 0 ;; " +
+            "  intel) detect_intel && exit 0 ;; " +
+            "esac; " +
+            "detect_nvidia && exit 0; " +
+            "detect_amd && exit 0; " +
+            "model=$(lspci 2>/dev/null | grep -i -m1 'vga\\|3d\\|display' | sed 's/.*: //'); " +
+            "if echo \"$model\" | grep -qi 'intel'; then " +
+            "  echo \"INTEL|$model\"; " +
             "else " +
-            "  model=$(lspci 2>/dev/null | grep -i -m1 'vga\\|3d\\|display' | sed 's/.*: //'); " +
-            "  if echo \"$model\" | grep -qi 'intel'; then " +
-            "    echo \"INTEL|$model\"; " +
-            "  else " +
-            "    echo \"UNKNOWN|$model\"; " +
-            "  fi; " +
+            "  echo \"UNKNOWN|$model\"; " +
             "fi"
         ]
+        environment: ({
+            GPUPREF: root.gpuPreference
+        })
         running: true
         stdout: StdioCollector {
             id: gpuModelCollector
@@ -325,12 +352,61 @@ Singleton {
         }
     }
 
-    // ── NVIDIA/Intel GPU polling — one-shot nvidia-smi per tick ───────
+    // ── NVIDIA/Intel GPU polling — one-shot Process per tick ─────────
     // Previous incarnation: an infinite `while true; do nvidia-smi; sleep 3`
     // bash loop. Each loop tick blocked a slot in the bash memory budget
     // (~30ms exec + 5MB temp). Now: a QML Timer spawns a one-shot Process
     // every `gpuInterval` ms when monitoring is enabled. When disabled,
     // neither the Timer nor any fork runs.
+    //
+    // Intel has no nvidia-smi/gpu_busy_percent equivalent readable without
+    // CAP_PERFMON, so usage comes from per-client DRM fdinfo counters
+    // (what nvtop uses): the script dumps cumulative busy counters per
+    // client and engine class, and parseIntelGpuSample() below turns the
+    // delta between two ticks into a busy percentage. fdinfo files are
+    // streamed through `cat` because fds vanish mid-scan all the time and
+    // gawk aborts on files it can't open; every fdinfo file starts with a
+    // "pos:" line, which serves as the per-file boundary in the stream.
+    // Only same-user clients are readable, which on a desktop covers the
+    // compositor and all apps.
+    property var previousIntelGpuSample: null
+
+    function parseIntelGpuSample(out) {
+        let nowNs = 0
+        let temp = 0
+        let driver = ""
+        const clients = {}
+        for (const line of out.split("\n")) {
+            const p = line.trim().split(/\s+/)
+            if (p[0] === "NOW") nowNs = Number(p[1])
+            else if (p[0] === "TEMP") temp = Number(p[1])
+            else if (p[0] === "DRIVER") driver = p[1]
+            else if (p[0] === "E") clients[p[1] + "/" + p[2]] = { cls: p[2], busy: Number(p[3]), total: Number(p[4]) }
+        }
+        gpuTemp = temp
+
+        const prev = previousIntelGpuSample
+        previousIntelGpuSample = { nowNs, clients }
+        if (!prev) return
+
+        // Busy ratio per engine class, summed over clients. xe exposes a GT
+        // timestamp per class (drm-total-cycles); i915 only reports ns, so
+        // wall-clock is the denominator. Clients whose counters went
+        // backwards (respawned) are skipped and re-baselined next tick.
+        let maxBusy = 0
+        const classBusy = {}
+        for (const key in clients) {
+            if (!(key in prev.clients)) continue
+            const db = clients[key].busy - prev.clients[key].busy
+            const dt = driver === "xe" ? clients[key].total - prev.clients[key].total : nowNs - prev.nowNs
+            if (db <= 0 || dt <= 0) continue
+            const cls = clients[key].cls
+            classBusy[cls] = (classBusy[cls] ?? 0) + db / dt
+            maxBusy = Math.max(maxBusy, classBusy[cls])
+        }
+        gpuUsage = Math.min(1, maxBusy)
+    }
+
     Process {
         id: gpuMonitorProc
         command: ["bash", "-c",
@@ -342,19 +418,36 @@ Singleton {
             "    if [ -f \"$hw/name\" ]; then " +
             "      name=$(cat \"$hw/name\" 2>/dev/null); " +
             "      if [ \"$name\" = \"coretemp\" ] || [ \"$name\" = \"intel-pch\" ]; then " +
-            "        for t in \"$hw\"/temp1_input; do " +
-            "          if [ -f \"$t\" ]; then x=$(cat \"$t\" 2>/dev/null || echo 0); temp=$((x/1000)); echo \"0, $temp\"; exit 0; fi; " +
-            "        done; " +
+            "        if [ -f \"$hw/temp1_input\" ]; then x=$(cat \"$hw/temp1_input\" 2>/dev/null || echo 0); temp=$((x/1000)); break; fi; " +
             "      fi; " +
             "    fi; " +
             "  done; " +
-            "  for tz in /sys/class/thermal/thermal_zone*; do " +
-            "    type=$(cat \"$tz/type\" 2>/dev/null); " +
-            "    if [ \"$type\" = \"x86_pkg_temp\" ] || [ \"$type\" = \"cpu_thermal\" ]; then " +
-            "      x=$(cat \"$tz/temp\" 2>/dev/null || echo 0); temp=$((x/1000)); echo \"0, $temp\"; exit 0; " +
-            "    fi; " +
-            "  done; " +
-            "  echo \"0, 0\"; " +
+            "  if [ \"$temp\" -eq 0 ]; then " +
+            "    for tz in /sys/class/thermal/thermal_zone*; do " +
+            "      type=$(cat \"$tz/type\" 2>/dev/null); " +
+            "      if [ \"$type\" = \"x86_pkg_temp\" ] || [ \"$type\" = \"cpu_thermal\" ]; then " +
+            "        x=$(cat \"$tz/temp\" 2>/dev/null || echo 0); temp=$((x/1000)); break; " +
+            "      fi; " +
+            "    done; " +
+            "  fi; " +
+            "  echo \"NOW $(date +%s%N)\"; " +
+            "  echo \"TEMP $temp\"; " +
+            "  cat /proc/[0-9]*/fdinfo/* 2>/dev/null | awk '" +
+            "    function flush(   k) { " +
+            "      if ((drv == \"xe\" || drv == \"i915\") && cid != \"\" && !(cid in seen)) { " +
+            "        seen[cid] = 1; gdrv = drv; " +
+            "        for (k in c) print \"E\", cid, k, c[k], t[k] + 0; " +
+            "      } " +
+            "      drv = \"\"; cid = \"\"; delete c; delete t; " +
+            "    } " +
+            "    /^pos:/ { flush() } " +
+            "    $1 == \"drm-driver:\" { drv = $2 } " +
+            "    $1 == \"drm-client-id:\" { cid = $2 } " +
+            "    /^drm-cycles-/ { cls = substr($1, 12); sub(/:$/, \"\", cls); c[cls] += $2 } " +
+            "    /^drm-total-cycles-/ { cls = substr($1, 18); sub(/:$/, \"\", cls); if ($2 > t[cls]) t[cls] = $2 } " +
+            "    /^drm-engine-/ && $3 == \"ns\" && $1 !~ /capacity/ { cls = substr($1, 12); sub(/:$/, \"\", cls); c[cls] += $2 } " +
+            "    END { flush(); if (gdrv != \"\") print \"DRIVER\", gdrv } " +
+            "  '; " +
             "else " +
             "  echo \"0, 0\"; " +
             "fi"
@@ -363,9 +456,16 @@ Singleton {
             GPUVENDOR: root.gpuVendor
         })
         running: false
-        stdout: SplitParser {
-            onRead: data => {
-                const parts = data.trim().split(/[\s,]+/)
+        stdout: StdioCollector {
+            id: gpuMonitorCollector
+            onStreamFinished: {
+                const out = gpuMonitorCollector.text.trim()
+                if (out.length === 0) return
+                if (root.gpuVendor === "intel") {
+                    root.parseIntelGpuSample(out)
+                    return
+                }
+                const parts = out.split(/[\s,]+/)
                 if (parts.length >= 2) {
                     root.gpuUsage = Number(parts[0]) / 100
                     root.gpuTemp = Number(parts[1])
