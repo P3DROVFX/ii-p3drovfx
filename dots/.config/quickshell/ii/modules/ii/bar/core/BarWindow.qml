@@ -124,8 +124,9 @@ Scope {
         WlrLayershell.namespace: "quickshell:bar"
         WlrLayershell.keyboardFocus: isSearchActiveHere ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-        // Mask extends further when transparent to allow glow gradient rendering.
-        // In fullscreen, mask becomes empty to allow clicks to pass through to the fullscreen app.
+        // Mask extends only over bar content (plus autoHide hover region).
+        // Shadow from MultiEffect is visual-only and outside the mask.
+        // In fullscreen, mask becomes empty to allow clicks through.
         mask: Region {
             item: barRoot.hasFullscreenWindowOnMonitor ? null : hoverMaskRegion
         }
@@ -188,7 +189,7 @@ Scope {
 
             Item {
                 id: hoverMaskRegion
-                readonly property real shadowExtend: Config.options.bar.dropShadow ? 24 : 0
+                readonly property real shadowExtend: 0
                 readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                 readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                 anchors {
