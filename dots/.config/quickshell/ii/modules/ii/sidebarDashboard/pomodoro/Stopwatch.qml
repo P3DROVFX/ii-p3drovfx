@@ -12,6 +12,53 @@ Item {
     Layout.fillWidth: true
     Layout.fillHeight: true
 
+    property int _openCountdown: 5900
+    property bool _openingDone: false
+    property int entranceTrigger: -1
+
+    function beginEntrance() {
+        stopwatchTab.opacity = 0;
+        stopwatchTab._openingDone = false;
+        stopwatchTab._openCountdown = 5900;
+        countdownTimer.restart();
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    Component.onCompleted: {
+        beginEntrance();
+    }
+
+    onEntranceTriggerChanged: {
+        stopwatchTab.opacity = 0;
+        elapsedEntranceTranslate.y = 30;
+        beginEntrance();
+    }
+
+    Timer {
+        id: countdownTimer
+        interval: 18
+        repeat: true
+        onTriggered: {
+            stopwatchTab._openCountdown -= 70;
+            if (stopwatchTab._openCountdown <= 0) {
+                stopwatchTab._openCountdown = 0;
+                stopwatchTab._openingDone = true;
+                countdownTimer.stop();
+            }
+        }
+    }
+
+    SequentialAnimation {
+        id: entranceAnim
+        PauseAnimation { duration: 50 }
+        ParallelAnimation {
+            NumberAnimation { target: stopwatchTab; property: "opacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
+            NumberAnimation { target: elapsedEntranceTranslate; property: "y"; from: 30; to: 0; duration: 300; easing.type: Easing.OutCubic }
+        }
+    }
+
     Item {
         anchors {
             fill: parent
@@ -22,6 +69,11 @@ Item {
 
         RowLayout { // Elapsed
             id: elapsedIndicator
+
+            transform: Translate {
+                id: elapsedEntranceTranslate
+                y: 30
+            }
             
             anchors {
                 top: undefined
@@ -51,10 +103,15 @@ Item {
 
             spacing: 0
             StyledText {
-                // Layout.preferredWidth: elapsedIndicator.width * 0.6 // Prevent shakiness
                 font.pixelSize: 40
                 color: Appearance.m3colors.m3onSurface
                 text: {
+                    if (!stopwatchTab._openingDone) {
+                        let total = stopwatchTab._openCountdown;
+                        let m = Math.floor(total / 6000).toString().padStart(2, '0');
+                        let s = Math.floor((total % 6000) / 100).toString().padStart(2, '0');
+                        return m + ":" + s;
+                    }
                     let totalSeconds = Math.floor(TimerService.stopwatchTime) / 100
                     let minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
                     let seconds = Math.floor(totalSeconds % 60).toString().padStart(2, '0')
@@ -66,6 +123,10 @@ Item {
                 font.pixelSize: 40
                 color: Appearance.colors.colSubtext
                 text: {
+                    if (!stopwatchTab._openingDone) {
+                        let c = stopwatchTab._openCountdown % 100;
+                        return `:<sub>${c.toString().padStart(2, '0')}</sub>`;
+                    }
                     return `:<sub>${(Math.floor(TimerService.stopwatchTime) % 100).toString().padStart(2, '0')}</sub>`
                 }
             }
@@ -74,6 +135,7 @@ Item {
         // Laps
         StyledListView {
             id: lapsList
+            property int entranceTrigger: stopwatchTab.entranceTrigger
             anchors {
                 top: elapsedIndicator.bottom
                 bottom: controlButtons.top
@@ -94,13 +156,46 @@ Item {
                 id: lapItem
                 required property int index
                 required property var modelData
+                property int entranceTrigger: lapsList.entranceTrigger
                 property var horizontalPadding: 10
                 property var verticalPadding: 6
+                property real _entranceOffset: -20
+
                 width: lapsList.width
                 implicitHeight: lapRow.implicitHeight + verticalPadding * 2
                 implicitWidth: lapRow.implicitWidth + horizontalPadding * 2
                 color: Appearance.colors.colLayer2
                 radius: Appearance.rounding.small
+                opacity: 0
+
+                transform: Translate {
+                    y: lapItem._entranceOffset
+                }
+
+                Component.onCompleted: {
+                    lapItem.opacity = 0;
+                    lapItem._entranceOffset = -20;
+                    Qt.callLater(function() {
+                        lapEntranceAnim.start();
+                    });
+                }
+
+                onEntranceTriggerChanged: {
+                    lapItem.opacity = 0;
+                    lapItem._entranceOffset = -20;
+                    Qt.callLater(function() {
+                        lapEntranceAnim.start();
+                    });
+                }
+
+                SequentialAnimation {
+                    id: lapEntranceAnim
+                    PauseAnimation { duration: Math.min(lapItem.index, 15) * 35 }
+                    ParallelAnimation {
+                        NumberAnimation { target: lapItem; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: lapItem; property: "_entranceOffset"; from: -20; to: 0; duration: 300; easing.type: Easing.OutCubic }
+                    }
+                }
 
                 RowLayout {
                     id: lapRow

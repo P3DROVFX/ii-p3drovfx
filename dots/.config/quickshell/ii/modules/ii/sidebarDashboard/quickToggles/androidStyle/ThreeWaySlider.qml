@@ -13,6 +13,58 @@ Item {
     required property string toggleType
     required property var toggleModel
 
+    // Entrance animation
+    property int entranceTrigger: -1
+    property real _entranceOpacity: 0
+    property real _entranceScale: 0.85
+    property real _entranceTranslateY: 20
+    property bool _entranceDone: false
+    property real _knobEntranceTranslateX: -30
+    property real _knobEntranceScale: 0.7
+    property real _knobEntranceRotation: -15
+
+    onEntranceTriggerChanged: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.85;
+        _entranceTranslateY = 20;
+        _knobEntranceTranslateX = -30;
+        _knobEntranceScale = 0.7;
+        _knobEntranceRotation = -15;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    Component.onCompleted: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.85;
+        _entranceTranslateY = 20;
+        _knobEntranceTranslateX = -30;
+        _knobEntranceScale = 0.7;
+        _knobEntranceRotation = -15;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    SequentialAnimation {
+        id: entranceAnim
+        PauseAnimation { duration: 50 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+        }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "_knobEntranceTranslateX"; from: -30; to: 0; duration: 350; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_knobEntranceScale"; from: 0.7; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_knobEntranceRotation"; from: -15; to: 0; duration: 350; easing.type: Easing.OutBack }
+        }
+        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    }
+
     readonly property real margin: 4
     readonly property real knobSize: root.height - (margin * 2)
 
@@ -132,6 +184,8 @@ Item {
         radius: height / 2
         color: Appearance.colors.colLayer2
         border.width: 0
+        opacity: root._entranceDone ? 1.0 : root._entranceOpacity
+        scale: root._entranceDone ? 1.0 : root._entranceScale
 
         // Left, Center, and Right Dots (Position indicators)
         Rectangle {
@@ -143,7 +197,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.left
             anchors.horizontalCenterOffset: root.posLeft + (root.knobSize / 2)
-            opacity: root.hoverIndex === 0 ? 0.0 : 1.0
+            opacity: (root.hoverIndex === 0 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
 
@@ -155,7 +209,7 @@ Item {
             color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.4)
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.horizontalCenter
-            opacity: root.hoverIndex === 1 ? 0.0 : 1.0
+            opacity: (root.hoverIndex === 1 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
 
@@ -168,7 +222,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.right
             anchors.horizontalCenterOffset: -(root.posLeft + (root.knobSize / 2))
-            opacity: root.hoverIndex === 2 ? 0.0 : 1.0
+            opacity: (root.hoverIndex === 2 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
     }
@@ -180,9 +234,12 @@ Item {
         height: root.knobSize
         radius: width / 2
         y: root.margin
-        x: root.isDraggingKnob ? root.knobDragX : root.targetX
+        x: (root.isDraggingKnob ? root.knobDragX : root.targetX) + (root._entranceDone ? 0 : root._knobEntranceTranslateX)
 
         color: Appearance.colors.colPrimary
+        opacity: root._entranceDone ? 1.0 : root._entranceOpacity
+        scale: root._entranceDone ? 1.0 : root._knobEntranceScale
+        rotation: root._entranceDone ? 0 : root._knobEntranceRotation
 
         Behavior on x {
             enabled: !root.isDraggingKnob

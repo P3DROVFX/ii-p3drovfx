@@ -282,31 +282,31 @@ ContentPage {
                     }
                 ]
             }
+        }
 
-            StyledText {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                text: Translation.tr("Tip: You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colTertiary
-                wrapMode: Text.WordWrap
+        NoticeBox {
+            Layout.fillWidth: true
+            text: Translation.tr("You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
+        }
+
+        ConfigSlider {
+            Layout.fillWidth: true
+            text: Translation.tr("Center spacing")
+            value: Config.options.lock.centerSpacing ?? 20
+            from: 0
+            to: 100
+            stepSize: 5
+            onValueChanged: {
+                Config.options.lock.centerSpacing = value;
             }
+        }
 
-            ConfigSlider {
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                text: Translation.tr("Center spacing")
-                value: Config.options.lock.centerSpacing ?? 20
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: {
-                    Config.options.lock.centerSpacing = value;
-                }
-            }
-
+        ContentSubsection {
+            title: Translation.tr("Lockscreen widgets aligment")
+            icon: "align_vertical_center"
+            Layout.fillWidth: true
             ConfigSelectionArray {
-                currentValue: Config.options.lock.centerAlignment ?? "vertical"
+                currentValue: Config.options.lock.centerAlignment ?? "horizontal"
                 onSelected: newValue => {
                     Config.options.lock.centerAlignment = newValue;
                 }
@@ -346,6 +346,18 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Replace the standard dots with random Material You shapes when typing the password.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "waves"
+            text: Translation.tr("Ripple effect on touch")
+            checked: Config.options.lock.rippleEffect ?? true
+            onCheckedChanged: {
+                Config.options.lock.rippleEffect = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Show a ripple animation when clicking anywhere on the lock screen.")
             }
         }
     }

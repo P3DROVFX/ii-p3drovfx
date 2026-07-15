@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -52,6 +53,12 @@ Rectangle {
         },
     ]
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        entranceTrigger++;
+    }
+
     Behavior on implicitHeight {
         NumberAnimation {
             duration: Appearance.animation.elementMove.duration
@@ -92,6 +99,28 @@ Rectangle {
         }
     ]
 
+    Connections {
+        target: GlobalStates
+        function onSidebarRightOpenChanged() {
+            if (GlobalStates.sidebarRightOpen && !root.effectivelyCollapsed) {
+                // Call immediately: widgets reset to opacity 0 synchronously,
+                // then Qt.callLater inside each widget fires the animation on next frame.
+                root.triggerContentEntrance();
+            }
+        }
+    }
+
+    onStateChanged: {
+        if (state === "collapsed") {
+            chevronUpAnim.start();
+        } else if (state === "expanded") {
+            chevronDownAnim.start();
+            if (GlobalStates.sidebarRightOpen) {
+                root.triggerContentEntrance();
+            }
+        }
+    }
+
     Keys.onPressed: event => {
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.ControlModifier) {
             if (event.key === Qt.Key_PageDown) {
@@ -119,10 +148,28 @@ Rectangle {
                 root.setCollapsed(false);
             }
             contentItem: MaterialSymbol {
+                id: chevronUpIcon
                 text: "keyboard_arrow_up"
                 iconSize: Appearance.font.pixelSize.larger
                 horizontalAlignment: Text.AlignHCenter
                 color: Appearance.colors.colOnLayer1
+
+                transform: Rotation {
+                    id: chevronUpRotation
+                    origin.x: chevronUpIcon.width / 2
+                    origin.y: chevronUpIcon.height / 2
+                    angle: 0
+                }
+
+                NumberAnimation {
+                    id: chevronUpAnim
+                    target: chevronUpRotation
+                    property: "angle"
+                    from: 180
+                    to: 0
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
             }
         }
 
@@ -188,10 +235,28 @@ Rectangle {
                     root.setCollapsed(true);
                 }
                 contentItem: MaterialSymbol {
+                    id: chevronDownIcon
                     text: "keyboard_arrow_down"
                     iconSize: Appearance.font.pixelSize.larger
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.colOnLayer1
+
+                    transform: Rotation {
+                        id: chevronDownRotation
+                        origin.x: chevronDownIcon.width / 2
+                        origin.y: chevronDownIcon.height / 2
+                        angle: 0
+                    }
+
+                    NumberAnimation {
+                        id: chevronDownAnim
+                        target: chevronDownRotation
+                        property: "angle"
+                        from: -180
+                        to: 0
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
                 }
             }
         }
@@ -211,6 +276,19 @@ Rectangle {
 
                 Component.onCompleted: {
                     tabStack.source = root.tabs[root.selectedTab].widget;
+                }
+
+                onLoaded: {
+                    root.triggerContentEntrance();
+                }
+
+                Connections {
+                    target: root
+                    function onEntranceTriggerChanged() {
+                        if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger")) {
+                            tabStack.item.entranceTrigger = root.entranceTrigger;
+                        }
+                    }
                 }
 
                 Connections {

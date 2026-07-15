@@ -13,20 +13,65 @@ Item {
     implicitHeight: contentColumn.implicitHeight
     implicitWidth: contentColumn.implicitWidth
 
+    property real _ringAnimValue: 0.0
+    readonly property real _realRingValue: TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration
+    property int entranceTrigger: -1
+
+    onEntranceTriggerChanged: {
+        circularProgress.enableAnimation = false;
+        _ringAnimValue = 0.0;
+        contentTranslate.y = 20;
+        Qt.callLater(function() {
+            ringOpenSeq.start();
+            contentEntranceAnim.start();
+        });
+    }
+
+    SequentialAnimation {
+        id: contentEntranceAnim
+        PauseAnimation { duration: 50 }
+        NumberAnimation { target: contentTranslate; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+    }
+
+    SequentialAnimation {
+        id: ringOpenSeq
+        PauseAnimation { duration: 50 }
+        NumberAnimation {
+            target: root
+            property: "_ringAnimValue"
+            from: 0.0
+            to: root._realRingValue
+            duration: 800
+            easing.type: Easing.OutCubic
+        }
+        ScriptAction {
+            script: {
+                circularProgress.enableAnimation = true;
+                _ringAnimValue = Qt.binding(function() {
+                    return TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration;
+                });
+            }
+        }
+    }
+
     ColumnLayout {
         id: contentColumn
         anchors.fill: parent
         spacing: 0
 
+        transform: Translate {
+            id: contentTranslate
+            y: 20
+        }
+
         // The Pomodoro timer circle
         CircularProgress {
+            id: circularProgress
             Layout.alignment: Qt.AlignHCenter
             lineWidth: 8
-            value: {
-                return TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration;
-            }
+            value: root._ringAnimValue
             implicitSize: 200
-            enableAnimation: true
+            enableAnimation: false
 
             ColumnLayout {
                 anchors.centerIn: parent
@@ -43,10 +88,33 @@ Item {
                     color: Appearance.m3colors.m3onSurface
                 }
                 StyledText {
+                    id: modeLabel
                     Layout.alignment: Qt.AlignHCenter
                     text: TimerService.pomodoroLongBreak ? Translation.tr("Long break") : TimerService.pomodoroBreak ? Translation.tr("Break") : Translation.tr("Focus")
                     font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colSubtext
+
+                    property string _lastMode: ""
+                    readonly property string _currentMode: TimerService.pomodoroLongBreak ? "long" : TimerService.pomodoroBreak ? "break" : "focus"
+
+                    transform: Scale {
+                        id: modeScale
+                        origin.y: modeLabel.height / 2
+                        yScale: 1.0
+                    }
+
+                    on_CurrentModeChanged: {
+                        if (_lastMode !== "" && _lastMode !== _currentMode) {
+                            modeFlip.restart();
+                        }
+                        _lastMode = _currentMode;
+                    }
+
+                    SequentialAnimation {
+                        id: modeFlip
+                        NumberAnimation { target: modeScale; property: "yScale"; from: 1.0; to: 0.0; duration: 120; easing.type: Easing.InCubic }
+                        NumberAnimation { target: modeScale; property: "yScale"; from: 0.0; to: 1.0; duration: 180; easing.type: Easing.OutBack }
+                    }
                 }
             }
 

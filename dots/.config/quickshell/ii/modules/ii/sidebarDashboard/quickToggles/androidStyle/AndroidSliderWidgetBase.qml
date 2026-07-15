@@ -27,6 +27,44 @@ Item {
     property var panel: null
     property var gridRef: null
 
+    // Entrance animation
+    property int entranceTrigger: -1
+    property real _entranceOpacity: 0
+    property real _entranceScale: 0.85
+    property real _entranceTranslateY: 20
+    property bool _entranceDone: false
+
+    onEntranceTriggerChanged: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.85;
+        _entranceTranslateY = 20;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    Component.onCompleted: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.85;
+        _entranceTranslateY = 20;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    SequentialAnimation {
+        id: entranceAnim
+        PauseAnimation { duration: Math.min(Math.max(root.buttonIndex, 0), 15) * 35 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+        }
+        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    }
+
     property string tooltipText: ""
 
     property string materialSymbol: ""
@@ -112,8 +150,9 @@ Item {
         width: root.width
         height: root.height
 
-        scale: root.isDragging ? 1.05 : 1.0
+        scale: (root.isDragging ? 1.05 : 1.0) * (root._entranceDone ? 1.0 : root._entranceScale)
         opacity: {
+            if (!root._entranceDone) return root._entranceOpacity;
             if (root.isUnused) return 0.5;
             if (root.editMode && !root.isDragging) return 0.9;
             if (root.isDragging) return 0.95;
@@ -121,10 +160,16 @@ Item {
         }
         z: root.isDragging ? 99 : 1
         
+        transform: Translate {
+            y: root._entranceDone ? 0 : root._entranceTranslateY
+        }
+        
         Behavior on scale {
+            enabled: !entranceAnim.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
+            enabled: !entranceAnim.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 

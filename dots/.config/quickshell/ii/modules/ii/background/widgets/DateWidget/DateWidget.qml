@@ -27,10 +27,10 @@ AbstractBackgroundWidget {
         anchors.fill: parent
         anchors.margins: 10
         color: {
-            let base = Appearance.colors.colSurfaceContainerHighest;
+            let base = Appearance.colors.colSurfaceContainerHigh;
             return Qt.rgba(base.r, base.g, base.b, 1.0);
         }
-        radius: Appearance.rounding.large
+        radius: Appearance.rounding.windowRounding
 
         // Recorte da camada ativado apenas se a sombra interna estiver ligada
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? true

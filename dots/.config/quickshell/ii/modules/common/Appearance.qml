@@ -15,6 +15,18 @@ Singleton {
     property QtObject sizes
     property string syntaxHighlightingTheme
 
+    readonly property int windowRounding: {
+        let rv = Config.options.appearance.roundingValue;
+        if (rv <= 0) return 0;
+        return Math.round(18 * rv / 24.0);
+    }
+
+    onWindowRoundingChanged: {
+        if (Config.ready) {
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + windowRounding + " } })"]);
+        }
+    }
+
     // Transparency. The quadratic functions were derived from analysis of hand-picked transparency values.
     ColorQuantizer {
         id: wallColorQuant
@@ -200,14 +212,10 @@ Singleton {
 
     rounding: QtObject {
         property real scale: {
-            let mode = Config.options.appearance.globalRounding;
-            if (mode === "sharp" || Config.options.appearance.sharpMode)
-                return 0.0;
-            if (mode === "normal")
-                return 17.0 / 24.0;
-            if (mode === "verylarge")
-                return 32.0 / 24.0;
-            return 1.0; // "large" is 24 (default)
+            let rv = Config.options.appearance.roundingValue;
+            if (rv > 0) return rv / 24.0;
+            if (rv < 0) return 1.0; // not yet migrated, default to large
+            return 0.0; // roundingValue === 0 → sharp
         }
 
         property int unsharpen: Math.round(2 * scale)
@@ -219,13 +227,7 @@ Singleton {
         property int verylarge: Math.round(32 * scale)
         property int full: scale === 0 ? 0 : 9999
         property int screenRounding: large
-        property int windowRounding: Math.round(18 * scale)
-
-        onWindowRoundingChanged: {
-            if (Config.options.appearance.toggleWindowRounding && Config.ready) {
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + windowRounding + " } })"]);
-            }
-        }
+        property int windowRounding: root.windowRounding
     }
 
     property color activeBorderColor: {
@@ -301,9 +303,7 @@ Singleton {
         running: Config.ready
         repeat: false
         onTriggered: {
-            if (Config.options.appearance.toggleWindowRounding) {
-                Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.rounding.windowRounding + " } })"]);
-            }
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
             var a = root.ignoreAlpha;
             var bs = "";

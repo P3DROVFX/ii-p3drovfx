@@ -100,6 +100,15 @@ AbstractBackgroundWidget {
             visible: active && (root.shouldShow)
             sourceComponent: NagasakiClock {}
         }
+
+        Loader {
+            id: dialClockLoader
+            anchors.horizontalCenter: parent.horizontalCenter
+            active: root.clockStyle === "dial"
+            visible: active && (root.shouldShow)
+            sourceComponent: DialClock {}
+        }
+
         StatusRow {
             anchors.horizontalCenter: parent.horizontalCenter
         }

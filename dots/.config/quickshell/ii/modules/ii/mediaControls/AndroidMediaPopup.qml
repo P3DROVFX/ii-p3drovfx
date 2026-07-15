@@ -94,12 +94,8 @@ Item {
         color: root.artDominantColor
     }
 
-    readonly property color artTextColor: root.useDynamicColors
-        ? root.blendedColors.colOnPrimary
-        : (root.artSource !== "" ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface)
-    readonly property color artSubtextColor: root.useDynamicColors
-        ? root.blendedColors.colOnPrimary
-        : Appearance.colors.colOnSurfaceVariant
+    readonly property color artTextColor: Appearance.colors.colOnSurface
+    readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
 
     Behavior on artVignetteBlur {
         NumberAnimation {
@@ -164,6 +160,18 @@ Item {
         onTriggered: root.player.positionChanged()
     }
 
+    function getBarAmplitude(index) {
+        if (!root.playing || root.visualizerPoints.length === 0)
+            return 0.0;
+        let indices = [2, 5, 9, 14, 20, 26, 32, 38];
+        let idx = indices[index] || 0;
+        if (idx >= root.visualizerPoints.length) {
+            idx = root.visualizerPoints.length - 1;
+        }
+        let val = root.visualizerPoints[idx] / 1000.0;
+        return Math.min(1.0, Math.max(0.0, val * 1.8));
+    }
+
     implicitWidth: 380
     implicitHeight: 220
 
@@ -212,39 +220,47 @@ Item {
                 }
             }
 
-            Item {
-                id: vignetteMask
-                anchors.fill: parent
-                visible: true
-
-                Rectangle {
-                    id: hMask
+                Item {
+                    id: vignetteMask
                     anchors.fill: parent
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.15; color: "transparent" }
-                        GradientStop { position: 0.35; color: "white" }
-                        GradientStop { position: 0.65; color: "white" }
-                        GradientStop { position: 0.85; color: "transparent" }
-                        GradientStop { position: 1.0; color: "transparent" }
+                    visible: true
+
+                    Rectangle {
+                        id: hMask
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.08; color: "transparent" }
+                            GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                            GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                            GradientStop { position: 0.45; color: "white" }
+                            GradientStop { position: 0.55; color: "white" }
+                            GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                            GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                            GradientStop { position: 0.92; color: "transparent" }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            orientation: Gradient.Vertical
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                            GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                            GradientStop { position: 0.5; color: "white" }
+                            GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                            GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: hMask
+                        }
                     }
                 }
-
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        orientation: Gradient.Vertical
-                        GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.5; color: "white" }
-                        GradientStop { position: 1.0; color: "transparent" }
-                    }
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: hMask
-                    }
-                }
-            }
 
             Item {
                 anchors.fill: parent
@@ -335,7 +351,7 @@ Item {
                             anchors.centerIn: parent
                             text: "music_note"
                             iconSize: Appearance.font.pixelSize.smallest
-                            color: root.useDynamicColors ? root.blendedColors.colOnLayer0 : "#FFFFFF"
+                            color: Appearance.colors.colOnSurface
                         }
                     }
                 }
@@ -359,7 +375,7 @@ Item {
                         fill: GlobalStates.mediaControlsPinned ? 1 : 0
                         color: GlobalStates.mediaControlsPinned
                             ? (root.useDynamicColors ? root.blendedColors.colPrimary : Appearance.colors.colPrimary)
-                            : (root.useDynamicColors ? root.blendedColors.colSubtext : "#B0B0B0")
+                            : Appearance.colors.colOnSurfaceVariant
                         horizontalAlignment: Text.AlignHCenter
                     }
                     onClicked: GlobalStates.mediaControlsPinned = !GlobalStates.mediaControlsPinned
@@ -373,7 +389,7 @@ Item {
                     Layout.alignment: Qt.AlignTop
                     colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                     colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                    colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                    colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                     buttonRadius: Appearance.rounding.full
 
                     readonly property string activeAudioDeviceName: Audio.sink ? (Audio.sink.description || "") : ""
@@ -399,14 +415,14 @@ Item {
                         MaterialSymbol {
                             text: audioPill.audioDeviceIcon
                             iconSize: Appearance.font.pixelSize.smallest
-                            color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                            color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                         }
 
                         StyledText {
                             text: audioPill.activeAudioDeviceName !== "" ? audioPill.activeAudioDeviceName : Translation.tr("Audio")
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             font.bold: true
-                            color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                            color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                             Layout.maximumWidth: 100
                             elide: Text.ElideRight
                         }
@@ -568,7 +584,7 @@ Item {
                             anchors.centerIn: parent
                             text: root.playing ? "pause" : "play_arrow"
                             iconSize: Appearance.font.pixelSize.hugeass
-                            color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                            color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                             fill: 1
                         }
                     }
@@ -605,9 +621,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoPrevious) {
-                                    return root.useDynamicColors ? root.blendedColors.colSubtext : "#666666";
+                                    return Appearance.colors.colOnSurfaceVariant;
                                 }
-                                return root.useDynamicColors ? root.blendedColors.colSubtext : "#E0E0E0";
+                                return Appearance.colors.colOnSurface;
                             }
                             opacity: root.player && root.player.canGoPrevious ? 1.0 : 0.4
                         }
@@ -676,9 +692,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoNext) {
-                                    return root.useDynamicColors ? root.blendedColors.colSubtext : "#666666";
+                                    return Appearance.colors.colOnSurfaceVariant;
                                 }
-                                return root.useDynamicColors ? root.blendedColors.colSubtext : "#E0E0E0";
+                                return Appearance.colors.colOnSurface;
                             }
                             opacity: root.player && root.player.canGoNext ? 1.0 : 0.4
                         }

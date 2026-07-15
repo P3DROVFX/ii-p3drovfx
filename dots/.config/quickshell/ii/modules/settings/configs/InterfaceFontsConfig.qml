@@ -34,51 +34,26 @@ ContentPage {
         icon: "rounded_corner"
 
         ContentSubsection {
-            title: Translation.tr("Rounding style")
-            icon: "style"
+            title: Translation.tr("Rounding value")
+            icon: "rounded_corner"
             Layout.fillWidth: true
 
-            ConfigSelectionArray {
-                currentValue: Config.options.appearance.globalRounding
-                onSelected: newValue => {
-                    Config.options.appearance.globalRounding = newValue;
-                    Config.options.appearance.sharpMode = (newValue === "sharp");
+            ConfigSlider {
+                buttonIcon: "rounded_corner"
+                text: Translation.tr("Corner radius")
+                usePercentTooltip: false
+                stopIndicatorValues: [24]
+                tooltipContent: `${value}px`
+                from: 0
+                to: 48
+                stepSize: 1
+                value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
+                onValueChanged: {
+                    Config.options.appearance.roundingValue = value;
+                    Config.options.appearance.sharpMode = (value === 0);
                 }
-                options: [
-                    {
-                        displayName: Translation.tr("Sharp"),
-                        icon: "square",
-                        value: "sharp"
-                    },
-                    {
-                        displayName: Translation.tr("Normal"),
-                        icon: "rounded_corner",
-                        value: "normal"
-                    },
-                    {
-                        displayName: Translation.tr("Large"),
-                        icon: "lens_blur",
-                        value: "large"
-                    },
-                    {
-                        displayName: Translation.tr("V. Large"),
-                        icon: "circle",
-                        value: "verylarge"
-                    }
-                ]
             }
         }
-
-        ConfigSwitch {
-            buttonIcon: "buttons_alt"
-            text: Translation.tr("Toggle window rounding with rounding style")
-            checked: Config.options.appearance.toggleWindowRounding
-            onCheckedChanged: {
-                Config.options.appearance.toggleWindowRounding = checked;
-            }
-        }
-
-
     }
 
     ContentSection {

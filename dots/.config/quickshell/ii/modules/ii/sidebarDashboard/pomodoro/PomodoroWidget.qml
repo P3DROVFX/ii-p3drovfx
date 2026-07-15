@@ -8,6 +8,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    property int entranceTrigger: -1
     property var tabButtonList: [
         {"name": Translation.tr("Pomodoro"), "icon": "search_activity"},
         {"name": Translation.tr("Stopwatch"), "icon": "timer"}
@@ -72,8 +73,8 @@ Item {
             currentIndex: tabBar.currentIndex
 
             // Tabs
-            PomodoroTimer {}
-            Stopwatch {}
+            PomodoroTimer { entranceTrigger: root.entranceTrigger }
+            Stopwatch { entranceTrigger: root.entranceTrigger }
         }
     }
 }

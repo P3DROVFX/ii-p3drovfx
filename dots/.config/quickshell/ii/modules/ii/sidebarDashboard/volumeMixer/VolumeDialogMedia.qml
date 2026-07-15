@@ -157,12 +157,8 @@ Item {
                     color: cardRoot.artDominantColor
                 }
 
-                readonly property color artTextColor: cardRoot.useDynamicColors
-                    ? cardRoot.blendedColors.colOnPrimary
-                    : (cardRoot.artSource !== "" ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface)
-                readonly property color artSubtextColor: cardRoot.useDynamicColors
-                    ? cardRoot.blendedColors.colOnPrimary
-                    : Appearance.colors.colOnSurfaceVariant
+                readonly property color artTextColor: Appearance.colors.colOnSurface
+                readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
 
                 Behavior on artVignetteBlur {
                     NumberAnimation {
@@ -216,10 +212,14 @@ Item {
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
                                     GradientStop { position: 0.0; color: "transparent" }
-                                    GradientStop { position: 0.15; color: "transparent" }
-                                    GradientStop { position: 0.35; color: "white" }
-                                    GradientStop { position: 0.65; color: "white" }
-                                    GradientStop { position: 0.85; color: "transparent" }
+                                    GradientStop { position: 0.08; color: "transparent" }
+                                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.45; color: "white" }
+                                    GradientStop { position: 0.55; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.92; color: "transparent" }
                                     GradientStop { position: 1.0; color: "transparent" }
                                 }
                             }
@@ -229,7 +229,11 @@ Item {
                                 gradient: Gradient {
                                     orientation: Gradient.Vertical
                                     GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
                                     GradientStop { position: 0.5; color: "white" }
+                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
                                     GradientStop { position: 1.0; color: "transparent" }
                                 }
                                 layer.enabled: true
@@ -341,7 +345,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: "music_note"
                                         iconSize: Appearance.font.pixelSize.smallest
-                                        color: cardRoot.useDynamicColors ? cardRoot.blendedColors.colOnLayer0 : "#FFFFFF"
+                                        color: Appearance.colors.colOnSurface
                                     }
                                 }
                             }
@@ -421,7 +425,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: cardRoot.playing ? "pause" : "play_arrow"
                                         iconSize: Appearance.font.pixelSize.huge
-                                        color: cardRoot.useDynamicColors ? cardRoot.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                                        color: cardRoot.useDynamicColors ? cardRoot.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                                         fill: 1
                                     }
                                 }

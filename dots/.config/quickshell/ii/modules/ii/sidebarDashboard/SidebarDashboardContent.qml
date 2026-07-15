@@ -36,6 +36,12 @@ Item {
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog
     property bool editMode: false
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        entranceTrigger++;
+    }
+
     readonly property bool isDynamicIslandTop: !Config.options.bar.vertical && !Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
     readonly property bool isDynamicIslandBottom: !Config.options.bar.vertical && Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
 
@@ -51,6 +57,9 @@ Item {
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
+            if (GlobalStates.sidebarRightOpen) {
+                root.triggerContentEntrance();
+            }
             if (!GlobalStates.sidebarRightOpen) {
                 root.showWifiDialog = false;
                 root.showBluetoothDialog = false;
@@ -122,6 +131,9 @@ Item {
                 // Layout.margins: 10
                 Layout.topMargin: 5
                 Layout.bottomMargin: 0
+                entranceTrigger: root.entranceTrigger
+                editMode: root.editMode
+                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
             }
 
             LoaderedQuickPanelImplementation {
@@ -283,7 +295,43 @@ Item {
     }
 
     component SystemButtonRow: Item {
+        id: systemButtonRowRoot
         implicitHeight: Math.max(uptimeContainer.implicitHeight, systemButtonsRow.implicitHeight)
+        property int entranceTrigger: -1
+        property bool editMode: false
+        signal editModeToggled(bool newEditMode)
+
+        // Entrance animation properties
+        property real _entranceOpacity: 0
+        property real _entranceTranslateY: -20
+        property bool _entranceDone: false
+
+        onEntranceTriggerChanged: {
+            _entranceDone = false;
+            _entranceOpacity = 0;
+            _entranceTranslateY = -20;
+            Qt.callLater(function() {
+                entranceAnim.start();
+            });
+        }
+
+        Component.onCompleted: {
+            _entranceDone = false;
+            _entranceOpacity = 0;
+            _entranceTranslateY = -20;
+            Qt.callLater(function() {
+                entranceAnim.start();
+            });
+        }
+
+        SequentialAnimation {
+            id: entranceAnim
+            ParallelAnimation {
+                NumberAnimation { target: systemButtonRowRoot; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+                NumberAnimation { target: systemButtonRowRoot; property: "_entranceTranslateY"; from: -20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+            }
+            PropertyAction { target: systemButtonRowRoot; property: "_entranceDone"; value: true }
+        }
 
         Rectangle {
             id: uptimeContainer
@@ -297,6 +345,11 @@ Item {
             radius: fullRadius
 
             visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none" || Config.options.sidebar.dashboardHeader.textMode !== "none"
+
+            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
+            transform: Translate {
+                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
+            }
 
             property int rowLeftMargin: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 6 : 14
 
@@ -531,16 +584,40 @@ Item {
             color: Appearance.colors.colLayer1
             padding: 4
 
+            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
+            transform: Translate {
+                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
+            }
+
             QuickToggleButton {
-                toggled: root.editMode
+                id: editButton
+                toggled: systemButtonRowRoot.editMode
                 visible: Config.options.sidebar.quickToggles.style === "android"
                 buttonIcon: "edit"
-                onClicked: root.editMode = !root.editMode
+                onClicked: {
+                    systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
+                    systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
+                }
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (root.editMode ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : "")
+                    text: Translation.tr("Edit quick toggles") + (systemButtonRowRoot.editMode ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : "")
+                }
+
+                SequentialAnimation {
+                    id: editEntranceAnim
+                    ScriptAction { script: editButton.rotation = -180 }
+                    NumberAnimation { target: editButton; property: "rotation"; from: -180; to: 0; duration: 400; easing.type: Easing.OutCubic }
+                }
+                Connections {
+                    target: systemButtonRowRoot
+                    function onEntranceTriggerChanged() {
+                        if (systemButtonRowRoot.entranceTrigger >= 0) {
+                            editEntranceAnim.start();
+                        }
+                    }
                 }
             }
             QuickToggleButton {
+                id: reloadButton
                 toggled: false
                 buttonIcon: "restart_alt"
                 onClicked: {
@@ -550,8 +627,23 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Reload Hyprland & Quickshell")
                 }
+
+                SequentialAnimation {
+                    id: reloadEntranceAnim
+                    ScriptAction { script: reloadButton.rotation = -360 }
+                    NumberAnimation { target: reloadButton; property: "rotation"; from: -360; to: 0; duration: 500; easing.type: Easing.OutCubic }
+                }
+                Connections {
+                    target: systemButtonRowRoot
+                    function onEntranceTriggerChanged() {
+                        if (systemButtonRowRoot.entranceTrigger >= 0) {
+                            reloadEntranceAnim.start();
+                        }
+                    }
+                }
             }
             QuickToggleButton {
+                id: settingsButton
                 toggled: false
                 buttonIcon: "settings"
                 onClicked: {
@@ -561,9 +653,24 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Settings")
                 }
+
+                SequentialAnimation {
+                    id: settingsEntranceAnim
+                    ScriptAction { script: settingsButton.rotation = 90 }
+                    NumberAnimation { target: settingsButton; property: "rotation"; from: 90; to: 0; duration: 350; easing.type: Easing.OutBack }
+                }
+                Connections {
+                    target: systemButtonRowRoot
+                    function onEntranceTriggerChanged() {
+                        if (systemButtonRowRoot.entranceTrigger >= 0) {
+                            settingsEntranceAnim.start();
+                        }
+                    }
+                }
             }
 
             QuickToggleButton {
+                id: powerButton
                 toggled: false
                 buttonIcon: "power_settings_new"
                 onClicked: {
@@ -571,6 +678,20 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Session")
+                }
+
+                SequentialAnimation {
+                    id: powerEntranceAnim
+                    ScriptAction { script: powerButton.rotation = -90 }
+                    NumberAnimation { target: powerButton; property: "rotation"; from: -90; to: 0; duration: 350; easing.type: Easing.OutBack }
+                }
+                Connections {
+                    target: systemButtonRowRoot
+                    function onEntranceTriggerChanged() {
+                        if (systemButtonRowRoot.entranceTrigger >= 0) {
+                            powerEntranceAnim.start();
+                        }
+                    }
                 }
             }
         }

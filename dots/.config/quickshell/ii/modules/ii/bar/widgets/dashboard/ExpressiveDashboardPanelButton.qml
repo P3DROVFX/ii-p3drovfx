@@ -63,7 +63,7 @@ Item {
         property real dashOffset: 0
 
         implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 10
-        implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 9
+        implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 8
 
         width: implicitWidth
         height: implicitHeight
@@ -167,10 +167,11 @@ Item {
                 id: volumeWrapper
                 vertical: root.vertical
                 MaterialSymbol {
+                    width: parent.width
+                    height: parent.height
                     text: Audio.sink?.audio?.muted ? "volume_off" : "volume_up"
                     iconSize: Appearance.font.pixelSize.larger
                     color: volumeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
-                    anchors.centerIn: parent
                 }
             }
         }
@@ -181,10 +182,11 @@ Item {
                 id: micWrapper
                 vertical: root.vertical
                 MaterialSymbol {
+                    width: parent.width
+                    height: parent.height
                     text: "mic_off"
                     iconSize: Appearance.font.pixelSize.larger
                     color: micWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
-                    anchors.centerIn: parent
                 }
             }
         }
@@ -195,10 +197,11 @@ Item {
                 id: netWrapper
                 vertical: root.vertical
                 MaterialSymbol {
+                    width: parent.width
+                    height: parent.height
                     text: Network.materialSymbol
                     iconSize: Appearance.font.pixelSize.larger
                     color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
-                    anchors.centerIn: parent
                 }
             }
         }
@@ -209,10 +212,11 @@ Item {
                 id: btWrapper
                 vertical: root.vertical
                 MaterialSymbol {
+                    width: parent.width
+                    height: parent.height
                     text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
                     iconSize: Appearance.font.pixelSize.larger
                     color: btWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
-                    anchors.centerIn: parent
                 }
             }
         }
@@ -225,7 +229,19 @@ Item {
                 Loader {
                     id: notifLoader
                     source: "ExpressiveNotificationUnreadCount.qml"
-                    anchors.centerIn: parent
+                    anchors.fill: parent
+                    Binding {
+                        target: notifLoader.item
+                        property: "width"
+                        value: notifLoader.width
+                        when: notifLoader.item !== null
+                    }
+                    Binding {
+                        target: notifLoader.item
+                        property: "height"
+                        value: notifLoader.height
+                        when: notifLoader.item !== null
+                    }
                     Binding {
                         target: notifLoader.item
                         property: "color"

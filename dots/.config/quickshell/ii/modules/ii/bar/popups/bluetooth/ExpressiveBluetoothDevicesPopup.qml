@@ -142,27 +142,49 @@ StyledPopup {
                         return yPos;
                     }
 
-                    opacity: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.0
-                    scale: (root.opened && root.popupOpenProgress > 0.6) ? 1.0 : 0.92
+                    readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+                    
+                    onStartAnimChanged: {
+                        if (startAnim) {
+                            deviceCard.opacity = 0.0;
+                            deviceCard.scale = 0.85;
+                            deviceCardTranslate.y = 25;
+
+                            earbud1.opacity = 0.0;
+                            earbud1.scale = 0.8;
+                            earbud1Trans.y = 30;
+
+                            earbud2.opacity = 0.0;
+                            earbud2.scale = 0.8;
+                            earbud2Trans.y = 30;
+
+                            phoneContainer.opacity = 0.0;
+                            phoneContainer.scale = 0.8;
+                            phoneContainerTrans.y = 30;
+                            
+                            Qt.callLater(function() {
+                                deviceCardAnim.start();
+                                earbud1Anim.start();
+                                earbud2Anim.start();
+                                phoneContainerAnim.start();
+                            });
+                        }
+                    }
+                    
+                    opacity: 0.0
+                    scale: 1.0
                     transform: Translate {
-                        y: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 15
-                        Behavior on y {
-                            SequentialAnimation {
-                                PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                                NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutCubic }
-                            }
-                        }
+                        id: deviceCardTranslate
+                        y: (root.opened && root.popupOpenProgress > 0.6) ? 0 : 25
                     }
-                    Behavior on opacity {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 250 : 180 }
-                        }
-                    }
-                    Behavior on scale {
-                        SequentialAnimation {
-                            PauseAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? (25 + index * 75) : 0 }
-                            NumberAnimation { duration: (root.opened && root.popupOpenProgress > 0.6) ? 320 : 180; easing.type: Easing.OutBack }
+                    
+                    SequentialAnimation {
+                        id: deviceCardAnim
+                        PauseAnimation { duration: 40 + index * 75 }
+                        ParallelAnimation {
+                            NumberAnimation { target: deviceCard; property: "opacity"; to: 1.0; duration: 300 }
+                            NumberAnimation { target: deviceCard; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: deviceCardTranslate; property: "y"; to: 0; duration: 380; easing.type: Easing.OutCubic }
                         }
                     }
 
@@ -207,6 +229,23 @@ StyledPopup {
                                 anchors.left: parent.left
                                 anchors.leftMargin: 5
 
+                                opacity: 0.0
+                                scale: 0.8
+                                transform: Translate {
+                                    id: earbud1Trans
+                                    y: 30
+                                }
+
+                                SequentialAnimation {
+                                    id: earbud1Anim
+                                    PauseAnimation { duration: 40 + index * 75 + 100 }
+                                    ParallelAnimation {
+                                        NumberAnimation { target: earbud1; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                        NumberAnimation { target: earbud1; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                        NumberAnimation { target: earbud1Trans; property: "y"; from: 30; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                    }
+                                }
+
                                 Image {
                                     anchors.fill: parent
                                     source: root.iconEarbudsCushion
@@ -236,6 +275,23 @@ StyledPopup {
                                 anchors.left: earbud1.right
                                 anchors.leftMargin: 2
                                 anchors.bottomMargin: -35
+
+                                opacity: 0.0
+                                scale: 0.8
+                                transform: Translate {
+                                    id: earbud2Trans
+                                    y: 30
+                                }
+
+                                SequentialAnimation {
+                                    id: earbud2Anim
+                                    PauseAnimation { duration: 40 + index * 75 + 160 }
+                                    ParallelAnimation {
+                                        NumberAnimation { target: earbud2; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                        NumberAnimation { target: earbud2; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                        NumberAnimation { target: earbud2Trans; property: "y"; from: 30; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                    }
+                                }
 
                                 Image {
                                     anchors.fill: parent
@@ -311,6 +367,23 @@ StyledPopup {
                             anchors.right: parent.right
                             anchors.rightMargin: 15
                             anchors.bottom: parent.bottom
+
+                            opacity: 0.0
+                            scale: 0.8
+                            transform: Translate {
+                                id: phoneContainerTrans
+                                y: 30
+                            }
+
+                            SequentialAnimation {
+                                id: phoneContainerAnim
+                                PauseAnimation { duration: 40 + index * 75 + 100 }
+                                ParallelAnimation {
+                                    NumberAnimation { target: phoneContainer; property: "scale"; from: 0.8; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                                    NumberAnimation { target: phoneContainer; property: "opacity"; from: 0.0; to: 1.0; duration: 350 }
+                                    NumberAnimation { target: phoneContainerTrans; property: "y"; from: 30; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                                }
+                            }
 
                             // 1. Frame Body (The colorable part)
                             Image {

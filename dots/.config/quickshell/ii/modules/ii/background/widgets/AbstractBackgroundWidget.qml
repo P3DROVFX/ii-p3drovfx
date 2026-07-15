@@ -26,7 +26,7 @@ AbstractWidget {
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "center" || lockBehavior === "lockOnly" || (
         Config.options.lock.centerWidget !== "none" && widgetInstance && widgetInstance.widgetId && widgetInstance.widgetId.startsWith(Config.options.lock.centerWidget)
     )
-    property bool forceCenter: GlobalStates.screenLocked && (lockBehavior === "center" || (lockBehavior === "hide" && Config.options.lock.centerWidget !== "none" && widgetInstance && widgetInstance.widgetId && widgetInstance.widgetId.startsWith(Config.options.lock.centerWidget)))
+    property bool forceCenter: (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress) && (lockBehavior === "center" || (lockBehavior === "hide" && Config.options.lock.centerWidget !== "none" && widgetInstance && widgetInstance.widgetId && widgetInstance.widgetId.startsWith(Config.options.lock.centerWidget)))
 
     function getCenteredWidgetsList() {
         if (typeof widgetListModel === "undefined") return [];
@@ -42,7 +42,10 @@ AbstractWidget {
         return result;
     }
 
-    readonly property var centeredWidgetsList: getCenteredWidgetsList()
+    readonly property var centeredWidgetsList: {
+        backgroundScope.widgetSyncVersion; // dependency to force re-evaluation
+        return getCenteredWidgetsList();
+    }
     readonly property int centeredWidgetCount: centeredWidgetsList.length
     readonly property int centeredWidgetIndex: {
         if (!widgetInstance) return 0;
@@ -54,38 +57,49 @@ AbstractWidget {
 
     readonly property real centeredOffsetX: {
         if (centeredWidgetCount <= 1) return 0;
-        if ((Config.options.lock.centerAlignment || "vertical") === "horizontal") {
+        let alignment = Config.options.lock.centerAlignment;
+        if (alignment === "horizontal" || alignment === undefined || alignment === "") {
             let spacing = Config.options.lock.centerSpacing || 20;
-            let totalWidth = centeredWidgetCount * (implicitWidth + spacing) - spacing;
-            let myX = centeredWidgetIndex * (implicitWidth + spacing);
-            return myX - (totalWidth - implicitWidth) / 2;
+            let totalWidth = centeredWidgetCount * (width + spacing) - spacing;
+            let myX = centeredWidgetIndex * (width + spacing);
+            return myX - (totalWidth - width) / 2;
         }
         return 0;
     }
 
     readonly property real centeredOffsetY: {
         if (centeredWidgetCount <= 1) return 0;
-        if ((Config.options.lock.centerAlignment || "vertical") === "vertical") {
+        let alignment = Config.options.lock.centerAlignment;
+        if (alignment === "vertical") {
             let spacing = Config.options.lock.centerSpacing || 20;
-            let totalHeight = centeredWidgetCount * (implicitHeight + spacing) - spacing;
-            let myY = centeredWidgetIndex * (implicitHeight + spacing);
-            return myY - (totalHeight - implicitHeight) / 2;
+            let totalHeight = centeredWidgetCount * (height + spacing) - spacing;
+            let myY = centeredWidgetIndex * (height + spacing);
+            return myY - (totalHeight - height) / 2;
         }
         return 0;
     }
 
-    readonly property real centeringX: (screenWidth - implicitWidth) / 2 + centeredOffsetX
-    readonly property real centeringY: (screenHeight - implicitHeight) / 2 + centeredOffsetY
+    readonly property real centeringX: (screenWidth - width) / 2 + centeredOffsetX
+    readonly property real centeringY: (screenHeight - height) / 2 + centeredOffsetY
 
     onForceCenterChanged: {
         if (forceCenter) {
             root.animDuration = 700;
             lockAnimResetTimer.restart();
+        } else {
+            root.animDuration = 500;
+            unlockAnimResetTimer.restart();
         }
     }
     Timer {
         id: lockAnimResetTimer
         interval: 750
+        repeat: false
+        onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
+    }
+    Timer {
+        id: unlockAnimResetTimer
+        interval: 550
         repeat: false
         onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
     }

@@ -230,6 +230,21 @@ Singleton {
         }
     }
 
+    function migrateRoundingConfig() {
+        if (root.options.appearance.roundingValue >= 0) return;
+        var oldMode = root.options.appearance.globalRounding || "large";
+        if (oldMode === "sharp") {
+            root.options.appearance.roundingValue = 0;
+        } else if (oldMode === "normal") {
+            root.options.appearance.roundingValue = 17;
+        } else if (oldMode === "verylarge") {
+            root.options.appearance.roundingValue = 32;
+        } else {
+            root.options.appearance.roundingValue = 24;
+        }
+        root.options.appearance.sharpMode = (root.options.appearance.roundingValue === 0);
+    }
+
     function migrateWidgetLockBehavior() {
         if (Persistent.states.background.lockBehaviorMigrated) return;
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
@@ -268,7 +283,10 @@ Singleton {
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
-        onLoaded: root.ready = true
+        onLoaded: {
+            root.ready = true;
+            migrateRoundingConfig();
+        }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
                 return;
@@ -396,7 +414,8 @@ Singleton {
                 property int fakeScreenRounding: 3 // 0: None | 1: Always | 2: When not fullscreen | 3: Wrapped
                 property int wrappedFrameThickness: 10
                 property bool sharpMode: false
-                property string globalRounding: "large" // Options: "sharp", "normal", "large", "verylarge"
+                property string globalRounding: "large" // Legacy — migrated to roundingValue via onLoaded
+                property int roundingValue: -1 // -1 = not yet migrated, 0-48 = active slider value (default 24 after migration)
                 property int defaultBorderRadius: 18
                 property bool toggleWindowRounding: true // Changes Hyprland window rounding to 0 if sharpMode is true
                 property real iconTintPercentage: 0.6
@@ -497,8 +516,8 @@ Singleton {
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 1518.98
                         property real y: 168.8
-                        property string style: "cookie"        // Options: "cookie", "digital"
-                        property string styleLocked: "cookie"  // Options: "cookie", "digital"
+                        property string style: "cookie"        // Options: "cookie", "digital", "nagasaki", "dial"
+                        property string styleLocked: "cookie"  // Options: "cookie", "digital", "nagasaki", "dial"
                         property JsonObject cookie: JsonObject {
                             property bool aiStyling: false
                             property string aiStylingModel: "gemini" // Options "gemini", "openrouter"
@@ -529,6 +548,12 @@ Singleton {
                                 property real size: 90
                                 property real roundness: 0
                             }
+                        }
+                        property JsonObject dial: JsonObject {
+                            property bool showTicks: true
+                            property bool showMinuteHand: true
+                            property bool enableShadows: true
+                            property bool enableInnerShadow: false
                         }
                         property JsonObject quote: JsonObject {
                             property bool enable: false
@@ -586,6 +611,13 @@ Singleton {
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 100
                         property real y: 100
+                    }
+                    property JsonObject photo: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property string imagePath: ""
                     }
                     property bool enableInnerShadow: true
                     property bool enableShadows: true
@@ -1030,6 +1062,7 @@ Singleton {
                     property bool showSecondary: true
                     property bool swapPrimaryWithSecondary: false
                     property bool showPercentageInsideBattery: false
+                    property string showPercentage: "off"
                 }
                 property string bluetoothDevicesLayout: "expressive" // Options: classic, expressive
                 property JsonObject sizes: JsonObject {
@@ -1181,13 +1214,14 @@ Singleton {
                 }
                 property string centerWidget: "clock" // "clock" | "media" | "none"
                 property real centerSpacing: 20 // spacing between multiple centered widgets
-                property string centerAlignment: "vertical" // "vertical" | "horizontal"
+                property string centerAlignment: "horizontal" // "vertical" | "horizontal"
                 property bool showLockedText: true
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false
                 }
                 property bool materialShapeChars: true
+                property bool rippleEffect: true
                 property JsonObject zoomAnimation: JsonObject {
                     property bool enabled: true
                 }

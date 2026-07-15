@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -13,8 +14,24 @@ Rectangle {
     color: Appearance.colors.colLayer1
     implicitHeight: 250
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        entranceTrigger++;
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarRightOpenChanged() {
+            if (GlobalStates.sidebarRightOpen) {
+                root.triggerContentEntrance();
+            }
+        }
+    }
+
     NotificationList {
         anchors.fill: parent
         anchors.margins: 5
+        entranceTrigger: root.entranceTrigger
     }
 }

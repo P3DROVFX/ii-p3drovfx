@@ -18,6 +18,7 @@ DelegateChooser {
     property bool isUnused: false
     property var panel: null
     property var gridRef: null
+    property int entranceTrigger: -1
     signal openAudioOutputDialog
     signal openAudioInputDialog
     signal openBluetoothDialog
@@ -45,6 +46,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openNightLightDialog();
             }
@@ -68,6 +70,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openAudioOutputDialog();
             }
@@ -91,6 +94,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openBluetoothDialog();
             }
@@ -114,6 +118,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -134,6 +139,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -154,6 +160,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -174,6 +181,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openDarkModeDialog();
             }
@@ -197,6 +205,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -217,6 +226,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -237,6 +247,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -257,6 +268,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openAudioInputDialog();
             }
@@ -280,6 +292,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -300,6 +313,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openWifiDialog();
             }
@@ -323,6 +337,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openNightLightDialog();
             }
@@ -346,6 +361,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -366,6 +382,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -386,6 +403,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -406,6 +424,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -426,6 +445,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -446,6 +466,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -466,6 +487,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openLocalSendDialog();
             }
@@ -489,6 +511,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
     DelegateChoice {
@@ -508,6 +531,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openAudioOutputDialog();
             }
@@ -531,6 +555,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
             onOpenMenu: {
                 root.openAudioInputDialog();
             }
@@ -554,6 +579,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -574,6 +600,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 
@@ -594,6 +621,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 }

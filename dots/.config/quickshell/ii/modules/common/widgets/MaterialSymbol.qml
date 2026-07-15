@@ -10,6 +10,7 @@ StyledText {
     renderType: Text.NativeRendering
     antialiasing: true
     smooth: true
+    horizontalAlignment: Text.AlignHCenter
 
     font {
         hintingPreference: Font.PreferNoHinting

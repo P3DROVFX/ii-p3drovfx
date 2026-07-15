@@ -1120,7 +1120,7 @@ Scope {
                 bodyWidth: parent.width
                 bodyHeight: parent.height
                 topRadius: root._compactConcaveRadius >= 0 ? root._compactConcaveRadius : (((root.isHoverExpanded && root.hasExpandedVersion) || root.mode === "search") ? 32 : 24)
-                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (root.mode === "search" ? Appearance.rounding.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20))
+                bottomRadius: root._compactBottomRadius >= 0 ? root._compactBottomRadius : (root.mode === "search" ? Appearance.windowRounding : ((root.isHoverExpanded && root.hasExpandedVersion) ? 28 : 20))
                 fillColor: Config.options.bar.expressiveColors ? root.activeTheme.barBackground : Appearance.colors.colLayer0
                 disableBehaviors: true
 

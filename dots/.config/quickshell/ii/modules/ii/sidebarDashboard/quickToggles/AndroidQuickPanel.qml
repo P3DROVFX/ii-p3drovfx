@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -15,6 +16,22 @@ AbstractQuickPanel {
 
     // Current page index
     property int currentPage: 0
+
+    // Entrance animation trigger
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        entranceTrigger++;
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarRightOpenChanged() {
+            if (GlobalStates.sidebarRightOpen) {
+                root.triggerContentEntrance();
+            }
+        }
+    }
 
     // Sizes
     property real spacing: 6
@@ -440,6 +457,7 @@ AbstractQuickPanel {
                     gridColumns: root.columns
                     panel: root
                     gridRef: fixedSlidersColumn
+                    entranceTrigger: root.entranceTrigger
 
                     onOpenAudioOutputDialog: root.openAudioOutputDialog()
                     onOpenAudioInputDialog: root.openAudioInputDialog()
@@ -576,6 +594,7 @@ AbstractQuickPanel {
                                         gridColumns: root.columns
                                         panel: root
                                         gridRef: pageContentGrid
+                                        entranceTrigger: root.entranceTrigger
 
                                         onOpenAudioOutputDialog: root.openAudioOutputDialog()
                                         onOpenAudioInputDialog: root.openAudioInputDialog()

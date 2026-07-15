@@ -34,9 +34,14 @@ Singleton {
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
+    property bool workspaceRestoreInProgress: false
+    property bool capsLockActive: false
     property bool screenLockContainsCharacters: false
     property bool screenUnlockFailed: false
     property bool screenTranslatorOpen: false
+    // Ripple signal: emitted by LockSurface on click, received by Background.qml
+    // (WlSessionLock and WlrLayershell panels can't directly share children)
+    signal lockScreenRipple(x: real, y: real)
     property bool sessionOpen: false
     property bool superDown: false
     property bool superReleaseMightTrigger: true

@@ -20,6 +20,45 @@ MouseArea { // Notification group area
     property bool popup: false
     property real zoom: 1.0
     property int lazyLimit: 2
+    property int entranceTrigger: -1
+    property int globalIndex: 0
+
+    // Entrance animation properties
+    property real _entranceOpacity: 0
+    property real _entranceScale: 0.75
+    property real _entranceTranslateY: 35
+    property bool _entranceDone: false
+
+    onEntranceTriggerChanged: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.75;
+        _entranceTranslateY = 35;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    Component.onCompleted: {
+        _entranceDone = false;
+        _entranceOpacity = 0;
+        _entranceScale = 0.75;
+        _entranceTranslateY = 35;
+        Qt.callLater(function() {
+            entranceAnim.start();
+        });
+    }
+
+    SequentialAnimation {
+        id: entranceAnim
+        PauseAnimation { duration: Math.min(Math.max(root.globalIndex, 0), 15) * 35 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.75; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 35; to: 0; duration: 320; easing.type: Easing.OutCubic }
+        }
+        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    }
 
     onExpandedChanged: {
         if (expanded) {
@@ -179,18 +218,32 @@ MouseArea { // Notification group area
         anchors.leftMargin: root.xOffset
 
         opacity: {
+            if (!root._entranceDone) return root._entranceOpacity;
             if (!dragManager.dragging)
                 return 1.0;
             var u = root.width > 0 ? Math.min(1.0, Math.abs(root.xOffset) / root.width) : 0.0;
             return (1.0 - u * u * u) * (1.0 - u * u * u);
         }
+        scale: root._entranceDone ? 1.0 : root._entranceScale
         Behavior on opacity {
-            enabled: !dragManager.dragging
+            enabled: !entranceAnim.running
             NumberAnimation {
                 duration: Appearance.animation.elementMove.duration
                 easing.type: Appearance.animation.elementMove.type
                 easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
             }
+        }
+
+        Behavior on scale {
+            enabled: !entranceAnim.running
+            NumberAnimation {
+                duration: 350
+                easing.type: Easing.OutBack
+            }
+        }
+
+        transform: Translate {
+            y: root._entranceDone ? 0 : root._entranceTranslateY
         }
 
         Behavior on anchors.leftMargin {

@@ -42,6 +42,16 @@ Singleton {
             "configPage": "widgets/DesktopClockWidgetConfig.qml"
         },
         {
+            "widgetId": "clock_dial",
+            "name": Translation.tr("Dial Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/ClockWidget.qml"),
+            "styleOverride": "dial",
+            "icon": "schedule",
+            "description": Translation.tr("A beautiful analog clock with tick marks and capsule hands."),
+            "configPage": "widgets/DesktopDialClockConfig.qml"
+        },
+        {
             "widgetId": "clock_wearos",
             "name": Translation.tr("WearOS Clock (Watch)"),
             "category": "Clock",
@@ -78,6 +88,15 @@ Singleton {
             "configPage": "widgets/DesktopMediaWidgetConfig.qml"
         },
         {
+            "widgetId": "media_android",
+            "name": Translation.tr("Android Media"),
+            "category": "Media",
+            "qmlPath": Qt.resolvedUrl("media/AndroidMediaWidget.qml"),
+            "icon": "play_circle",
+            "description": Translation.tr("Beautiful Android style media player widget with dynamic colors, artwork, lyrics, and visualizer."),
+            "configPage": "widgets/DesktopMediaWidgetConfig.qml"
+        },
+        {
             "widgetId": "weather_default",
             "name": Translation.tr("Default Weather"),
             "category": "Weather",
@@ -103,6 +122,15 @@ Singleton {
             "icon": "calendar_today",
             "description": Translation.tr("A simple card showing current month and day."),
             "configPage": "widgets/DateDesktopWIdgetConfig.qml"
+        },
+        {
+            "widgetId": "photo_default",
+            "name": Translation.tr("Photo"),
+            "category": "Photo",
+            "qmlPath": Qt.resolvedUrl("photo/PhotoWidget.qml"),
+            "icon": "image",
+            "description": Translation.tr("Display a personal photo on your desktop."),
+            "configPage": "widgets/DesktopPhotoWidgetConfig.qml"
         }
     ]
 

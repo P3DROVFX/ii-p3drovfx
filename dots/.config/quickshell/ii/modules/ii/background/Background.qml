@@ -21,6 +21,7 @@ import qs.modules.ii.background.widgets.clock
 import qs.modules.ii.background.widgets.weather
 import qs.modules.ii.background.widgets.media
 import qs.modules.ii.background.widgets.DateWidget
+import qs.modules.ii.background.widgets.photo
 
 Scope {
     id: backgroundScope
@@ -29,6 +30,7 @@ Scope {
         id: widgetListModel
         onCountChanged: console.log("[Background] widgetListModel count changed to: " + count)
     }
+    property int widgetSyncVersion: 0
 
     function syncActiveWidgets() {
         let configList = Config.options.background.activeWidgets || [];
@@ -84,6 +86,7 @@ Scope {
                 }
             }
         }
+        backgroundScope.widgetSyncVersion++;
     }
 
     function maybeMigrateWidgets() {
@@ -206,13 +209,25 @@ Scope {
 
             property bool anyWidgetIsDragging: false
             property bool lockAnimationActive: false
+            property bool parallaxFrozen: false
 
             Connections {
                 target: GlobalStates
                 function onScreenLockedChanged() {
                     if (GlobalStates.screenLocked) {
                         bgRoot.lockAnimationActive = true;
+                        bgRoot.parallaxFrozen = false;
+                        parallaxUnfreezeTimer.stop();
                     } else {
+                        bgRoot.parallaxFrozen = true;
+                        parallaxUnfreezeTimer.restart();
+                        if (!GlobalStates.workspaceRestoreInProgress) {
+                            lockAnimResetTimer.restart();
+                        }
+                    }
+                }
+                function onWorkspaceRestoreInProgressChanged() {
+                    if (!GlobalStates.workspaceRestoreInProgress && !GlobalStates.screenLocked) {
                         lockAnimResetTimer.restart();
                     }
                 }
@@ -222,6 +237,12 @@ Scope {
                 interval: 800
                 repeat: false
                 onTriggered: bgRoot.lockAnimationActive = false
+            }
+            Timer {
+                id: parallaxUnfreezeTimer
+                interval: 1400
+                repeat: false
+                onTriggered: bgRoot.parallaxFrozen = false
             }
 
             // Hide when fullscreen
@@ -294,11 +315,37 @@ Scope {
             }
             property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
             property real preferredWallpaperScale: Config.options.background.parallax.workspaceZoom
-            property real effectiveWallpaperScale: 1 // Some reasonable init value, to be updated
+            property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
+            property real effectiveWallpaperScale: 1 // Final scale applied to wallpaper
             property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
             property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
             property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.width) / 2
             property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * effectiveWallpaperScale) - screen.height) / 2
+
+            // Lockscreen zoom animation: animate effectiveWallpaperScale to 1.0 on lock, back to base on unlock
+            Behavior on effectiveWallpaperScale {
+                NumberAnimation {
+                    duration: 600
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            onBaseWallpaperScaleChanged: {
+                if (!GlobalStates.screenLocked) {
+                    effectiveWallpaperScale = baseWallpaperScale;
+                }
+            }
+
+            Connections {
+                target: GlobalStates
+                function onScreenLockedChanged() {
+                    if (GlobalStates.screenLocked) {
+                        effectiveWallpaperScale = 1.0;
+                    } else {
+                        effectiveWallpaperScale = baseWallpaperScale;
+                    }
+                }
+            }
             readonly property real minSafeScale: {
                 const w = wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale;
                 const h = wallpaperHeight / wallpaperToScreenRatio * effectiveWallpaperScale;
@@ -381,12 +428,15 @@ Scope {
                 if (width <= 0 || height <= 0) return;
                 if (Config.options.background.scaleLargeWallpapers) {
                     if (width <= screenW || height <= screenH) {
-                        bgRoot.effectiveWallpaperScale = Math.max(screenW / width, screenH / height);
+                        bgRoot.baseWallpaperScale = Math.max(screenW / width, screenH / height);
                     } else {
-                        bgRoot.effectiveWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
+                        bgRoot.baseWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenW, height / screenH);
                     }
                 } else {
-                    bgRoot.effectiveWallpaperScale = 1.0;
+                    bgRoot.baseWallpaperScale = 1.0;
+                }
+                if (!GlobalStates.screenLocked) {
+                    bgRoot.effectiveWallpaperScale = bgRoot.baseWallpaperScale;
                 }
             }
 
@@ -411,13 +461,16 @@ Scope {
                         if (Config.options.background.scaleLargeWallpapers) {
                             if (width <= screenWidth || height <= screenHeight) {
                                 // Undersized/perfectly sized wallpapers
-                                bgRoot.effectiveWallpaperScale = Math.max(screenWidth / width, screenHeight / height);
+                                bgRoot.baseWallpaperScale = Math.max(screenWidth / width, screenHeight / height);
                             } else {
                                 // Oversized = can be zoomed for parallax, yay
-                                bgRoot.effectiveWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenWidth, height / screenHeight);
+                                bgRoot.baseWallpaperScale = Math.min(bgRoot.preferredWallpaperScale, width / screenWidth, height / screenHeight);
                             }
                         } else {
-                            bgRoot.effectiveWallpaperScale = 1.0;
+                            bgRoot.baseWallpaperScale = 1.0;
+                        }
+                        if (!GlobalStates.screenLocked) {
+                            bgRoot.effectiveWallpaperScale = bgRoot.baseWallpaperScale;
                         }
                     }
                 }
@@ -534,8 +587,8 @@ Scope {
                         // Shared parallax + size properties used by all 9 tiles
                         property real wallpaperW: bgRoot.wallpaperWidth / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
                         property real wallpaperH: bgRoot.wallpaperHeight / bgRoot.wallpaperToScreenRatio * bgRoot.effectiveWallpaperScale
-                        property real parallaxX: GlobalStates.screenLocked ? -(bgRoot.movableXSpace) : -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
-                        property real parallaxY: GlobalStates.screenLocked ? -(bgRoot.movableYSpace) : -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
+                        property real parallaxX: (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress || bgRoot.parallaxFrozen) ? -(bgRoot.movableXSpace) : -(bgRoot.movableXSpace) - (wallpaper.effectiveValueX - 0.5) * 2 * bgRoot.movableXSpace
+                        property real parallaxY: (GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress || bgRoot.parallaxFrozen) ? -(bgRoot.movableYSpace) : -(bgRoot.movableYSpace) - (wallpaper.effectiveValueY - 0.5) * 2 * bgRoot.movableYSpace
                         // Centered position (style 0: no parallax offset)
                         property real centeredX: -(bgRoot.movableXSpace)
                         property real centeredY: -(bgRoot.movableYSpace)
@@ -753,8 +806,8 @@ Scope {
                                     }
                                     return result;
                                 }
-                                property real effectiveValueX: Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
-                                property real effectiveValueY: Math.max(0, Math.min(1, valueY))
+                                property real effectiveValueX: bgRoot.parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueX)) + sidebarOffsetX
+                                property real effectiveValueY: bgRoot.parallaxFrozen ? 0.5 : Math.max(0, Math.min(1, valueY))
 
                                 imageSource: bgRoot.wallpaperSafetyTriggered ? "" : bgRoot.wallpaperPath
                                 animated: Config.options.background.animateWallpaperChanges
@@ -830,7 +883,7 @@ Scope {
                                 color: "black"
                                 opacity: bgRoot.anyWidgetIsDragging ? 0.45 : 0.0
                                 visible: opacity > 0
-                                
+
                                 Behavior on opacity {
                                     NumberAnimation {
                                         duration: 350
@@ -839,8 +892,10 @@ Scope {
                                 }
                             }
 
+
                             Loader {
                                 id: gradientBlurLoader
+
                                 active: Config.options.background.gradientBlur.enable
                                 anchors.fill: wallpaper
                                 visible: active
@@ -1005,7 +1060,7 @@ Scope {
                                 height: parent.height
                                 states: State {
                                     name: "centered"
-                                    when: GlobalStates.screenLocked || bgRoot.wallpaperSafetyTriggered
+                                    when: GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress || bgRoot.wallpaperSafetyTriggered
                                     PropertyChanges {
                                         target: widgetCanvas
                                         width: parent.width
@@ -1082,6 +1137,19 @@ Scope {
                                 }
 
                                 Component {
+                                    id: component_clock_dial
+                                    ClockWidget {
+                                        styleOverride: "dial"
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                        wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+                                    }
+                                }
+
+                                Component {
                                     id: component_circular_media
                                     CircularMediaWidget {
                                         screenWidth: bgRoot.screen.width
@@ -1126,6 +1194,17 @@ Scope {
                                 }
 
                                 Component {
+                                    id: component_media_android
+                                    AndroidMediaWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
+                                Component {
                                     id: component_weather_default
                                     WeatherWidget {
                                         screenWidth: bgRoot.screen.width
@@ -1158,17 +1237,31 @@ Scope {
                                     }
                                 }
 
+                                Component {
+                                    id: component_photo_default
+                                    PhotoWidget {
+                                        screenWidth: bgRoot.screen.width
+                                        screenHeight: bgRoot.screen.height
+                                        scaledScreenWidth: bgRoot.screen.width / bgRoot.effectiveWallpaperScale
+                                        scaledScreenHeight: bgRoot.screen.height / bgRoot.effectiveWallpaperScale
+                                        wallpaperScale: bgRoot.effectiveWallpaperScale
+                                    }
+                                }
+
                                 property var widgetComponentMap: ({
                                     "clock_cookie": component_clock_cookie,
                                     "clock_digital": component_clock_digital,
                                     "clock_nagasaki": component_clock_nagasaki,
+                                    "clock_dial": component_clock_dial,
                                     "clock_wearos": component_clock_wearos,
                                     "circular_media": component_circular_media,
                                     "media_circular": component_media_circular,
                                     "media_expressive": component_media_expressive,
+                                    "media_android": component_media_android,
                                     "weather_default": component_weather_default,
                                     "weather_expressive": component_weather_expressive,
-                                    "date_default": component_date_default
+                                    "date_default": component_date_default,
+                                    "photo_default": component_photo_default
                                 })
 
                                 Repeater {

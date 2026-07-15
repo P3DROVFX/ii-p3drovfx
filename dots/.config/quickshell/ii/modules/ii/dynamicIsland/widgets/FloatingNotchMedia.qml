@@ -72,12 +72,8 @@ Item {
     property real artVignetteInner: 0.2
     property real artVignetteOuter: 0.85
 
-    readonly property color artTextColor: root.useDynamicColors
-        ? root.blendedColors.colOnPrimary
-        : (root.currentArtUrl !== "" ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface)
-    readonly property color artSubtextColor: root.useDynamicColors
-        ? root.blendedColors.colOnPrimary
-        : Appearance.colors.colOnSurfaceVariant
+    readonly property color artTextColor: Appearance.colors.colOnSurface
+    readonly property color artSubtextColor: Appearance.colors.colOnSurfaceVariant
 
     property bool isLocalArt: root.artUrl.startsWith("file://")
     property string artDownloadLocation: Directories.coverArt
@@ -578,6 +574,21 @@ Item {
         return minH + norm * (maxH - minH);
     }
 
+    function getBarAmplitude(index) {
+        if (!root.playing)
+            return 0.0;
+        let val = 0;
+        if (index === 0)
+            val = bar0Val;
+        else if (index === 1)
+            val = bar1Val;
+        else if (index === 2)
+            val = bar2Val;
+        else if (index === 3)
+            val = bar3Val;
+        return Math.min(1.0, Math.max(0.0, val * 2.0));
+    }
+
     Process {
         id: cavaProc
         running: !root.isExpanded && root.playing
@@ -639,10 +650,14 @@ Item {
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: "transparent" }
-                    GradientStop { position: 0.35; color: "white" }
-                    GradientStop { position: 0.65; color: "white" }
-                    GradientStop { position: 0.85; color: "transparent" }
+                    GradientStop { position: 0.08; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.45; color: "white" }
+                    GradientStop { position: 0.55; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.92; color: "transparent" }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
             }
@@ -652,7 +667,11 @@ Item {
                 gradient: Gradient {
                     orientation: Gradient.Vertical
                     GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
                     GradientStop { position: 0.5; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
                 layer.enabled: true
@@ -777,7 +796,7 @@ Item {
             visible: root.currentArtUrl === ""
             text: "music_note"
             iconSize: Appearance.font.pixelSize.large
-            color: root.useDynamicColors ? root.blendedColors.colOnLayer0 : Appearance.colors.colOnSurfaceVariant
+            color: Appearance.colors.colOnSurface
             opacity: 0.5
         }
 
@@ -875,20 +894,18 @@ Item {
 
                     Repeater {
                         model: 4
-                        Rectangle {
+                        ModernVisualizerBar {
                             required property int index
                             anchors.verticalCenter: parent.verticalCenter
-                            width: root.barWidth
-                            height: root.getBarHeight(index)
-                            radius: root.barWidth / 2
-                            color: root.artTextColor
-
-                            Behavior on height {
-                                NumberAnimation {
-                                    duration: 85
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
+                            barWidth: root.barWidth
+                            maxHeight: root.elementHeight - 10
+                            minHeight: root.barWidth
+                            amplitude: root.getBarAmplitude(index)
+                            bgAmplitude: root.getBarAmplitude((index + 1) % 4)
+                            color: root.useDynamicColors ? root.blendedColors.colPrimary : root.artTextColor
+                            fgColor: root.useDynamicColors ? root.blendedColors.colTertiary : Appearance.colors.colTertiary
+                            glowColor: root.useDynamicColors ? root.blendedColors.colOnPrimary : "#FFFFFF"
+                            playing: root.playing
                         }
                     }
                 }
@@ -947,10 +964,14 @@ Item {
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
-                    GradientStop { position: 0.15; color: "transparent" }
-                    GradientStop { position: 0.35; color: "white" }
-                    GradientStop { position: 0.65; color: "white" }
-                    GradientStop { position: 0.85; color: "transparent" }
+                    GradientStop { position: 0.08; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.45; color: "white" }
+                    GradientStop { position: 0.55; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.92; color: "transparent" }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
             }
@@ -960,7 +981,11 @@ Item {
                 gradient: Gradient {
                     orientation: Gradient.Vertical
                     GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
                     GradientStop { position: 0.5; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
                     GradientStop { position: 1.0; color: "transparent" }
                 }
                 layer.enabled: true
@@ -1161,7 +1186,7 @@ Item {
                         anchors.centerIn: parent
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.smallest
-                        color: root.useDynamicColors ? root.blendedColors.colOnLayer0 : Appearance.colors.colOnSurface
+                        color: Appearance.colors.colOnSurface
                     }
                 }
             }
@@ -1179,7 +1204,7 @@ Item {
                 Layout.alignment: Qt.AlignTop
                 colBackground: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                 colBackgroundHover: root.useDynamicColors ? root.blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                colRipple: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                 buttonRadius: Appearance.rounding.full
 
                 readonly property string activeAudioDeviceName: Audio.sink ? (Audio.sink.description || "") : ""
@@ -1205,14 +1230,14 @@ Item {
                     MaterialSymbol {
                         text: audioPill.audioDeviceIcon
                         iconSize: Appearance.font.pixelSize.smallest
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                     }
 
                     StyledText {
                         text: audioPill.activeAudioDeviceName !== "" ? audioPill.activeAudioDeviceName : Translation.tr("Wired headphones")
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.bold: true
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                         Layout.maximumWidth: 100
                         elide: Text.ElideRight
                     }
@@ -1381,7 +1406,7 @@ Item {
                         anchors.centerIn: parent
                         text: root.playing ? "pause" : "play_arrow"
                         iconSize: Appearance.font.pixelSize.hugeass
-                        color: root.useDynamicColors ? root.blendedColors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                        color: root.useDynamicColors ? root.blendedColors.colOnPrimaryContainer : Appearance.colors.colOnPrimaryContainer
                         fill: 1
                     }
                 }
@@ -1420,9 +1445,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoPrevious) {
-                                    return root.useDynamicColors ? root.blendedColors.colSubtext : Appearance.colors.colSubtext;
+                                    return Appearance.colors.colOnSurfaceVariant;
                                 }
-                                return root.useDynamicColors ? root.blendedColors.colSubtext : Appearance.colors.colPrimaryContainer;
+                                return Appearance.colors.colOnSurface;
                             }
                             opacity: root.player && root.player.canGoPrevious ? 1.0 : 0.4
                         }
@@ -1493,9 +1518,9 @@ Item {
                             fill: 1
                             color: {
                                 if (!root.player || !root.player.canGoNext) {
-                                    return root.useDynamicColors ? root.blendedColors.colSubtext : Appearance.colors.colSubtext;
+                                    return Appearance.colors.colOnSurfaceVariant;
                                 }
-                                return root.useDynamicColors ? root.blendedColors.colSubtext : Appearance.colors.colPrimaryContainer;
+                                return Appearance.colors.colOnSurface;
                             }
                             opacity: root.player && root.player.canGoNext ? 1.0 : 0.4
                         }

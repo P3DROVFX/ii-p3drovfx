@@ -8,35 +8,76 @@ import QtQuick.Layouts
 import Quickshell
 
 Item {
-    id: root
+    id: taskListRoot
     required property var taskList
     property string emptyPlaceholderIcon
     property string emptyPlaceholderText
     property int todoListItemSpacing: 5
     property int todoListItemPadding: 8
     property int listBottomPadding: 80
+    property int entranceTrigger: -1
 
     StyledListView {
         id: listView
         anchors.fill: parent
-        spacing: root.todoListItemSpacing
+        spacing: taskListRoot.todoListItemSpacing
         animateAppearance: false
         model: ScriptModel {
-            values: root.taskList
+            values: taskListRoot.taskList
         }
         delegate: Item {
             id: todoItem
             required property var modelData
+            required property int index
+            property int entranceTrigger: taskListRoot.entranceTrigger
             property bool pendingDoneToggle: false
             property bool pendingDelete: false
             property bool enableHeightAnimation: false
-            
+
             property bool _optimisticDone: modelData.done
             onModelDataChanged: _optimisticDone = modelData.done
+
+            property real _entranceOpacity: 0
+            property real _entranceOffset: 20
+            property bool _entranceDone: false
+
+            opacity: _entranceDone ? 1.0 : _entranceOpacity
 
             implicitHeight: todoItemRectangle.implicitHeight
             width: ListView.view.width
             clip: true
+
+            transform: Translate {
+                y: _entranceDone ? 0 : _entranceOffset
+            }
+
+            onEntranceTriggerChanged: {
+                _entranceDone = false;
+                _entranceOpacity = 0;
+                _entranceOffset = 20;
+                Qt.callLater(function() {
+                    entranceAnim.start();
+                });
+            }
+
+            Component.onCompleted: {
+                _entranceDone = false;
+                _entranceOpacity = 0;
+                _entranceOffset = 20;
+                Qt.callLater(function() {
+                    entranceAnim.start();
+                });
+            }
+
+            SequentialAnimation {
+                id: entranceAnim
+                PauseAnimation { duration: Math.min(Math.max(todoItem.index, 0), 20) * 45 }
+                ParallelAnimation {
+                    NumberAnimation { target: todoItem; property: "_entranceOpacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: todoItem; property: "_entranceOffset"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                }
+                PropertyAction { target: todoItem; property: "_entranceDone"; value: true }
+            }
 
             Behavior on implicitHeight {
                 enabled: enableHeightAnimation
@@ -163,7 +204,7 @@ Item {
     Item {
         // Placeholder when list is empty
         visible: opacity > 0
-        opacity: taskList.length === 0 ? 1 : 0
+        opacity: taskListRoot.taskList.length === 0 ? 1 : 0
         anchors.fill: parent
 
         Behavior on opacity {
@@ -178,14 +219,14 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 iconSize: 55
                 color: Appearance.m3colors.m3outline
-                text: emptyPlaceholderIcon
+                text: taskListRoot.emptyPlaceholderIcon
             }
             StyledText {
                 Layout.alignment: Qt.AlignHCenter
                 font.pixelSize: Appearance.font.pixelSize.normal
                 color: Appearance.m3colors.m3outline
                 horizontalAlignment: Text.AlignHCenter
-                text: emptyPlaceholderText
+                text: taskListRoot.emptyPlaceholderText
             }
         }
     }

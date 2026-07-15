@@ -8,13 +8,19 @@ import qs.services
 
 Item {
     property int monthShift: 0
+    property int _entranceKey: 0
+    property int entranceTrigger: -1
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0, Config.options.time.firstDayOfWeek)
 
-    // Layout.topMargin: 10
-    anchors.topMargin: 10
+    onEntranceTriggerChanged: {
+        _entranceKey++;
+    }
+
+    onMonthShiftChanged: _entranceKey++
+
     width: calendarColumn.width
-    implicitHeight: calendarColumn.height + 10 * 2
+    implicitHeight: calendarColumn.height + 5
     Keys.onPressed: (event) => {
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.NoModifier) {
             if (event.key === Qt.Key_PageDown)
@@ -137,6 +143,9 @@ Item {
                         day: calendarLayout[modelData][index].day
                         isToday: calendarLayout[modelData][index].today
                         taskList: CalendarService.getTasksByDate(new Date(calendarLayout[modelData][index].year, calendarLayout[modelData][index].month, calendarLayout[modelData][index].day))
+                        gridRow: modelData
+                        gridCol: index
+                        entranceKey: calendarColumn.parent._entranceKey
                     }
 
                 }

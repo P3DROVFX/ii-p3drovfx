@@ -378,6 +378,7 @@ StyledFlickable {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
+                radius: devEntry.rFull
 
                 property real displayVol: devEntry.node?.audio?.volume ?? 0
                 Behavior on displayVol {
@@ -604,6 +605,7 @@ StyledFlickable {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
+                radius: progEntry.rFull
 
                 property real displayVol: progEntry.node?.audio?.volume ?? 0
                 Behavior on displayVol {

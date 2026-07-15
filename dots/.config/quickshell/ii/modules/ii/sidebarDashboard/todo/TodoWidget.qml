@@ -9,6 +9,8 @@ import qs.services
 Item {
     id: root
 
+    property int entranceTrigger: -1
+
     property var tabButtonList: [{
         "icon": "checklist",
         "name": Translation.tr("Unfinished")
@@ -75,6 +77,7 @@ Item {
                 listBottomPadding: root.fabSize + root.fabMargins * 2
                 emptyPlaceholderIcon: "check_circle"
                 emptyPlaceholderText: Translation.tr("Nothing here!")
+                entranceTrigger: root.entranceTrigger
                 taskList: Todo.list.map(function(item, i) {
                     return Object.assign({
                     }, item, {
@@ -94,6 +97,7 @@ Item {
                 listBottomPadding: root.fabSize + root.fabMargins * 2
                 emptyPlaceholderIcon: "checklist"
                 emptyPlaceholderText: Translation.tr("Finished tasks will go here")
+                entranceTrigger: root.entranceTrigger
                 taskList: Todo.list.map(function(item, i) {
                     return Object.assign({
                     }, item, {
