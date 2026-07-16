@@ -78,6 +78,30 @@ Scope {
         }
     }
 
+    // The refocus signal also fires from hypridle's after_sleep_cmd. A verify
+    // that was in flight across suspend is dead (some readers even crash
+    // fprintd), so trade it for a fresh transaction. No-op when unlocked or
+    // without fingerprints.
+    onShouldReFocus: restartFingerUnlock()
+
+    function restartFingerUnlock() {
+        if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
+            return;
+        stopFingerPam();
+        fingerRestartTimer.restart();
+    }
+
+    Timer {
+        id: fingerRestartTimer
+        // Long enough for the aborted transaction to end and a crashed
+        // fprintd to be restarted by systemd
+        interval: 1000
+        onTriggered: {
+            if (GlobalStates.screenLocked)
+                root.tryFingerUnlock();
+        }
+    }
+
     function stopFingerPam() {
         if (fingerPam.active) {
             fingerPam.abort();
