@@ -60,6 +60,12 @@ Item {
     property var mainAction: toggleModel?.mainAction ?? null
     property var altAction: toggleModel?.hasMenu ? (() => root.openMenu()) : (toggleModel?.altAction ?? null)
 
+    // Optional custom layout for 2x2 size — set by subclasses to override ios2x2Layout
+    property Component wide2x2OverrideComponent: null
+
+    // Optional custom layout for 1x2 (tall) size — set by subclasses to override tallLayout
+    property Component tall1x2OverrideComponent: null
+
     // Edit mode state
     property bool editMode: false
     property bool isUnused: false // injected by delegate chooser
@@ -246,7 +252,9 @@ Item {
             id: contentItemLoader
             anchors.fill: parent
             sourceComponent: is3WaySlider ? threeWaySliderLayout
+                           : (root.isWide && root.isTall && root.wide2x2OverrideComponent) ? root.wide2x2OverrideComponent
                            : (root.isWide && root.isTall) ? ios2x2Layout
+                           : (root.isTall && !root.isWide && root.tall1x2OverrideComponent) ? root.tall1x2OverrideComponent
                            : (root.isTall && !root.isWide) ? tallLayout
                            : standardLayout
         }
