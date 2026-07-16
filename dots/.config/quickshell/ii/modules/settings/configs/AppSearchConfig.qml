@@ -199,6 +199,11 @@ ContentPage {
                         name: Translation.tr("Media Downloader"),
                         icon: "download",
                         prop: "mediaDownloader"
+                    },
+                    {
+                        name: Translation.tr("Material Symbols"),
+                        icon: "font_download",
+                        prop: "materialSymbols"
                     }
                 ]
                 delegate: Rectangle {
@@ -209,8 +214,8 @@ ContentPage {
 
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 12 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 12 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent
