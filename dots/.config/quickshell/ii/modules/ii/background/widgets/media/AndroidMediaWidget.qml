@@ -32,6 +32,7 @@ AbstractBackgroundWidget {
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
+    readonly property bool hasTrack: (player?.trackTitle ?? "").length > 0
 
     property bool isLocalArt: artUrl.startsWith("file://")
     property string artDownloadLocation: Directories.coverArt
@@ -199,7 +200,7 @@ AbstractBackgroundWidget {
         Rectangle {
             id: mainBg
             anchors.fill: parent
-            color: Appearance.colors.colLayer0
+            color: Appearance.m3colors.m3secondaryContainer
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
@@ -214,6 +215,7 @@ AbstractBackgroundWidget {
 
             Item {
                 anchors.fill: parent
+                visible: root.hasTrack
 
                 Image {
                     id: artBlurredUnderlay
@@ -232,7 +234,6 @@ AbstractBackgroundWidget {
                 Item {
                     id: vignetteMask
                     anchors.fill: parent
-                    visible: true
 
                     Rectangle {
                         id: hMask
@@ -291,6 +292,7 @@ AbstractBackgroundWidget {
 
             Item {
                 anchors.fill: parent
+                visible: root.hasTrack
                 opacity: root.playing ? 0.55 : 0.75
 
                 Behavior on opacity {
@@ -356,6 +358,7 @@ AbstractBackgroundWidget {
                         Loader {
                             anchors.fill: parent
                             active: !appIconLoader.active
+                            visible: root.hasTrack
                             sourceComponent: MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "music_note"
@@ -432,6 +435,7 @@ AbstractBackgroundWidget {
                             id: lyricsWrapper
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            visible: root.hasTrack
                             clip: true
 
                             Column {
@@ -538,12 +542,35 @@ AbstractBackgroundWidget {
 
                         StyledText {
                             Layout.fillWidth: true
+                            visible: root.hasTrack
                             font.family: Appearance.font.family.main
                             font.pixelSize: 16
                             color: root.artSubtextColor
                             text: root.displayArtist
                             maximumLineCount: 1
                             elide: Text.ElideRight
+                        }
+
+                        Item {
+                            visible: !root.hasTrack
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+
+                            MaterialShape {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: height
+                                shapeString: "Cookie9Sided"
+                                color: Appearance.m3colors.m3primaryContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "music_off"
+                                    iconSize: 36
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
                         }
                     }
 

@@ -332,6 +332,7 @@ Item {
         ]
 
         readonly property bool paddingless: registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial
+            || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding:       paddingless ? 0 : 5
         leftPadding:   paddingless ? 0 : padding
         rightPadding:  paddingless ? 0 : padding
@@ -371,7 +372,9 @@ Item {
                             item.width = Qt.binding(() => Appearance.sizes.verticalBarWidth - 8);
                         }
 
-                        if (item.implicitWidth === item.implicitHeight) {
+                        if (item.Layout !== undefined && item.Layout.fillHeight) {
+                            item.height = Qt.binding(() => itemLoader.height);
+                        } else if (item.implicitWidth === item.implicitHeight) {
                             item.height = Qt.binding(() => item.width);
                         }
                     }
