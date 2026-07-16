@@ -66,35 +66,7 @@ AbstractQuickPanel {
             rawPages = [cfg.pages];
         }
 
-        const useThreeWay = Config.options.sidebar.quickToggles.useThreeWaySliders ?? false;
-        if (!useThreeWay)
-            return rawPages;
-
-        var mappedPages = [];
-        for (var p = 0; p < rawPages.length; p++) {
-            var page = rawPages[p];
-            if (!page) {
-                mappedPages.push([]);
-                continue;
-            }
-            var newPage = [];
-            for (var i = 0; i < page.length; i++) {
-                var item = page[i];
-                if (item && (item.type === "soundcoreAnc" || item.type === "powerProfile" || item.type === "keyboardBacklight")) {
-                    var newItem = {};
-                    for (var key in item) {
-                        newItem[key] = item[key];
-                    }
-                    newItem.size = 2;
-                    newItem.sizeW = 2;
-                    newPage.push(newItem);
-                } else {
-                    newPage.push(item);
-                }
-            }
-            mappedPages.push(newPage);
-        }
-        return mappedPages;
+        return rawPages;
     }
 
     // Current page toggles
