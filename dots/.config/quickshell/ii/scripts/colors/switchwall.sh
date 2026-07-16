@@ -756,6 +756,20 @@ main() {
         fi
     fi
 
+    # Resolve light theme variant when mode is light
+    if [[ -n "$theme_file" && "$mode_flag" == "light" ]]; then
+        local light_theme_file="${theme_file%.json}_light.json"
+        if [[ -f "$light_theme_file" ]]; then
+            theme_file="$light_theme_file"
+            echo "[switchwall.sh] Using light theme variant: $type_flag"
+        else
+            echo "[switchwall.sh] No light variant for '$type_flag', falling back to matugen generation"
+            theme_file=""
+            # Must be a valid matugen scheme (not "auto" — matugen rejects it)
+            type_flag="scheme-tonal-spot"
+        fi
+    fi
+
     switch "$imgpath" "$mode_flag" "$type_flag" "$color_flag" "$color" "$theme_file"
 }
 
