@@ -78,8 +78,17 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
+    onHasTrackChanged: {
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
+    }
+
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
+        if (typeof rootItem !== "undefined") {
+            rootItem.toggleVisible(hasTrack);
+        }
     }
 
     onArtFilePathChanged: {
