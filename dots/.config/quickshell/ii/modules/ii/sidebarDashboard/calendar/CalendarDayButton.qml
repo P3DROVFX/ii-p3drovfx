@@ -27,7 +27,10 @@ RippleButton {
     scale: _entranceDone ? 1.0 : _entranceScale
 
     function resetAndAnimate() {
-        if (gridRow < 0 || gridCol < 0) return;
+        if (gridRow < 0 || gridCol < 0) {
+            _entranceDone = true;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.85;
