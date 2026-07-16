@@ -20,6 +20,10 @@ Scope {
     property bool unlockInProgress: false
     property bool showFailure: false
     property bool fingerprintsConfigured: false
+    // pam_fprintd default max-tries is 3 (pam/fprintd.conf passes no override)
+    readonly property int fingerprintMaxTries: 3
+    property int fingerprintTriesLeft: fingerprintMaxTries
+    signal fingerprintFailed()
     property var targetAction: LockContext.ActionEnum.Unlock
     property bool alsoInhibitIdle: false
 
@@ -67,6 +71,9 @@ Scope {
 
     function tryFingerUnlock() {
         if (root.fingerprintsConfigured) {
+            // Each start() is a fresh PAM transaction, so pam_fprintd's
+            // internal try counter resets too.
+            root.fingerprintTriesLeft = root.fingerprintMaxTries;
             fingerPam.start();
         }
     }
@@ -124,6 +131,15 @@ Scope {
 
         configDirectory: "pam"
         config: "fprintd.conf"
+
+        // pam_fprintd sends an error-type conversation message per failed
+        // scan; timeouts ("Verification timed out") must not count as tries.
+        onPamMessage: {
+            if (this.messageIsError && this.message.includes("Failed to match")) {
+                root.fingerprintTriesLeft = Math.max(0, root.fingerprintTriesLeft - 1);
+                root.fingerprintFailed();
+            }
+        }
 
         onCompleted: result => {
             if (result == PamResult.Success) {
