@@ -409,7 +409,7 @@ MouseArea {
                                     highlightColor: {
                                         if (root.isLow && !root.effectivelyCharging)
                                             return Appearance.m3colors.m3error;
-                                        if (root.effectivelyCharging || root.chargeLimitReached)
+                                        if (root.effectivelyCharging)
                                             return '#55c35a';
                                         if (root.isPowerSaving)
                                             return "#FFC917";
@@ -453,13 +453,13 @@ MouseArea {
                             }
 
                             MaterialSymbol {
-                                visible: root.effectivelyCharging || root.showCheck
+                                visible: root.effectivelyCharging
 
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.right
                                 anchors.horizontalCenterOffset: -2
                                 
-                                text: root.showCheck ? "check" : "bolt"
+                                text: "bolt"
                                 iconSize: 16
                                 fill: 1
                                 style: Text.Outline
@@ -467,7 +467,6 @@ MouseArea {
                                 color: root.colText
                                 rotation: 90
                             }
-                            z: 1
                         }
                     }
                 }

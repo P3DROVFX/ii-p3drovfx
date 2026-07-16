@@ -84,22 +84,22 @@ AbstractWidget {
 
     onForceCenterChanged: {
         if (forceCenter) {
-            root.animDuration = 700;
+            root.animDuration = 600;
             lockAnimResetTimer.restart();
         } else {
-            root.animDuration = 500;
+            root.animDuration = 600;
             unlockAnimResetTimer.restart();
         }
     }
     Timer {
         id: lockAnimResetTimer
-        interval: 750
+        interval: 650
         repeat: false
         onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
     }
     Timer {
         id: unlockAnimResetTimer
-        interval: 550
+        interval: 650
         repeat: false
         onTriggered: { root.animDuration = Appearance.animation.elementMove.duration; }
     }

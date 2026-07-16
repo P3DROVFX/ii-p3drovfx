@@ -372,7 +372,7 @@ command: ["bash", "-c",
                 topRightRadius: Appearance.rounding.verysmall
                 bottomLeftRadius: Appearance.rounding.verysmall
                 bottomRightRadius: Appearance.rounding.large
-                title: Translation.tr("My Fork Info")
+                title: Translation.tr("This fork info")
                 icon: "call_split"
 
                 RowLayout {
@@ -390,12 +390,12 @@ command: ["bash", "-c",
                     ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         StyledText {
-                            text: Translation.tr("My Fork (ii-p3drovfx)")
+                            text: Translation.tr("ii-p3drovfx")
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                         }
                         StyledText {
-                            text: "<a href='https://github.com/P3DROVFX/ii-vynx-fork'>github.com/P3DROVFX/...</a>"
+                            text: "<a href='https://github.com/P3DROVFX/ii-p3drovfx'>github.com/P3DROVFX/...</a>"
                             font.pixelSize: Appearance.font.pixelSize.small
                             textFormat: Text.RichText
                             onLinkActivated: link => Qt.openUrlExternally(link)

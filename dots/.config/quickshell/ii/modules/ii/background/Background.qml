@@ -215,10 +215,19 @@ Scope {
                 target: GlobalStates
                 function onScreenLockedChanged() {
                     if (GlobalStates.screenLocked) {
+                        if (effectiveWallpaperScale === 1.0) {
+                            effectiveWallpaperScale = baseWallpaperScale;
+                            Qt.callLater(function() {
+                                effectiveWallpaperScale = 1.0;
+                            });
+                        } else {
+                            effectiveWallpaperScale = 1.0;
+                        }
                         bgRoot.lockAnimationActive = true;
                         bgRoot.parallaxFrozen = false;
                         parallaxUnfreezeTimer.stop();
                     } else {
+                        effectiveWallpaperScale = baseWallpaperScale;
                         bgRoot.parallaxFrozen = true;
                         parallaxUnfreezeTimer.restart();
                         if (!GlobalStates.workspaceRestoreInProgress) {
@@ -234,13 +243,13 @@ Scope {
             }
             Timer {
                 id: lockAnimResetTimer
-                interval: 800
+                interval: 650
                 repeat: false
                 onTriggered: bgRoot.lockAnimationActive = false
             }
             Timer {
                 id: parallaxUnfreezeTimer
-                interval: 1400
+                interval: 700
                 repeat: false
                 onTriggered: bgRoot.parallaxFrozen = false
             }
@@ -336,16 +345,6 @@ Scope {
                 }
             }
 
-            Connections {
-                target: GlobalStates
-                function onScreenLockedChanged() {
-                    if (GlobalStates.screenLocked) {
-                        effectiveWallpaperScale = 1.0;
-                    } else {
-                        effectiveWallpaperScale = baseWallpaperScale;
-                    }
-                }
-            }
             readonly property real minSafeScale: {
                 const w = wallpaperWidth / wallpaperToScreenRatio * effectiveWallpaperScale;
                 const h = wallpaperHeight / wallpaperToScreenRatio * effectiveWallpaperScale;
@@ -683,28 +682,7 @@ Scope {
                             hideSource: false
                         }
 
-                        Item {
-                            id: windowBlurMask
-                            width: bgRoot.screen.width
-                            height: bgRoot.screen.height
-                            visible: false
-
-                            Rectangle {
-                                x: windowBlurEffect.wbLeft
-                                y: windowBlurEffect.wbTop
-                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
-                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
-                                color: "black"
-                                radius: {
-                                    if (wallpaperItem.wallpaperClipRadius > 0)
-                                        return wallpaperItem.wallpaperClipRadius;
-                                    if (Config.options.appearance.fakeScreenRounding > 0)
-                                        return Appearance.rounding.screenRounding;
-                                    return 0;
-                                }
-                            }
-                            layer.enabled: true
-                        }
+                        
 
                         StyledRectangularShadow {
                             id: centralWallpaperShadow
@@ -743,16 +721,14 @@ Scope {
                             }
                             Behavior on width {
                                 NumberAnimation {
-                                    duration: 500
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 600
+                                    easing.type: Easing.OutCubic
                                 }
                             }
                             Behavior on height {
                                 NumberAnimation {
-                                    duration: 500
-                                    easing.type: Easing.BezierSpline
-                                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    duration: 600
+                                    easing.type: Easing.OutCubic
                                 }
                             }
 
@@ -1086,14 +1062,12 @@ Scope {
                                 transitions: Transition {
                                     PropertyAnimation {
                                         properties: "width,height,leftMargin,rightMargin,topMargin,bottomMargin"
-                                        duration: Appearance.animation.elementMove.duration
-                                        easing.type: Appearance.animation.elementMove.type
-                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                        duration: 600
+                                        easing.type: Easing.OutCubic
                                     }
                                     AnchorAnimation {
-                                        duration: Appearance.animation.elementMove.duration
-                                        easing.type: Appearance.animation.elementMove.type
-                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                        duration: 600
+                                        easing.type: Easing.OutCubic
                                     }
                                 }
 
@@ -1264,6 +1238,28 @@ Scope {
                                     "photo_default": component_photo_default
                                 })
 
+                                // Cache of dynamically created extension components keyed by extId.
+                                // Busted when extensionsChanged fires so updates always get a fresh compile.
+                                property var extComponentCache: ({})
+
+                                Connections {
+                                    target: WidgetExtensionManager
+                                    function onExtensionsChanged() {
+                                        widgetCanvas.extComponentCache = ({});
+                                    }
+                                }
+
+                                function getExtUrl(extId) {
+                                    // Returns the file:// URL of the ext widget QML.
+                                    // Loader.source handles async loading correctly.
+                                    let entry = WidgetExtensionManager.installedWidgets[extId];
+                                    if (!entry) return "";
+                                    let wj = entry.widgetJson || {};
+                                    let qmlFile = wj.component ||
+                                        (wj.widget && wj.widget.component ? wj.widget.component : "main.qml");
+                                    return "file://" + entry.installedPath + "/" + qmlFile;
+                                }
+
                                 Repeater {
                                     model: widgetListModel
                                     delegate: Item {
@@ -1285,7 +1281,15 @@ Scope {
                                                 || delegateRoot.lockBehavior === "center" 
                                                 || delegateRoot.lockBehavior === "keep"
                                             
-                                            sourceComponent: widgetCanvas.widgetComponentMap[delegateRoot.widgetId] || null
+                                            // Extension widgets use source (URL) — Loader handles async internally.
+                                            // Builtin widgets use sourceComponent (static Component map).
+                                            source: delegateRoot.widgetId.startsWith("ext:")
+                                                ? widgetCanvas.getExtUrl(delegateRoot.widgetId.substring(4))
+                                                : ""
+
+                                            sourceComponent: delegateRoot.widgetId.startsWith("ext:")
+                                                ? null
+                                                : (widgetCanvas.widgetComponentMap[delegateRoot.widgetId] || null)
 
                                             Binding {
                                                 target: widgetLoader.item
@@ -1302,6 +1306,109 @@ Scope {
                                                 }
                                                 when: widgetLoader.status == Loader.Ready
                                             }
+
+                                            // Inject extension-specific props when it's an ext: widget
+                                            Binding {
+                                                target: widgetLoader.item
+                                                property: "widgetExtensionId"
+                                                value: delegateRoot.widgetId.startsWith("ext:") ? delegateRoot.widgetId.substring(4) : ""
+                                                when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+                                            }
+                                            Binding {
+                                                target: widgetLoader.item
+                                                property: "widgetConfig"
+                                                value: {
+                                                    if (!delegateRoot.widgetId.startsWith("ext:")) return null;
+                                                    let extId = delegateRoot.widgetId.substring(4);
+                                                    return WidgetExtensionManager.widgetConfigs[extId] || ({});
+                                                }
+                                                when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
+                                            }
+                                        }
+
+                                        // Placeholder shown when an ext:* widget is not installed
+                                        Rectangle {
+                                            id: missingWidgetPlaceholder
+                                            visible: {
+                                                if (!delegateRoot.widgetId.startsWith("ext:")) return false;
+                                                if (!WidgetExtensionManager.ready) return false;
+                                                let extId = delegateRoot.widgetId.substring(4);
+                                                return !WidgetExtensionManager.isWidgetInstalled(extId);
+                                            }
+
+                                            x: delegateRoot.widgetX
+                                            y: delegateRoot.widgetY
+                                            width: 220
+                                            height: 96
+                                            radius: Appearance.rounding.large
+                                            color: missingPlaceholderMouse.containsMouse
+                                                ? Qt.rgba(0.12, 0, 0, 0.72)
+                                                : Qt.rgba(0, 0, 0, 0.55)
+                                            border.color: Qt.rgba(1, 0.4, 0.4, 0.5)
+                                            border.width: 1
+
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                                            MouseArea {
+                                                id: missingPlaceholderMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: Config.removeWidgetFromDesktop(delegateRoot.widgetId)
+                                            }
+
+                                            Column {
+                                                anchors {
+                                                    left: parent.left
+                                                    right: parent.right
+                                                    verticalCenter: parent.verticalCenter
+                                                }
+                                                spacing: 4
+
+                                                MaterialSymbol {
+                                                    text: "extension_off"
+                                                    iconSize: 18
+                                                    color: "#ff8a8a"
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                }
+
+                                                Text {
+                                                    text: delegateRoot.widgetId.substring(4) + "\nnot installed"
+                                                    color: "#ffaaaa"
+                                                    font.pixelSize: 10
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                }
+
+                                                // Remove hint
+                                                Rectangle {
+                                                    anchors.horizontalCenter: parent.horizontalCenter
+                                                    width: removeHintRow.implicitWidth + 16
+                                                    height: 20
+                                                    radius: height / 2
+                                                    color: Qt.rgba(1, 0.3, 0.3, 0.3)
+
+                                                    Row {
+                                                        id: removeHintRow
+                                                        anchors.centerIn: parent
+                                                        spacing: 3
+
+                                                        MaterialSymbol {
+                                                            text: "close"
+                                                            iconSize: 10
+                                                            color: "#ffaaaa"
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+
+                                                        Text {
+                                                            text: "Click to remove"
+                                                            color: "#ffaaaa"
+                                                            font.pixelSize: 9
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1312,21 +1419,7 @@ Scope {
                             id: windowBlurEffect
                             anchors.fill: parent
 
-                            readonly property bool barVertical: wallpaperPlanes.barVertical
-                            readonly property bool barBottom: wallpaperPlanes.barBottom
-                            readonly property int barSz: wallpaperPlanes.barSize
-                            readonly property int gp: wallpaperPlanes.gap
-                            readonly property bool barEffective: GlobalStates.barOpen && !GlobalStates.screenLocked
-
-                            readonly property int baseMargin: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : gp
-                            readonly property real leftSidebarOffset: (GlobalStates.policiesPinned && !GlobalStates.policiesDetached && GlobalStates.animatedLeftSidebarWidth > 0 && bgRoot.screen && bgRoot.screen.name === GlobalStates.activeLeftSidebarMonitor) ? GlobalStates.animatedLeftSidebarWidth : 0
-                            readonly property real rightSidebarOffset: 0
-
-                            readonly property int wbLeft: Math.max(baseMargin, (barEffective && barVertical && !barBottom) ? barSz : 0, leftSidebarOffset)
-                            readonly property int wbRight: Math.max(baseMargin, (barEffective && barVertical && barBottom) ? barSz : 0, rightSidebarOffset)
-                            readonly property int wbTop: Math.max(baseMargin, (barEffective && !barVertical && !barBottom) ? barSz : 0)
-                            readonly property int wbBottom: Math.max(baseMargin, (barEffective && !barVertical && barBottom) ? barSz : 0)
-
+                            
                             property bool shouldBlur: Config.options.background.blurWhenWindowsOpen && bgRoot.hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !bgRoot.overviewOpen
                             visible: shouldBlur || opacity > 0.01
                             opacity: shouldBlur ? 1.0 : 0.0
@@ -1342,22 +1435,11 @@ Scope {
                             blurMax: 64
                             blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
 
-                            maskEnabled: true
-                            maskSource: windowBlurMask
+                            // Overscan slightly so the blur's edge fringe lands offscreen
+                            
 
                             Rectangle {
-                                x: windowBlurEffect.wbLeft
-                                y: windowBlurEffect.wbTop
-                                width: parent.width - windowBlurEffect.wbLeft - windowBlurEffect.wbRight
-                                height: parent.height - windowBlurEffect.wbTop - windowBlurEffect.wbBottom
-                                radius: {
-                                    if (wallpaperItem.wallpaperClipRadius > 0)
-                                        return wallpaperItem.wallpaperClipRadius;
-                                    if (Config.options.appearance.fakeScreenRounding > 0)
-                                        return Appearance.rounding.screenRounding;
-                                    return 0;
-                                }
-                                opacity: 1.0
+                                anchors.fill: parent
                                 color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
                             }
                         }

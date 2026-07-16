@@ -134,11 +134,11 @@ Singleton {
         }
     ]
 
-    // List of user-installed widgets loaded dynamically
-    property var userWidgets: []
+    // Extension widgets from WidgetExtensionManager
+    property var extensionWidgets: WidgetExtensionManager.ready ? WidgetExtensionManager.getRegistryEntries() : []
 
     // Combined list of all available widgets
-    readonly property var allWidgets: (builtinWidgets || []).concat(userWidgets || [])
+    readonly property var allWidgets: (builtinWidgets || []).concat(extensionWidgets || [])
 
     function getWidgetMetadata(widgetId) {
         let list = allWidgets;
@@ -160,27 +160,15 @@ Singleton {
         return meta ? meta.styleOverride : undefined;
     }
 
-    Process {
-        id: listUserWidgetsProc
-        command: ["python3", Directories.scriptPath + "/list_user_widgets.py"]
-        running: true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let str = text.trim();
-                if (!str) return;
-                try {
-                    let list = JSON.parse(str);
-                    root.userWidgets = list;
-                } catch(e) {
-                    console.log("[WidgetsRegistry] Failed to parse user widgets JSON:", e, str);
-                }
-            }
+    Connections {
+        target: WidgetExtensionManager
+        function onExtensionsChanged() {
+            root.extensionWidgets = WidgetExtensionManager.getRegistryEntries();
         }
     }
 
-    // Refresh function for registry (e.g. when widgets are installed/uninstalled)
+    // Refresh function kept for external callers that may exist
     function refresh() {
-        listUserWidgetsProc.running = false;
-        listUserWidgetsProc.running = true;
+        root.extensionWidgets = WidgetExtensionManager.getRegistryEntries();
     }
 }
