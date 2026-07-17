@@ -242,7 +242,7 @@ Item {
 
         onClicked: {
             if (is3WaySlider) return;
-            if (root.expandedSize && root.altAction)
+            if ((root.expandedSize || root.isTall) && root.altAction)
                 root.altAction();
             else
                 root.mainAction();
@@ -265,33 +265,56 @@ Item {
             anchors.fill: parent
             anchors.margins: 4
 
-            Rectangle {
-                id: tallIconBg
+            MouseArea {
+                id: tallIconMouseArea
                 width: 54
                 height: 54
                 anchors.top: parent.top
                 anchors.topMargin: 4
                 anchors.horizontalCenter: parent.horizontalCenter
-                radius: width / 2
-                color: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+                hoverEnabled: true
+                acceptedButtons: root.altAction ? Qt.LeftButton : Qt.NoButton
+                cursorShape: Qt.PointingHandCursor
 
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tallIconBg)
-                }
+                onClicked: root.mainAction()
 
-                Item {
-                    width: parent.width
-                    height: parent.width // 54x54, matching the top circle of the pill
-                    anchors.top: parent.top
+                Rectangle {
+                    id: tallIconBg
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        fill: root.toggled ? 1 : 0
-                        iconSize: 26
-                        color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
-                        text: root.buttonIcon
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tallIconBg)
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: parent.width // 54x54, matching the top circle of the pill
+                        anchors.top: parent.top
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            fill: root.toggled ? 1 : 0
+                            iconSize: 26
+                            color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
+                            text: root.buttonIcon
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
+                        }
+                    }
+
+                    // Hover/Press state layer
+                    Loader {
+                        anchors.fill: parent
+                        active: root.altAction
+                        sourceComponent: Rectangle {
+                            radius: tallIconBg.radius
+                            color: ColorUtils.transparentize(visualButton.colIcon, tallIconMouseArea.containsPress ? 0.88 : tallIconMouseArea.containsMouse ? 0.95 : 1)
+                            Behavior on color {
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                            }
                         }
                     }
                 }

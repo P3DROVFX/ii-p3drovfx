@@ -82,75 +82,97 @@ AndroidQuickToggleButton {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.round(connectedView.height * 0.60)
 
-                        // Custom image (takes priority)
-                        Image {
+                        MaterialShape {
+                            id: connectedWideShape
+                            width: 66
+                            height: 66
                             anchors.centerIn: parent
-                            visible: connectedView.hasCustomImg
-                            source: connectedView.customImg
-                            width:  Math.min(parent.width, parent.height) * 0.72
-                            height: width
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            mipmap: true
-                        }
+                            shapeString: "Clover8Leaf"
+                            color: root.toggled
+                                ? Appearance.colors.colPrimary
+                                : Appearance.colors.colLayer3
 
-                        // Earbud SVG pair — side by side, outward-facing
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            visible: connectedView.isEarbud
+                            Behavior on color {
+                                ColorAnimation { duration: 200 }
+                            }
 
-                            // Left earbud — normal
-                            Item {
-                                width: 36; height: 58
-                                anchors.verticalCenter: parent.verticalCenter
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedView.pathCushion
-                                    sourceSize: Qt.size(width, height)
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedView.colCushion }
+                            // Custom image (takes priority)
+                            Image {
+                                anchors.centerIn: parent
+                                visible: connectedView.hasCustomImg
+                                source: connectedView.customImg
+                                width: parent.width - 12
+                                height: parent.height - 12
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
+                            }
+
+                            // Earbud SVG pair — side by side, outward-facing
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 2
+                                visible: connectedView.isEarbud
+
+                                // Left earbud — normal
+                                Item {
+                                    width: 28; height: 44
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Image {
+                                        anchors.fill: parent
+                                        source: connectedView.pathCushion
+                                        sourceSize: Qt.size(width, height)
+                                        layer.enabled: true
+                                        layer.effect: ColorOverlay { color: connectedView.colCushion }
+                                    }
+                                    Image {
+                                        anchors.fill: parent
+                                        source: connectedView.pathStem
+                                        sourceSize: Qt.size(width, height)
+                                        layer.enabled: true
+                                        layer.effect: ColorOverlay { color: connectedView.colStem }
+                                    }
                                 }
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedView.pathStem
-                                    sourceSize: Qt.size(width, height)
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedView.colStem }
+
+                                // Right earbud — mirrored (outward)
+                                Item {
+                                    width: 28; height: 44
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Image {
+                                        anchors.fill: parent
+                                        source: connectedView.pathCushion
+                                        sourceSize: Qt.size(width, height)
+                                        mirror: true
+                                        layer.enabled: true
+                                        layer.effect: ColorOverlay { color: connectedView.colCushion }
+                                    }
+                                    Image {
+                                        anchors.fill: parent
+                                        source: connectedView.pathStem
+                                        sourceSize: Qt.size(width, height)
+                                        mirror: true
+                                        layer.enabled: true
+                                        layer.effect: ColorOverlay { color: connectedView.colStem }
+                                    }
                                 }
                             }
 
-                            // Right earbud — mirrored (outward)
-                            Item {
-                                width: 36; height: 58
-                                anchors.verticalCenter: parent.verticalCenter
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedView.pathCushion
-                                    sourceSize: Qt.size(width, height)
-                                    mirror: true
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedView.colCushion }
-                                }
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedView.pathStem
-                                    sourceSize: Qt.size(width, height)
-                                    mirror: true
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedView.colStem }
+                            // Generic MaterialSymbol fallback
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                visible: !connectedView.hasCustomImg && !connectedView.isEarbud
+                                fill: root.toggled ? 1 : 0
+                                text: Icons.getBluetoothDeviceMaterialSymbol(connectedView.deviceIcon)
+                                iconSize: 28
+                                color: root.toggled
+                                    ? Appearance.colors.colOnPrimary
+                                    : Appearance.colors.colOnLayer3
+                                horizontalAlignment: Text.AlignHCenter
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 200 }
                                 }
                             }
-                        }
-
-                        // Generic MaterialSymbol fallback
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            visible: !connectedView.hasCustomImg && !connectedView.isEarbud
-                            text: Icons.getBluetoothDeviceMaterialSymbol(connectedView.deviceIcon)
-                            iconSize: Math.round(Math.min(parent.width, parent.height) * 0.70)
-                            color: Appearance.colors.colOnLayer2
-                            horizontalAlignment: Text.AlignHCenter
                         }
                     }
 
@@ -193,11 +215,11 @@ AndroidQuickToggleButton {
                     anchors.centerIn: parent
                     spacing: 8
 
-                    // Large Cookie12Sided BT icon
+                    // Large Clover8Leaf BT icon
                     MaterialShape {
                         Layout.alignment: Qt.AlignHCenter
-                        shapeString: "Cookie12Sided"
-                        implicitSize: Math.round(Math.min(parent.parent.width, parent.parent.height) * 0.55)
+                        shapeString: "Clover8Leaf"
+                        implicitSize: 66
                         color: BluetoothStatus.enabled
                             ? Appearance.colors.colLayer3
                             : Appearance.colors.colSurfaceContainerLow
@@ -209,7 +231,7 @@ AndroidQuickToggleButton {
                         MaterialSymbol {
                             anchors.centerIn: parent
                             text: BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
-                            iconSize: Math.round(parent.implicitSize * 0.52)
+                            iconSize: 28
                             color: BluetoothStatus.enabled
                                 ? Appearance.colors.colOnLayer3
                                 : Appearance.colors.colOnSurfaceVariant
@@ -287,70 +309,119 @@ AndroidQuickToggleButton {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Math.round(connectedTall.height * 0.60)
 
-                        // Custom image
-                        Image {
+                        MouseArea {
+                            id: btTallIconMouseArea
+                            width: 54
+                            height: 54
                             anchors.centerIn: parent
-                            visible: connectedTall.hasCustomImg
-                            source: connectedTall.customImg
-                            width: 60; height: 60
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true; mipmap: true
-                        }
+                            hoverEnabled: true
+                            acceptedButtons: root.altAction ? Qt.LeftButton : Qt.NoButton
+                            cursorShape: Qt.PointingHandCursor
 
-                        // Earbud pair — fixed size, side by side
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 4
-                            visible: connectedTall.isEarbud
+                            onClicked: root.mainAction()
 
-                            Item {
-                                width: 36; height: 58
-                                anchors.verticalCenter: parent.verticalCenter
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedTall.pathCushion
-                                    sourceSize: Qt.size(width, height)
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedTall.colCushion }
+                            MaterialShape {
+                                id: connectedTallShape
+                                anchors.fill: parent
+                                shapeString: "Clover8Leaf"
+                                color: root.toggled
+                                    ? Appearance.colors.colPrimary
+                                    : Appearance.colors.colLayer3
+
+                                Behavior on color {
+                                    ColorAnimation { duration: 200 }
                                 }
+
+                                // Custom image
                                 Image {
-                                    anchors.fill: parent
-                                    source: connectedTall.pathStem
-                                    sourceSize: Qt.size(width, height)
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedTall.colStem }
+                                    anchors.centerIn: parent
+                                    visible: connectedTall.hasCustomImg
+                                    source: connectedTall.customImg
+                                    width: parent.width - 12
+                                    height: parent.height - 12
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true; mipmap: true
+                                }
+
+                                // Earbud pair — fixed size, side by side
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+                                    visible: connectedTall.isEarbud
+
+                                    Item {
+                                        width: 24; height: 38
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedTall.pathCushion
+                                            sourceSize: Qt.size(width, height)
+                                            layer.enabled: true
+                                            layer.effect: ColorOverlay { color: connectedTall.colCushion }
+                                        }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedTall.pathStem
+                                            sourceSize: Qt.size(width, height)
+                                            layer.enabled: true
+                                            layer.effect: ColorOverlay { color: connectedTall.colStem }
+                                        }
+                                    }
+                                    Item {
+                                        width: 24; height: 38
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedTall.pathCushion
+                                            sourceSize: Qt.size(width, height)
+                                            mirror: true
+                                            layer.enabled: true
+                                            layer.effect: ColorOverlay { color: connectedTall.colCushion }
+                                        }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedTall.pathStem
+                                            sourceSize: Qt.size(width, height)
+                                            mirror: true
+                                            layer.enabled: true
+                                            layer.effect: ColorOverlay { color: connectedTall.colStem }
+                                        }
+                                    }
+                                }
+
+                                // Generic symbol fallback
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    visible: !connectedTall.hasCustomImg && !connectedTall.isEarbud
+                                    fill: root.toggled ? 1 : 0
+                                    text: Icons.getBluetoothDeviceMaterialSymbol(connectedTall.deviceIcon)
+                                    iconSize: 26
+                                    color: root.toggled
+                                        ? Appearance.colors.colOnPrimary
+                                        : Appearance.colors.colOnLayer3
+                                    horizontalAlignment: Text.AlignHCenter
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 200 }
+                                    }
                                 }
                             }
-                            Item {
-                                width: 36; height: 58
-                                anchors.verticalCenter: parent.verticalCenter
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedTall.pathCushion
-                                    sourceSize: Qt.size(width, height)
-                                    mirror: true
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedTall.colCushion }
-                                }
-                                Image {
-                                    anchors.fill: parent
-                                    source: connectedTall.pathStem
-                                    sourceSize: Qt.size(width, height)
-                                    mirror: true
-                                    layer.enabled: true
-                                    layer.effect: ColorOverlay { color: connectedTall.colStem }
+
+                            // Hover/Press state layer
+                            Loader {
+                                anchors.fill: parent
+                                active: root.altAction
+                                sourceComponent: Rectangle {
+                                    radius: connectedTallShape.radius
+                                    color: ColorUtils.transparentize(
+                                        root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3,
+                                        btTallIconMouseArea.containsPress ? 0.88 : btTallIconMouseArea.containsMouse ? 0.95 : 1
+                                    )
+                                    Behavior on color {
+                                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                    }
                                 }
                             }
-                        }
-
-                        // Generic symbol fallback
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            visible: !connectedTall.hasCustomImg && !connectedTall.isEarbud
-                            text: Icons.getBluetoothDeviceMaterialSymbol(connectedTall.deviceIcon)
-                            iconSize: 42
-                            color: Appearance.colors.colOnLayer2
-                            horizontalAlignment: Text.AlignHCenter
                         }
                     }
 
@@ -393,24 +464,50 @@ AndroidQuickToggleButton {
                     anchors.centerIn: parent
                     spacing: 6
 
-                    MaterialShape {
+                    MouseArea {
+                        id: btTallDisconnectedMouseArea
                         Layout.alignment: Qt.AlignHCenter
-                        shapeString: "Cookie12Sided"
-                        implicitSize: Math.round(Math.min(parent.parent.width, parent.parent.height) * 0.50)
-                        color: BluetoothStatus.enabled
-                            ? Appearance.colors.colLayer3
-                            : Appearance.colors.colSurfaceContainerLow
-                        Behavior on color { ColorAnimation { duration: 200 } }
+                        Layout.preferredWidth: 54
+                        Layout.preferredHeight: 54
+                        hoverEnabled: true
+                        acceptedButtons: root.altAction ? Qt.LeftButton : Qt.NoButton
+                        cursorShape: Qt.PointingHandCursor
 
-                        MaterialSymbol {
+                        onClicked: root.mainAction()
+
+                        MaterialShape {
+                            id: disconnectedTallShape
                             anchors.centerIn: parent
-                            text: BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
-                            iconSize: Math.round(parent.implicitSize * 0.52)
+                            shapeString: "Clover8Leaf"
+                            implicitSize: 54
                             color: BluetoothStatus.enabled
-                                ? Appearance.colors.colOnLayer3
-                                : Appearance.colors.colOnSurfaceVariant
-                            horizontalAlignment: Text.AlignHCenter
+                                ? Appearance.colors.colLayer3
+                                : Appearance.colors.colSurfaceContainerLow
                             Behavior on color { ColorAnimation { duration: 200 } }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
+                                iconSize: 26
+                                color: BluetoothStatus.enabled
+                                    ? Appearance.colors.colOnLayer3
+                                    : Appearance.colors.colOnSurfaceVariant
+                                horizontalAlignment: Text.AlignHCenter
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                            }
+
+                            // Hover/Press state layer
+                            Loader {
+                                anchors.fill: parent
+                                active: root.altAction
+                                sourceComponent: Rectangle {
+                                    radius: disconnectedTallShape.radius
+                                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, btTallDisconnectedMouseArea.containsPress ? 0.88 : btTallDisconnectedMouseArea.containsMouse ? 0.95 : 1)
+                                    Behavior on color {
+                                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                    }
+                                }
+                            }
                         }
                     }
 
