@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import qs
 import qs.services
 import qs.modules.common
@@ -269,15 +271,15 @@ Item {
 
             add: Transition {
                 NumberAnimation {
-                    property: "scale"
+                    property: "opacity"
                     from: 0; to: 1.0
                     duration: Appearance.animation.elementMoveEnter.duration
                     easing.type: Appearance.animation.elementMoveEnter.type
                     easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
                 }
                 NumberAnimation {
-                    property: "opacity"
-                    from: 0; to: 1.0
+                    property: root.vertical ? "y" : "x"
+                    from: root.vertical ? (listView.height) : (listView.width)
                     duration: Appearance.animation.elementMoveEnter.duration
                     easing.type: Appearance.animation.elementMoveEnter.type
                     easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve

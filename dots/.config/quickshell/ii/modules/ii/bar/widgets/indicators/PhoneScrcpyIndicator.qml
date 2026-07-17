@@ -193,5 +193,6 @@ MouseArea {
 
     StyledToolTip {
         text: Translation.tr("scrcpy mirror is running\n• Left-click: focus window\n• Middle-click: kill")
+        extraVisibleCondition: indicator.containsMouse
     }
 }
