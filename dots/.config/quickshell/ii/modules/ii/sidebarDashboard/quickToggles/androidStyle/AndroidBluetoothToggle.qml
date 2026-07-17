@@ -70,8 +70,12 @@ AndroidQuickToggleButton {
                     "../../../../../assets/images/devices/earbuds_stem.svg"
 
                 // colours matching the popup
-            readonly property color colPrimary:   Appearance.colors.colPrimary
-            readonly property color colSecondary: Appearance.colors.colSurfaceContainerLow
+                readonly property color colCushion: root.toggled
+                    ? Appearance.colors.colOnPrimary
+                    : Appearance.colors.colOnLayer3
+                readonly property color colStem: root.toggled
+                    ? Appearance.colors.colOnPrimaryContainer
+                    : Appearance.colors.colOnLayer3
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -114,45 +118,57 @@ AndroidQuickToggleButton {
                                 spacing: 2
                                 visible: connectedView.isEarbud
 
-                                // Left earbud — normal
+                                // Left earbud — mirrored (outward)
                                 Item {
-                                    width: 28; height: 44
+                                    width: 22; height: 36
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Image {
+                                    Item {
                                         anchors.fill: parent
-                                        source: connectedView.pathCushion
-                                        sourceSize: Qt.size(width, height)
                                         layer.enabled: true
                                         layer.effect: ColorOverlay { color: connectedView.colCushion }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedView.pathCushion
+                                            sourceSize: Qt.size(width, height)
+                                            mirror: true
+                                        }
                                     }
-                                    Image {
+                                    Item {
                                         anchors.fill: parent
-                                        source: connectedView.pathStem
-                                        sourceSize: Qt.size(width, height)
                                         layer.enabled: true
                                         layer.effect: ColorOverlay { color: connectedView.colStem }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedView.pathStem
+                                            sourceSize: Qt.size(width, height)
+                                            mirror: true
+                                        }
                                     }
                                 }
 
-                                // Right earbud — mirrored (outward)
+                                // Right earbud — normal (outward)
                                 Item {
-                                    width: 28; height: 44
+                                    width: 22; height: 36
                                     anchors.verticalCenter: parent.verticalCenter
-                                    Image {
+                                    Item {
                                         anchors.fill: parent
-                                        source: connectedView.pathCushion
-                                        sourceSize: Qt.size(width, height)
-                                        mirror: true
                                         layer.enabled: true
                                         layer.effect: ColorOverlay { color: connectedView.colCushion }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedView.pathCushion
+                                            sourceSize: Qt.size(width, height)
+                                        }
                                     }
-                                    Image {
+                                    Item {
                                         anchors.fill: parent
-                                        source: connectedView.pathStem
-                                        sourceSize: Qt.size(width, height)
-                                        mirror: true
                                         layer.enabled: true
                                         layer.effect: ColorOverlay { color: connectedView.colStem }
+                                        Image {
+                                            anchors.fill: parent
+                                            source: connectedView.pathStem
+                                            sourceSize: Qt.size(width, height)
+                                        }
                                     }
                                 }
                             }
@@ -297,8 +313,12 @@ AndroidQuickToggleButton {
                     "../../../../../assets/images/devices/earbuds_cushion.svg"
                 readonly property string pathStem:
                     "../../../../../assets/images/devices/earbuds_stem.svg"
-                readonly property color colCushion: Appearance.colors.colOnSecondaryContainer
-                readonly property color colStem:    Appearance.colors.colSecondary
+                readonly property color colCushion: root.toggled
+                    ? Appearance.colors.colOnPrimary
+                    : Appearance.colors.colOnLayer3
+                readonly property color colStem: root.toggled
+                    ? Appearance.colors.colOnPrimaryContainer
+                    : Appearance.colors.colOnLayer3
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -350,41 +370,53 @@ AndroidQuickToggleButton {
                                     visible: connectedTall.isEarbud
 
                                     Item {
-                                        width: 24; height: 38
+                                        width: 18; height: 28
                                         anchors.verticalCenter: parent.verticalCenter
-                                        Image {
+                                        Item {
                                             anchors.fill: parent
-                                            source: connectedTall.pathCushion
-                                            sourceSize: Qt.size(width, height)
                                             layer.enabled: true
                                             layer.effect: ColorOverlay { color: connectedTall.colCushion }
+                                            Image {
+                                                anchors.fill: parent
+                                                source: connectedTall.pathCushion
+                                                sourceSize: Qt.size(width, height)
+                                                mirror: true
+                                            }
                                         }
-                                        Image {
+                                        Item {
                                             anchors.fill: parent
-                                            source: connectedTall.pathStem
-                                            sourceSize: Qt.size(width, height)
                                             layer.enabled: true
                                             layer.effect: ColorOverlay { color: connectedTall.colStem }
+                                            Image {
+                                                anchors.fill: parent
+                                                source: connectedTall.pathStem
+                                                sourceSize: Qt.size(width, height)
+                                                mirror: true
+                                            }
                                         }
                                     }
                                     Item {
-                                        width: 24; height: 38
+                                        width: 18; height: 28
                                         anchors.verticalCenter: parent.verticalCenter
-                                        Image {
+                                        Item {
                                             anchors.fill: parent
-                                            source: connectedTall.pathCushion
-                                            sourceSize: Qt.size(width, height)
-                                            mirror: true
                                             layer.enabled: true
                                             layer.effect: ColorOverlay { color: connectedTall.colCushion }
+                                            Image {
+                                                anchors.fill: parent
+                                                source: connectedTall.pathCushion
+                                                sourceSize: Qt.size(width, height)
+                                            }
                                         }
-                                        Image {
+                                        Item {
                                             anchors.fill: parent
-                                            source: connectedTall.pathStem
-                                            sourceSize: Qt.size(width, height)
-                                            mirror: true
                                             layer.enabled: true
                                             layer.effect: ColorOverlay { color: connectedTall.colStem }
+                                            Image {
+                                                anchors.fill: parent
+                                                source: connectedTall.pathStem
+                                                sourceSize: Qt.size(width, height)
+                                            }
                                         }
                                     }
                                 }
