@@ -16,7 +16,7 @@ LockScreen {
 
     Timer {
         id: restoreTimer
-        interval: 700
+        interval: 100
         repeat: false
         onTriggered: {
             var batch = ""
