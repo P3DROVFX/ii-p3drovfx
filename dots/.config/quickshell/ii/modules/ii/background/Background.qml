@@ -210,19 +210,18 @@ Scope {
             property bool anyWidgetIsDragging: false
             property bool lockAnimationActive: false
             property bool parallaxFrozen: false
+            property bool rippleActive: false  // mantém layer em Top durante ripple de unlock
 
             Connections {
                 target: GlobalStates
                 function onScreenLockedChanged() {
                     if (GlobalStates.screenLocked) {
-                        if (effectiveWallpaperScale === 1.0) {
+                        // Zoom out immediately — if already at 1.0, briefly bump to base
+                        // so the Behavior has a real value change to animate from
+                        if (Math.abs(effectiveWallpaperScale - 1.0) < 0.001) {
                             effectiveWallpaperScale = baseWallpaperScale;
-                            Qt.callLater(function() {
-                                effectiveWallpaperScale = 1.0;
-                            });
-                        } else {
-                            effectiveWallpaperScale = 1.0;
                         }
+                        effectiveWallpaperScale = 1.0;
                         bgRoot.lockAnimationActive = true;
                         bgRoot.parallaxFrozen = false;
                         parallaxUnfreezeTimer.stop();
@@ -233,6 +232,10 @@ Scope {
                         if (!GlobalStates.workspaceRestoreInProgress) {
                             lockAnimResetTimer.restart();
                         }
+                        // Ripple no unlock — pequeno delay para layer já estar visível
+                        if (Config.options.lock.rippleEffect ?? true) {
+                            rippleOnUnlockTimer.restart();
+                        }
                     }
                 }
                 function onWorkspaceRestoreInProgressChanged() {
@@ -240,6 +243,24 @@ Scope {
                         lockAnimResetTimer.restart();
                     }
                 }
+            }
+            // Dispara o ripple com delay após unlock para não colidir com troca de layer
+            Timer {
+                id: rippleOnUnlockTimer
+                interval: 80
+                repeat: false
+                onTriggered: {
+                    bgRoot.rippleActive = true;
+                    lockScreenRippleEffect.startRipple(0, 0);
+                    // Volta ao Bottom depois que o ripple terminar (750ms grow + 550ms fade + margem)
+                    rippleLayerResetTimer.restart();
+                }
+            }
+            Timer {
+                id: rippleLayerResetTimer
+                interval: 1500
+                repeat: false
+                onTriggered: bgRoot.rippleActive = false
             }
             Timer {
                 id: lockAnimResetTimer
@@ -334,8 +355,8 @@ Scope {
             // Lockscreen zoom animation: animate effectiveWallpaperScale to 1.0 on lock, back to base on unlock
             Behavior on effectiveWallpaperScale {
                 NumberAnimation {
-                    duration: 600
-                    easing.type: Easing.OutCubic
+                    duration: 450
+                    easing.type: Easing.OutQuart
                 }
             }
 
@@ -396,7 +417,7 @@ Scope {
             // Layer props
             screen: modelData
             exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) ? WlrLayer.Top : WlrLayer.Bottom
+            WlrLayershell.layer: (GlobalStates.screenLocked && !scaleAnim.running) || bgRoot.rippleActive ? WlrLayer.Top : WlrLayer.Bottom
             WlrLayershell.namespace: "quickshell:background"
             anchors {
                 top: true
@@ -486,6 +507,95 @@ Scope {
             Component.onCompleted: {
                 if (!mediaModeOpen && Config.options.appearance.palette.type.startsWith("scheme")) {
                     Wallpapers.apply(Config.options.background.wallpaperPath);
+                }
+            }
+
+            // Lockscreen ripple — saindo do centro da tela ao desbloquear
+            // Usa SequentialAnimation idêntico ao RippleButton: grow → depois fade
+            Item {
+                id: lockScreenRippleEffect
+                anchors.fill: parent
+                z: 100
+                clip: true
+                visible: rippleAnim.running || rippleFadeAnim.running
+
+                function startRipple(x, y) {
+                    // Sempre irradia do centro da tela, independente de onde foi clicado
+                    const cx = bgRoot.width / 2;
+                    const cy = bgRoot.height / 2;
+                    // Raio = diagonal até o canto mais longe do centro
+                    const maxRadius = Math.sqrt(cx * cx + cy * cy);
+
+                    rippleCircle.x = cx;
+                    rippleCircle.y = cy;
+                    rippleAnim.radius = maxRadius;
+
+                    // Mesmo padrão do RippleButton: para fade anterior, reinicia sequência
+                    rippleFadeAnim.complete();
+                    rippleAnim.restart();
+                }
+
+                // Sequência: set posição+opacidade → grow → (ao terminar) fade
+                SequentialAnimation {
+                    id: rippleAnim
+                    property real radius: 0
+
+                    PropertyAction { target: rippleCircle; property: "rippleSize"; value: 0 }
+                    PropertyAction { target: rippleCircle; property: "opacity";    value: 0.75 }
+
+                    NumberAnimation {
+                        target: rippleCircle
+                        property: "rippleSize"
+                        from: 0
+                        to: rippleAnim.radius * 2
+                        duration: 750
+                        easing.type: Easing.OutCubic
+                    }
+
+                    // Inicia fade após o grow
+                    ScriptAction {
+                        script: rippleFadeAnim.restart()
+                    }
+                }
+
+                // Fade separado — começa só após grow terminar
+                NumberAnimation {
+                    id: rippleFadeAnim
+                    target: rippleCircle
+                    property: "opacity"
+                    from: 0.75
+                    to: 0
+                    duration: 550
+                    easing.type: Easing.InQuad
+                }
+
+                Item {
+                    id: rippleCircle
+                    property real rippleSize: 0
+                    width: rippleSize
+                    height: rippleSize
+                    opacity: 0
+                    visible: rippleSize > 0
+                    transform: Translate {
+                        x: -rippleCircle.width  / 2
+                        y: -rippleCircle.height / 2
+                    }
+
+                    RadialGradient {
+                        anchors.fill: parent
+                        gradient: Gradient {
+                            GradientStop { position: 0.0;  color: Appearance.colors.colPrimary }
+                            GradientStop { position: 0.35; color: Appearance.colors.colPrimary }
+                            GradientStop {
+                                position: 0.75
+                                color: Qt.rgba(
+                                    Appearance.colors.colPrimary.r,
+                                    Appearance.colors.colPrimary.g,
+                                    Appearance.colors.colPrimary.b,
+                                    0.0)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -833,9 +943,13 @@ Scope {
                                 }
                                 opacity: GlobalStates.screenLocked ? 1.0 : 0.0
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 400
-                                        easing.type: Easing.OutCubic
+                                    SequentialAnimation {
+                                        // Delay blur fade-in so zoom-out animation is visible first
+                                        PauseAnimation { duration: GlobalStates.screenLocked ? 150 : 0 }
+                                        NumberAnimation {
+                                            duration: 350
+                                            easing.type: Easing.OutCubic
+                                        }
                                     }
                                 }
                                 sourceComponent: MultiEffect {
@@ -877,45 +991,45 @@ Scope {
                                 visible: active
                                 sourceComponent: Item {
                                     anchors.fill: parent
-                                    
-                                    ShaderEffectSource {
+
+                                    Image {
                                         id: gradientBlurSource
-                                        sourceItem: wallpaper
-                                        sourceRect: Qt.rect(wallpaper.x, wallpaper.y, wallpaper.width, wallpaper.height)
-                                        width: wallpaper.width
-                                        height: wallpaper.height
-                                        live: true
-                                        hideSource: Config.options.background.gradientBlur.enable
+                                        anchors.fill: parent
+                                        source: bgRoot.wallpaperPath
+                                        fillMode: Image.PreserveAspectCrop
                                         visible: false
                                     }
-                                    
-                                    MultiEffect {
-                                        id: lightBlur
+
+                                    // Light blur layer — full intensity at start, fading to 0
+                                    Item {
+                                        id: lightBlurWrapper
                                         anchors.fill: parent
-                                        source: gradientBlurSource
-                                        blurEnabled: true
-                                        blurMax: 32
-                                        blur: Config.options.background.gradientBlur.radius / 200.0
-                                        
                                         layer.enabled: true
                                         layer.effect: OpacityMask {
                                             maskSource: lightBlurMask
                                         }
+
+                                        FastBlur {
+                                            anchors.fill: parent
+                                            source: gradientBlurSource
+                                            radius: Math.round(Config.options.background.gradientBlur.radius * 0.32)
+                                            transparentBorder: true
+                                        }
                                     }
-                                    
+
                                     Item {
                                         id: lightBlurMask
                                         anchors.fill: parent
                                         visible: false
-                                        
+
                                         Canvas {
                                             anchors.fill: parent
                                             readonly property string dir: Config.options.background.gradientBlur.direction
-                                            
+
                                             onPaint: {
                                                 var ctx = getContext("2d");
                                                 ctx.reset();
-                                                
+
                                                 var gradient;
                                                 if (dir === "left-to-right") {
                                                     gradient = ctx.createLinearGradient(0, 0, width, 0);
@@ -926,47 +1040,50 @@ Scope {
                                                 } else {
                                                     gradient = ctx.createLinearGradient(0, 0, 0, height);
                                                 }
-                                                
+
                                                 gradient.addColorStop(0.0, "rgba(255, 255, 255, 1)");
                                                 gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
                                                 gradient.addColorStop(1.0, "rgba(255, 255, 255, 0)");
-                                                
+
                                                 ctx.fillStyle = gradient;
                                                 ctx.fillRect(0, 0, width, height);
                                             }
-                                            
+
                                             onWidthChanged: requestPaint()
                                             onHeightChanged: requestPaint()
                                         }
                                     }
-                                    
-                                    MultiEffect {
-                                        id: heavyBlur
+
+                                    // Heavy blur layer — 0 at start, full intensity at end
+                                    Item {
+                                        id: heavyBlurWrapper
                                         anchors.fill: parent
-                                        source: gradientBlurSource
-                                        blurEnabled: true
-                                        blurMax: 64
-                                        blur: Config.options.background.gradientBlur.radius / 100.0
-                                        
                                         layer.enabled: true
                                         layer.effect: OpacityMask {
                                             maskSource: heavyBlurMask
                                         }
+
+                                        FastBlur {
+                                            anchors.fill: parent
+                                            source: gradientBlurSource
+                                            radius: Math.round(Config.options.background.gradientBlur.radius * 0.64)
+                                            transparentBorder: true
+                                        }
                                     }
-                                    
+
                                     Item {
                                         id: heavyBlurMask
                                         anchors.fill: parent
                                         visible: false
-                                        
+
                                         Canvas {
                                             anchors.fill: parent
                                             readonly property string dir: Config.options.background.gradientBlur.direction
-                                            
+
                                             onPaint: {
                                                 var ctx = getContext("2d");
                                                 ctx.reset();
-                                                
+
                                                 var gradient;
                                                 if (dir === "left-to-right") {
                                                     gradient = ctx.createLinearGradient(0, 0, width, 0);
@@ -977,18 +1094,18 @@ Scope {
                                                 } else {
                                                     gradient = ctx.createLinearGradient(0, 0, 0, height);
                                                 }
-                                                
+
                                                 gradient.addColorStop(0.0, "rgba(255, 255, 255, 0)");
                                                 gradient.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
                                                 gradient.addColorStop(1.0, "rgba(255, 255, 255, 1)");
-                                                
+
                                                 ctx.fillStyle = gradient;
                                                 ctx.fillRect(0, 0, width, height);
                                             }
-                                            
+
                                             onWidthChanged: requestPaint()
                                             onHeightChanged: requestPaint()
-                                            
+
                                             Connections {
                                                 target: Config.options.background.gradientBlur
                                                 function onDirectionChanged() {
@@ -1004,9 +1121,13 @@ Scope {
                             WidgetCanvas {
                                 id: widgetCanvas
                                 scale: 1 - (defaultRatio - 1)
+                                // Render widget tree as a single GPU texture during lock anim
+                                // Eliminates per-frame relayout of the full widget tree
+                                layer.enabled: bgRoot.lockAnimationActive
                                 Behavior on scale {
                                     animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                 }
+
                                 anchors {
                                     left: parent.left
                                     right: parent.right
@@ -1034,38 +1155,23 @@ Scope {
                                 }
                                 width: parent.width
                                 height: parent.height
+                                // Lock centering: animate margin offsets instead of AnchorChanges
+                                // AnchorAnimation invalidates full layout each frame — too expensive
                                 states: State {
                                     name: "centered"
                                     when: GlobalStates.screenLocked || GlobalStates.workspaceRestoreInProgress || bgRoot.wallpaperSafetyTriggered
                                     PropertyChanges {
                                         target: widgetCanvas
-                                        width: parent.width
-                                        height: parent.height
-                                        leftMargin: 0
-                                        rightMargin: 0
-                                        topMargin: 0
-                                        bottomMargin: 0
-                                    }
-                                    AnchorChanges {
-                                        target: widgetCanvas
-                                        anchors {
-                                            left: undefined
-                                            right: undefined
-                                            top: undefined
-                                            bottom: undefined
-                                            horizontalCenter: parent.horizontalCenter
-                                            verticalCenter: parent.verticalCenter
-                                        }
+                                        anchors.leftMargin: 0
+                                        anchors.rightMargin: 0
+                                        anchors.topMargin: 0
+                                        anchors.bottomMargin: 0
                                     }
                                 }
 
                                 transitions: Transition {
                                     PropertyAnimation {
-                                        properties: "width,height,leftMargin,rightMargin,topMargin,bottomMargin"
-                                        duration: 600
-                                        easing.type: Easing.OutCubic
-                                    }
-                                    AnchorAnimation {
+                                        properties: "anchors.leftMargin,anchors.rightMargin,anchors.topMargin,anchors.bottomMargin"
                                         duration: 600
                                         easing.type: Easing.OutCubic
                                     }
@@ -1446,159 +1552,171 @@ Scope {
                     }
                 }
 
-                // Transparent bar gradient — exact copy of experimental gradientBlur component, full screen
-                Loader {
-                    id: barGradientOverlay
-                    active: Config.options.bar.barBackgroundStyle === 0 && Config.options.bar.transparentGlow && GlobalStates.barOpen && !GlobalStates.screenLocked
+                // Bar blur gradient — blur na borda da bar, mesma posição do dim
+                Item {
+                    id: barBlurOverlay
                     anchors.fill: wallpaperItem
-                    visible: active
+
+                    readonly property bool shouldShow: Config.options.bar.barBackgroundStyle === 0
+                        && Config.options.bar.transparentGlow
+                        && GlobalStates.barOpen
+                        && !GlobalStates.screenLocked
+
+                    visible: opacity > 0.001
+                    opacity: shouldShow ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                    }
 
                     readonly property bool isVertical: Config.options.bar.vertical
                     readonly property bool isBottom: Config.options.bar.bottom
+                    readonly property int barSize: isVertical
+                        ? Appearance.sizes.verticalBarWidth
+                        : Appearance.sizes.barHeight
+                    readonly property int overlaySpan: barSize + 80
+                    readonly property int overlayX: isVertical ? (isBottom ? parent.width - overlaySpan : 0) : 0
+                    readonly property int overlayY: !isVertical ? (isBottom ? parent.height - overlaySpan : 0) : 0
+                    readonly property int overlayW: isVertical ? overlaySpan : parent.width
+                    readonly property int overlayH: !isVertical ? overlaySpan : parent.height
 
-                    sourceComponent: Item {
-                        anchors.fill: parent
+                    Item {
+                        x: barBlurOverlay.overlayX
+                        y: barBlurOverlay.overlayY
+                        width: barBlurOverlay.overlayW
+                        height: barBlurOverlay.overlayH
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: barBlurGradientMask
+                        }
 
                         ShaderEffectSource {
-                            id: barBlurSource
-                            sourceItem: wallpaper
-                            sourceRect: Qt.rect(wallpaper.x, wallpaper.y, wallpaper.width, wallpaper.height)
-                            width: wallpaper.width
-                            height: wallpaper.height
+                            id: barBlurShaderSource
+                            sourceItem: centralWallpaperClipRect
+                            sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY, barBlurOverlay.overlayW, barBlurOverlay.overlayH)
+                            width: barBlurOverlay.overlayW
+                            height: barBlurOverlay.overlayH
                             live: true
-                            hideSource: true
+                            hideSource: false
                             visible: false
                         }
 
-                        // Light blur
                         MultiEffect {
                             anchors.fill: parent
-                            source: barBlurSource
-                            blurEnabled: true
-                            blurMax: 32
-                            blur: Config.options.background.gradientBlur.radius / 200.0
-
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: lightMask
-                            }
-                        }
-
-                        Item {
-                            id: lightMask
-                            anchors.fill: parent
-                            visible: false
-
-                            Canvas {
-                                anchors.fill: parent
-                                readonly property bool isV: barGradientOverlay.isVertical
-                                readonly property bool isB: barGradientOverlay.isBottom
-
-                                onPaint: {
-                                    var ctx = getContext("2d");
-                                    ctx.reset();
-                                    var g;
-                                    if (isV)
-                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
-                                    else
-                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
-                                    g.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-                                    g.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
-                                    g.addColorStop(1.0, "rgba(255, 255, 255, 0)");
-                                    ctx.fillStyle = g;
-                                    ctx.fillRect(0, 0, width, height);
-                                }
-
-                                onWidthChanged: requestPaint()
-                                onHeightChanged: requestPaint()
-                            }
-                        }
-
-                        // Heavy blur (inverted mask)
-                        MultiEffect {
-                            anchors.fill: parent
-                            source: barBlurSource
+                            source: barBlurShaderSource
                             blurEnabled: true
                             blurMax: 64
-                            blur: Config.options.background.gradientBlur.radius / 100.0
-
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: heavyMask
-                            }
+                            blur: 0.35
                         }
+                    }
 
-                        Item {
-                            id: heavyMask
+                    Item {
+                        id: barBlurGradientMask
+                        x: barBlurOverlay.overlayX
+                        y: barBlurOverlay.overlayY
+                        width: barBlurOverlay.overlayW
+                        height: barBlurOverlay.overlayH
+                        opacity: 0 // Invisible visually, but OpacityMask reads it internally
+
+                        Canvas {
                             anchors.fill: parent
-                            visible: false
+                            readonly property bool isVertical: barBlurOverlay.isVertical
+                            readonly property bool isBottom: barBlurOverlay.isBottom
 
-                            Canvas {
-                                anchors.fill: parent
-                                readonly property bool isV: barGradientOverlay.isVertical
-                                readonly property bool isB: barGradientOverlay.isBottom
+                            onPaint: {
+                                var ctx = getContext("2d");
+                                ctx.reset();
 
-                                onPaint: {
-                                    var ctx = getContext("2d");
-                                    ctx.reset();
-                                    var g;
-                                    if (isV)
-                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
-                                    else
-                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
-                                    g.addColorStop(0.0, "rgba(255, 255, 255, 0)");
-                                    g.addColorStop(0.5, "rgba(255, 255, 255, 0.5)");
-                                    g.addColorStop(1.0, "rgba(255, 255, 255, 1)");
-                                    ctx.fillStyle = g;
-                                    ctx.fillRect(0, 0, width, height);
+                                // Gradient direction: always TOWARD the bar side
+                                // Bar side = opaque (max blur), far side = transparent
+                                var gradient;
+                                if (isVertical) {
+                                    // Horizontal gradient
+                                    gradient = isBottom
+                                        ? ctx.createLinearGradient(0, 0, width, 0)   // left→right (right bar)
+                                        : ctx.createLinearGradient(width, 0, 0, 0);   // right→left (left bar)
+                                } else {
+                                    // Vertical gradient
+                                    gradient = isBottom
+                                        ? ctx.createLinearGradient(0, 0, 0, height)  // top→bottom (bottom bar)
+                                        : ctx.createLinearGradient(0, height, 0, 0);  // bottom→top (top bar)
                                 }
 
-                                onWidthChanged: requestPaint()
-                                onHeightChanged: requestPaint()
+                                gradient.addColorStop(0.0, "rgba(255, 255, 255, 0)");
+                                gradient.addColorStop(0.55, "rgba(255, 255, 255, 0.4)");
+                                gradient.addColorStop(1.0, "rgba(255, 255, 255, 1)");
+
+                                ctx.fillStyle = gradient;
+                                ctx.fillRect(0, 0, width, height);
                             }
+
+                            onWidthChanged: requestPaint()
+                            onHeightChanged: requestPaint()
+                            onIsVerticalChanged: requestPaint()
+                            onIsBottomChanged: requestPaint()
                         }
+                    }
+                }
 
-                        // Dim
-                        Item {
-                            anchors.fill: parent
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: dimMask
+                // Bar gradient overlay — overlay simples sobre o wallpaper na borda da bar
+                // Sem ShaderEffectSource/MultiEffect: não mexe no wallpaper, só sobrepõe
+                Item {
+                    id: barGradientOverlay
+                    anchors.fill: wallpaperItem
+
+                    readonly property bool shouldShow: Config.options.bar.barBackgroundStyle === 0
+                        && Config.options.bar.transparentGlow
+                        && GlobalStates.barOpen
+                        && !GlobalStates.screenLocked
+
+                    visible: opacity > 0.001
+                    opacity: shouldShow ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                    }
+
+                    readonly property bool isVertical: Config.options.bar.vertical
+                    readonly property bool isBottom: Config.options.bar.bottom
+                    readonly property int barSize: isVertical
+                        ? Appearance.sizes.verticalBarWidth
+                        : Appearance.sizes.barHeight
+
+                    // Faixa de gradiente apenas na borda da bar
+                    // Largura/altura = tamanho da bar + fade
+                    readonly property int overlaySpan: barSize + 80
+
+                    // Posição e dimensões dependem de onde a bar está
+                    readonly property int overlayX: isVertical ? (isBottom ? parent.width - overlaySpan : 0) : 0
+                    readonly property int overlayY: !isVertical ? (isBottom ? parent.height - overlaySpan : 0) : 0
+                    readonly property int overlayW: isVertical ? overlaySpan : parent.width
+                    readonly property int overlayH: !isVertical ? overlaySpan : parent.height
+
+                    Rectangle {
+                        x: barGradientOverlay.overlayX
+                        y: barGradientOverlay.overlayY
+                        width: barGradientOverlay.overlayW
+                        height: barGradientOverlay.overlayH
+
+                        gradient: Gradient {
+                            orientation: barGradientOverlay.isVertical ? Gradient.Horizontal : Gradient.Vertical
+
+                            // Lado onde a bar fica — mais escuro
+                            GradientStop {
+                                position: 0.0
+                                color: barGradientOverlay.isVertical
+                                    ? (barGradientOverlay.isBottom ? "transparent" : Qt.rgba(0,0,0,0.45))
+                                    : (!barGradientOverlay.isBottom ? Qt.rgba(0,0,0,0.45) : "transparent")
                             }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Qt.rgba(0, 0, 0, 0.30)
+                            GradientStop {
+                                position: 0.55
+                                color: barGradientOverlay.isVertical
+                                    ? (barGradientOverlay.isBottom ? "transparent" : Qt.rgba(0,0,0,0.15))
+                                    : (!barGradientOverlay.isBottom ? Qt.rgba(0,0,0,0.15) : "transparent")
                             }
-                        }
-
-                        Item {
-                            id: dimMask
-                            anchors.fill: parent
-                            visible: false
-
-                            Canvas {
-                                anchors.fill: parent
-                                readonly property bool isV: barGradientOverlay.isVertical
-                                readonly property bool isB: barGradientOverlay.isBottom
-
-                                onPaint: {
-                                    var ctx = getContext("2d");
-                                    ctx.reset();
-                                    var g;
-                                    if (isV)
-                                        g = isB ? ctx.createLinearGradient(width, 0, 0, 0) : ctx.createLinearGradient(0, 0, width, 0);
-                                    else
-                                        g = isB ? ctx.createLinearGradient(0, height, 0, 0) : ctx.createLinearGradient(0, 0, 0, height);
-                                    g.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-                                    g.addColorStop(0.7, "rgba(255, 255, 255, 0.3)");
-                                    g.addColorStop(1.0, "rgba(255, 255, 255, 0)");
-                                    ctx.fillStyle = g;
-                                    ctx.fillRect(0, 0, width, height);
-                                }
-
-                                onWidthChanged: requestPaint()
-                                onHeightChanged: requestPaint()
+                            GradientStop {
+                                position: 1.0
+                                color: barGradientOverlay.isVertical
+                                    ? (barGradientOverlay.isBottom ? Qt.rgba(0,0,0,0.45) : "transparent")
+                                    : (!barGradientOverlay.isBottom ? "transparent" : Qt.rgba(0,0,0,0.45))
                             }
                         }
                     }
