@@ -258,7 +258,7 @@ Scope {
             }
             Timer {
                 id: rippleLayerResetTimer
-                interval: 1500
+                interval: 1800
                 repeat: false
                 onTriggered: bgRoot.rippleActive = false
             }
@@ -510,89 +510,147 @@ Scope {
                 }
             }
 
-            // Lockscreen ripple — saindo do centro da tela ao desbloquear
-            // Usa SequentialAnimation idêntico ao RippleButton: grow → depois fade
+            // Lockscreen unlock — onda suave e sutil irradiando do centro
             Item {
                 id: lockScreenRippleEffect
                 anchors.fill: parent
                 z: 100
                 clip: true
-                visible: rippleAnim.running || rippleFadeAnim.running
+                visible: wave1Anim.running || wave2Anim.running || wave3Anim.running
 
                 function startRipple(x, y) {
-                    // Sempre irradia do centro da tela, independente de onde foi clicado
                     const cx = bgRoot.width / 2;
                     const cy = bgRoot.height / 2;
-                    // Raio = diagonal até o canto mais longe do centro
-                    const maxRadius = Math.sqrt(cx * cx + cy * cy);
+                    const maxRadius = Math.sqrt(cx * cx + cy * cy) * 1.1;
 
-                    rippleCircle.x = cx;
-                    rippleCircle.y = cy;
-                    rippleAnim.radius = maxRadius;
+                    wave1.x = cx; wave1.y = cy;
+                    wave2.x = cx; wave2.y = cy;
+                    wave3.x = cx; wave3.y = cy;
+                    rippleAnim.maxRadius = maxRadius;
 
-                    // Mesmo padrão do RippleButton: para fade anterior, reinicia sequência
-                    rippleFadeAnim.complete();
+                    wave1.opacity = 0;
+                    wave2.opacity = 0;
+                    wave3.opacity = 0;
+
                     rippleAnim.restart();
                 }
 
-                // Sequência: set posição+opacidade → grow → (ao terminar) fade
                 SequentialAnimation {
                     id: rippleAnim
-                    property real radius: 0
+                    property real maxRadius: 0
 
-                    PropertyAction { target: rippleCircle; property: "rippleSize"; value: 0 }
-                    PropertyAction { target: rippleCircle; property: "opacity";    value: 0.75 }
-
-                    NumberAnimation {
-                        target: rippleCircle
-                        property: "rippleSize"
-                        from: 0
-                        to: rippleAnim.radius * 2
-                        duration: 750
-                        easing.type: Easing.OutCubic
-                    }
-
-                    // Inicia fade após o grow
-                    ScriptAction {
-                        script: rippleFadeAnim.restart()
+                    // Wave 1
+                    ParallelAnimation {
+                        NumberAnimation { target: wave1; property: "rippleSize"; from: 0; to: rippleAnim.maxRadius * 2; duration: 1200; easing.type: Easing.OutQuart }
+                        NumberAnimation { target: wave1; property: "opacity"; from: 0.18; to: 0; duration: 1200; easing.type: Easing.OutCubic }
                     }
                 }
 
-                // Fade separado — começa só após grow terminar
-                NumberAnimation {
-                    id: rippleFadeAnim
-                    target: rippleCircle
-                    property: "opacity"
-                    from: 0.75
-                    to: 0
-                    duration: 550
-                    easing.type: Easing.InQuad
+                // Wave 2 — delay 120ms
+                SequentialAnimation {
+                    id: wave2Anim
+                    PauseAnimation { duration: 120 }
+                    ParallelAnimation {
+                        NumberAnimation { target: wave2; property: "rippleSize"; from: 0; to: rippleAnim.maxRadius * 2; duration: 1300; easing.type: Easing.OutQuart }
+                        NumberAnimation { target: wave2; property: "opacity"; from: 0.12; to: 0; duration: 1300; easing.type: Easing.OutCubic }
+                    }
+                }
+
+                // Wave 3 — delay 260ms
+                SequentialAnimation {
+                    id: wave3Anim
+                    PauseAnimation { duration: 260 }
+                    ParallelAnimation {
+                        NumberAnimation { target: wave3; property: "rippleSize"; from: 0; to: rippleAnim.maxRadius * 2; duration: 1400; easing.type: Easing.OutQuart }
+                        NumberAnimation { target: wave3; property: "opacity"; from: 0.08; to: 0; duration: 1400; easing.type: Easing.OutCubic }
+                    }
                 }
 
                 Item {
-                    id: rippleCircle
+                    id: wave1
                     property real rippleSize: 0
                     width: rippleSize
                     height: rippleSize
                     opacity: 0
                     visible: rippleSize > 0
                     transform: Translate {
-                        x: -rippleCircle.width  / 2
-                        y: -rippleCircle.height / 2
+                        x: -wave1.width  / 2
+                        y: -wave1.height / 2
                     }
 
-                    RadialGradient {
+                    Rectangle {
                         anchors.fill: parent
-                        gradient: Gradient {
-                            GradientStop { position: 0.0;  color: Appearance.colors.colPrimary }
-                            GradientStop { position: 0.35; color: Appearance.colors.colPrimary }
-                            GradientStop {
-                                position: 0.75
-                                color: Qt.rgba(
-                                    Appearance.colors.colPrimary.r,
-                                    Appearance.colors.colPrimary.g,
-                                    Appearance.colors.colPrimary.b,
-                                    0.0)
+                        radius: width / 2
+                        clip: true
+                        color: "transparent"
+
+                        RadialGradient {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop { position: 0.0;  color: Qt.rgba(1, 1, 1, 1) }
+                                GradientStop { position: 0.25; color: Qt.rgba(1, 1, 1, 0.6) }
+                                GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, 0.15) }
+                                GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0) }
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    id: wave2
+                    property real rippleSize: 0
+                    width: rippleSize
+                    height: rippleSize
+                    opacity: 0
+                    visible: rippleSize > 0
+                    transform: Translate {
+                        x: -wave2.width  / 2
+                        y: -wave2.height / 2
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        clip: true
+                        color: "transparent"
+
+                        RadialGradient {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop { position: 0.0;  color: Qt.rgba(1, 1, 1, 1) }
+                                GradientStop { position: 0.2;  color: Qt.rgba(1, 1, 1, 0.5) }
+                                GradientStop { position: 0.5;  color: Qt.rgba(1, 1, 1, 0.1) }
+                                GradientStop { position: 0.8;  color: Qt.rgba(1, 1, 1, 0) }
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    id: wave3
+                    property real rippleSize: 0
+                    width: rippleSize
+                    height: rippleSize
+                    opacity: 0
+                    visible: rippleSize > 0
+                    transform: Translate {
+                        x: -wave3.width  / 2
+                        y: -wave3.height / 2
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        clip: true
+                        color: "transparent"
+
+                        RadialGradient {
+                            anchors.fill: parent
+                            gradient: Gradient {
+                                GradientStop { position: 0.0;  color: Qt.rgba(1, 1, 1, 1) }
+                                GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.4) }
+                                GradientStop { position: 0.45; color: Qt.rgba(1, 1, 1, 0.08) }
+                                GradientStop { position: 0.75; color: Qt.rgba(1, 1, 1, 0) }
                             }
                         }
                     }
