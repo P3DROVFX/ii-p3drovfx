@@ -209,32 +209,34 @@ Item {
                             Rectangle {
                                 id: hMask
                                 anchors.fill: parent
+                                color: "transparent"
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
-                                    GradientStop { position: 0.0; color: "transparent" }
-                                    GradientStop { position: 0.08; color: "transparent" }
-                                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                                    GradientStop { position: 0.45; color: "white" }
-                                    GradientStop { position: 0.55; color: "white" }
-                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                                    GradientStop { position: 0.92; color: "transparent" }
-                                    GradientStop { position: 1.0; color: "transparent" }
+                                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                                    GradientStop { position: 0.08; color: Qt.rgba(0, 0, 0, 0) }
+                                    GradientStop { position: 0.2; color: Qt.rgba(0, 0, 0, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
+                                    GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 1) }
+                                    GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 1) }
+                                    GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
+                                    GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.3) }
+                                    GradientStop { position: 0.92; color: Qt.rgba(0, 0, 0, 0) }
+                                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
                                 }
                             }
 
                             Rectangle {
                                 anchors.fill: parent
+                                color: "transparent"
                                 gradient: Gradient {
                                     orientation: Gradient.Vertical
-                                    GradientStop { position: 0.0; color: "transparent" }
-                                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                                    GradientStop { position: 0.5; color: "white" }
-                                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                                    GradientStop { position: 1.0; color: "transparent" }
+                                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                                    GradientStop { position: 0.15; color: Qt.rgba(0, 0, 0, 0.3) }
+                                    GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
+                                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 1) }
+                                    GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
+                                    GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.3) }
+                                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
                                 }
                                 layer.enabled: true
                                 layer.effect: OpacityMask {
