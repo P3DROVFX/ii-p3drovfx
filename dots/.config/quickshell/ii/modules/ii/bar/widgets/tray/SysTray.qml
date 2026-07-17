@@ -17,6 +17,7 @@ Item {
     property bool trayOverflowOpen: false
     property bool showSeparator: true
     property bool showOverflowMenu: true
+    property bool circleItems: false
     property var activeMenu: null
 
     property list<var> pinnedItems: TrayService.pinnedItems
@@ -78,8 +79,8 @@ Item {
         id: gridLayout
         columns: sysTrayRoot.vertical ? 1 : -1
         anchors.fill: parent
-        rowSpacing: 8
-        columnSpacing: 15
+        rowSpacing: sysTrayRoot.circleItems ? 4 : 8
+        columnSpacing: sysTrayRoot.circleItems ? 4 : 15
 
         RippleButton {
             id: trayOverflowButton
@@ -143,14 +144,32 @@ Item {
                 values: sysTrayRoot.pinnedItems
             }
 
-            delegate: SysTrayItem {
+            delegate: Item {
+                id: circleDelegate
                 required property SystemTrayItem modelData
-                item: modelData
-                Layout.fillHeight: !sysTrayRoot.vertical
-                Layout.fillWidth: sysTrayRoot.vertical
-                onMenuClosed: sysTrayRoot.releaseFocus()
-                onMenuOpened: qsWindow => {
-                    sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow);
+                property bool useCircle: sysTrayRoot.circleItems
+                Layout.fillHeight: !sysTrayRoot.vertical && !useCircle
+                Layout.fillWidth: sysTrayRoot.vertical && !useCircle
+                implicitWidth: useCircle ? 26 : trayItem.implicitWidth
+                implicitHeight: useCircle ? 26 : trayItem.implicitHeight
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimaryContainer
+                    visible: circleDelegate.useCircle
+                }
+
+                SysTrayItem {
+                    id: trayItem
+                    anchors.centerIn: parent
+                    item: circleDelegate.modelData
+                    onMenuClosed: sysTrayRoot.releaseFocus()
+                    onMenuOpened: qsWindow => {
+                        sysTrayRoot.setExtraWindowAndGrabFocus(qsWindow);
+                    }
                 }
             }
         }
