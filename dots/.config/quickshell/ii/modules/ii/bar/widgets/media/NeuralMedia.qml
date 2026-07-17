@@ -1,11 +1,13 @@
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.utils
+import qs.modules.common.models
 import qs.services
 import qs
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
@@ -15,8 +17,8 @@ Item {
     id: root
 
     Layout.fillHeight: true
-
     property bool vertical: false
+    property bool isMaterial: true
 
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
@@ -28,13 +30,11 @@ Item {
     property int lyricsCustomSize: Config.options.bar.mediaPlayer.lyrics.customSize
     property bool useFixedSize: Config.options.bar.mediaPlayer.useFixedSize
     readonly property bool lyricsEnabled: Config.options.bar.mediaPlayer.lyrics.enable
-    readonly property bool useGradientMask: Config.options.bar.mediaPlayer.lyrics.useGradientMask
-    readonly property string lyricsStyle: Config.options.bar.mediaPlayer.lyrics.style
     readonly property bool artworkEnabled: Config.options.bar.mediaPlayer.artwork.enable
 
     readonly property int artSize: Appearance.sizes.baseBarHeight - 8
     readonly property int barWidth: Math.max(4, Math.min(8, artSize / 5))
-    readonly property int visualizerWidth: 4 * barWidth + 3 * 1
+    readonly property int visualizerWidth: 4 * barWidth + 2 * 3
     readonly property int spacing: 4
 
     readonly property string artUrl: MprisController.artUrl
@@ -48,6 +48,35 @@ Item {
         if (isLocalArt) return artUrl;
         return artDownloaded ? Qt.resolvedUrl(artFilePath) : artUrl;
     }
+
+    readonly property string localArtFilePath: {
+        if (!artUrl || artUrl === "") return "";
+        if (isLocalArt) return FileUtils.trimFileProtocol(artUrl);
+        return artDownloaded ? artFilePath : "";
+    }
+
+    readonly property string resolvedArtPath: localArtFilePath !== "" ? Qt.resolvedUrl(localArtFilePath) : ""
+
+    readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && localArtFilePath !== ""
+
+    ColorQuantizer {
+        id: colorQuantizer
+        source: root.resolvedArtPath
+        depth: 0
+        rescaleSize: 1
+    }
+
+    property color artDominantColor: ColorUtils.mix(
+        (colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary),
+        Appearance.colors.colPrimaryContainer, 0.8
+    ) || Appearance.m3colors.m3secondaryContainer
+
+    property QtObject blendedColors: AdaptedMaterialScheme {
+        color: root.artDominantColor
+    }
+
+    readonly property color artTextColor: useDynamicColors ? blendedColors.colOnSurface : Appearance.colors.colOnSurface
+    readonly property color artSubtextColor: useDynamicColors ? blendedColors.colOnSurfaceVariant : Appearance.colors.colOnSurfaceVariant
 
     TextMetrics {
         id: titleMetrics
@@ -71,8 +100,9 @@ Item {
         ? lyricsCustomSize
         : useFixedSize
             ? customSize
-            : (calculatedPillWidth + (artworkEnabled ? artSize + spacing : 0) + (hasTrack ? spacing + visualizerWidth : 0))
-    implicitHeight: Appearance.sizes.baseBarHeight
+            : (calculatedPillWidth + visualizerWidth + 24)
+    implicitHeight: Appearance.sizes.baseBarHeight - 8
+    height: implicitHeight
 
     Behavior on implicitWidth {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
@@ -131,20 +161,26 @@ Item {
     function getBarHeight(index) {
         let minH = barWidth;
         if (!root.playing)
-            return minH; // Reset to perfect circle when paused
+            return minH;
         let val = 0;
-        if (index === 0)
-            val = bar0Val;
-        else if (index === 1)
-            val = bar1Val;
-        else if (index === 2)
-            val = bar2Val;
-        else if (index === 3)
-            val = bar3Val;
+        if (index === 0) val = bar0Val;
+        else if (index === 1) val = bar1Val;
+        else if (index === 2) val = bar2Val;
+        else if (index === 3) val = bar3Val;
 
-        let norm = Math.min(1.0, Math.max(0.0, val));
+        let norm = Math.min(1.0, Math.max(0.0, val * 2.0));
         let maxH = artSize - 10;
         return minH + norm * (maxH - minH);
+    }
+
+    function getBarAmplitude(index) {
+        if (!root.playing) return 0.0;
+        let val = 0;
+        if (index === 0) val = bar0Val;
+        else if (index === 1) val = bar1Val;
+        else if (index === 2) val = bar2Val;
+        else if (index === 3) val = bar3Val;
+        return Math.min(1.0, Math.max(0.0, val * 2.0));
     }
 
     Process {
@@ -193,72 +229,200 @@ Item {
         }
     }
 
-    RowLayout {
+    // ── CONTRACTED LAYOUT (album-art full background, matching FloatingNotchMedia) ──
+
+    // Rounded clip mask
+    Rectangle {
+        id: contractedMaskRect
         anchors.fill: parent
-        spacing: root.spacing
+        radius: Appearance.rounding.small
+        visible: false
+    }
 
-        // Left Side: Album Art (12-sided Material Shape)
+    layer.enabled: true
+    layer.effect: OpacityMask {
+        maskSource: contractedMaskRect
+    }
+
+    // Vignette mask (horizontal + vertical gradients combined)
+    Item {
+        id: contractedVignetteMask
+        anchors.fill: parent
+        visible: true
+
+        Rectangle {
+            id: contractedHMask
+            anchors.fill: parent
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.08; color: "transparent" }
+                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                GradientStop { position: 0.45; color: "white" }
+                GradientStop { position: 0.55; color: "white" }
+                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                GradientStop { position: 0.92; color: "transparent" }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                orientation: Gradient.Vertical
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                GradientStop { position: 0.5; color: "white" }
+                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: contractedHMask
+            }
+        }
+    }
+
+    // Album art layers (background blurred + sharp foreground with vignette)
+    Item {
+        anchors.fill: parent
+
+        // Current art (visible when no transition in progress)
         Item {
-            id: compactArtContainer
-            visible: root.artworkEnabled
-            Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: root.artSize
-            Layout.preferredHeight: root.artSize
+            anchors.fill: parent
+            visible: root.artSource !== ""
 
-            MaterialShape {
-                id: compactCookieMask
+            Image {
                 anchors.fill: parent
-                shapeString: "Cookie9Sided"
-                color: Appearance.colors.colSurfaceContainerHighest
-                visible: false
+                source: root.artSource
+                fillMode: Image.PreserveAspectCrop
+                smooth: true
+                asynchronous: true
+                cache: false
+                sourceSize.width: root.artSize * 2
+                sourceSize.height: root.artSize * 2
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    blurEnabled: true
+                    blurMax: 128
+                    blur: root.playing ? 50 / 128 : 90 / 128
+
+                    Behavior on blur {
+                        NumberAnimation {
+                            duration: 500
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
             }
 
             Item {
                 anchors.fill: parent
                 layer.enabled: true
                 layer.effect: OpacityMask {
-                    maskSource: compactCookieMask
+                    maskSource: contractedVignetteMask
                 }
 
                 Image {
                     anchors.fill: parent
                     source: root.artSource
                     fillMode: Image.PreserveAspectCrop
-                    visible: root.artSource !== ""
+                    smooth: true
+                    asynchronous: true
                     cache: false
-                    antialiasing: true
-                    sourceSize.width: root.artSize
-                    sourceSize.height: root.artSize
-                }
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "music_note"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnSurfaceVariant
-                    visible: root.artSource === ""
+                    sourceSize.width: root.artSize * 2
+                    sourceSize.height: root.artSize * 2
                 }
             }
         }
+    }
 
-        // Center Side: Rounded Rectangle (Pill) containing metadata or lyrics
+    // Fallback gradient when no art
+    Rectangle {
+        anchors.fill: parent
+        visible: root.artSource === ""
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0.0
+                color: Appearance.colors.colSurfaceContainerHighest
+            }
+            GradientStop {
+                position: 1.0
+                color: Appearance.colors.colSurfaceContainer
+            }
+        }
+    }
+
+    // Music note icon centered when no art
+    MaterialSymbol {
+        anchors.centerIn: parent
+        visible: root.artSource === ""
+        text: "music_note"
+        iconSize: Appearance.font.pixelSize.large
+        color: Appearance.colors.colOnSurface
+        opacity: 0.5
+    }
+
+    // ── Radial gradient dimming overlay ──
+    Item {
+        anchors.fill: parent
+        opacity: root.playing ? 0.7 : 0.85
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutQuad
+            }
+        }
+
         Rectangle {
-            id: compactTextContainer
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
+                GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
+                GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
+                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+            }
+        }
+
+        // Extra dim layer when paused
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.3)
+            opacity: root.playing ? 0.0 : 0.5
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 500
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+    }
+
+    // ── Content row ──
+    RowLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        spacing: 8
+
+        // Left: metadata or lyrics
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.artSize
-            Layout.alignment: Qt.AlignVCenter
-            color: Appearance.colors.colSurfaceContainerHighest
-            radius: Appearance.rounding.verysmall
-            clip: true
+            Layout.fillHeight: true
 
-            readonly property bool hasLyrics: root.lyricsEnabled && LyricsService.hasSyncedLines
-
-            // Synced lyrics view (1 line or 3 lines with edge fade)
+            // Synced lyrics view
             Loader {
                 id: compactLyricsLoader
                 anchors.fill: parent
                 anchors.margins: 4
-                active: compactTextContainer.hasLyrics
+                active: root.lyricsEnabled && LyricsService.hasSyncedLines
                 visible: active
                 sourceComponent: LyricScroller {
                     id: lyricScroller
@@ -271,33 +435,32 @@ Item {
                 }
             }
 
-            // Standard metadata display (Song + Artist in two lines)
+            // Standard metadata display
             ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 0
+                spacing: 1
                 visible: !compactLyricsLoader.visible
 
                 StyledText {
-                    id: titleText
                     Layout.fillWidth: true
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.DemiBold
+                    font.weight: Font.Black
+                    font.styleName: "Rounded"
+                    font.hintingPreference: Font.PreferNoHinting
+                    color: root.artTextColor
                     text: root.cleanedTitle
                     maximumLineCount: 1
                     elide: Text.ElideRight
                     horizontalAlignment: Text.AlignLeft
-                    color: Appearance.colors.colOnSurface
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 StyledText {
-                    id: artistText
                     Layout.fillWidth: true
                     font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.colors.colSubtext
+                    color: root.artSubtextColor
                     text: root.trackArtist
                     maximumLineCount: 1
                     elide: Text.ElideRight
@@ -306,36 +469,31 @@ Item {
             }
         }
 
-        // Right Side: Cava Visualizer (4 bars)
+        // Right: visualizer bars
         Item {
-            id: compactVisualizerContainer
-            visible: root.hasTrack
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: root.visualizerWidth
-            Layout.preferredHeight: root.artSize
+            implicitWidth: root.visualizerWidth
+            implicitHeight: root.artSize
 
             Row {
-                id: compactVisualizerRow
                 anchors.centerIn: parent
                 height: parent.height
-                spacing: 1
+                spacing: 2
 
                 Repeater {
                     model: 4
-                    Rectangle {
+                    ModernVisualizerBar {
                         required property int index
                         anchors.verticalCenter: parent.verticalCenter
-                        width: root.barWidth
-                        height: root.getBarHeight(index)
-                        radius: root.barWidth / 2
-                        color: Appearance.colors.colPrimary
-
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: 85
-                                easing.type: Easing.OutCubic
-                            }
-                        }
+                        barWidth: root.barWidth
+                        maxHeight: root.artSize - 10
+                        minHeight: root.barWidth
+                        amplitude: root.getBarAmplitude(index)
+                        bgAmplitude: root.getBarAmplitude((index + 1) % 4)
+                        color: root.useDynamicColors ? root.blendedColors.colPrimary : root.artTextColor
+                        fgColor: root.useDynamicColors ? root.blendedColors.colTertiary : Appearance.colors.colTertiary
+                        glowColor: root.useDynamicColors ? root.blendedColors.colOnPrimary : "#FFFFFF"
+                        playing: root.playing
                     }
                 }
             }

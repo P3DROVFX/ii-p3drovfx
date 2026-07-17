@@ -265,7 +265,7 @@ Item {
     readonly property bool isExpressive: {
         if (modelData.id === "clock" && Config.options.bar.styles.clock === "expressive")
             return true;
-        if (modelData.id === "music_player" && Config.options.bar.styles.media === "expressive")
+        if (modelData.id === "music_player" && (Config.options.bar.styles.media === "expressive" || Config.options.bar.styles.media === "neural"))
             return true;
         if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
             return true;
@@ -341,7 +341,7 @@ Item {
 
         startRadius: rootItem.startRadius
         endRadius:   rootItem.endRadius
-        colBackground: rootItem.isMaterial ? "transparent" : groupTheme.resolvedBackground
+        colBackground: (rootItem.isMaterial || rootItem.isExpressive) ? "transparent" : groupTheme.resolvedBackground
 
         Loader {
             id: itemLoader
