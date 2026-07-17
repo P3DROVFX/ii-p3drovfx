@@ -47,6 +47,23 @@ ContentPage {
             targetSectionTitle: Translation.tr("Parallax Engine")
             materialIcon: "loupe"
         }
+
+        ConfigSlider {
+            buttonIcon: "hourglass_bottom"
+            text: Translation.tr("Window restore delay")
+            value: Config.options.lock.windowRestoreDelay
+            from: 0
+            to: 2000
+            stepSize: 10
+            usePercentTooltip: false
+            tooltipContent: `${Math.round(value)}ms`
+            onValueChanged: {
+                Config.options.lock.windowRestoreDelay = value;
+            }
+            StyledToolTip {
+                text: Translation.tr("Delay before windows slide back in after unlocking. Lower feels snappier but may race the unlock animation.")
+            }
+        }
     }
 
     ContentSection {

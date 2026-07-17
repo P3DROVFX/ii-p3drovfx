@@ -1216,6 +1216,7 @@ Singleton {
                 property real centerSpacing: 20 // spacing between multiple centered widgets
                 property string centerAlignment: "horizontal" // "vertical" | "horizontal"
                 property bool showLockedText: true
+                property int windowRestoreDelay: 100 // ms, delay before workspaces slide back in after unlock; 0-2000, step 10
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false

@@ -16,7 +16,7 @@ LockScreen {
 
     Timer {
         id: restoreTimer
-        interval: 100
+        interval: Config.options.lock.windowRestoreDelay
         repeat: false
         onTriggered: {
             var batch = ""
