@@ -45,12 +45,12 @@ Singleton {
         "subPages": ["widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/BTDeviceImagesConfig.qml"],
         "aliases": []
     }, {
-        "id": "backgrounds",
-        "name": "Backgrounds",
+        "id": "wallpaper",
+        "name": "Wallpaper",
         "icon": "wallpaper",
-        "component": "modules/settings/configs/BackgroundConfig.qml",
+        "component": "modules/settings/configs/WallpaperConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Backgrounds", "Wallpaper Engine"]
     }, {
         "id": "interfaceFonts",
         "name": "Interface & Fonts",
@@ -154,7 +154,7 @@ Singleton {
         "name": "Core Services",
         "icon": "settings_suggest",
         "component": "modules/settings/configs/CoreServicesConfig.qml",
-        "subPages": ["widgets/CoreAudioConfig.qml", "widgets/CorePowerConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreLanguageConfig.qml", "widgets/CoreAlertsConfig.qml", "widgets/CoreMediaConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreNetworkConfig.qml", "widgets/CoreFilesConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/CoreTerminalConfig.qml", "widgets/CoreWaffleConfig.qml", "widgets/MediaDownloaderConfig.qml"],
+        "subPages": ["widgets/CoreAudioConfig.qml", "widgets/CorePowerConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreLanguageConfig.qml", "widgets/CoreAlertsConfig.qml", "widgets/CoreMediaConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreNetworkConfig.qml", "widgets/CoreFilesConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/CoreWaffleConfig.qml", "widgets/MediaDownloaderConfig.qml"],
         "aliases": []
     }, {
         "id": "lockScreen",
@@ -191,7 +191,7 @@ Singleton {
     readonly property var groups: [{
         "id": "lookAndFeel",
         "name": "Look & Feel",
-        "pageIds": ["colors", "bar", "backgrounds", "interfaceFonts", "presets"]
+        "pageIds": ["colors", "bar", "wallpaper", "interfaceFonts", "presets"]
     }, {
         "id": "modules",
         "name": "Modules",

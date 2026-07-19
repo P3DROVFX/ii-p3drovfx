@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -19,10 +20,6 @@ Item {
         root.activeSubPage = "";
     }
 
-    Component.onCompleted: {
-        checkPendingSubPage();
-    }
-
     function checkPendingSubPage() {
         if (GlobalStates.settingsPendingSubPage !== "") {
             root.openSubPage(GlobalStates.settingsPendingSubPage);
@@ -30,15 +27,21 @@ Item {
         }
     }
 
+    Component.onCompleted: {
+        checkPendingSubPage();
+    }
+
     Connections {
-        target: GlobalStates
         function onSettingsPendingSubPageChanged() {
             root.checkPendingSubPage();
         }
+
+        target: GlobalStates
     }
 
     ContentPage {
         id: page
+
         anchors.fill: parent
         forceWidth: false
         opacity: subPageOverlay.slideProgress
@@ -80,6 +83,7 @@ Item {
                     description: qsTr("Battery and pomodoro sounds")
                     onOpenCard: root.openSubPage("widgets/CoreAlertsConfig.qml")
                 }
+
             }
 
             Item {
@@ -117,6 +121,7 @@ Item {
                     description: qsTr("Blackout overlay timing")
                     onOpenCard: root.openSubPage("widgets/CoreOledSaverConfig.qml")
                 }
+
             }
 
             Item {
@@ -163,6 +168,7 @@ Item {
                     description: qsTr("Download videos and audio using yt-dlp")
                     onOpenCard: root.openSubPage("widgets/MediaDownloaderConfig.qml")
                 }
+
             }
 
             Item {
@@ -191,6 +197,7 @@ Item {
                     description: qsTr("Clock formats and world clocks")
                     onOpenCard: root.openSubPage("widgets/CoreTimeDateConfig.qml")
                 }
+
             }
 
             Item {
@@ -207,8 +214,19 @@ Item {
                     cardHue: 276
                     cardShape: "Cookie4Sided"
                     title: qsTr("Terminal Settings")
-                    description: qsTr("Terminal color generation props")
-                    onOpenCard: root.openSubPage("widgets/CoreTerminalConfig.qml")
+                    description: qsTr("Moved to Colors & Themes → App theming")
+                    onOpenCard: {
+                        const win = root.QsWindow.window;
+                        if (!win || win.pageIndexById === undefined)
+                            return ;
+
+                        const idx = win.pageIndexById("colors");
+                        if (idx < 0)
+                            return ;
+
+                        win.pendingSectionHighlight = Translation.tr("App theming");
+                        win.currentPage = idx;
+                    }
                 }
 
                 ServiceCard {
@@ -219,6 +237,7 @@ Item {
                     description: qsTr("Optional shell tweaks")
                     onOpenCard: root.openSubPage("widgets/CoreWaffleConfig.qml")
                 }
+
             }
 
             Item {
@@ -247,6 +266,7 @@ Item {
                     description: qsTr("Record paths, LocalSend and wallpapers")
                     onOpenCard: root.openSubPage("widgets/CoreFilesConfig.qml")
                 }
+
             }
 
             Item {
@@ -266,13 +286,18 @@ Item {
                     description: qsTr("Hide suspects and manage policies icon")
                     onOpenCard: root.openSubPage("widgets/CorePoliciesConfig.qml")
                 }
+
             }
+
         }
+
     }
 
     ConfigSubPageHost {
         id: subPageOverlay
+
         anchors.fill: parent
         z: 10
     }
+
 }

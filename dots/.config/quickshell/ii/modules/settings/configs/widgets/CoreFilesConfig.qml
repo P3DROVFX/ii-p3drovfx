@@ -1,17 +1,19 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: root
+
+    signal goBack()
+
     forceWidth: false
-    signal goBack
 
     RowLayout {
         spacing: 12
@@ -26,6 +28,7 @@ ContentPage {
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: root.goBack()
 
             MaterialSymbol {
                 anchors.centerIn: parent
@@ -34,7 +37,6 @@ ContentPage {
                 color: Appearance.colors.colOnSecondaryContainer
             }
 
-            onClicked: root.goBack()
         }
 
         StyledText {
@@ -43,7 +45,9 @@ ContentPage {
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
         }
+
     }
+
     ContentSection {
         icon: "save"
         title: Translation.tr("File Paths & Transfers")
@@ -108,58 +112,53 @@ ContentPage {
 
         StyledComboBox {
             id: recorderCodecSelector2
+
             buttonIcon: "movie"
             textRole: "displayName"
             visible: Config.options.screenRecord.service === "wf-recorder"
-            model: [
-                {
-                    displayName: Translation.tr("Auto (Recommended)"),
-                    value: "auto"
-                },
-                {
-                    displayName: "H264 (NVIDIA GPU - NVENC)",
-                    value: "h264_nvenc"
-                },
-                {
-                    displayName: "H264 (Intel/AMD GPU - VAAPI)",
-                    value: "h264_vaapi"
-                },
-                {
-                    displayName: "H264 (AMD GPU - AMF)",
-                    value: "h264_amf"
-                },
-                {
-                    displayName: "H264 (CPU - Compatibility)",
-                    value: "libx264"
-                },
-                {
-                    displayName: "HEVC (NVIDIA GPU - NVENC)",
-                    value: "hevc_nvenc"
-                },
-                {
-                    displayName: "HEVC (Intel/AMD GPU - VAAPI)",
-                    value: "hevc_vaapi"
-                },
-                {
-                    displayName: "HEVC (AMD GPU - AMF)",
-                    value: "hevc_amf"
-                },
-                {
-                    displayName: "HEVC (CPU - Compatibility)",
-                    value: "libx265"
-                }
-            ]
+            model: [{
+                "displayName": Translation.tr("Auto (Recommended)"),
+                "value": "auto"
+            }, {
+                "displayName": "H264 (NVIDIA GPU - NVENC)",
+                "value": "h264_nvenc"
+            }, {
+                "displayName": "H264 (Intel/AMD GPU - VAAPI)",
+                "value": "h264_vaapi"
+            }, {
+                "displayName": "H264 (AMD GPU - AMF)",
+                "value": "h264_amf"
+            }, {
+                "displayName": "H264 (CPU - Compatibility)",
+                "value": "libx264"
+            }, {
+                "displayName": "HEVC (NVIDIA GPU - NVENC)",
+                "value": "hevc_nvenc"
+            }, {
+                "displayName": "HEVC (Intel/AMD GPU - VAAPI)",
+                "value": "hevc_vaapi"
+            }, {
+                "displayName": "HEVC (AMD GPU - AMF)",
+                "value": "hevc_amf"
+            }, {
+                "displayName": "HEVC (CPU - Compatibility)",
+                "value": "libx265"
+            }]
             currentIndex: {
-                const index = model.findIndex(item => item.value === Config.options.screenRecord.codec);
+                const index = model.findIndex((item) => {
+                    return item.value === Config.options.screenRecord.codec;
+                });
                 return index !== -1 ? index : 0;
             }
-            onActivated: index => {
+            onActivated: (index) => {
                 Config.options.screenRecord.codec = model[index].value;
             }
+
             StyledToolTip {
                 parent: recorderCodecSelector2
                 text: Translation.tr("Auto automatically selects the best hardware encoder on your system. NVENC is for Nvidia, VA-API is for Intel/AMD, and AMF is for AMD. CPU encodes via software and uses more resources.")
             }
+
         }
 
         ConfigSlider {
@@ -174,9 +173,11 @@ ContentPage {
             onValueChanged: {
                 Config.options.screenRecord.bitrate = value;
             }
+
             StyledToolTip {
                 text: Translation.tr("Higher bitrate increases video quality but uses more disk space. 6-12 Mbps is ideal for 1080p recording.")
             }
+
         }
 
         ConfigSlider {
@@ -191,9 +192,11 @@ ContentPage {
             onValueChanged: {
                 Config.options.screenRecord.framerate = value;
             }
+
             StyledToolTip {
                 text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings.")
             }
+
         }
 
         MaterialTextArea {
@@ -251,18 +254,6 @@ ContentPage {
             }
         }
 
-        ContentSubsectionLabel {
-            text: Translation.tr("Wallpaper Browser")
-        }
-
-        MaterialTextArea {
-            Layout.fillWidth: true
-            placeholderText: Translation.tr("Wallpaper Browser download path")
-            text: Config.options.wallpapers.paths.download
-            wrapMode: TextEdit.Wrap
-            onTextChanged: {
-                Config.options.wallpapers.paths.download = text;
-            }
-        }
     }
+
 }

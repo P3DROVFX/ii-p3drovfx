@@ -43,7 +43,7 @@ ContentPage {
         ShortcutBox {
             Layout.fillWidth: true
             value: Translation.tr("Wallpaper zoom")
-            targetPageId: "backgrounds"
+            targetPageId: "wallpaper"
             targetSectionTitle: Translation.tr("Parallax Engine")
             materialIcon: "loupe"
         }
@@ -287,6 +287,18 @@ ContentPage {
         NoticeBox {
             Layout.fillWidth: true
             text: Translation.tr("You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
+        }
+
+        ConfigSwitch {
+            buttonIcon: "timer_off"
+            text: Translation.tr("Disable clock animation on lock")
+            checked: Config.options.background.widgets.clock.disableAnimationOnLock
+            onCheckedChanged: {
+                Config.options.background.widgets.clock.disableAnimationOnLock = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Skip loading the clock widget during lock screen for better animation performance.")
+            }
         }
 
         ConfigSlider {
