@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 Item {
     id: overlaysConfigRoot
@@ -13,101 +13,11 @@ Item {
 
     ContentPage {
         id: page
+
         anchors.fill: parent
         forceWidth: false
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
-
-        ContentSection {
-            title: Translation.tr("Notifications")
-            icon: "notifications"
-
-            ConfigSpinBox {
-                icon: "timer"
-                text: Translation.tr("Timeout duration (ms)")
-                value: Config.options.notifications.timeout
-                from: 1000
-                to: 10000
-                stepSize: 500
-                onValueChanged: {
-                    Config.options.notifications.timeout = value;
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "zoom_in"
-                text: Translation.tr("Notification size (%)")
-                value: Config.options.notifications.zoomPercent
-                from: 50
-                to: 200
-                stepSize: 10
-                onValueChanged: {
-                    Config.options.notifications.zoomPercent = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "desktop_windows"
-                text: Translation.tr("Force specific monitor")
-                checked: Config.options.notifications.monitor.enable
-                onCheckedChanged: {
-                    Config.options.notifications.monitor.enable = checked;
-                }
-            }
-
-            ConfigTextField {
-                text: Translation.tr("Force monitor name")
-                icon: "desktop_windows"
-                visible: Config.options.notifications.monitor.enable
-                placeholderText: Translation.tr("Monitor Name (e.g. eDP-1)")
-                inputText: Config.options.notifications.monitor.name
-
-                textField.onTextChanged: {
-                    if (textField.activeFocus) {
-                        Config.options.notifications.monitor.name = textField.text;
-                    }
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "counter_2"
-                text: Translation.tr("Show unread count")
-                checked: Config.options.bar.indicators.notifications.showUnreadCount
-                onCheckedChanged: {
-                    Config.options.bar.indicators.notifications.showUnreadCount = checked;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Notification indicator style")
-                icon: "notifications"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.bar.styles.notification
-                    onSelected: newValue => { Config.options.bar.styles.notification = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
-                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Notification position")
-                icon: "place"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.notifications.position
-                    onSelected: newValue => { Config.options.notifications.position = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Top Left"),     icon: "north_west", value: "top_left" },
-                        { displayName: Translation.tr("Top Right"),    icon: "north_east", value: "top_right" },
-                        { displayName: Translation.tr("Bottom Left"),  icon: "south_west", value: "bottom_left" },
-                        { displayName: Translation.tr("Bottom Right"), icon: "south_east", value: "bottom_right" }
-                    ]
-                }
-            }
-        }
 
         ContentSection {
             title: Translation.tr("Game Overlays")
@@ -119,20 +29,24 @@ Item {
 
                 RippleButton {
                     id: gameOverlayRipple
+
                     Layout.fillWidth: true
                     implicitHeight: gameOverlayRow.implicitHeight + 32
                     buttonRadius: Appearance.rounding.full
-                    
                     colBackground: Appearance.colors.colTertiaryContainer
                     colBackgroundHover: Appearance.colors.colTertiaryContainerHover
                     colRipple: Appearance.colors.colTertiaryContainerActive
+                    onClicked: {
+                        overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml");
+                    }
 
                     contentItem: RowLayout {
                         id: gameOverlayRow
+
                         spacing: 12
                         anchors.fill: parent
                         anchors.margins: 16
-                        
+
                         MaterialShapeWrappedMaterialSymbol {
                             text: "settings"
                             shape: MaterialShape.Shape.Circle
@@ -142,26 +56,26 @@ Item {
                             color: Appearance.colors.colTertiary
                             colSymbol: Appearance.colors.colOnTertiary
                         }
-                        
+
                         StyledText {
                             Layout.fillWidth: true
                             text: Translation.tr("Game Overlay Options")
                             font.pixelSize: Appearance.font.pixelSize.medium
                             color: Appearance.colors.colOnTertiaryContainer
                         }
-                        
+
                         MaterialSymbol {
                             text: "arrow_forward"
                             iconSize: Appearance.font.pixelSize.large
                             color: Appearance.colors.colOnTertiaryContainer
                         }
+
                     }
 
-                    onClicked: {
-                        overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml");
-                    }
                 }
+
             }
+
         }
 
         ContentSection {
@@ -180,6 +94,7 @@ Item {
                         Config.options.overlay.media.showSlider = checked;
                     }
                 }
+
                 ConfigSpinBox {
                     icon: "opacity"
                     text: Translation.tr("Background opacity %")
@@ -191,6 +106,7 @@ Item {
                         Config.options.overlay.media.backgroundOpacityPercentage = value;
                     }
                 }
+
                 ConfigSwitch {
                     buttonIcon: "gradient"
                     text: Translation.tr("Use lyrics gradient masking")
@@ -199,6 +115,7 @@ Item {
                         Config.options.overlay.media.useGradientMask = checked;
                     }
                 }
+
                 ConfigSpinBox {
                     icon: "format_size"
                     text: Translation.tr("Lyrics font size")
@@ -210,13 +127,18 @@ Item {
                         Config.options.overlay.media.lyricSize = value;
                     }
                 }
+
             }
+
         }
+
     }
 
     ConfigSubPageHost {
         id: subPageOverlay
+
         anchors.fill: parent
         z: 10
     }
+
 }

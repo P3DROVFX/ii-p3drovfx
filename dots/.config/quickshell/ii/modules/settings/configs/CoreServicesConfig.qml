@@ -270,11 +270,11 @@ Item {
                 }
 
                 ServiceCard {
-                    cardIcon: "save"
+                    cardIcon: "share"
                     cardHue: 142
                     cardShape: "Cookie9Sided"
-                    title: qsTr("File Paths & Transfers")
-                    description: qsTr("Record paths, LocalSend and wallpapers")
+                    title: qsTr("LocalSend")
+                    description: qsTr("File sharing over the local network")
                     onOpenCard: root.openSubPage("widgets/CoreFilesConfig.qml")
                 }
 

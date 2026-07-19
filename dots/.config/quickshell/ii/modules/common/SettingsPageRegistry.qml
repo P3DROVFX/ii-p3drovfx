@@ -25,7 +25,7 @@ Singleton {
     // Group 1 – Look & Feel
     // Group 2 – Modules
     // Group 3 – Desktop & Windows
-    // Group 4 – Tools & Overlays
+    // Group 4 – Tools
     // Group 5 – System & Services
     // Hidden pages — keep at the end of the list
 
@@ -110,25 +110,39 @@ Singleton {
         "aliases": []
     }, {
         "id": "overlays",
-        "name": "System Overlays",
+        "name": "Overlays & OSD",
         "icon": "picture_in_picture",
         "component": "modules/settings/configs/OverlaysConfig.qml",
         "subPages": ["widgets/GameOverlayConfig.qml"],
-        "aliases": []
+        "aliases": ["System Overlays", "Media overlay", "Game overlay"]
     }, {
-        "id": "regionSelector",
-        "name": "Region Selector",
+        "id": "screenCapture",
+        "name": "Screenshots & Recording",
         "icon": "screenshot_region",
-        "component": "modules/settings/configs/RegionSelectorConfig.qml",
+        "component": "modules/settings/configs/ScreenCaptureConfig.qml",
+        "subPages": [],
+        "aliases": ["Region Selector", "Screenshot", "Screen recording", "Google Lens", "wf-recorder", "OBS"]
+    }, {
+        "id": "notifications",
+        "name": "Notifications",
+        "icon": "notifications",
+        "component": "modules/settings/configs/NotificationsConfig.qml",
         "subPages": [],
         "aliases": []
     }, {
-        "id": "appSearch",
-        "name": "App Search",
+        "id": "launcher",
+        "name": "Launcher",
         "icon": "search",
-        "component": "modules/settings/configs/AppSearchConfig.qml",
+        "component": "modules/settings/configs/LauncherConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["App Search", "Search Prefixes", "App Aliases"]
+    }, {
+        "id": "clipboard",
+        "name": "Clipboard",
+        "icon": "content_paste",
+        "component": "modules/settings/configs/ClipboardConfig.qml",
+        "subPages": [],
+        "aliases": ["Clipboard History Search"]
     }, {
         "id": "cheatSheet",
         "name": "Cheat Sheet",
@@ -202,9 +216,9 @@ Singleton {
         "name": "Desktop & Windows",
         "pageIds": ["widgets", "workspaces", "overview", "windows", "lockScreen"]
     }, {
-        "id": "toolsOverlays",
-        "name": "Tools & Overlays",
-        "pageIds": ["overlays", "regionSelector", "appSearch", "cheatSheet"]
+        "id": "tools",
+        "name": "Tools",
+        "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "cheatSheet"]
     }, {
         "id": "systemServices",
         "name": "System & Services",
