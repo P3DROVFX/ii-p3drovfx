@@ -102,7 +102,7 @@ ContentPage {
         Layout.fillWidth: true
         text: Translation.tr("Looking for Sidebars & Panels settings?")
         value: Translation.tr("Sidebars & Panels")
-        targetPageIndex: 5
+        targetPageId: "sidebars"
         targetSectionTitle: Translation.tr("Sidebars & Panels")
         materialIcon: "side_navigation"
     }

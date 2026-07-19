@@ -13,25 +13,25 @@ Item {
     property alias contentY: page.contentY
 
     // ── Active sub-page URL ("" = none) ───────────────────────────────────
-    property url activeSubPage: ""
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
     // ── Main content page ─────────────────────────────────────────────────
     ContentPage {
         id: page
         anchors.fill: parent
         forceWidth: false
-        opacity: subPageOverlay.width > 0 ? (subPageOverlay.x / subPageOverlay.width) : 1
+        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         function openWidgetPage(componentId) {
             const compInfo = BarComponentRegistry.getComponent(componentId);
             if (compInfo) {
-                if (typeof compInfo.sidebarPage !== "undefined") {
+                if (typeof compInfo.pageId !== "undefined") {
                     var win = barConfigRoot.QsWindow.window;
-                    if (win && win.currentPage !== undefined) {
+                    if (win && win.pageIndexById !== undefined) {
                         if (compInfo.sectionTitle)
                             win.pendingSectionHighlight = Translation.tr(compInfo.sectionTitle);
-                        win.currentPage = compInfo.sidebarPage;
+                        win.currentPage = win.pageIndexById(compInfo.pageId);
                     }
                 } else if (compInfo.configPage) {
                     barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/" + compInfo.configPage);
@@ -524,54 +524,10 @@ Item {
     }
 
     // ── Sub-page overlay (slides in from the right) ───────────────────────
-    Item {
+    ConfigSubPageHost {
         id: subPageOverlay
-        width: parent.width
-        height: parent.height
-        y: 0
+        anchors.fill: parent
         z: 10
-
-        // Open: x=0. Closed: x=width (off-screen right).
-        property bool isOpen: barConfigRoot.activeSubPage.toString() !== ""
-
-        // overlayActive stays true during close animation (until x reaches width)
-        property bool overlayActive: isOpen
-        onXChanged: {
-            if (!isOpen && x >= subPageOverlay.width - 1)
-                overlayActive = false;
-        }
-        onIsOpenChanged: {
-            if (isOpen) overlayActive = true;
-        }
-
-        x: isOpen ? 0 : subPageOverlay.width
-
-        Behavior on x {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-            }
-        }
-
-        // Disable input when off-screen
-        enabled: isOpen
-
-        Loader {
-            id: subPageLoader
-            anchors.fill: parent
-            source: barConfigRoot.activeSubPage
-            active: subPageOverlay.overlayActive
-
-            onLoaded: {
-                if (item.hasOwnProperty("showBackButton")) {
-                    item.showBackButton = true;
-                }
-                item.goBack.connect(function() {
-                    barConfigRoot.activeSubPage = "";
-                });
-            }
-        }
     }
 }
 

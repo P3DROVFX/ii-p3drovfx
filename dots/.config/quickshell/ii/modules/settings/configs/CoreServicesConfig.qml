@@ -9,7 +9,7 @@ Item {
     id: root
 
     property alias contentY: page.contentY
-    property url activeSubPage: ""
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
     function openSubPage(url) {
         root.activeSubPage = Qt.resolvedUrl(url);
@@ -41,7 +41,7 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
-        opacity: subPageOverlay.width > 0 ? (subPageOverlay.x / subPageOverlay.width) : 1
+        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         ContentSection {
@@ -270,50 +270,9 @@ Item {
         }
     }
 
-    Item {
+    ConfigSubPageHost {
         id: subPageOverlay
-        width: parent.width
-        height: parent.height
-        y: 0
+        anchors.fill: parent
         z: 10
-
-        property bool isOpen: root.activeSubPage.toString() !== ""
-        property bool overlayActive: isOpen
-
-        x: isOpen ? 0 : subPageOverlay.width
-
-        Behavior on x {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-            }
-        }
-
-        onXChanged: {
-            if (!isOpen && x >= subPageOverlay.width - 1)
-                overlayActive = false;
-        }
-        onIsOpenChanged: {
-            if (isOpen)
-                overlayActive = true;
-        }
-
-        enabled: isOpen
-
-        Loader {
-            id: subPageLoader
-            anchors.fill: parent
-            source: root.activeSubPage
-            active: subPageOverlay.overlayActive
-
-            onLoaded: {
-                if (item.hasOwnProperty("showBackButton"))
-                    item.showBackButton = true;
-                if (item.hasOwnProperty("goBack")) {
-                    item.goBack.connect(root.closeSubPage);
-                }
-            }
-        }
     }
 }

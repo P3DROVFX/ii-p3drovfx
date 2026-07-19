@@ -102,18 +102,108 @@ Item {
                             Layout.fillWidth: true
                             spacing: 4   // gap between pages within a group
 
-                            // Group title
-                            StyledText {
-                                text: groupDelegate.modelData.name
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.DemiBold
-                                color: Appearance.colors.colOnLayer1
-                                opacity: 0.55
-                                Layout.leftMargin: 10
-                                Layout.bottomMargin: 2
+                            readonly property string groupId: modelData.id ?? ""
+                            readonly property bool containsCurrentPage: (modelData.pages ?? []).some(p => p.pageIndex === sidebarRoot.currentPage)
+                            readonly property bool expanded: groupId === "" || Persistent.states.settings.collapsedGroups.indexOf(groupId) === -1
+
+                            function setCollapsed(collapsed) {
+                                if (groupId === "")
+                                    return;
+                                const list = Array.from(Persistent.states.settings.collapsedGroups);
+                                const i = list.indexOf(groupId);
+                                if (collapsed && i === -1)
+                                    list.push(groupId);
+                                else if (!collapsed && i !== -1)
+                                    list.splice(i, 1);
+                                else
+                                    return;
+                                Persistent.states.settings.collapsedGroups = list;
                             }
 
-                            // Pages in this group
+                            // Jumping to a page (search, deep link) reveals its group
+                            onContainsCurrentPageChanged: {
+                                if (containsCurrentPage)
+                                    setCollapsed(false);
+                            }
+                            Component.onCompleted: {
+                                if (containsCurrentPage)
+                                    setCollapsed(false);
+                            }
+
+                            // Group title — click to collapse/expand
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 10
+                                Layout.rightMargin: 6
+                                Layout.bottomMargin: 2
+                                implicitHeight: groupHeaderRow.implicitHeight
+
+                                RowLayout {
+                                    id: groupHeaderRow
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 4
+
+                                    StyledText {
+                                        text: groupDelegate.modelData.name
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.colors.colOnLayer1
+                                        opacity: groupHeaderMouse.containsMouse ? 0.85 : 0.55
+                                        Layout.fillWidth: true
+
+                                        Behavior on opacity {
+                                            NumberAnimation {
+                                                duration: 150
+                                            }
+                                        }
+                                    }
+
+                                    MaterialSymbol {
+                                        text: "keyboard_arrow_down"
+                                        iconSize: 16
+                                        color: Appearance.colors.colOnLayer1
+                                        opacity: groupHeaderMouse.containsMouse ? 0.85 : 0.55
+                                        rotation: groupDelegate.expanded ? 0 : -90
+
+                                        Behavior on rotation {
+                                            NumberAnimation {
+                                                duration: 150
+                                                easing.type: Easing.OutQuad
+                                            }
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: groupHeaderMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: groupDelegate.setCollapsed(groupDelegate.expanded)
+                                }
+                            }
+
+                            // Pages in this group, clipped away when collapsed
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: groupDelegate.expanded ? pagesColumn.implicitHeight : 0
+                                clip: true
+
+                                Behavior on Layout.preferredHeight {
+                                    NumberAnimation {
+                                        duration: 200
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    id: pagesColumn
+                                    anchors.top: parent.top
+                                    width: parent.width
+                                    spacing: 4
+
                             Repeater {
                                 id: pageRepeater
                                 model: groupDelegate.modelData.pages
@@ -147,6 +237,8 @@ Item {
                                     pageLabel: modelData.name
 
                                     onClicked: sidebarRoot.pageSelected(modelData.pageIndex)
+                                }
+                            }
                                 }
                             }
                         }

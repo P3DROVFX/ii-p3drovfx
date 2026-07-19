@@ -43,7 +43,7 @@ ContentPage {
         ShortcutBox {
             Layout.fillWidth: true
             value: Translation.tr("Wallpaper zoom")
-            targetPageIndex: 2
+            targetPageId: "backgrounds"
             targetSectionTitle: Translation.tr("Parallax Engine")
             materialIcon: "loupe"
         }

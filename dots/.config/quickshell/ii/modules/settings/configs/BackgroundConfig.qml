@@ -456,7 +456,7 @@ ContentPage {
     ShortcutBox {
         Layout.fillWidth: true
         value: Translation.tr("Desktop Clock Widget settings")
-        targetPageIndex: 9
+        targetPageId: "widgets"
         targetSectionTitle: Translation.tr("Widget Manager")
     }
 }

@@ -947,7 +947,7 @@ ContentPage {
                 Layout.fillWidth: true
                 text: Translation.tr("Looking for Media Downloader settings?")
                 value: Translation.tr("Media Downloader")
-                targetPageIndex: 16
+                targetPageId: "monitors"
                 targetSectionTitle: Translation.tr("Core Services")
                 materialIcon: "download"
             }

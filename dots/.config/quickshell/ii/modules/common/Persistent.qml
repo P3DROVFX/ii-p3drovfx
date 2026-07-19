@@ -243,6 +243,7 @@ Singleton {
             }
 
             property JsonObject settings: JsonObject {
+                property list<string> collapsedGroups: []
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"
