@@ -1263,6 +1263,11 @@ Singleton {
                 }
             }
 
+            property JsonObject oledSaver: JsonObject {
+                property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
+                property int hintExtraDelay: 10 // extra seconds the dismiss hint stays visible after the cursor hides
+            }
+
             property JsonObject osd: JsonObject {
                 property int timeout: 2500
             }
