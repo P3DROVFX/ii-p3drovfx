@@ -1271,6 +1271,11 @@ Singleton {
                 }
             }
 
+            property JsonObject oledSaver: JsonObject {
+                property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
+                property int hintExtraDelay: 10 // extra seconds the dismiss hint stays visible after the cursor hides
+            }
+
             property JsonObject osd: JsonObject {
                 property int timeout: 2500
             }
@@ -1351,6 +1356,9 @@ Singleton {
                 // New keys (zero-cost on AMD; only NVIDIA/Intel invoke nvidia-smi one-shot)
                 property int diskInterval: 30000
                 property int gpuInterval: 3000
+                // Which GPU to monitor on hybrid iGPU+dGPU systems.
+                // "auto" (NVIDIA → AMD → Intel priority) | "nvidia" | "amd" | "intel"
+                property string gpuPreference: "auto"
                 // Toggle for Docker section popup. When false, all Docker
                 // polls (docker stats, docker ps) are suppressed and the
                 // events stream is not subscribed.

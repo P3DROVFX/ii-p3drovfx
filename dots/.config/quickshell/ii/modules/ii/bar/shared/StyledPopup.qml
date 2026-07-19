@@ -155,10 +155,13 @@ LazyLoader {
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
 
+        property bool _dismissGrabArmed: false
+
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: false
+            active: Config.options.bar.tooltips.clickToShow && root._computedActive
+                && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
             }
@@ -256,20 +259,29 @@ LazyLoader {
                     openAnimSeq.start();
                 }
             }
+            function on_ComputedActiveChanged() {
+                if (root._computedActive) {
+                    popupWindow._dismissGrabArmed = false;
+                    dismissGrabArmTimer.restart();
+                } else {
+                    dismissGrabArmTimer.stop();
+                    popupWindow._dismissGrabArmed = false;
+                }
+            }
         }
 
         Component.onCompleted: {
             if (Config.options.bar.tooltips.clickToShow) {
-                grabDelayTimer.start();
+                dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
             openAnimSeq.start();
         }
 
         Timer {
-            id: grabDelayTimer
+            id: dismissGrabArmTimer
             interval: 250
-            onTriggered: dismissGrab.active = true
+            onTriggered: popupWindow._dismissGrabArmed = true
         }
 
         Item {

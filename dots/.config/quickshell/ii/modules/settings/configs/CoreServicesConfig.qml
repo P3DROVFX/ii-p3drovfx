@@ -108,6 +108,15 @@ Item {
                     description: qsTr("User agent and resource polling")
                     onOpenCard: root.openSubPage("widgets/CoreNetworkConfig.qml")
                 }
+
+                ServiceCard {
+                    cardIcon: "brightness_1"
+                    cardHue: 12
+                    cardShape: "Cookie12Sided"
+                    title: qsTr("OLED Saver")
+                    description: qsTr("Blackout overlay timing")
+                    onOpenCard: root.openSubPage("widgets/CoreOledSaverConfig.qml")
+                }
             }
 
             Item {
