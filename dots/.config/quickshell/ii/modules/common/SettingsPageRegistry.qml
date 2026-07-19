@@ -158,12 +158,12 @@ Singleton {
         "subPages": [],
         "aliases": ["Hyprland Rules", "Transparency", "Blur", "Gaps", "Borders"]
     }, {
-        "id": "monitors",
-        "name": "Monitors",
+        "id": "displays",
+        "name": "Displays",
         "icon": "monitor",
-        "component": "modules/settings/configs/MonitorsConfig.qml",
+        "component": "modules/settings/configs/DisplaysConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale"]
     }, {
         "id": "mediaMusic",
         "name": "Media & Music",
@@ -200,6 +200,34 @@ Singleton {
         "subPages": [],
         "aliases": ["Core Services", "TickTick", "Tasks", "Accounts"]
     }, {
+        "id": "soundAlerts",
+        "name": "Sound & Alerts",
+        "icon": "volume_up",
+        "component": "modules/settings/configs/SoundAlertsConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Audio Controls", "Earbang protection", "Interactive Alerts", "Battery sound", "Pomodoro sound"]
+    }, {
+        "id": "power",
+        "name": "Power & Battery",
+        "icon": "battery_android_full",
+        "component": "modules/settings/configs/PowerConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Suspend", "Battery warning", "Automatic suspend"]
+    }, {
+        "id": "devicesPhone",
+        "name": "Devices & Phone",
+        "icon": "smartphone",
+        "component": "modules/settings/configs/DevicesPhoneConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone"]
+    }, {
+        "id": "privacy",
+        "name": "Privacy & Content",
+        "icon": "policy",
+        "component": "modules/settings/configs/PrivacyConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Work Safety", "Hide clipboard images", "Hide suspect wallpapers", "Hiding Suspects"]
+    }, {
         "id": "coreServices",
         "name": "Core Services",
         "icon": "settings_suggest",
@@ -226,8 +254,7 @@ Singleton {
         "icon": "account_circle",
         "component": "modules/settings/configs/UserProfileConfig.qml",
         "subPages": [],
-        "aliases": ["Sidebar header"],
-        "hidden": true
+        "aliases": ["Sidebar header"]
     }, {
         "id": "search",
         "name": "Search Results",
@@ -259,9 +286,9 @@ Singleton {
         "name": "Services & Integrations",
         "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts"]
     }, {
-        "id": "systemServices",
-        "name": "System & Services",
-        "pageIds": ["monitors", "coreServices", "about"]
+        "id": "system",
+        "name": "System",
+        "pageIds": ["displays", "soundAlerts", "power", "devicesPhone", "privacy", "about", "profile"]
     }]
 
     function pageIndexById(id) {
