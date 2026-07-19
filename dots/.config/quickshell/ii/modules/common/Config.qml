@@ -1348,6 +1348,9 @@ Singleton {
                 // New keys (zero-cost on AMD; only NVIDIA/Intel invoke nvidia-smi one-shot)
                 property int diskInterval: 30000
                 property int gpuInterval: 3000
+                // Which GPU to monitor on hybrid iGPU+dGPU systems.
+                // "auto" (NVIDIA → AMD → Intel priority) | "nvidia" | "amd" | "intel"
+                property string gpuPreference: "auto"
                 // Toggle for Docker section popup. When false, all Docker
                 // polls (docker stats, docker ps) are suppressed and the
                 // events stream is not subscribed.

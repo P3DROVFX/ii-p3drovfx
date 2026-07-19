@@ -93,6 +93,40 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "developer_board"
+        title: Translation.tr("GPU")
+
+        ConfigSelectionArray {
+            currentValue: Config.options.resources.gpuPreference
+            onSelected: newValue => {
+                Config.options.resources.gpuPreference = newValue;
+            }
+            options: [
+                {
+                    displayName: Translation.tr("Auto"),
+                    icon: "auto_awesome",
+                    value: "auto"
+                },
+                {
+                    displayName: "NVIDIA",
+                    icon: "developer_board",
+                    value: "nvidia"
+                },
+                {
+                    displayName: "AMD",
+                    icon: "developer_board",
+                    value: "amd"
+                },
+                {
+                    displayName: "Intel",
+                    icon: "developer_board",
+                    value: "intel"
+                }
+            ]
+        }
+    }
+
+    ContentSection {
         icon: "inventory_2"
         title: Translation.tr("Docker Backend")
 
