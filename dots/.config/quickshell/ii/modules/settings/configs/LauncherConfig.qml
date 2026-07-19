@@ -879,37 +879,4 @@ ContentPage {
 
     }
 
-    ContentSection {
-        icon: "download"
-        title: Translation.tr("Media Downloader")
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "download"
-                text: Translation.tr("Enable Media Downloader panel")
-                checked: Config.options.mediaDownloader.enabled
-                onCheckedChanged: Config.options.mediaDownloader.enabled = checked
-
-                StyledToolTip {
-                    text: Translation.tr("Enables the Media Downloader panel in search, accessible via the '!' prefix (configurable above under Search Prefixes)")
-                }
-
-            }
-
-            // Shortcut to MediaDownloaderConfig
-            ShortcutBox {
-                Layout.fillWidth: true
-                text: Translation.tr("Looking for Media Downloader settings?")
-                value: Translation.tr("Media Downloader")
-                targetPageId: "coreServices"
-                materialIcon: "download"
-            }
-
-        }
-
-    }
-
 }

@@ -43,7 +43,7 @@ Singleton {
         "name": "Bar",
         "icon": "space_bar",
         "component": "modules/settings/configs/BarConfig.qml",
-        "subPages": ["widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/BTDeviceImagesConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/CorePowerConfig.qml", "widgets/WaffleTweaksConfig.qml"],
+        "subPages": ["widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/ClockDateWidgetConfig.qml", "widgets/WaffleTweaksConfig.qml"],
         "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle"]
     }, {
         "id": "wallpaper",
@@ -163,7 +163,7 @@ Singleton {
         "icon": "monitor",
         "component": "modules/settings/configs/DisplaysConfig.qml",
         "subPages": [],
-        "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale"]
+        "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
     }, {
         "id": "mediaMusic",
         "name": "Media & Music",
@@ -227,13 +227,6 @@ Singleton {
         "component": "modules/settings/configs/PrivacyConfig.qml",
         "subPages": [],
         "aliases": ["Core Services", "Work Safety", "Hide clipboard images", "Hide suspect wallpapers", "Hiding Suspects"]
-    }, {
-        "id": "coreServices",
-        "name": "Core Services",
-        "icon": "settings_suggest",
-        "component": "modules/settings/configs/CoreServicesConfig.qml",
-        "subPages": ["widgets/CoreAudioConfig.qml", "widgets/CorePowerConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreLanguageConfig.qml", "widgets/CoreAlertsConfig.qml", "widgets/CoreMediaConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreNetworkConfig.qml", "widgets/CoreFilesConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/MediaDownloaderConfig.qml"],
-        "aliases": []
     }, {
         "id": "lockScreen",
         "name": "Lock Screen",

@@ -132,8 +132,7 @@ Item {
             if (Todo.useTickTick) {
                 Todo.refresh();
             } else {
-                GlobalStates.settingsPendingPageName = "coreServices";
-                GlobalStates.settingsPendingSubPage = "widgets/CoreTickTickConfig.qml";
+                GlobalStates.settingsPendingPageName = "tasksAccounts";
                 GlobalStates.openSettings();
             }
         }

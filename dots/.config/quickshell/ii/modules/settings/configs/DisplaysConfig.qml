@@ -1198,4 +1198,49 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "brightness_1"
+        title: Translation.tr("OLED Saver")
+
+        StyledText {
+            text: Translation.tr("Super + R blacks out the focused monitor. Esc, click, or the same shortcut dismisses it.")
+            color: Appearance.colors.colOnLayer1
+            opacity: 0.75
+            font.pixelSize: Appearance.font.pixelSize.small
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            Layout.bottomMargin: 8
+        }
+
+        ConfigSpinBox {
+            icon: "mouse"
+            text: Translation.tr("Cursor hide delay (seconds)")
+            value: Config.options.oledSaver.cursorHideDelay
+            from: 1
+            to: 60
+            stepSize: 1
+            onValueChanged: {
+                Config.options.oledSaver.cursorHideDelay = value;
+            }
+            StyledToolTip {
+                text: Translation.tr("How long after you stop moving the mouse before the cursor hides again")
+            }
+        }
+
+        ConfigSpinBox {
+            icon: "help"
+            text: Translation.tr("Extra hint duration (seconds)")
+            value: Config.options.oledSaver.hintExtraDelay
+            from: 0
+            to: 60
+            stepSize: 1
+            onValueChanged: {
+                Config.options.oledSaver.hintExtraDelay = value;
+            }
+            StyledToolTip {
+                text: Translation.tr("How much longer the \"Esc or click to exit\" hint stays up after the cursor hides")
+            }
+        }
+    }
 }

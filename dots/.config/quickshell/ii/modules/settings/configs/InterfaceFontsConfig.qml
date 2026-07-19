@@ -365,14 +365,6 @@ ContentPage {
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "smart_toy"
-            text: Translation.tr("Show AI provider and model buttons")
-            checked: Config.options.sidebar.ai.showProviderAndModelButtons
-            onCheckedChanged: {
-                Config.options.sidebar.ai.showProviderAndModelButtons = checked;
-            }
-        }
 
         ContentSubsection {
             title: Translation.tr("This window")
