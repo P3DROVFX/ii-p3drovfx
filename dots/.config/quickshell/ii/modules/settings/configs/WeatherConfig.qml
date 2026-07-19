@@ -57,4 +57,25 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "bar"
+                label: Translation.tr("Weather bar widget")
+                sectionHighlight: Translation.tr("Widgets")
+            }
+
+            RelatedChip {
+                pageId: "widgets"
+                label: Translation.tr("Desktop weather widget")
+            }
+        }
+    }
 }

@@ -78,4 +78,20 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "bar"
+                label: Translation.tr("Battery bar widget")
+                sectionHighlight: Translation.tr("Widgets")
+            }
+        }
+    }
 }

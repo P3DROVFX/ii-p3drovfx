@@ -98,4 +98,35 @@ ContentPage {
                 ]
             }
         }
+    }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "lockScreen"
+                label: Translation.tr("Lock screen")
+            }
+
+            RelatedChip {
+                pageId: "dock"
+                label: Translation.tr("Dock badges")
+            }
+
+            RelatedChip {
+                pageId: "dynamicIsland"
+                label: Translation.tr("Island notch")
+            }
+
+            RelatedChip {
+                pageId: "soundAlerts"
+                label: Translation.tr("Alert sounds")
+            }
+        }
+    }
 }

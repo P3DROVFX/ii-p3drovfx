@@ -222,4 +222,25 @@ ContentPage {
 
     }
 
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "wallpaper"
+                label: Translation.tr("Wallpaper blur")
+            }
+
+            RelatedChip {
+                pageId: "lockScreen"
+                label: Translation.tr("Lock screen blur")
+                sectionHighlight: Translation.tr("Blur style")
+            }
+        }
+    }
 }

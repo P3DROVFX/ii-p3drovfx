@@ -43,4 +43,19 @@ ContentPage {
         Layout.fillWidth: true
         text: Translation.tr("The Weeb (NSFW) sidebar tab can be toggled from the Sidebars page.")
     }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "clipboard"
+                label: Translation.tr("Clipboard history")
+            }
+        }
+    }
 }

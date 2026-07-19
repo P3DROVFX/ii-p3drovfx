@@ -1220,4 +1220,26 @@ ContentPage {
         targetSectionTitle: Translation.tr("Widget Manager")
     }
 
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "windows"
+                label: Translation.tr("Window blur")
+                sectionHighlight: Translation.tr("Transparency & Blur")
+            }
+
+            RelatedChip {
+                pageId: "lockScreen"
+                label: Translation.tr("Lock screen blur")
+                sectionHighlight: Translation.tr("Blur style")
+            }
+        }
+    }
 }

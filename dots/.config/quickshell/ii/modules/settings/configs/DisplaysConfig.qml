@@ -1243,4 +1243,20 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "colors"
+                label: Translation.tr("Night Light")
+                sectionHighlight: Translation.tr("Night Light")
+            }
+        }
+    }
 }
