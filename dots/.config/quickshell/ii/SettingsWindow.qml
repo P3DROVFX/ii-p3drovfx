@@ -85,7 +85,7 @@ FloatingWindow {
             if (GlobalStates.settingsOpen) {
                 settingsSearchBar.forceFocus();
                 if (GlobalStates.settingsPendingPageName !== "") {
-                    // Accepts a page id ("coreServices") or a component file name
+                    // Accepts a page id ("tasksAccounts") or a component file name
                     for (let i = 0; i < root.pages.length; i++) {
                         if (root.pages[i].id === GlobalStates.settingsPendingPageName || root.pages[i].component.indexOf(GlobalStates.settingsPendingPageName) !== -1) {
                             root.currentPage = i;
@@ -93,10 +93,6 @@ FloatingWindow {
                         }
                     }
                     GlobalStates.settingsPendingPageName = "";
-                } else if (GlobalStates.settingsPendingPage >= 0) {
-                    // Deprecated: index-based deep link — use settingsPendingPageName
-                    root.currentPage = GlobalStates.settingsPendingPage;
-                    GlobalStates.settingsPendingPage = -1;
                 }
             }
         }
