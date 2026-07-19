@@ -1,13 +1,14 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: page
+
     forceWidth: false
 
     ContentSection {
@@ -36,9 +37,11 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.appearance.transparency.automatic = checked;
             }
+
             StyledToolTip {
                 text: Translation.tr("Calculate transparency automatically based on wallpaper colors")
             }
+
         }
 
         ConfigSwitch {
@@ -89,17 +92,18 @@ ContentPage {
             buttonIcon: "gradient"
             text: Translation.tr("Ignore Alpha")
             value: Config.options.appearance.ignoreAlpha ?? 0.2
-            from: 0.0
-            to: 1.0
+            from: 0
+            to: 1
             stepSize: 0.05
             onValueChanged: {
                 Config.options.appearance.ignoreAlpha = value;
             }
         }
+
     }
 
     ContentSection {
-        title: Translation.tr("Borders & Gaps")
+        title: Translation.tr("Gaps")
         icon: "margin"
 
         ConfigSlider {
@@ -127,10 +131,11 @@ ContentPage {
                 Config.options.appearance.gapsOut = Math.round(value);
             }
         }
+
     }
 
     ContentSection {
-        title: Translation.tr("Border Customization")
+        title: Translation.tr("Borders")
         icon: "border_outer"
 
         ConfigSwitch {
@@ -163,62 +168,58 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.appearance.borderColorType
-                onSelected: newValue => {
+                onSelected: (newValue) => {
                     Config.options.appearance.borderColorType = newValue;
                 }
-                options: [
-                    {
-                        displayName: Translation.tr("Primary"),
-                        value: "primary"
-                    },
-                    {
-                        displayName: Translation.tr("Secondary"),
-                        value: "secondary"
-                    },
-                    {
-                        displayName: Translation.tr("Tertiary"),
-                        value: "tertiary"
-                    },
-                    {
-                        displayName: Translation.tr("Primary Container"),
-                        value: "primaryContainer"
-                    },
-                    {
-                        displayName: Translation.tr("Surface"),
-                        value: "surface"
-                    }
-                ]
+                options: [{
+                    "displayName": Translation.tr("Primary"),
+                    "value": "primary"
+                }, {
+                    "displayName": Translation.tr("Secondary"),
+                    "value": "secondary"
+                }, {
+                    "displayName": Translation.tr("Tertiary"),
+                    "value": "tertiary"
+                }, {
+                    "displayName": Translation.tr("Primary Container"),
+                    "value": "primaryContainer"
+                }, {
+                    "displayName": Translation.tr("Surface"),
+                    "value": "surface"
+                }]
             }
+
         }
+
     }
 
     ContentSection {
-        title: Translation.tr("Windows General")
-        icon: "grid_view"
+        title: Translation.tr("Default layout")
+        icon: "view_quilt"
 
         ContentSubsection {
-            title: Translation.tr("Hyprland default layout")
-            icon: "view_quilt"
+            title: Translation.tr("Window tiling")
+            icon: "grid_view"
             Layout.fillWidth: true
 
             ConfigSelectionArray {
                 currentValue: Config.options.hyprland.defaultHyprlandLayout
-                onSelected: newValue => {
+                onSelected: (newValue) => {
                     Config.options.hyprland.defaultHyprlandLayout = newValue;
                 }
-                options: [
-                    {
-                        displayName: Translation.tr("Default"),
-                        icon: "splitscreen",
-                        value: "default"
-                    },
-                    {
-                        displayName: Translation.tr("Scrolling"),
-                        icon: "view_carousel",
-                        value: "scrolling"
-                    }
-                ]
+                options: [{
+                    "displayName": Translation.tr("Default"),
+                    "icon": "splitscreen",
+                    "value": "default"
+                }, {
+                    "displayName": Translation.tr("Scrolling"),
+                    "icon": "view_carousel",
+                    "value": "scrolling"
+                }]
             }
+
         }
+
     }
+
 }

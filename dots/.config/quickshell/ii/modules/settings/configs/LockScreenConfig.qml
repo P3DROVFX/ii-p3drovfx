@@ -252,7 +252,7 @@ ContentPage {
 
     ContentSection {
         icon: "style"
-        title: Translation.tr("Style: General")
+        title: Translation.tr("Widgets & layout")
 
         ContentSubsection {
             title: Translation.tr("Lockscreen widget")
@@ -515,7 +515,7 @@ ContentPage {
 
     ContentSection {
         icon: "blur_on"
-        title: Translation.tr("Style: Blurred")
+        title: Translation.tr("Blur style")
 
         ConfigSwitch {
             buttonIcon: "lens_blur"

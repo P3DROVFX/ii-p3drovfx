@@ -24,8 +24,9 @@ import Quickshell
 Singleton {
     // Group 1 – Look & Feel
     // Group 2 – Modules
-    // Group 3 – Tools & Overlays
-    // Group 4 – System & Services
+    // Group 3 – Desktop & Windows
+    // Group 4 – Tools & Overlays
+    // Group 5 – System & Services
     // Hidden pages — keep at the end of the list
 
     id: root
@@ -57,7 +58,7 @@ Singleton {
         "icon": "font_download",
         "component": "modules/settings/configs/InterfaceFontsConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Base Icon Themes", "Decorative Options"]
     }, {
         "id": "presets",
         "name": "Presets",
@@ -85,10 +86,10 @@ Singleton {
         "icon": "workspaces",
         "component": "modules/settings/configs/WorkspacesConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Tint workspaces icons"]
     }, {
         "id": "overview",
-        "name": "Overview Screen",
+        "name": "Overview",
         "icon": "grid_view",
         "component": "modules/settings/configs/OverviewConfig.qml",
         "subPages": [],
@@ -136,12 +137,12 @@ Singleton {
         "subPages": [],
         "aliases": []
     }, {
-        "id": "hyprlandRules",
-        "name": "Hyprland Rules",
+        "id": "windows",
+        "name": "Windows",
         "icon": "rule",
-        "component": "modules/settings/configs/HyprlandRulesConfig.qml",
+        "component": "modules/settings/configs/WindowsConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Hyprland Rules", "Transparency", "Blur", "Gaps", "Borders"]
     }, {
         "id": "monitors",
         "name": "Monitors",
@@ -195,15 +196,19 @@ Singleton {
     }, {
         "id": "modules",
         "name": "Modules",
-        "pageIds": ["sidebars", "dock", "workspaces", "overview", "widgets", "dynamicIsland"]
+        "pageIds": ["sidebars", "dock", "dynamicIsland"]
+    }, {
+        "id": "desktopWindows",
+        "name": "Desktop & Windows",
+        "pageIds": ["widgets", "workspaces", "overview", "windows", "lockScreen"]
     }, {
         "id": "toolsOverlays",
         "name": "Tools & Overlays",
-        "pageIds": ["overlays", "regionSelector", "appSearch", "cheatSheet", "hyprlandRules"]
+        "pageIds": ["overlays", "regionSelector", "appSearch", "cheatSheet"]
     }, {
         "id": "systemServices",
         "name": "System & Services",
-        "pageIds": ["monitors", "coreServices", "lockScreen", "about"]
+        "pageIds": ["monitors", "coreServices", "about"]
     }]
 
     function pageIndexById(id) {
