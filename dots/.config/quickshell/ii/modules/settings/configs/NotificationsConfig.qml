@@ -46,17 +46,11 @@ ContentPage {
             }
         }
 
-        ConfigTextField {
-            text: Translation.tr("Force monitor name")
-            icon: "desktop_windows"
+        MonitorPicker {
             visible: Config.options.notifications.monitor.enable
-            placeholderText: Translation.tr("Monitor Name (e.g. eDP-1)")
-            inputText: Config.options.notifications.monitor.name
-
-            textField.onTextChanged: {
-                if (textField.activeFocus) {
-                    Config.options.notifications.monitor.name = textField.text;
-                }
+            currentValue: Config.options.notifications.monitor.name
+            onSelected: (newValue) => {
+                Config.options.notifications.monitor.name = newValue;
             }
         }
 

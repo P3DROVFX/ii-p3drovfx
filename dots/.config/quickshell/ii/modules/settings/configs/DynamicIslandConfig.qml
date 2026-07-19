@@ -112,22 +112,10 @@ ContentPage {
             icon: "settings_input_hdmi"
             visible: Config.options.bar.floatingNotch.enable && Config.options.bar.floatingNotch.onlyShowOnSingleMonitor
 
-            ConfigSelectionArray {
+            MonitorPicker {
                 currentValue: Config.options.bar.floatingNotch.singleMonitorName
                 onSelected: (newValue) => {
                     Config.options.bar.floatingNotch.singleMonitorName = newValue;
-                }
-                options: {
-                    let list = [];
-                    for (let i = 0; i < Quickshell.screens.length; i++) {
-                        let name = Quickshell.screens[i].name;
-                        list.push({
-                            "displayName": name,
-                            "icon": "desktop_windows",
-                            "value": name
-                        });
-                    }
-                    return list;
                 }
             }
 
