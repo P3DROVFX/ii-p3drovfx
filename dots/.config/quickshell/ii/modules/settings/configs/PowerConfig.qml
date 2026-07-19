@@ -19,7 +19,7 @@ ContentPage {
 
         ConfigSpinBox {
             icon: "warning"
-            text: Translation.tr("Low warning")
+            text: Translation.tr("Low warning (%)")
             value: Config.options.battery.low
             from: 0
             to: 100
@@ -31,7 +31,7 @@ ContentPage {
 
         ConfigSpinBox {
             icon: "dangerous"
-            text: Translation.tr("Critical warning")
+            text: Translation.tr("Critical warning (%)")
             value: Config.options.battery.critical
             from: 0
             to: 100
@@ -68,7 +68,7 @@ ContentPage {
 
         ConfigSpinBox {
             icon: "charger"
-            text: Translation.tr("Full battery warning")
+            text: Translation.tr("Full battery warning (%)")
             value: Config.options.battery.full
             from: 0
             to: 101

@@ -173,7 +173,7 @@ ContentPage {
             ConfigSlider {
                 visible: Config.options.bar.workspaces.showAppIcons
                 buttonIcon: "humidity_percentage"
-                text: Translation.tr("Tint percentage")
+                text: Translation.tr("Tint (%)")
                 value: Config.options.appearance.iconTintPercentage ?? 0.6
                 onValueChanged: Config.options.appearance.iconTintPercentage = value
                 enabled: Config.options.bar.workspaces.monochromeIcons

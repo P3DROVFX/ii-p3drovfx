@@ -309,7 +309,7 @@ ContentPage {
 
             ConfigSpinBox {
                 icon: "contrast"
-                text: Translation.tr("Terminal: Harmony %")
+                text: Translation.tr("Terminal: Harmony (%)")
                 value: Config.options.appearance.wallpaperTheming.terminalGenerationProps.harmony * 100
                 from: 0
                 to: 100
@@ -333,7 +333,7 @@ ContentPage {
 
             ConfigSpinBox {
                 icon: "brightness_high"
-                text: Translation.tr("Terminal: Foreground boost %")
+                text: Translation.tr("Terminal: Foreground boost (%)")
                 value: Config.options.appearance.wallpaperTheming.terminalGenerationProps.termFgBoost * 100
                 from: 0
                 to: 100

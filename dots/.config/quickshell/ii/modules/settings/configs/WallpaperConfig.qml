@@ -280,7 +280,7 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "zoom_in_map"
-            text: Translation.tr("Zoom animation when overview/cheatsheet is open (Beta)")
+            text: Translation.tr("Zoom animation when overview/cheatsheet is open (Experimental)")
             checked: Config.options.background.zoomOutEnabled
             onCheckedChanged: {
                 Config.options.background.zoomOutEnabled = checked;
@@ -323,7 +323,7 @@ ContentPage {
         ConfigSwitch {
             visible: Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0
             buttonIcon: "open_with"
-            text: Translation.tr("Experimental - Scale windows with wallpaper")
+            text: Translation.tr("Scale windows with wallpaper (Experimental)")
             checked: Config.options.background.windowZoomOnOverview
             onCheckedChanged: {
                 Config.options.background.windowZoomOnOverview = checked;

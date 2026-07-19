@@ -76,7 +76,7 @@ ContentPage {
             ConfigSpinBox {
                 enabled: Config.options.overview.enable
                 icon: "aspect_ratio"
-                text: Translation.tr("Scale %")
+                text: Translation.tr("Scale (%)")
                 value: Config.options.overview.scale * 100
                 from: 10
                 to: 100
@@ -213,7 +213,7 @@ ContentPage {
             ConfigSpinBox {
                 enabled: Config.options.overview.scrollingStyle.backgroundStyle === "dim"
                 icon: "contrast"
-                text: Translation.tr("Dim percentage")
+                text: Translation.tr("Dim (%)")
                 value: Config.options.overview.scrollingStyle.dimPercentage
                 from: 0
                 to: 100

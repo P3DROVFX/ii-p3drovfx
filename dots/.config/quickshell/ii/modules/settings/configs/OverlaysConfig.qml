@@ -97,7 +97,7 @@ Item {
 
                 ConfigSpinBox {
                     icon: "opacity"
-                    text: Translation.tr("Background opacity %")
+                    text: Translation.tr("Background opacity (%)")
                     value: Config.options.overlay.media.backgroundOpacityPercentage
                     from: 0
                     to: 100
