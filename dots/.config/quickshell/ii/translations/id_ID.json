@@ -488,5 +488,9 @@
   "Colors": "Warna",
   "Monitors": "Monitor",
   "Fuzzy": "Fuzzy",
-  "Discord": "Discord"
+  "Discord": "Discord",
+  "Low warning (%)": "Peringatan rendah",
+  "Critical warning (%)": "Peringatan kritis",
+  "Blur style": "Gaya: Buram",
+  "Displays": "Monitor"
 }

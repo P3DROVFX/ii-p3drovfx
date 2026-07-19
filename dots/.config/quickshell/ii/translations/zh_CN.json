@@ -720,5 +720,8 @@
   "Move left": "左移",
   "Pin to Start": "固定到“开始”屏幕",
   "Pin": "固定",
-  "Unpin": "取消固定"
+  "Unpin": "取消固定",
+  "Low warning (%)": "低电量警告",
+  "Critical warning (%)": "临界警告",
+  "Blur style": "样式：模糊"
 }

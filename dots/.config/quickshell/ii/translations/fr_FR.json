@@ -613,5 +613,8 @@
   "Pin": "Épingler",
   "Unpin": "Désépingler",
   "Scroll gestures": "Gestes de défilement",
-  "Enable or disable scrolling on the bar to change volume or brightness": "Activer ou désactiver le défilement sur la barre pour changer le volume ou la luminosité"
+  "Enable or disable scrolling on the bar to change volume or brightness": "Activer ou désactiver le défilement sur la barre pour changer le volume ou la luminosité",
+  "Low warning (%)": "Avertissement faible",
+  "Critical warning (%)": "Avertissement critique",
+  "Blur style": "Style : Flouté"
 }

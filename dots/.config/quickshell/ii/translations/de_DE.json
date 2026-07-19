@@ -604,5 +604,8 @@
   "Recognize music": "Musik erkennen",
   "Stroke width": "Strichstärke",
   "Use varying shapes for password characters": "Verschiedene Formen für Passwort-Zeichen verwenden",
-  "Battery full": "Batterie voll"
+  "Battery full": "Batterie voll",
+  "Low warning (%)": "Niedrige Warnung",
+  "Critical warning (%)": "Kritische Warnung",
+  "Blur style": "Stil: Verschwommen"
 }

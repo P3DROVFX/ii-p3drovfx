@@ -604,5 +604,8 @@
   "Recognize music": "Müziği tanı",
   "Stroke width": "Çizgi genişliği",
   "Use varying shapes for password characters": "Şifre karakterleri için değişen şekiller kullan",
-  "Battery full": "Pil dolu"
+  "Battery full": "Pil dolu",
+  "Low warning (%)": "Düşük uyarısı",
+  "Critical warning (%)": "Kritik uyarı",
+  "Blur style": "Stil: Bulanık"
 }
