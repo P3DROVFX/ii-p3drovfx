@@ -271,12 +271,78 @@ MouseArea {
             active: root.context.fingerprintsConfigured
             visible: active
 
-            sourceComponent: MaterialSymbol {
-                id: fingerprintIcon
-                fill: 1
-                text: "fingerprint"
-                iconSize: Appearance.font.pixelSize.hugeass
-                color: Appearance.colors.colOnSurfaceVariant
+            sourceComponent: ColumnLayout {
+                id: fingerprintStatus
+                spacing: 0
+
+                readonly property int triesLeft: root.context.fingerprintTriesLeft
+                readonly property bool exhausted: triesLeft === 0
+                property bool failureFlash: false
+
+                Connections {
+                    target: root.context
+                    function onFingerprintFailed() {
+                        fingerprintStatus.failureFlash = true;
+                        failureFlashTimer.restart();
+                        fingerprintShakeAnim.restart();
+                    }
+                }
+                Timer {
+                    id: failureFlashTimer
+                    interval: 800
+                    onTriggered: fingerprintStatus.failureFlash = false
+                }
+
+                MaterialSymbol {
+                    id: fingerprintIcon
+                    Layout.alignment: Qt.AlignHCenter
+                    fill: 1
+                    text: "fingerprint"
+                    iconSize: Appearance.font.pixelSize.hugeass
+                    color: (fingerprintStatus.failureFlash || fingerprintStatus.exhausted)
+                        ? Appearance.colors.colError
+                        : Appearance.colors.colOnSurfaceVariant
+                    opacity: fingerprintStatus.exhausted ? 0.5 : 1
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 200 }
+                    }
+
+                    transform: Translate { id: fingerprintShakeOffset }
+                    SequentialAnimation {
+                        id: fingerprintShakeAnim
+                        NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: -6; duration: 50 }
+                        NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 6; duration: 50 }
+                        NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: -3; duration: 40 }
+                        NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 3; duration: 40 }
+                        NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 0; duration: 30 }
+                    }
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 4
+                    Repeater {
+                        model: root.context.fingerprintMaxTries
+                        Rectangle {
+                            implicitWidth: 5
+                            implicitHeight: 5
+                            radius: 2.5
+                            color: index < fingerprintStatus.triesLeft
+                                ? ((fingerprintStatus.failureFlash) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant)
+                                : "transparent"
+                            border.width: index < fingerprintStatus.triesLeft ? 0 : 1
+                            border.color: fingerprintStatus.exhausted
+                                ? Appearance.colors.colError
+                                : Appearance.colors.colOutline
+                            Behavior on color {
+                                ColorAnimation { duration: 200 }
+                            }
+                        }
+                    }
+                }
             }
         }
 
