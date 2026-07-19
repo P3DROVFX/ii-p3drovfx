@@ -39,11 +39,11 @@ Singleton {
         "aliases": []
     }, {
         "id": "bar",
-        "name": "Bar & Status Bar",
+        "name": "Bar",
         "icon": "space_bar",
         "component": "modules/settings/configs/BarConfig.qml",
-        "subPages": ["widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/BTDeviceImagesConfig.qml"],
-        "aliases": []
+        "subPages": ["widgets/ActiveWindowConfig.qml", "widgets/MediaPlayerConfig.qml", "widgets/UtilButtonsConfig.qml", "widgets/KeyboardLayoutConfig.qml", "widgets/SystemMonitorConfig.qml", "widgets/IndicatorsConfig.qml", "widgets/SportsConfig.qml", "widgets/BluetoothConfig.qml", "widgets/SystemTrayConfig.qml", "widgets/BatteryConfig.qml", "widgets/DashboardButtonConfig.qml", "widgets/BTDeviceImagesConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/CorePowerConfig.qml", "widgets/WaffleTweaksConfig.qml"],
+        "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle"]
     }, {
         "id": "wallpaper",
         "name": "Wallpaper",
@@ -67,11 +67,11 @@ Singleton {
         "aliases": []
     }, {
         "id": "sidebars",
-        "name": "Sidebars & Panels",
+        "name": "Sidebars",
         "icon": "side_navigation",
         "component": "modules/settings/configs/SidebarsConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Sidebars & Panels", "Panels"]
     }, {
         "id": "dock",
         "name": "Dock",
@@ -154,7 +154,7 @@ Singleton {
         "name": "Core Services",
         "icon": "settings_suggest",
         "component": "modules/settings/configs/CoreServicesConfig.qml",
-        "subPages": ["widgets/CoreAudioConfig.qml", "widgets/CorePowerConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreLanguageConfig.qml", "widgets/CoreAlertsConfig.qml", "widgets/CoreMediaConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreNetworkConfig.qml", "widgets/CoreFilesConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/CoreWaffleConfig.qml", "widgets/MediaDownloaderConfig.qml"],
+        "subPages": ["widgets/CoreAudioConfig.qml", "widgets/CorePowerConfig.qml", "widgets/CoreTimeDateConfig.qml", "widgets/CoreLanguageConfig.qml", "widgets/CoreAlertsConfig.qml", "widgets/CoreMediaConfig.qml", "widgets/CorePoliciesConfig.qml", "widgets/CoreNetworkConfig.qml", "widgets/CoreFilesConfig.qml", "widgets/CoreWeatherConfig.qml", "widgets/MediaDownloaderConfig.qml"],
         "aliases": []
     }, {
         "id": "lockScreen",
@@ -176,7 +176,7 @@ Singleton {
         "icon": "account_circle",
         "component": "modules/settings/configs/UserProfileConfig.qml",
         "subPages": [],
-        "aliases": [],
+        "aliases": ["Sidebar header"],
         "hidden": true
     }, {
         "id": "search",

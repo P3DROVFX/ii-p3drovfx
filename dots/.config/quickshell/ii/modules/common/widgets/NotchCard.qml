@@ -15,6 +15,8 @@ ColumnLayout {
     property string buttonIcon: "circle"
     property string tooltip: ""
     property string heightLabel: ""
+    // Not every notch is height-tunable (the OSD one isn't)
+    property bool hasHeight: true
     // Island master switch — the whole card hides when the island is off
     property bool masterEnabled: true
     property bool notchEnabled: true
@@ -44,7 +46,7 @@ ColumnLayout {
     ConfigSpinBox {
         icon: "height"
         text: root.heightLabel
-        visible: root.notchEnabled
+        visible: root.hasHeight && root.notchEnabled
         value: root.contractedHeight
         from: root.heightFrom
         to: root.heightTo

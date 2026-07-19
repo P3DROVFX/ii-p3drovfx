@@ -234,8 +234,19 @@ Item {
                     cardHue: 276
                     cardShape: "Cookie4Sided"
                     title: qsTr("Waffle Tweaks")
-                    description: qsTr("Optional shell tweaks")
-                    onOpenCard: root.openSubPage("widgets/CoreWaffleConfig.qml")
+                    description: qsTr("Moved to Bar \u2192 Shell mode")
+                    onOpenCard: {
+                        const win = root.QsWindow.window;
+                        if (!win || win.pageIndexById === undefined)
+                            return ;
+
+                        const idx = win.pageIndexById("bar");
+                        if (idx < 0)
+                            return ;
+
+                        win.pendingSectionHighlight = Translation.tr("Shell mode");
+                        win.currentPage = idx;
+                    }
                 }
 
             }

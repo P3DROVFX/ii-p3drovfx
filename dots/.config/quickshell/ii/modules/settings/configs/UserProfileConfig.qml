@@ -1,26 +1,30 @@
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import Qt5Compat.GraphicalEffects
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: page
+
     forceWidth: false
 
     Process {
         id: pickImageProc
+
         command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then cp \"$FILE\" ~/.config/quickshell/ii/assets/profile.png; echo 'success'; fi"]
+
         stdout: SplitParser {
-            onRead: data => {
-                if (data.trim() === "success") {
+            onRead: (data) => {
+                if (data.trim() === "success")
                     Config.options.userProfile.imagePath = Directories.home + "/.config/quickshell/ii/assets/profile.png?rand=" + Math.random();
-                }
+
             }
         }
+
     }
 
     // Hero card: avatar left, inputs right
@@ -47,51 +51,71 @@ ContentPage {
 
                 MaterialShape {
                     id: heroShape
-                    anchors.centerIn: parent
-                    width: 110
-                    height: 110
-
-                    function resolveShape(s) {
-                        switch (s) {
-                            case "Cookie9Sided":  return MaterialShape.Shape.Cookie9Sided;
-                            case "Cookie12Sided": return MaterialShape.Shape.Cookie12Sided;
-                            case "Squircle":      return MaterialShape.Shape.Squircle;
-                            case "Circle":        return MaterialShape.Shape.Circle;
-                            case "Clover4Leaf":   return MaterialShape.Shape.Clover4Leaf;
-                            case "Burst":         return MaterialShape.Shape.Burst;
-                            case "Heart":         return MaterialShape.Shape.Heart;
-                            case "Bun":           return MaterialShape.Shape.Bun;
-                            default:              return MaterialShape.Shape.Cookie9Sided;
-                        }
-                    }
-                    shape: resolveShape(Config.options.userProfile.avatarShape)
-
-                    color: {
-                        switch (Config.options.userProfile.avatarColor) {
-                            case "secondary": return Appearance.colors.colSecondary;
-                            case "tertiary":  return Appearance.colors.colTertiary;
-                            case "error":     return Appearance.colors.colError;
-                            default:          return Appearance.colors.colPrimary;
-                        }
-                    }
 
                     readonly property color onColor: {
                         switch (Config.options.userProfile.avatarColor) {
-                            case "secondary": return Appearance.colors.colOnSecondary;
-                            case "tertiary":  return Appearance.colors.colOnTertiary;
-                            case "error":     return Appearance.colors.colOnError;
-                            default:          return Appearance.colors.colOnPrimary;
+                        case "secondary":
+                            return Appearance.colors.colOnSecondary;
+                        case "tertiary":
+                            return Appearance.colors.colOnTertiary;
+                        case "error":
+                            return Appearance.colors.colOnError;
+                        default:
+                            return Appearance.colors.colOnPrimary;
+                        }
+                    }
+
+                    function resolveShape(s) {
+                        switch (s) {
+                        case "Cookie9Sided":
+                            return MaterialShape.Shape.Cookie9Sided;
+                        case "Cookie12Sided":
+                            return MaterialShape.Shape.Cookie12Sided;
+                        case "Squircle":
+                            return MaterialShape.Shape.Squircle;
+                        case "Circle":
+                            return MaterialShape.Shape.Circle;
+                        case "Clover4Leaf":
+                            return MaterialShape.Shape.Clover4Leaf;
+                        case "Burst":
+                            return MaterialShape.Shape.Burst;
+                        case "Heart":
+                            return MaterialShape.Shape.Heart;
+                        case "Bun":
+                            return MaterialShape.Shape.Bun;
+                        default:
+                            return MaterialShape.Shape.Cookie9Sided;
+                        }
+                    }
+
+                    anchors.centerIn: parent
+                    width: 110
+                    height: 110
+                    shape: resolveShape(Config.options.userProfile.avatarShape)
+                    color: {
+                        switch (Config.options.userProfile.avatarColor) {
+                        case "secondary":
+                            return Appearance.colors.colSecondary;
+                        case "tertiary":
+                            return Appearance.colors.colTertiary;
+                        case "error":
+                            return Appearance.colors.colError;
+                        default:
+                            return Appearance.colors.colPrimary;
                         }
                     }
 
                     Image {
                         id: avatarImg
+
                         anchors.fill: parent
                         source: {
                             if (Config.options.userProfile.imageStyle === "custom")
                                 return "file://" + Config.options.userProfile.imagePath;
+
                             if (Config.options.userProfile.imageStyle === "initial")
                                 return Directories.userAvatarPathAccountsService;
+
                             return "";
                         }
                         fillMode: Image.PreserveAspectCrop
@@ -129,7 +153,9 @@ ContentPage {
                             }
                         }
                     }
+
                 }
+
             }
 
             // Right column: image style + inputs
@@ -142,21 +168,31 @@ ContentPage {
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     currentValue: Config.options.userProfile.imageStyle
-                    onSelected: v => {
-                        Config.options.userProfile.imageStyle = v
+                    onSelected: (v) => {
+                        Config.options.userProfile.imageStyle = v;
                         if (v === "custom") {
                             pickImageProc.running = false;
                             pickImageProc.running = true;
                         }
                     }
-                    options: [
-                        { displayName: Translation.tr("Initial"),    icon: "title",  value: "initial"    },
-                        { displayName: Translation.tr("Expressive"), icon: "cookie", value: "expressive" },
-                        { displayName: Translation.tr("Custom"),     icon: "image",  value: "custom"     }
-                    ]
+                    options: [{
+                        "displayName": Translation.tr("Initial"),
+                        "icon": "title",
+                        "value": "initial"
+                    }, {
+                        "displayName": Translation.tr("Expressive"),
+                        "icon": "cookie",
+                        "value": "expressive"
+                    }, {
+                        "displayName": Translation.tr("Custom"),
+                        "icon": "image",
+                        "value": "custom"
+                    }]
                 }
 
-                Item { implicitHeight: 8 }
+                Item {
+                    implicitHeight: 8
+                }
 
                 ConfigTextField {
                     text: Translation.tr("Your name")
@@ -173,8 +209,11 @@ ContentPage {
                     inputText: Config.options.userProfile.customGreeting
                     textField.onTextChanged: Config.options.userProfile.customGreeting = textField.text
                 }
+
             }
+
         }
+
     }
 
     // Avatar appearance
@@ -189,14 +228,32 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.userProfile.avatarColor
-                onSelected: v => Config.options.userProfile.avatarColor = v
-                options: [
-                    { displayName: Translation.tr("Primary"),   icon: "circle", color: Appearance.colors.colPrimary.toString(),   value: "primary"   },
-                    { displayName: Translation.tr("Secondary"), icon: "circle", color: Appearance.colors.colSecondary.toString(), value: "secondary" },
-                    { displayName: Translation.tr("Tertiary"),  icon: "circle", color: Appearance.colors.colTertiary.toString(),  value: "tertiary"  },
-                    { displayName: Translation.tr("Error"),     icon: "circle", color: Appearance.colors.colError.toString(),     value: "error"     }
-                ]
+                onSelected: (v) => {
+                    return Config.options.userProfile.avatarColor = v;
+                }
+                options: [{
+                    "displayName": Translation.tr("Primary"),
+                    "icon": "circle",
+                    "color": Appearance.colors.colPrimary.toString(),
+                    "value": "primary"
+                }, {
+                    "displayName": Translation.tr("Secondary"),
+                    "icon": "circle",
+                    "color": Appearance.colors.colSecondary.toString(),
+                    "value": "secondary"
+                }, {
+                    "displayName": Translation.tr("Tertiary"),
+                    "icon": "circle",
+                    "color": Appearance.colors.colTertiary.toString(),
+                    "value": "tertiary"
+                }, {
+                    "displayName": Translation.tr("Error"),
+                    "icon": "circle",
+                    "color": Appearance.colors.colError.toString(),
+                    "value": "error"
+                }]
             }
+
         }
 
         ContentSubsection {
@@ -206,13 +263,102 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.userProfile.avatarShape
-                onSelected: v => Config.options.userProfile.avatarShape = v
-                options: (["Cookie9Sided", "Cookie12Sided", "Squircle", "Circle", "Clover4Leaf", "Burst", "Heart", "Bun"]).map(s => ({
-                    displayName: "",
-                    shape: s,
-                    value: s
-                }))
+                onSelected: (v) => {
+                    return Config.options.userProfile.avatarShape = v;
+                }
+                options: (["Cookie9Sided", "Cookie12Sided", "Squircle", "Circle", "Clover4Leaf", "Burst", "Heart", "Bun"]).map((s) => {
+                    return ({
+                        "displayName": "",
+                        "shape": s,
+                        "value": s
+                    });
+                })
             }
+
         }
+
     }
+
+    ContentSection {
+        title: Translation.tr("Sidebar header")
+        icon: "account_circle"
+
+        ContentSubsection {
+            title: Translation.tr("Profile Image Type")
+            icon: "image"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.sidebar.dashboardHeader.profileImageType
+                onSelected: (newValue) => {
+                    Config.options.sidebar.dashboardHeader.profileImageType = newValue;
+                }
+                options: [{
+                    "displayName": Translation.tr("User Profile"),
+                    "icon": "account_circle",
+                    "value": "user_profile"
+                }, {
+                    "displayName": Translation.tr("Distro Icon"),
+                    "icon": "computer",
+                    "value": "distro"
+                }, {
+                    "displayName": Translation.tr("None"),
+                    "icon": "do_not_disturb",
+                    "value": "none"
+                }]
+            }
+
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Header Text Mode")
+            icon: "title"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.sidebar.dashboardHeader.textMode
+                onSelected: (newValue) => {
+                    Config.options.sidebar.dashboardHeader.textMode = newValue;
+                }
+                options: [{
+                    "displayName": Translation.tr("Username"),
+                    "icon": "person",
+                    "value": "username"
+                }, {
+                    "displayName": Translation.tr("Uptime"),
+                    "icon": "schedule",
+                    "value": "uptime"
+                }, {
+                    "displayName": Translation.tr("Custom Text"),
+                    "icon": "edit",
+                    "value": "custom"
+                }, {
+                    "displayName": Translation.tr("None"),
+                    "icon": "do_not_disturb",
+                    "value": "none"
+                }]
+            }
+
+        }
+
+        ContentSubsection {
+            visible: Config.options.sidebar.dashboardHeader.textMode === "custom"
+            title: Translation.tr("Custom Header Text")
+            icon: "edit_note"
+            Layout.fillWidth: true
+
+            MaterialTextArea {
+                Layout.fillWidth: true
+                placeholderText: Translation.tr("Enter custom text")
+                text: Config.options.sidebar.dashboardHeader.customText
+                wrapMode: TextEdit.NoWrap
+                onTextChanged: {
+                    Config.options.sidebar.dashboardHeader.customText = text;
+                }
+            }
+
+        }
+
+    }
+
 }

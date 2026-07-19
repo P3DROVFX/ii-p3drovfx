@@ -142,10 +142,9 @@ ContentPage {
         }
     }
 
-    ContentSection {
+    MaterialWidgetLayoutSection {
         enabled: Config.options.bar.styles.battery === "material"
-        icon: "interests"
-        title: Translation.tr("Material 3 Design")
+        config: Config.options.bar.battery
 
         ConfigSwitch {
             buttonIcon: "percent"
@@ -155,41 +154,6 @@ ContentPage {
                 Config.options.bar.battery.showPercentageInsideBattery = checked;
             }
         }
-
-        ConfigSwitch {
-            buttonIcon: "flip"
-            text: Translation.tr("Move secondary component to the opposite")
-            checked: Config.options.bar.battery.secondaryOpposite
-            onCheckedChanged: {
-                Config.options.bar.battery.secondaryOpposite = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "radio_button_checked"
-            text: Translation.tr("Show primary component")
-            checked: Config.options.bar.battery.showPrimary
-            onCheckedChanged: {
-                Config.options.bar.battery.showPrimary = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "radio_button_unchecked"
-            text: Translation.tr("Show secondary component")
-            checked: Config.options.bar.battery.showSecondary
-            onCheckedChanged: {
-                Config.options.bar.battery.showSecondary = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "sync"
-            text: Translation.tr("Swap secondary component with the primary")
-            checked: Config.options.bar.battery.swapPrimaryWithSecondary
-            onCheckedChanged: {
-                Config.options.bar.battery.swapPrimaryWithSecondary = checked;
-            }
-        }
+    }
     }
 }
