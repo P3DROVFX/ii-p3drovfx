@@ -1570,9 +1570,41 @@ Singleton {
             }
 
             property JsonObject sounds: JsonObject {
-                property bool battery: false
-                property bool pomodoro: false
+                property bool enable: true
                 property string theme: "freedesktop"
+                property int volume: 100
+
+                property bool notifications: true
+                property bool volumeChange: true
+                property bool battery: false
+                property bool screenshot: true
+                property bool pomodoro: false
+                property bool alarm: true
+                property bool session: false
+                property bool devices: true
+                property bool lock: false
+
+                property bool alarmFadeIn: false
+                property int alarmFadeInSeconds: 30
+
+                property JsonObject notificationApps: JsonObject {
+                    property string defaultPolicy: "play" // "play" | "mute"
+                    property list<string> alwaysPlayApps: []
+                    property list<string> neverPlayApps: []
+                }
+
+                // Per-event custom sound file overrides (absolute paths)
+                property JsonObject custom: JsonObject {
+                    property string notifications: ""
+                    property string volumeChange: ""
+                    property string battery: ""
+                    property string screenshot: ""
+                    property string pomodoro: ""
+                    property string alarm: ""
+                    property string session: ""
+                    property string devices: ""
+                    property string lock: ""
+                }
             }
 
             property JsonObject soundcore: JsonObject {

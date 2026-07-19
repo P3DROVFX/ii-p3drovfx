@@ -92,32 +92,17 @@ Singleton {
         ringingAlarmIndex = index;
         let alarm = alarms[index];
 
-        // Stop existing sound if any
-        alarmSoundProcess.running = false;
-
         // Play sound in loop if enabled
+        SoundService.stopLoop();
         if (Config.options.sounds.alarm) {
-            let script = `
-                THEME_PATH="/usr/share/sounds/${Audio.audioTheme}/stereo/alarm-clock-elapsed.oga"
-                FALLBACK_PATH="/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga"
-                OCEAN_PATH="/usr/share/sounds/ocean/stereo/alarm-clock-elapsed.oga"
-                
-                if [ -f "$THEME_PATH" ]; then
-                    ffplay -nodisp -loop 0 "$THEME_PATH"
-                elif [ -f "$FALLBACK_PATH" ]; then
-                    ffplay -nodisp -loop 0 "$FALLBACK_PATH"
-                else
-                    ffplay -nodisp -loop 0 "$OCEAN_PATH"
-                fi
-            `;
-            alarmSoundProcess.command = ["bash", "-c", script];
-            alarmSoundProcess.running = true;
+            const fadeSeconds = Config.options.sounds.alarmFadeIn ? Config.options.sounds.alarmFadeInSeconds : 0;
+            SoundService.startLoop("alarm", "alarm-clock-elapsed", fadeSeconds);
         }
 
         // Send a system notification if the fullscreen popup is disabled
         if (!Config.options.time.alarms.useFullscreenPopup) {
             let labelStr = alarm.label ? alarm.label : Translation.tr("Alarm");
-            Quickshell.execDetached(["notify-send", labelStr, alarm.time, "-a", "Alarm", "-i", "alarm", "--urgency=critical"]);
+            Quickshell.execDetached(["notify-send", labelStr, alarm.time, "-a", "Alarm", "-i", "alarm", "--urgency=critical", "--hint=boolean:suppress-sound:true"]);
         }
 
         GlobalStates.alarmRinging = true;
@@ -139,7 +124,7 @@ Singleton {
         }
 
         ringingAlarmIndex = -1;
-        alarmSoundProcess.running = false;
+        SoundService.stopLoop();
         GlobalStates.alarmRinging = false;
     }
 
@@ -189,10 +174,6 @@ Singleton {
         running: ringingAlarmIndex !== -1
         repeat: false
         onTriggered: stopRinging()
-    }
-
-    Process {
-        id: alarmSoundProcess
     }
 
     IpcHandler {

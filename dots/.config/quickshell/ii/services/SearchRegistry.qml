@@ -34,7 +34,7 @@ Item {
         ];
         
         
-        let files = [basePath + "ColorsThemesConfig.qml", basePath + "BarConfig.qml", basePath + "BackgroundConfig.qml", basePath + "InterfaceFontsConfig.qml", basePath + "PresetsConfig.qml", basePath + "SidebarsConfig.qml", basePath + "DockConfig.qml", basePath + "WorkspacesConfig.qml", basePath + "OverviewConfig.qml", basePath + "WidgetsConfig.qml", basePath + "DynamicIslandConfig.qml", basePath + "OverlaysConfig.qml", basePath + "RegionSelectorConfig.qml", basePath + "AppSearchConfig.qml", basePath + "CheatSheetConfig.qml", basePath + "HyprlandRulesConfig.qml", basePath + "MonitorsConfig.qml", basePath + "CoreServicesConfig.qml", basePath + "LockScreenConfig.qml", basePath + "AboutConfig.qml", basePath + "UserProfileConfig.qml"];
+        let files = [basePath + "ColorsThemesConfig.qml", basePath + "BarConfig.qml", basePath + "BackgroundConfig.qml", basePath + "InterfaceFontsConfig.qml", basePath + "PresetsConfig.qml", basePath + "SidebarsConfig.qml", basePath + "DockConfig.qml", basePath + "WorkspacesConfig.qml", basePath + "OverviewConfig.qml", basePath + "WidgetsConfig.qml", basePath + "DynamicIslandConfig.qml", basePath + "OverlaysConfig.qml", basePath + "RegionSelectorConfig.qml", basePath + "AppSearchConfig.qml", basePath + "CheatSheetConfig.qml", basePath + "HyprlandRulesConfig.qml", basePath + "MonitorsConfig.qml", basePath + "CoreServicesConfig.qml", basePath + "SoundsConfig.qml", basePath + "LockScreenConfig.qml", basePath + "AboutConfig.qml", basePath + "UserProfileConfig.qml"];
         
         for (let w of widgetFiles) files.push(basePath + "widgets/" + w);
         

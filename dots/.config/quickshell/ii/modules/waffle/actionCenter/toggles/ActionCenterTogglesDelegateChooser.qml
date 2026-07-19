@@ -151,4 +151,11 @@ DelegateChooser {
             icon: "cut"
         }
     }
+    DelegateChoice {
+        roleValue: "systemSounds"
+        ActionCenterToggleButton {
+            toggleModel: SystemSoundsToggle {}
+            icon: Config.options.sounds.enable ? "speaker" : "speaker-mute"
+        }
+    }
 }

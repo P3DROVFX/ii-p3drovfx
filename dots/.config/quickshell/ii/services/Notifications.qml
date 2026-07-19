@@ -195,6 +195,75 @@ Singleton {
     property list<string> appNameList: appNameListForGroups(root.groupsByAppName)
     property list<string> popupAppNameList: appNameListForGroups(root.popupGroupsByAppName)
 
+    // fdo notification categories → sound naming spec events. Exact match is
+    // tried first, then the part before the first dot ("im.received" → "im").
+    readonly property var categorySoundMap: ({
+        "im.received": "message-new-instant",
+        "im": "message",
+        "email.arrived": "message-new-email",
+        "email": "message-new-email",
+        "call.incoming": "phone-incoming-call",
+        "device.added": "device-added",
+        "device.removed": "device-removed",
+        "device.error": "dialog-error",
+        "network.connected": "network-connectivity-established",
+        "network.disconnected": "network-connectivity-lost",
+        "transfer.complete": "complete",
+        "transfer.error": "dialog-error"
+    })
+
+    function soundPolicyFor(appName) {
+        const conf = Config.options.sounds.notificationApps;
+        const lower = (appName || "").toLowerCase();
+        if (conf.neverPlayApps.some(app => app.toLowerCase() === lower)) return "mute";
+        if (conf.alwaysPlayApps.some(app => app.toLowerCase() === lower)) return "play";
+        return conf.defaultPolicy;
+    }
+
+    function appSoundsMuted(appName) {
+        const conf = Config.options.sounds.notificationApps;
+        const lower = (appName || "").toLowerCase();
+        return conf.neverPlayApps.some(app => app.toLowerCase() === lower);
+    }
+
+    function toggleAppSoundMute(appName) {
+        if (!appName) return;
+        const conf = Config.options.sounds.notificationApps;
+        const lower = appName.toLowerCase();
+        if (root.appSoundsMuted(appName)) {
+            conf.neverPlayApps = conf.neverPlayApps.filter(app => app.toLowerCase() !== lower);
+        } else {
+            conf.alwaysPlayApps = conf.alwaysPlayApps.filter(app => app.toLowerCase() !== lower);
+            conf.neverPlayApps = [...conf.neverPlayApps, appName];
+        }
+    }
+
+    // Follows the fdo notification spec: apps can suppress the sound or request
+    // a specific one via hints. Do-not-disturb (silent) mutes everything.
+    function playNotificationSound(notification) {
+        if (root.silent) return;
+        const hints = notification.hints ?? {};
+        if (hints["suppress-sound"]) return;
+        if (root.soundPolicyFor(notification.appName) === "mute") return;
+
+        if (hints["sound-file"]) {
+            SoundService.playEventFile("notifications", hints["sound-file"]);
+            return;
+        }
+
+        const events = [];
+        if (hints["sound-name"]) events.push(hints["sound-name"]);
+        const category = hints["category"] ?? "";
+        if (category !== "") {
+            if (root.categorySoundMap[category]) events.push(root.categorySoundMap[category]);
+            const prefix = category.split(".")[0];
+            if (root.categorySoundMap[prefix]) events.push(root.categorySoundMap[prefix]);
+        }
+        if (notification.urgency === NotificationUrgency.Critical) events.push("dialog-warning");
+        events.push("message-new-instant");
+        SoundService.playEvent("notifications", events);
+    }
+
     // Quickshell's notification IDs starts at 1 on each run, while saved notifications
     // can already contain higher IDs. This is for avoiding id collisions
     property int idOffset
@@ -229,6 +298,7 @@ Singleton {
             }
 
             notification.tracked = true
+            root.playNotificationSound(notification);
             const newNotifObject = notifComponent.createObject(root, {
                 "notificationId": notification.id + root.idOffset,
                 "notification": notification,
