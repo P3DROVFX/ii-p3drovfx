@@ -165,6 +165,41 @@ Singleton {
         "subPages": [],
         "aliases": []
     }, {
+        "id": "mediaMusic",
+        "name": "Media & Music",
+        "icon": "album",
+        "component": "modules/settings/configs/MediaMusicConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Media Integrations", "Media Downloader", "Music", "Lyrics", "yt-dlp"]
+    }, {
+        "id": "languageTime",
+        "name": "Language & Time",
+        "icon": "translate",
+        "component": "modules/settings/configs/LanguageTimeConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Language & Translation", "Time & Date", "World Clocks", "Alarms", "Translator"]
+    }, {
+        "id": "weather",
+        "name": "Weather",
+        "icon": "cloud",
+        "component": "modules/settings/configs/WeatherConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Weather Service"]
+    }, {
+        "id": "aiAssistant",
+        "name": "AI Assistant",
+        "icon": "neurology",
+        "component": "modules/settings/configs/AiAssistantConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "Gemini", "AI", "System prompt"]
+    }, {
+        "id": "tasksAccounts",
+        "name": "Tasks & Accounts",
+        "icon": "checklist",
+        "component": "modules/settings/configs/TasksAccountsConfig.qml",
+        "subPages": [],
+        "aliases": ["Core Services", "TickTick", "Tasks", "Accounts"]
+    }, {
         "id": "coreServices",
         "name": "Core Services",
         "icon": "settings_suggest",
@@ -219,6 +254,10 @@ Singleton {
         "id": "tools",
         "name": "Tools",
         "pageIds": ["launcher", "clipboard", "screenCapture", "notifications", "overlays", "cheatSheet"]
+    }, {
+        "id": "servicesIntegrations",
+        "name": "Services & Integrations",
+        "pageIds": ["mediaMusic", "languageTime", "weather", "aiAssistant", "tasksAccounts"]
     }, {
         "id": "systemServices",
         "name": "System & Services",
