@@ -15,6 +15,10 @@ StyledListView { // Scrollable window
     readonly property real zoom: popup ? (Config.options.notifications.zoomPercent / 100) : 1.0
     dismissToLeft: popup && (Config.options.notifications.position ?? "top_right").endsWith("left")
     useSlideInAnimation: popup
+    // Groups reorder by latest activity (Notifications.appNameList), and reused delegates
+    // leak per-item UI state (expanded, lazyLimit, implicitHeight animation) across
+    // different notification groups, causing stuck height/overlap glitches.
+    reuseItems: false
 
     spacing: 3
 
