@@ -16,22 +16,28 @@ LockScreen {
 
     Timer {
         id: restoreTimer
-        interval: 700
+        interval: 450 // Delayed until zoom-in is fully finished (450ms)
         repeat: false
         onTriggered: {
-            var batch = ""
-            var style = Config.options.background.parallax.vertical ? "slidevert" : "slide"
-            batch += "hyprctl keyword animation workspaces,1,7,menu_decel," + style + "; "
+            var batch = "keyword animation workspaces,0"
+            var hasCmds = false
             for (var j = 0; j < Quickshell.screens.length; ++j) {
                 var monName = Quickshell.screens[j].name
                 var wsId = root.savedWorkspaces[monName]
                 if (wsId !== undefined) {
-                    batch += `hyprctl dispatch 'hl.dsp.focus({monitor="${monName}"})'; hyprctl dispatch 'hl.dsp.focus({workspace=${wsId}})';`
+                    var mData = HyprlandData.monitors.find(m => m.name === monName)
+                    if (mData && mData.activeWorkspace && mData.activeWorkspace.id > 1000000) {
+                        batch += ` ; dispatch hl.dsp.focus {monitor="${monName}"} ; dispatch hl.dsp.focus {workspace=${wsId}}`
+                        hasCmds = true
+                    }
                 }
             }
-            if (batch.length > 0) {
+            batch += " ; keyword animation workspaces,1"
+            if (hasCmds) {
                 GlobalStates.workspaceRestoreInProgress = false;
-                Quickshell.execDetached(["bash", "-c", batch])
+                Quickshell.execDetached(["hyprctl", "--batch", batch])
+            } else {
+                GlobalStates.workspaceRestoreInProgress = false;
             }
         }
     }
@@ -48,7 +54,8 @@ LockScreen {
                 GlobalStates.workspaceRestoreInProgress = false;
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
                 var next = {}
-                var batch = "hyprctl keyword animation workspaces,1,7,menu_decel,slidevert; "
+                var batch = "keyword animation workspaces,0"
+                var hasCmds = false
                 for (var i = 0; i < Quickshell.screens.length; ++i) {
                     var mon = Quickshell.screens[i] ? Quickshell.screens[i].name : null
                     if (!mon) continue;
@@ -58,10 +65,17 @@ LockScreen {
                     }
                     var ws = (mData?.activeWorkspace?.id ?? 1)
                     next[mon] = ws
-                    batch += `hyprctl dispatch 'hl.dsp.focus({monitor="${mon}"})'; hyprctl dispatch 'hl.dsp.focus({workspace=${2147483647 - ws}})';`
+                    var hasWindows = HyprlandData.windowList.some(function(w) { return w.workspace.id === ws; })
+                    if (hasWindows) {
+                        batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${2147483647 - ws}}`
+                        hasCmds = true
+                    }
                 }
+                batch += " ; keyword animation workspaces,1"
                 root.savedWorkspaces = next
-                Quickshell.execDetached(["bash", "-c", batch])
+                if (hasCmds) {
+                    Quickshell.execDetached(["hyprctl", "--batch", batch])
+                }
             } else {
                 GlobalStates.workspaceRestoreInProgress = true;
                 restoreTimer.start()

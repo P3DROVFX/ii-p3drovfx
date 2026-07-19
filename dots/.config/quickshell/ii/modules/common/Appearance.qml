@@ -17,7 +17,8 @@ Singleton {
 
     readonly property int windowRounding: {
         let rv = Config.options.appearance.roundingValue;
-        if (rv <= 0) return 0;
+        if (rv <= 0)
+            return 0;
         return Math.round(18 * rv / 24.0);
     }
 
@@ -213,8 +214,10 @@ Singleton {
     rounding: QtObject {
         property real scale: {
             let rv = Config.options.appearance.roundingValue;
-            if (rv > 0) return rv / 24.0;
-            if (rv < 0) return 1.0; // not yet migrated, default to large
+            if (rv > 0)
+                return rv / 24.0;
+            if (rv < 0)
+                return 1.0; // not yet migrated, default to large
             return 0.0; // roundingValue === 0 → sharp
         }
 
@@ -232,10 +235,14 @@ Singleton {
 
     property color activeBorderColor: {
         let type = Config.options.appearance.borderColorType;
-        if (type === "secondary") return colors.colSecondary;
-        if (type === "tertiary") return colors.colTertiary;
-        if (type === "primaryContainer") return colors.colPrimaryContainer;
-        if (type === "surface") return colors.colOutlineVariant;
+        if (type === "secondary")
+            return colors.colSecondary;
+        if (type === "tertiary")
+            return colors.colTertiary;
+        if (type === "primaryContainer")
+            return colors.colPrimaryContainer;
+        if (type === "surface")
+            return colors.colOutlineVariant;
         return colors.colPrimary;
     }
 
@@ -257,14 +264,14 @@ Singleton {
                 Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { ['col.active_border'] = '" + hyprColor + "' }, group = { ['col.border_active'] = '" + hyprColor + "', groupbar = { ['col.active'] = '" + hyprColor + "' } } })"]);
             }
         }
-    } 
+    }
 
     property bool borderless: Config.options.appearance.borderless ?? false
     onBorderlessChanged: {
         if (Config.ready) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { border_size = " + (borderless ? "0" : borderWidth) + " } })"]);
         }
-    } 
+    }
 
     property int borderWidth: Config.options.appearance.borderWidth ?? 2
     onBorderWidthChanged: {
@@ -380,7 +387,8 @@ Singleton {
                     "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
                 })
             property var title: ({ // Slightly bold weight for title
-                    "wght": 550, // Weight (Lowered to compensate for increased grade)
+                    "wght": 550 // Weight (Lowered to compensate for increased grade)
+                    ,
                     "ROND": Config.options.appearance.fonts.roundnessFull ? 100 : 0
                 })
             property var rounded: ({

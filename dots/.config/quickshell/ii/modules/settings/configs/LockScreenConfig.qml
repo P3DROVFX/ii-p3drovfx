@@ -254,36 +254,6 @@ ContentPage {
         icon: "style"
         title: Translation.tr("Style: General")
 
-        ContentSubsection {
-            title: Translation.tr("Lockscreen widget")
-            icon: "widgets"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.lock.centerWidget
-                onSelected: newValue => {
-                    Config.options.lock.centerWidget = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Clock"),
-                        icon: "schedule",
-                        value: "clock"
-                    },
-                    {
-                        displayName: Translation.tr("Media"),
-                        icon: "music_note",
-                        value: "media"
-                    },
-                    {
-                        displayName: Translation.tr("None"),
-                        icon: "do_not_disturb",
-                        value: "none"
-                    }
-                ]
-            }
-        }
-
         NoticeBox {
             Layout.fillWidth: true
             text: Translation.tr("You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
@@ -358,6 +328,42 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Show a ripple animation when clicking anywhere on the lock screen.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "music_note"
+            text: Translation.tr("Show Now Playing widget")
+            checked: Config.options.lock.nowPlaying ?? true
+            onCheckedChanged: {
+                Config.options.lock.nowPlaying = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Display a Now Playing media bar at the top of the lockscreen.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "alarm"
+            text: Translation.tr("Show next alarm")
+            checked: Config.options.lock.showAlarm ?? true
+            onCheckedChanged: {
+                Config.options.lock.showAlarm = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Display the next scheduled alarm in the lockscreen bottom toolbar.")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "cloud"
+            text: Translation.tr("Show weather icon")
+            checked: Config.options.lock.showWeather ?? true
+            onCheckedChanged: {
+                Config.options.lock.showWeather = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Display the current weather icon in the lockscreen bottom toolbar.")
             }
         }
     }
@@ -538,6 +544,102 @@ ContentPage {
             stepSize: 5
             onValueChanged: {
                 Config.options.lock.blur.extraZoom = value / 100;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "incomplete_circle"
+        title: Translation.tr("Style: Desaturated")
+
+        ConfigSwitch {
+            buttonIcon: "deblur"
+            text: Translation.tr("Desaturate wallpaper on lock")
+            checked: Config.options.lock.desaturate.enable
+            onCheckedChanged: {
+                Config.options.lock.desaturate.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Reduce wallpaper saturation when the screen is locked, with a smooth fade transition on lock/unlock.")
+            }
+        }
+
+        ConfigSlider {
+            Layout.fillWidth: true
+            buttonIcon: "palette"
+            text: Translation.tr("Desaturation amount")
+            enabled: Config.options.lock.desaturate.enable
+            from: 0
+            to: 100
+            stepSize: 5
+            value: Config.options.lock.desaturate.amount * 100
+            usePercentTooltip: true
+            onValueChanged: {
+                Config.options.lock.desaturate.amount = value / 100;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "palette"
+        title: Translation.tr("Style: Color Wash")
+
+        ConfigSwitch {
+            buttonIcon: "format_color_fill"
+            text: Translation.tr("Color wash overlay on lock")
+            checked: Config.options.lock.colorWash.enable
+            onCheckedChanged: {
+                Config.options.lock.colorWash.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Apply a primary color tint over the wallpaper when locked.")
+            }
+        }
+
+        ConfigSlider {
+            Layout.fillWidth: true
+            buttonIcon: "opacity"
+            text: Translation.tr("Color wash intensity")
+            enabled: Config.options.lock.colorWash.enable
+            from: 0
+            to: 100
+            stepSize: 5
+            value: Config.options.lock.colorWash.amount * 100
+            usePercentTooltip: true
+            onValueChanged: {
+                Config.options.lock.colorWash.amount = value / 100;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "vignette"
+        title: Translation.tr("Style: Vignette")
+
+        ConfigSwitch {
+            buttonIcon: "gradient"
+            text: Translation.tr("Vignette effect on lock")
+            checked: Config.options.lock.vignette.enable
+            onCheckedChanged: {
+                Config.options.lock.vignette.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Darken the edges of the wallpaper with a radial gradient when locked, focusing attention to the center.")
+            }
+        }
+
+        ConfigSlider {
+            Layout.fillWidth: true
+            buttonIcon: "dark_mode"
+            text: Translation.tr("Vignette intensity")
+            enabled: Config.options.lock.vignette.enable
+            from: 0
+            to: 100
+            stepSize: 5
+            value: Config.options.lock.vignette.amount * 100
+            usePercentTooltip: true
+            onValueChanged: {
+                Config.options.lock.vignette.amount = value / 100;
             }
         }
     }
