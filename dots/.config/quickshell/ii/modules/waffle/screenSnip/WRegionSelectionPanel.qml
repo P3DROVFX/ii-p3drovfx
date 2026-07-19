@@ -172,6 +172,7 @@ PanelWindow {
 
                 // Image post-processing
                 snipProc.startDetached();
+                ScreenshotAction.playShutterSound(screenshotAction);
                 root.close();
             }
 

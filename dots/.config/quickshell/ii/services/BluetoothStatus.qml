@@ -19,6 +19,9 @@ Singleton {
     signal deviceConnected(BluetoothDevice device)
     signal deviceDisconnected(BluetoothDevice device)
 
+    onDeviceConnected: device => SoundService.playEvent("devices", "device-added")
+    onDeviceDisconnected: device => SoundService.playEvent("devices", "device-removed")
+
     property var _previousConnectedAddresses: []
     property bool _initialized: false
 

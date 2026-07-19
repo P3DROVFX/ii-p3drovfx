@@ -48,31 +48,12 @@ ContentPage {
         icon: "notifications_active"
         title: Translation.tr("Interactive Alerts")
 
-        ConfigSwitch {
-            buttonIcon: "battery_alert"
-            text: Translation.tr("Battery sound toggle")
-            checked: Config.options.sounds.battery
-            onCheckedChanged: {
-                Config.options.sounds.battery = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "av_timer"
-            text: Translation.tr("Pomodoro sound toggle")
-            checked: Config.options.sounds.pomodoro
-            onCheckedChanged: {
-                Config.options.sounds.pomodoro = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "alarm"
-            text: Translation.tr("Alarm sound toggle")
-            checked: Config.options.sounds.alarm
-            onCheckedChanged: {
-                Config.options.sounds.alarm = checked;
-            }
+        ShortcutBox {
+            Layout.fillWidth: true
+            value: Translation.tr("Alert sounds moved to the Sounds page")
+            targetPageIndex: 18
+            targetSectionTitle: Translation.tr("Events")
+            materialIcon: "volume_up"
         }
     }
 }

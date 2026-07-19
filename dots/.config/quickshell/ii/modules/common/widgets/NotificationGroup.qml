@@ -320,6 +320,30 @@ MouseArea { // Notification group area
                             font.pixelSize: topRow.fontSize
                             color: Appearance.colors.colSubtext
                         }
+
+                        RippleButton {
+                            id: muteButton
+                            readonly property bool muted: Notifications.appSoundsMuted(notificationGroup?.appName)
+
+                            visible: root.expanded
+                            Layout.rightMargin: 5
+                            implicitWidth: implicitHeight
+                            implicitHeight: expandButton.implicitHeight
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: "transparent"
+                            onClicked: Notifications.toggleAppSoundMute(notificationGroup?.appName)
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: muteButton.muted ? "notifications_off" : "notifications_active"
+                                iconSize: Appearance.font.pixelSize.normal * root.zoom
+                                color: Appearance.colors.colSubtext
+                            }
+
+                            StyledToolTip {
+                                text: muteButton.muted ? Translation.tr("Unmute this app's notification sounds") : Translation.tr("Mute this app's notification sounds")
+                            }
+                        }
                     }
                     NotificationGroupExpandButton {
                         id: expandButton
