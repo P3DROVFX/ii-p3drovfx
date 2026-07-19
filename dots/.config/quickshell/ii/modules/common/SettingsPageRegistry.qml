@@ -93,7 +93,7 @@ Singleton {
         "icon": "grid_view",
         "component": "modules/settings/configs/OverviewConfig.qml",
         "subPages": [],
-        "aliases": []
+        "aliases": ["Overview Screen"]
     }, {
         "id": "widgets",
         "name": "Desktop Widgets",
