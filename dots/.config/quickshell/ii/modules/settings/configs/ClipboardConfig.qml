@@ -26,8 +26,6 @@ ContentPage {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            Layout.fillWidth: true
-            spacing: 4
 
             ConfigSwitch {
                 buttonIcon: "palette"
@@ -101,8 +99,6 @@ ContentPage {
         title: Translation.tr("Panel layout")
 
         ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
             Layout.fillWidth: true
             spacing: 4
 
