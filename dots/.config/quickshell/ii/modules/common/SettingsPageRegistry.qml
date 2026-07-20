@@ -247,7 +247,8 @@ Singleton {
         "icon": "account_circle",
         "component": "modules/settings/configs/UserProfileConfig.qml",
         "subPages": [],
-        "aliases": ["Sidebar header"]
+        "aliases": ["Sidebar header"],
+        "hidden": true
     }, {
         "id": "search",
         "name": "Search Results",
@@ -281,7 +282,7 @@ Singleton {
     }, {
         "id": "system",
         "name": "System",
-        "pageIds": ["displays", "soundAlerts", "power", "devicesPhone", "privacy", "about", "profile"]
+        "pageIds": ["displays", "soundAlerts", "power", "devicesPhone", "privacy", "about"]
     }]
 
     function pageIndexById(id) {
