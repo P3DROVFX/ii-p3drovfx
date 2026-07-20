@@ -37,6 +37,8 @@ Singleton {
     property bool regionSelectorOpen: false
     property bool searchOpen: false
     property bool screenLocked: false
+    property bool lockScreenCentered: false
+    property bool lockAnimationActive: false
     property bool workspaceRestoreInProgress: false
     property bool capsLockActive: false
     property bool screenLockContainsCharacters: false

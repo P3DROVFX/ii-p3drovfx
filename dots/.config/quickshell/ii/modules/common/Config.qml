@@ -248,17 +248,10 @@ Singleton {
     function migrateWidgetLockBehavior() {
         if (Persistent.states.background.lockBehaviorMigrated) return;
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let centerWidget = root.options.lock.centerWidget || "none";
         let changed = false;
         for (let i = 0; i < cloned.length; i++) {
             if (!cloned[i].lockBehavior) {
-                if (centerWidget === "clock" && cloned[i].widgetId && cloned[i].widgetId.startsWith("clock")) {
-                    cloned[i].lockBehavior = "center";
-                } else if (centerWidget === "media" && cloned[i].widgetId && cloned[i].widgetId.startsWith("media")) {
-                    cloned[i].lockBehavior = "center";
-                } else {
-                    cloned[i].lockBehavior = "hide";
-                }
+                cloned[i].lockBehavior = "hide";
                 changed = true;
             }
         }
@@ -1214,7 +1207,19 @@ Singleton {
                     property real radius: 100
                     property real extraZoom: 1.1
                 }
-                property string centerWidget: "clock" // "clock" | "media" | "none"
+                property JsonObject desaturate: JsonObject {
+                    property bool enable: false
+                    property real amount: 1.0
+                }
+                property JsonObject colorWash: JsonObject {
+                    property bool enable: false
+                    property real amount: 0.5
+                }
+                property JsonObject vignette: JsonObject {
+                    property bool enable: false
+                    property real amount: 0.7
+                }
+
                 property real centerSpacing: 20 // spacing between multiple centered widgets
                 property string centerAlignment: "horizontal" // "vertical" | "horizontal"
                 property bool showLockedText: true
@@ -1224,6 +1229,9 @@ Singleton {
                 }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
+                property bool nowPlaying: true
+                property bool showAlarm: true
+                property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
                     property bool enabled: true
                 }

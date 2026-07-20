@@ -25,8 +25,8 @@ MouseArea {
     NumberAnimation {
         id: sharedXAnim
         duration: root.animDuration
-        easing.type: root.animDuration > 500 ? Easing.OutCubic : Appearance.animation.elementMove.type
-        easing.bezierCurve: root.animDuration > 500 ? [] : Appearance.animation.elementMove.bezierCurve
+        easing.type: (root.animDuration == Math.round(450 * Appearance.animMultiplier) || root.animDuration > 500) ? Easing.OutCubic : Appearance.animation.elementMove.type
+        easing.bezierCurve: (root.animDuration == Math.round(450 * Appearance.animMultiplier) || root.animDuration > 500) ? [] : Appearance.animation.elementMove.bezierCurve
     }
     Behavior on x {
         id: xBehavior
@@ -35,8 +35,8 @@ MouseArea {
     NumberAnimation {
         id: sharedYAnim
         duration: root.animDuration
-        easing.type: root.animDuration > 500 ? Easing.OutCubic : Appearance.animation.elementMove.type
-        easing.bezierCurve: root.animDuration > 500 ? [] : Appearance.animation.elementMove.bezierCurve
+        easing.type: (root.animDuration == Math.round(450 * Appearance.animMultiplier) || root.animDuration > 500) ? Easing.OutCubic : Appearance.animation.elementMove.type
+        easing.bezierCurve: (root.animDuration == Math.round(450 * Appearance.animMultiplier) || root.animDuration > 500) ? [] : Appearance.animation.elementMove.bezierCurve
     }
     Behavior on y {
         id: yBehavior

@@ -9,7 +9,7 @@ Loader {
     property alias animation: opacityBehavior.animation
     opacity: shown ? 1 : 0
     visible: opacity > 0
-    active: opacity > 0
+    active: true
 
     Behavior on opacity {
         id: opacityBehavior

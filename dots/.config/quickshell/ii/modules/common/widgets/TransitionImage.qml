@@ -15,6 +15,7 @@ Item {
     property var fillMode: Image.PreserveAspectCrop
     property bool animated: true
     property bool imgAIsBack: true
+    property bool lockAnimationActive: false
 
     property var sourceSize: Qt.size(0, 0)
     property bool cache: false
@@ -22,6 +23,12 @@ Item {
     property bool asynchronous: true
     property bool smooth: true
     property bool mipmap: true
+
+    // Shader transition support
+    property string transitionShader: ""
+    property var shadersPath: ""
+    property string activeShader: ""
+    property real transitionProgress: 1.0
 
     readonly property Item fromImage: imgAIsBack ? imgA : imgB
     readonly property Item toImage: imgAIsBack ? imgB : imgA
@@ -48,9 +55,23 @@ Item {
         back.z = 0;
 
         if (root.animated) {
-            front.opacity = 0;
-            fadeAnim.target = front;
-            fadeAnim.restart();
+            if (root.transitionShader !== "") {
+                if (root.transitionShader === "random") {
+                    let list = ["circle", "circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"];
+                    root.activeShader = list[Math.floor(Math.random() * list.length)];
+                } else {
+                    root.activeShader = root.transitionShader;
+                }
+                // Standard crossfade animation is skipped; reset opacities to 1.0 so
+                // ShaderEffectSource captures the complete images
+                front.opacity = 1.0;
+                back.opacity = 1.0;
+                shaderProgressAnim.restart();
+            } else {
+                front.opacity = 0;
+                fadeAnim.target = front;
+                fadeAnim.restart();
+            }
         } else {
             front.opacity = 1;
             var oldBack = imgAIsBack ? imgA : imgB;
@@ -74,6 +95,60 @@ Item {
         }
     }
 
+    NumberAnimation {
+        id: shaderProgressAnim
+        target: root
+        property: "transitionProgress"
+        from: 0.0
+        to: 1.0
+        duration: root.animationDuration
+        easing.type: Easing.InOutCubic
+        onFinished: {
+            var front = root.imgAIsBack ? imgB : imgA;
+            var back = root.imgAIsBack ? imgA : imgB;
+            front.opacity = 1;
+            back.opacity = 0;
+            back.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            root.activeShader = "";
+        }
+    }
+
+    ShaderEffectSource {
+        id: fromSource
+        sourceItem: root.imgAIsBack ? imgA : imgB
+        hideSource: shaderProgressAnim.running
+        live: shaderProgressAnim.running
+        visible: false
+    }
+
+    ShaderEffectSource {
+        id: toSource
+        sourceItem: root.imgAIsBack ? imgB : imgA
+        hideSource: shaderProgressAnim.running
+        live: shaderProgressAnim.running
+        visible: false
+    }
+
+    ShaderEffect {
+        id: transitionEffect
+        anchors.fill: parent
+        z: 2
+        visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
+        
+        property var fromImage: fromSource
+        property var toImage: toSource
+        property real progress: root.transitionProgress
+        property real aspectX: width / height
+        property real aspectY: 1.0
+        property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+        property vector2d origin: Qt.vector2d(0.5, 0.5)
+        
+        fragmentShader: (root.activeShader !== "" && root.shadersPath !== "")
+            ? root.shadersPath + "/" + root.activeShader + ".frag.qsb"
+            : ""
+    }
+
     Image {
         id: imgA
         anchors.fill: parent
@@ -84,7 +159,6 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
-        layer.enabled: true
     }
 
     Image {
@@ -98,6 +172,5 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
-        layer.enabled: true
     }
 }

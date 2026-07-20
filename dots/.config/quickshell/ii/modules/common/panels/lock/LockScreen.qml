@@ -129,6 +129,9 @@ Scope {
         function focus(): void {
             lockContext.shouldReFocus();
         }
+        function fingerStop(): void {
+            lockContext.stopFingerPam();
+        }
     }
 
     GlobalShortcut {
@@ -137,6 +140,15 @@ Scope {
 
         onPressed: {
             root.lock();
+        }
+    }
+
+    GlobalShortcut {
+        name: "lockFingerStop"
+        description: "Stops the lock screen's fingerprint prompt. Meant for hypridle's before_sleep_cmd:" + " suspending with a fingerprint operation in flight crashes some readers' drivers"
+
+        onPressed: {
+            lockContext.stopFingerPam();
         }
     }
 

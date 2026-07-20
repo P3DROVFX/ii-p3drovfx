@@ -235,42 +235,14 @@ AbstractBackgroundWidget {
                     id: vignetteMask
                     anchors.fill: parent
 
-                    Rectangle {
-                        id: hMask
+                    RadialGradient {
                         anchors.fill: parent
-                        color: "transparent"
                         gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.08; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.2; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.45; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.92; color: Qt.rgba(0, 0, 0, 0) }
+                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
                             GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
                         }
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "transparent"
-                        gradient: Gradient {
-                            orientation: Gradient.Vertical
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-                            GradientStop { position: 0.15; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 0.65; color: Qt.rgba(0, 0, 0, 0.7) }
-                            GradientStop { position: 0.85; color: Qt.rgba(0, 0, 0, 0.3) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                        }
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: hMask
-                        }
+                        horizontalRadius: width * 0.65
+                        verticalRadius: height * 0.65
                     }
                 }
 
@@ -325,6 +297,22 @@ AbstractBackgroundWidget {
                             easing.type: Easing.OutCubic
                         }
                     }
+                }
+            }
+
+            Item {
+                anchors.fill: parent
+                visible: root.hasTrack
+                opacity: 0.3
+
+                RadialGradient {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
+                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.9) }
+                    }
+                    horizontalRadius: width * 0.7
+                    verticalRadius: height * 0.7
                 }
             }
 
