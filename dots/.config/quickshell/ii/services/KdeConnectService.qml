@@ -59,6 +59,7 @@ Singleton {
     readonly property bool activeReachable: root.activeDevice
         ? (root.activeDevice.reachable === true)
         : false
+    onActiveReachableChanged: SoundService.playEvent("devices", root.activeReachable ? "device-added" : "device-removed")
     readonly property bool activeHasNotifications: root.activeDeviceId !== ""
         && root._devicePlugins(root.activeDeviceId).indexOf("kdeconnect_notifications") >= 0
     readonly property bool scrcpyAvailable: root._scrcpyAvailable

@@ -27,6 +27,11 @@ Singleton {
     property string imageSearchEngineBaseUrl: Config.options.search.imageSearch.imageSearchEngineBaseUrl
     property string fileUploadApiEndpoint: "https://uguu.se/upload"
 
+    function playShutterSound(action) {
+        if (action === ScreenshotAction.Action.Record || action === ScreenshotAction.Action.RecordWithSound) return;
+        SoundService.playEvent("screenshot", ["camera-shutter", "screen-capture"]);
+    }
+
     function getCommand(x, y, width, height, screenshotPath, action, saveDir = "") {
         // Set command for action
         const rx = Math.round(x);

@@ -103,6 +103,7 @@ PanelWindow {
     }
 
     function finalizeScreenshot(saveToFile) {
+        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
         var targetW = Math.round(root.editorRegionW * root.monitorScale);
         var targetH = Math.round(root.editorRegionH * root.monitorScale);
         editorContent.grabToImage(function (result) {
@@ -112,9 +113,9 @@ PanelWindow {
                 var saveDir = Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
                 var fileName = "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
                 var fullPath = saveDir + "/" + fileName;
-                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + StringUtils.shellSingleQuoteEscape(saveDir) + "' && mv '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' '" + StringUtils.shellSingleQuoteEscape(fullPath) + "' && notify-send -i camera-photo -t 4000 'Screenshot saved' 'Saved to: " + StringUtils.shellSingleQuoteEscape(fullPath) + "'"]);
+                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + StringUtils.shellSingleQuoteEscape(saveDir) + "' && mv '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' '" + StringUtils.shellSingleQuoteEscape(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + StringUtils.shellSingleQuoteEscape(fullPath) + "'"]);
             } else {
-                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && rm '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && notify-send -i camera-photo -t 4000 'Screenshot copied' 'Copied to clipboard'"]);
+                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && rm '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
             }
             root.dismiss();
         }, Qt.size(targetW, targetH));
@@ -373,6 +374,7 @@ PanelWindow {
         , screenshotAction //
         , screenshotDir);
         Quickshell.execDetached(command);
+        ScreenshotAction.playShutterSound(screenshotAction);
         if (root.action === RegionSelection.SnipAction.AskAI) {
             Ai.handleClipboardAndAttach();
             GlobalStates.policiesPanelOpen = true;
