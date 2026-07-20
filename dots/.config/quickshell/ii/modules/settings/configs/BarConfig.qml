@@ -46,30 +46,6 @@ Item {
             title: Translation.tr("Shell mode")
 
             ContentSubsection {
-                title: Translation.tr("Panel family")
-                icon: "dashboard"
-                tooltip: Translation.tr("Swaps the entire panel set. Same thing the panel family cycle shortcut does.")
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.panelFamily
-                    onSelected: (newValue) => {
-                        Config.options.panelFamily = newValue;
-                    }
-                    options: [{
-                        "displayName": Translation.tr("ii"),
-                        "icon": "space_bar",
-                        "value": "ii"
-                    }, {
-                        "displayName": Translation.tr("Waffle"),
-                        "icon": "grid_view",
-                        "value": "waffle"
-                    }]
-                }
-
-            }
-
-            ContentSubsection {
                 title: Translation.tr("Style")
                 icon: "style"
                 Layout.fillWidth: true
@@ -97,18 +73,6 @@ Item {
                 visible: Config.options.bar.autoHide.enable
                 text: Translation.tr("Bar auto-hide is not supported by Search Connect Mode yet. Disable auto-hide to use the drop search.")
             }
-
-            ServiceCard {
-                cardIcon: "build"
-                cardHue: 276
-                cardShape: "Cookie4Sided"
-                title: Translation.tr("Waffle tweaks")
-                description: Translation.tr("Optional tweaks for the Waffle panel family")
-                onOpenCard: {
-                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/WaffleTweaksConfig.qml");
-                }
-            }
-
         }
 
         // ── Layout ────────────────────────────────────────────────────────
@@ -713,6 +677,23 @@ Item {
 
                 }
 
+            }
+
+        }
+
+        ContentSection {
+            icon: "grid_view"
+            title: Translation.tr("Waffle")
+
+            ServiceCard {
+                cardIcon: "build"
+                cardHue: 276
+                cardShape: "Cookie4Sided"
+                title: Translation.tr("Waffle tweaks")
+                description: Translation.tr("Optional tweaks for the Waffle panel family")
+                onOpenCard: {
+                    barConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/WaffleTweaksConfig.qml");
+                }
             }
 
         }

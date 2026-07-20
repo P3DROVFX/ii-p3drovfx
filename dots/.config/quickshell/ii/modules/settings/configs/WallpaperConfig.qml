@@ -14,31 +14,6 @@ ContentPage {
     forceWidth: false
 
     ContentSection {
-        title: Translation.tr("Wallpaper")
-        icon: "wallpaper"
-
-        ConfigWallpaperSelector {
-            Layout.fillWidth: true
-            text: Translation.tr("Wallpaper Selector")
-        }
-
-        ConfigSwitch {
-            buttonIcon: "folder_shared"
-            text: Translation.tr("Use system file picker")
-            checked: Config.options.wallpaperSelector.useSystemFileDialog
-            onCheckedChanged: {
-                Config.options.wallpaperSelector.useSystemFileDialog = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("Uses xdg-desktop-portal instead of the built-in quickshell picker")
-            }
-
-        }
-
-    }
-
-    ContentSection {
         title: Translation.tr("Parallax Engine")
         icon: "sync_alt"
 

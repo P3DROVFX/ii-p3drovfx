@@ -47,11 +47,11 @@ Singleton {
         "aliases": ["Bar & Status Bar", "Status Bar", "Shell mode", "Waffle"]
     }, {
         "id": "wallpaper",
-        "name": "Wallpaper",
+        "name": "Background",
         "icon": "wallpaper",
         "component": "modules/settings/configs/WallpaperConfig.qml",
         "subPages": [],
-        "aliases": ["Backgrounds", "Wallpaper Engine"]
+        "aliases": ["Wallpaper", "Backgrounds", "Wallpaper Engine"]
     }, {
         "id": "interfaceFonts",
         "name": "Interface & Fonts",
@@ -262,7 +262,7 @@ Singleton {
     readonly property var groups: [{
         "id": "lookAndFeel",
         "name": "Look & Feel",
-        "pageIds": ["colors", "bar", "wallpaper", "interfaceFonts", "presets"]
+        "pageIds": ["colors", "bar", "interfaceFonts", "presets"]
     }, {
         "id": "modules",
         "name": "Modules",
@@ -270,7 +270,7 @@ Singleton {
     }, {
         "id": "desktopWindows",
         "name": "Desktop & Windows",
-        "pageIds": ["widgets", "workspaces", "overview", "windows", "lockScreen"]
+        "pageIds": ["wallpaper", "workspaces", "overview", "windows", "lockScreen", "widgets"]
     }, {
         "id": "tools",
         "name": "Tools",

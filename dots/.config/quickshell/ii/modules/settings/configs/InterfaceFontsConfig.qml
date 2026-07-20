@@ -12,6 +12,166 @@ ContentPage {
     forceWidth: false
 
     ContentSection {
+        title: Translation.tr("System Rounding")
+        icon: "rounded_corner"
+
+        ContentSubsection {
+            title: Translation.tr("Rounding value")
+            icon: "rounded_corner"
+            Layout.fillWidth: true
+
+            ConfigSlider {
+                buttonIcon: "rounded_corner"
+                text: Translation.tr("Corner radius")
+                usePercentTooltip: false
+                stopIndicatorValues: [24]
+                tooltipContent: `${value}px`
+                from: 0
+                to: 48
+                stepSize: 1
+                value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
+                onValueChanged: {
+                    Config.options.appearance.roundingValue = value;
+                    Config.options.appearance.sharpMode = (value === 0);
+                }
+            }
+
+        }
+
+    }
+
+    ContentSection {
+        title: Translation.tr("Animations")
+        icon: "animation"
+
+        ConfigSlider {
+            buttonIcon: "speed"
+            text: Translation.tr("Animation Duration")
+            usePercentTooltip: false
+            from: 0.1
+            to: 3
+            stepSize: 0.05
+            value: Config.options.appearance.animationMultiplier ?? 1
+            onValueChanged: Config.options.appearance.animationMultiplier = value
+
+            StyledToolTip {
+                text: Translation.tr("Controls the duration of all UI animations.\n0.1 = ultra fast  |  1.0 = default  |  3.0 = very slow")
+            }
+
+        }
+
+    }
+
+    ContentSection {
+        title: Translation.tr("Icons")
+        icon: "category"
+
+        ConfigSwitch {
+            buttonIcon: "magic_button"
+            text: Translation.tr("Themed icons (Experimental)")
+            checked: Config.options.appearance.icons.enableThemed
+            onCheckedChanged: {
+                Config.options.appearance.icons.enableThemed = checked;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")
+            }
+
+        }
+
+        ContentSubsection {
+            visible: Config.options.appearance.icons.enableThemed
+            title: Translation.tr("Base icon theme")
+            icon: "palette"
+            Layout.fillWidth: true
+            tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.iconTheme
+                onSelected: (newValue) => {
+                    Config.options.appearance.iconTheme = newValue;
+                }
+                options: IconThemes.availableThemes.map((theme) => {
+                    return ({
+                        "displayName": theme,
+                        "value": theme,
+                        "icon": "category"
+                    });
+                })
+            }
+
+        }
+
+        RippleButtonWithIcon {
+            visible: Config.options.appearance.icons.enableThemed
+            materialIcon: "magic_button"
+            mainText: Translation.tr("Apply Theme")
+            useDynamicRadius: true
+            implicitHeight: 48
+            Layout.fillWidth: true
+            colBackground: Appearance.colors.colPrimaryContainer
+            colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+            colRipple: Appearance.colors.colPrimaryContainerActive
+            colText: Appearance.colors.colOnPrimaryContainer
+            onClicked: {
+                IconThemes.applyTheme(false);
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "restart_alt"
+            text: Translation.tr("Auto restart Quickshell on theme change")
+            checked: Config.options.appearance.wallpaperTheming.autoRestartQuickshell
+            onCheckedChanged: {
+                Config.options.appearance.wallpaperTheming.autoRestartQuickshell = checked;
+            }
+        }
+
+    }
+
+    ContentSection {
+        title: Translation.tr("Details")
+        icon: "auto_awesome"
+
+        ConfigSwitch {
+            buttonIcon: "colors"
+            text: Translation.tr("Colorful scrollbar")
+            checked: Config.options.appearance.colorfulScrollbar
+            onCheckedChanged: {
+                Config.options.appearance.colorfulScrollbar = checked;
+            }
+        }
+
+
+        ContentSubsection {
+            title: Translation.tr("This window")
+            icon: "settings_applications"
+            Layout.fillWidth: true
+
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Scroll animation in settings")
+                checked: Config.options.appearance.scrollAnimations
+                onCheckedChanged: {
+                    Config.options.appearance.scrollAnimations = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_linear"
+                text: Translation.tr("Scroll fade gradient mask in settings")
+                checked: Config.options.appearance.scrollFadeMask
+                onCheckedChanged: {
+                    Config.options.appearance.scrollFadeMask = checked;
+                }
+            }
+
+        }
+
+    }
+
+    ContentSection {
         title: Translation.tr("Fonts Management")
         icon: "text_format"
 
@@ -232,165 +392,4 @@ ContentPage {
         }
 
     }
-
-    ContentSection {
-        title: Translation.tr("System Rounding")
-        icon: "rounded_corner"
-
-        ContentSubsection {
-            title: Translation.tr("Rounding value")
-            icon: "rounded_corner"
-            Layout.fillWidth: true
-
-            ConfigSlider {
-                buttonIcon: "rounded_corner"
-                text: Translation.tr("Corner radius")
-                usePercentTooltip: false
-                stopIndicatorValues: [24]
-                tooltipContent: `${value}px`
-                from: 0
-                to: 48
-                stepSize: 1
-                value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
-                onValueChanged: {
-                    Config.options.appearance.roundingValue = value;
-                    Config.options.appearance.sharpMode = (value === 0);
-                }
-            }
-
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Animations")
-        icon: "animation"
-
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Animation Duration")
-            usePercentTooltip: false
-            from: 0.1
-            to: 3
-            stepSize: 0.05
-            value: Config.options.appearance.animationMultiplier ?? 1
-            onValueChanged: Config.options.appearance.animationMultiplier = value
-
-            StyledToolTip {
-                text: Translation.tr("Controls the duration of all UI animations.\n0.1 = ultra fast  |  1.0 = default  |  3.0 = very slow")
-            }
-
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Icons")
-        icon: "category"
-
-        ConfigSwitch {
-            buttonIcon: "magic_button"
-            text: Translation.tr("Themed icons (Experimental)")
-            checked: Config.options.appearance.icons.enableThemed
-            onCheckedChanged: {
-                Config.options.appearance.icons.enableThemed = checked;
-            }
-
-            StyledToolTip {
-                text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")
-            }
-
-        }
-
-        ContentSubsection {
-            visible: Config.options.appearance.icons.enableThemed
-            title: Translation.tr("Base icon theme")
-            icon: "palette"
-            Layout.fillWidth: true
-            tooltip: Translation.tr("Select the base icon theme to be recolored by Matugen.\nRequires generating colors again to apply.")
-
-            ConfigSelectionArray {
-                currentValue: Config.options.appearance.iconTheme
-                onSelected: (newValue) => {
-                    Config.options.appearance.iconTheme = newValue;
-                }
-                options: IconThemes.availableThemes.map((theme) => {
-                    return ({
-                        "displayName": theme,
-                        "value": theme,
-                        "icon": "category"
-                    });
-                })
-            }
-
-        }
-
-        RippleButtonWithIcon {
-            visible: Config.options.appearance.icons.enableThemed
-            materialIcon: "magic_button"
-            mainText: Translation.tr("Apply Theme")
-            useDynamicRadius: true
-            implicitHeight: 48
-            Layout.fillWidth: true
-            colBackground: Appearance.colors.colPrimaryContainer
-            colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-            colRipple: Appearance.colors.colPrimaryContainerActive
-            colText: Appearance.colors.colOnPrimaryContainer
-            onClicked: {
-                IconThemes.applyTheme(false);
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "restart_alt"
-            text: Translation.tr("Auto restart Quickshell on theme change")
-            checked: Config.options.appearance.wallpaperTheming.autoRestartQuickshell
-            onCheckedChanged: {
-                Config.options.appearance.wallpaperTheming.autoRestartQuickshell = checked;
-            }
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Details")
-        icon: "auto_awesome"
-
-        ConfigSwitch {
-            buttonIcon: "colors"
-            text: Translation.tr("Colorful scrollbar")
-            checked: Config.options.appearance.colorfulScrollbar
-            onCheckedChanged: {
-                Config.options.appearance.colorfulScrollbar = checked;
-            }
-        }
-
-
-        ContentSubsection {
-            title: Translation.tr("This window")
-            icon: "settings_applications"
-            Layout.fillWidth: true
-
-            ConfigSwitch {
-                buttonIcon: "animation"
-                text: Translation.tr("Scroll animation in settings")
-                checked: Config.options.appearance.scrollAnimations
-                onCheckedChanged: {
-                    Config.options.appearance.scrollAnimations = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "blur_linear"
-                text: Translation.tr("Scroll fade gradient mask in settings")
-                checked: Config.options.appearance.scrollFadeMask
-                onCheckedChanged: {
-                    Config.options.appearance.scrollFadeMask = checked;
-                }
-            }
-
-        }
-
-    }
-
 }
