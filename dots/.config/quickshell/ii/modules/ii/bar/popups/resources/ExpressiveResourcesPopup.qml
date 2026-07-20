@@ -154,6 +154,51 @@ StyledPopup {
             }
         }
 
+        Connections {
+            target: root
+            function onPopupOpenProgressChanged() {
+                if (root && root.popupOpenProgress === 0.0) {
+                    heroCardAnim.stop();
+                    cpuGpuCardsRowAnim.stop();
+                    ramCardAnim.stop();
+                    swapCardAnim.stop();
+                    diskCardAnim.stop();
+                    dockerLayoutAnim.stop();
+
+                    heroCard.opacity = 0.0;
+                    heroCard.scale = 0.85;
+                    heroCardTransform.y = 25;
+                    
+                    cpuGpuCardsRow.opacity = 0.0;
+                    cpuGpuCardsRow.scale = 0.85;
+                    cpuGpuCardsRowTransform.y = 25;
+                    
+                    ramCard.opacity = 0.0;
+                    ramCard.scale = 0.85;
+                    ramCardTransform.y = 25;
+                    
+                    swapCard.opacity = 0.0;
+                    swapCard.scale = 0.85;
+                    swapCardTransform.y = 25;
+                    
+                    diskCard.opacity = 0.0;
+                    diskCard.scale = 0.85;
+                    diskCardTransform.y = 25;
+                    
+                    dockerLayout.opacity = 0.0;
+                    dockerLayout.scale = 0.85;
+                    dockerLayoutTransform.y = 25;
+                    
+                    heroCard.innerStartAnim = false;
+                    cpuCard.innerStartAnim = false;
+                    gpuCard.innerStartAnim = false;
+                    ramCard.innerStartAnim = false;
+                    swapCard.innerStartAnim = false;
+                    diskCard.innerStartAnim = false;
+                }
+            }
+        }
+
         readonly property var _visList: [
             true, // Hero Card
             true, // CPU/GPU Cards

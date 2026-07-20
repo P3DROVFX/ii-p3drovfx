@@ -49,6 +49,28 @@ Item {
         }
     }
 
+    Connections {
+        target: root
+        function onPopupOpenProgressChanged() {
+            if (root && root.popupOpenProgress === 0.0) {
+                for (var k = 0; k < listView.count; k++) {
+                    var resetItem = listView.itemAtIndex(k);
+                    if (resetItem) {
+                        resetItem.stopCardAnim();
+                        resetItem.cardOpacity = 0.0;
+                        resetItem.cardTranslateX = 50;
+                        resetItem.iconScale = 0.8;
+                        resetItem.iconRotation = -15;
+                        resetItem.offsetOpacity = 0.0;
+                        resetItem.offsetTranslateX = -30;
+                        resetItem.timeOpacity = 0.0;
+                        resetItem.timeScale = 0.9;
+                    }
+                }
+            }
+        }
+    }
+
     Layout.fillWidth: true
     Layout.preferredHeight: 96
     implicitHeight: 96

@@ -117,6 +117,25 @@ StyledPopup {
                         }
                     }
                     
+                    Connections {
+                        target: root
+                        function onPopupOpenProgressChanged() {
+                            if (root && root.popupOpenProgress === 0.0) {
+                                layoutCardAnim.stop();
+                                keyboardIconAnim.stop();
+                                layoutTextAnim.stop();
+
+                                layoutCard.opacity = 0.0;
+                                layoutCard.scale = 0.85;
+                                layoutCardTranslate.x = 25;
+                                
+                                keyboardIcon.scale = 0.8;
+                                keyboardIcon.rotation = -10;
+                                layoutText.opacity = 0.0;
+                            }
+                        }
+                    }
+                    
                     opacity: 0.0
                     scale: 1.0
                     transform: Translate {

@@ -229,6 +229,41 @@ StyledPopup {
                                 });
                             }
                         }
+
+                        Connections {
+                            target: root
+                            function onPopupOpenProgressChanged() {
+                                if (root && root.popupOpenProgress === 0.0) {
+                                    cardAnim.stop();
+                                    homeLogoContAnim.stop();
+                                    homeTeamNameAnim.stop();
+                                    homeScoreAnim.stop();
+                                    awayLogoContAnim.stop();
+                                    awayTeamNameAnim.stop();
+                                    awayScoreAnim.stop();
+                                    statusPillAnim.stop();
+                                    leagueTextAnim.stop();
+
+                                    card.opacity = 0.0;
+                                    card.scale = 0.85;
+                                    cardTranslate.y = 25;
+                                    
+                                    homeLogoCont.scale = 0.8;
+                                    homeTeamName.opacity = 0.0;
+                                    homeScore.opacity = 0.0;
+                                    homeScore.scale = 0.9;
+
+                                    awayLogoCont.scale = 0.8;
+                                    awayTeamName.opacity = 0.0;
+                                    awayScore.opacity = 0.0;
+                                    awayScore.scale = 0.9;
+
+                                    statusPill.opacity = 0.0;
+                                    statusPill.scale = 0.9;
+                                    leagueText.opacity = 0.0;
+                                }
+                            }
+                        }
                         
                         transform: Translate {
                             id: cardTranslate

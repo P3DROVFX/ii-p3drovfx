@@ -254,6 +254,39 @@ StyledPopup {
             }
         }
 
+        Connections {
+            target: root
+            function onPopupOpenProgressChanged() {
+                if (root.popupOpenProgress === 0.0) {
+                    clockHeroAnim.stop();
+                    worldClocksAnim.stop();
+                    infoColumnAnim.stop();
+                    localSendAnim.stop();
+                    alarmsCardAnim.stop();
+
+                    clockHero.opacity = 0.0;
+                    clockHero.scale = 0.85;
+                    clockHeroTransform.y = 25;
+                    
+                    worldClocksLoader.opacity = 0.0;
+                    worldClocksLoader.scale = 0.85;
+                    worldClocksTransform.y = 25;
+                    
+                    infoColumn.opacity = 0.0;
+                    infoColumn.scale = 0.85;
+                    infoColumnTransform.y = 25;
+                    
+                    localSendLoader.opacity = 0.0;
+                    localSendLoader.scale = 0.85;
+                    localSendTransform.y = 25;
+                    
+                    alarmsCard.opacity = 0.0;
+                    alarmsCard.scale = 0.85;
+                    alarmsCardTransform.y = 25;
+                }
+            }
+        }
+
         ClockHeaderCard {
             id: clockHero
             Layout.fillWidth: true

@@ -149,6 +149,28 @@ StyledPopup {
                             });
                         }
                     }
+
+                    Connections {
+                        target: root
+                        function onPopupOpenProgressChanged() {
+                            if (root && root.popupOpenProgress === 0.0) {
+                                deviceCardAnim.stop();
+                                iconContainerAnim.stop();
+                                detailsColAnim.stop();
+
+                                deviceCard.opacity = 0.0;
+                                deviceCard.scale = 0.85;
+                                deviceCardTranslate.y = 25;
+
+                                iconContainer.scale = 0.8;
+                                iconContainer.opacity = 0.0;
+                                iconContainerTrans.x = -20;
+
+                                detailsCol.opacity = 0.0;
+                                detailsColTrans.x = 20;
+                            }
+                        }
+                    }
                     
                     opacity: 0.0
                     scale: 1.0
