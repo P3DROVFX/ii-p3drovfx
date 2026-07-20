@@ -498,6 +498,7 @@ Item {
                 }
 
                 ConfigTextField {
+                    id: topLeftIconField
                     text: Translation.tr("Top-left icon identifier")
                     icon: "image"
                     tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
@@ -514,7 +515,7 @@ Item {
 
                     Connections {
                         function onTopLeftIconChanged() {
-                            textField.text = Config.options.bar.topLeftIcon;
+                            topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
                         }
 
                         target: Config.options.bar

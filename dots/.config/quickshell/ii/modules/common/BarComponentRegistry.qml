@@ -153,7 +153,7 @@ Singleton {
             id: "phone_scrcpy_indicator",
             icon: "smart_display",
             title: "Phone scrcpy indicator",
-            pageId: "devices"
+            pageId: "devicesPhone"
         },
         {
             id: "date",
