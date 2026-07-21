@@ -1205,14 +1205,16 @@ Singleton {
                 + "org.kde.kdeconnect.device.sftp mountPoint 2>/dev/null "
                 + " | sed 's/^.*: \"\\(.*\\)\"/\\1/'); fi; "
                 + "if [ -n \"$MOUNT\" ]; then "
+                + "  TARGET=\"$MOUNT\"; "
+                + "  if [ -d \"$MOUNT/storage/emulated/0\" ]; then TARGET=\"$MOUNT/storage/emulated/0\"; fi; "
                 // gio open respects the system's default file manager via
                 // GVFS mimetype associations — unlike xdg-open which can
                 // route to the browser if inode/directory is misassociated.
                 + "  if command -v gio >/dev/null 2>&1; then "
-                + "    gio open \"$MOUNT\" >/dev/null 2>&1 & exit 0; "
+                + "    gio open \"$TARGET\" >/dev/null 2>&1 & exit 0; "
                 + "  fi; "
                 // Fall back to xdg-open if gio is unavailable.
-                + "  xdg-open \"$MOUNT\" >/dev/null 2>&1 & "
+                + "  xdg-open \"$TARGET\" >/dev/null 2>&1 & "
                 + "fi"
             ])
         }
