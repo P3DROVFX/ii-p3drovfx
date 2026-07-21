@@ -71,16 +71,32 @@ Item {
     property real largeWorkspaceRadius: Appearance.rounding.large
     property real smallWorkspaceRadius: Appearance.rounding.verysmall
 
-    // we are using a width map to get all windows width and settings workspaceImplicitWidth to the maximum item of this list/map
+    // We are using a width map to get all windows width and setting workspaceImplicitWidth to the maximum item of this list/map
     property list<int> widthMap: []
 
-    onWidthMapChanged: root.workspaceImplicitWidth = getMaxWidth()
+    onMinWorkspaceWidthChanged: {
+        if (!root.hyprscrollingEnabled)
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWorkspaceGroupChanged: {
+        root.widthMap = [];
+        root.workspaceImplicitWidth = minWorkspaceWidth;
+    }
+
+    onWidthMapChanged: {
+        if (root.hyprscrollingEnabled) {
+            root.workspaceImplicitWidth = getMaxWidth();
+        } else {
+            root.workspaceImplicitWidth = minWorkspaceWidth;
+        }
+    }
 
     function getMaxWidth() {
         if (widthMap.length === 0)
             return minWorkspaceWidth;
         const max = Math.max(...widthMap);
-        return max;
+        return Math.max(max, minWorkspaceWidth);
     }
 
     property real workspaceNumberMargin: 80
