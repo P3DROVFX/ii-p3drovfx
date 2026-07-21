@@ -188,7 +188,7 @@ Item {
                             Item {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: groupDelegate.expanded ? pagesColumn.implicitHeight : 0
-                                clip: true
+                                clip: !groupDelegate.expanded || height < pagesColumn.implicitHeight
 
                                 Behavior on Layout.preferredHeight {
                                     NumberAnimation {
