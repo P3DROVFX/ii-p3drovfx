@@ -79,7 +79,7 @@ Scope {
                 return monitor.specialWorkspace.name !== "";
             }
 
-            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen)))
+            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -87,6 +87,10 @@ Scope {
                 const wsId = HyprlandData.activeWorkspace?.id ?? -1
                 if (wsId === -1) return true
                 return HyprlandData.hyprlandClientsForWorkspace(wsId).length === 0
+            }
+
+            readonly property bool isFocusedMonitor: {
+                return (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") === (dockRoot.screen ? dockRoot.screen.name : "")
             }
 
             readonly property var sizing: dock.computeSizes({

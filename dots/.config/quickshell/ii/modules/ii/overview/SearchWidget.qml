@@ -16,7 +16,7 @@ import qs.modules.common.functions
 Item {
     id: root
     width: implicitWidth
-    height: implicitHeight
+    height: searchWidgetContent.height
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
@@ -123,10 +123,28 @@ Item {
     implicitWidth: searchWidgetContent.implicitWidth + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
     implicitHeight: searchWidgetContent.implicitHeight + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
 
+    // Track animation state via Connections to the animation IDs
+    property bool _heightAnimating: false
+    property bool _widthAnimating: false
+    
+    Connections {
+        target: heightAnim
+        function onRunningChanged() {
+            root._heightAnimating = heightAnim.running;
+        }
+    }
+    
+    Connections {
+        target: widthAnim
+        function onRunningChanged() {
+            root._widthAnimating = widthAnim.running;
+        }
+    }
+
     // Signals to DynamicIslandStyle that the open animation is stable (no active resize)
     // When true, the DI pill disables its own behaviors and follows SearchWidget's animations directly.
     // In notch mode we always return false so the DI pill remains responsible for all animations.
-    readonly property bool openStateStable: root.inNotchMode ? false : ((!searchHeightBehavior.animation || !searchHeightBehavior.animation.running) && (!searchWidthBehavior.animation || !searchWidthBehavior.animation.running))
+    readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
         if (root.isBluetoothMode) {} else if (root.isClipboardMode) {} else if (root.isTranslatorMode) {
@@ -294,6 +312,7 @@ Item {
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
             enabled: !root.inNotchMode
             NumberAnimation {
+                id: widthAnim
                 duration: Appearance.animation.elementMoveSmall.duration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
@@ -305,6 +324,7 @@ Item {
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
             enabled: !root.inNotchMode
             NumberAnimation {
+                id: heightAnim
                 duration: Appearance.animation.elementMoveSmall.duration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel

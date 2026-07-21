@@ -76,10 +76,6 @@ Item {
         }
     }
 
-    // Shadow
-    StyledRectangularShadow {
-        target: contentBackground
-    }
 
     Rectangle {
         id: contentBackground

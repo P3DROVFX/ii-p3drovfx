@@ -36,7 +36,7 @@ Item { // Window
     property real xOffset: 0
     property real yOffset: 0
     property var widgetMonitor
-    property int widgetMonitorId: widgetMonitor.id
+    property int widgetMonitorId: widgetMonitor ? widgetMonitor.id : 0
 
     property real targetWindowWidth: (windowData ? windowData.size[0] : 0) * scale * widthRatio
     property real targetWindowHeight: (windowData ? windowData.size[1] : 0) * scale * heightRatio

@@ -304,7 +304,7 @@ Item {
         implicitHeight: mainLayout.implicitHeight + root.contentPadding * 2
 
         radius: Appearance.rounding.large
-        color: Appearance.colors.colLayer1Base
+        color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
 
         // Animations applied on the card itself to keep root window input mapping clean
         opacity: 0
@@ -339,10 +339,6 @@ Item {
             onClicked: mouse => mouse.accepted = true
             onPressed: mouse => mouse.accepted = true
             onReleased: mouse => mouse.accepted = true
-        }
-
-        StyledRectangularShadow {
-            target: contentBackground
         }
 
         ColumnLayout {

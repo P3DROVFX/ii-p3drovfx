@@ -35,6 +35,16 @@ LazyLoader {
     property bool animateHeight: true
     property bool stickyHover: false
     property int keyboardFocus: WlrKeyboardFocus.None
+
+    property bool customPosition: false
+    property bool anchorRight: false
+    property bool anchorLeft: false
+    property bool anchorTop: false
+    property bool anchorBottom: false
+    property int customMarginLeft: 0
+    property int customMarginRight: 0
+    property int customMarginTop: 0
+    property int customMarginBottom: 0
     
     // Expose active state to child elements so they can trigger animations,
     // exactly like WeatherPopup does for HourlyForecast.
@@ -42,11 +52,12 @@ LazyLoader {
 
     property bool _popupHovered: false
     property bool _stickyActive: false
-    property bool _targetHovered: hoverTarget ? hoverTarget.containsMouse : false
+    property bool forceClick: false
+    property bool _targetHovered: hoverTarget ? (hoverTarget.containsMouse !== undefined ? hoverTarget.containsMouse : (hoverTarget.hovered !== undefined ? hoverTarget.hovered : false)) : false
     property bool _clickActive: false
     property bool _isClosing: false
 
-    readonly property bool _computedActive: Config.options.bar.tooltips.clickToShow ? _clickActive : (stickyHover ? _stickyActive : (hoverTarget && hoverTarget.containsMouse))
+    readonly property bool _computedActive: (Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : _targetHovered)
 
     active: _computedActive || _isClosing
 
@@ -106,10 +117,10 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
-        anchors.left: !Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom)
-        anchors.right: Config.options.bar.vertical && Config.options.bar.bottom
-        anchors.top: Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom)
-        anchors.bottom: !Config.options.bar.vertical && Config.options.bar.bottom
+        anchors.left: root.customPosition ? root.anchorLeft : (!Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom))
+        anchors.right: root.customPosition ? root.anchorRight : (Config.options.bar.vertical && Config.options.bar.bottom)
+        anchors.top: root.customPosition ? root.anchorTop : (Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom))
+        anchors.bottom: root.customPosition ? root.anchorBottom : (!Config.options.bar.vertical && Config.options.bar.bottom)
 
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground.targetHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
@@ -123,6 +134,9 @@ LazyLoader {
 
         margins {
             left: {
+                if (root.customPosition) {
+                    return root.customMarginLeft;
+                }
                 if (!Config.options.bar.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
                         return 0;
@@ -136,6 +150,9 @@ LazyLoader {
             }
 
             top: {
+                if (root.customPosition) {
+                    return root.customMarginTop;
+                }
                 if (!Config.options.bar.vertical) {
                     return Appearance.sizes.barHeight;
                 }
@@ -148,8 +165,8 @@ LazyLoader {
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: Appearance.sizes.verticalBarWidth
-            bottom: Appearance.sizes.barHeight
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth
+            bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
         }
 
         WlrLayershell.namespace: "quickshell:popup"
@@ -160,7 +177,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: Config.options.bar.tooltips.clickToShow && root._computedActive
+            active: (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive
                 && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;

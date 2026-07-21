@@ -107,7 +107,7 @@ Singleton {
 
     Timer {
         id: pollTimer
-        interval: 150
+        interval: 1000
         running: root.available && root.deviceName !== ""
         repeat: true
         onTriggered: {
@@ -120,9 +120,9 @@ Singleton {
                 }
             } else {
                 // If direct read fails (e.g. permission issue), fallback to brightnessctl via refresh()
-                // and slow down the polling to 2 seconds to save CPU.
-                if (pollTimer.interval === 150) {
-                    pollTimer.interval = 2000
+                // and slow down the polling to 5 seconds to save CPU.
+                if (pollTimer.interval === 1000) {
+                    pollTimer.interval = 5000
                 }
                 root.refresh()
             }

@@ -98,6 +98,29 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("On-Screen Display (OSD)")
+        icon: "desktop_windows"
+
+        ConfigSwitch {
+            buttonIcon: "visibility"
+            text: Translation.tr("Enable OSD")
+            checked: Config.options.osd.enable
+            onCheckedChanged: {
+                Config.options.osd.enable = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "tag"
+            text: Translation.tr("Show OSD value number")
+            checked: Config.options.osd.showValues
+            onCheckedChanged: {
+                Config.options.osd.showValues = checked;
+            }
+        }
+    }
+
+    ContentSection {
         icon: "phone_android"
         title: Translation.tr("ii Mode")
 

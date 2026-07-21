@@ -46,6 +46,19 @@ ContentPage {
                     Config.options.dock.isolateMonitors = checked;
                 }
             }
+
+            ConfigSwitch {
+                enabled: Config.options.dock.enable
+                buttonIcon: "center_focus_strong"
+                text: Translation.tr("Show only on focused monitor")
+                checked: Config.options.dock.showOnlyOnFocusedMonitor
+                onCheckedChanged: {
+                    Config.options.dock.showOnlyOnFocusedMonitor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("When workspace is empty, show the dock only on the focused monitor instead of all monitors")
+                }
+            }
         }
 
         Item { Layout.preferredHeight: 16 }

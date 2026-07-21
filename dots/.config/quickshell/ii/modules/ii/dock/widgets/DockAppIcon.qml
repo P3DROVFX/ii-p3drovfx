@@ -57,10 +57,13 @@ Item {
 
         StyledText {
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: -1
             text: badgeRoot._notifCount.toString()
             font.pixelSize: badgeRoot._fontSize
             font.weight: Font.Bold
             color: Appearance.colors.colOnTertiary
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
     }
 }

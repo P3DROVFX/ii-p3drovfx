@@ -202,6 +202,7 @@ Scope {
                                 implicitWidth: isNotchMode ? GlobalStates.activeSearchWidth : searchWidget.implicitWidth
                                 z: 999
                                 visible: !isNotchMode
+                                height: isNotchMode ? implicitHeight : searchWidget.height
 
                                 // Slide from absolute top of screen — offset large enough to hide above top edge
                                 readonly property real slideOffset: (Config.options.bar.bottom ? 1 : -1) * (implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
@@ -317,7 +318,6 @@ Scope {
                                 }
 
                                 width: implicitWidth
-                                height: implicitHeight
                                 y: Config.options.bar.bottom ? (parent.height - height - (root.margin * 2 + Appearance.sizes.elevationMargin)) : (root.margin * 2 + Appearance.sizes.elevationMargin)
                                 anchors.horizontalCenter: parent.horizontalCenter
 
@@ -333,6 +333,13 @@ Scope {
                             Loader { // Classic overview
                                 id: overviewLoader
                                 y: Config.options.bar.bottom ? (searchWidgetWrapper.y - height - 10) : (searchWidgetWrapper.y + searchWidgetWrapper.height + 10)
+                                Behavior on y {
+                                    NumberAnimation {
+                                        duration: root.animDurationExit
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: root.animCurveExit
+                                    }
+                                }
                                 height: implicitHeight
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 active: (Config?.options.overview.enable ?? true) && !root.isScrollingLayout
@@ -347,17 +354,17 @@ Scope {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: overviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                        duration: root.animDurationExit
                                         easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: overviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                        easing.bezierCurve: root.animCurveExit
                                     }
                                 }
 
                                 Behavior on scale {
                                     NumberAnimation {
-                                        duration: overviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                        duration: root.animDurationExit
                                         easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: overviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                        easing.bezierCurve: root.animCurveExit
                                     }
                                 }
 
@@ -365,9 +372,9 @@ Scope {
                                     y: overviewLoader.isOverviewVisible ? 0 : (Config.options.bar.bottom ? -30 : 30)
                                     Behavior on y {
                                         NumberAnimation {
-                                            duration: overviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                            duration: root.animDurationExit
                                             easing.type: Easing.BezierSpline
-                                            easing.bezierCurve: overviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                            easing.bezierCurve: root.animCurveExit
                                         }
                                     }
                                 }
@@ -393,17 +400,17 @@ Scope {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: scrollingOverviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                        duration: root.animDurationExit
                                         easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: scrollingOverviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                        easing.bezierCurve: root.animCurveExit
                                     }
                                 }
 
                                 Behavior on scale {
                                     NumberAnimation {
-                                        duration: scrollingOverviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                        duration: root.animDurationExit
                                         easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: scrollingOverviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                        easing.bezierCurve: root.animCurveExit
                                     }
                                 }
 
@@ -411,9 +418,9 @@ Scope {
                                     y: scrollingOverviewLoader.isOverviewVisible ? 0 : (Config.options.bar.bottom ? -30 : 30)
                                     Behavior on y {
                                         NumberAnimation {
-                                            duration: scrollingOverviewLoader.isOverviewVisible ? root.animDurationEnter : root.animDurationExit
+                                            duration: root.animDurationExit
                                             easing.type: Easing.BezierSpline
-                                            easing.bezierCurve: scrollingOverviewLoader.isOverviewVisible ? root.animCurveEnter : root.animCurveExit
+                                            easing.bezierCurve: root.animCurveExit
                                         }
                                     }
                                 }

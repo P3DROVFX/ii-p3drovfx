@@ -371,6 +371,8 @@ Singleton {
 
     function startMonitor() {
         if (monitorProc.running) return
+        // Kill any orphaned monitor.py processes from previous QS sessions
+        Quickshell.execDetached(["pkill", "-f", "kdeconnect/monitor.py"])
         monitorProc.command = ["python3", root._scriptPath]
         monitorProc.running = true
     }

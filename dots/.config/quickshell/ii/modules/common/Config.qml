@@ -457,7 +457,7 @@ Singleton {
                 property string colorEngine: "vynx" // "vynx" | "fork" — color generation engine
                 property string iconTheme: "Papirus"
                 property JsonObject palette: JsonObject {
-                    property string type: "scheme-fidelity" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot
+                    property string type: "scheme-fidelity" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
                     property string accentColor: ""
                 }
                 property list<string> customColorSchemes: []
@@ -1116,6 +1116,7 @@ Singleton {
                 property bool enable: true
                 property bool smartGrouping: false
                 property bool isolateMonitors: false
+                property bool showOnlyOnFocusedMonitor: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
                 property bool enableShapeMask: false
@@ -1277,7 +1278,9 @@ Singleton {
             }
 
             property JsonObject osd: JsonObject {
+                property bool enable: true
                 property int timeout: 2500
+                property bool showValues: true
             }
 
             property JsonObject osk: JsonObject {
@@ -1589,6 +1592,7 @@ Singleton {
                 property bool enable: true
                 property string theme: "freedesktop"
                 property int volume: 100
+                property bool monoAudio: false
 
                 property bool notifications: true
                 property bool volumeChange: true

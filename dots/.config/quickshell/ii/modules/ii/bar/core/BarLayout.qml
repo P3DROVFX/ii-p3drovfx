@@ -10,8 +10,11 @@ Item {
     id: root
     visible: false
 
-    readonly property var _emptyLayout: ([])
-    readonly property var fullModel: Config.options.bar.layouts.center || root._emptyLayout
+    readonly property var _emptyLayout: []
+    readonly property var fullModel: {
+        const model = Config.options.bar.layouts.center;
+        return (model && model.length > 0) ? model : root._emptyLayout;
+    }
     readonly property int centerIdx: fullModel.findIndex(item => item.centered)
 
     readonly property var leftList:   centerIdx === -1 ? root._emptyLayout : fullModel.slice(0, centerIdx)

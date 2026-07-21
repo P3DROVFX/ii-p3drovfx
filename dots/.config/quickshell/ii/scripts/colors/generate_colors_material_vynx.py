@@ -106,6 +106,8 @@ elif args.scheme == 'scheme-content':
     from materialyoucolor.scheme.scheme_content import SchemeContent as Scheme
 elif args.scheme == 'scheme-vibrant':
     from materialyoucolor.scheme.scheme_vibrant import SchemeVibrant as Scheme
+elif args.scheme == 'scheme-intense':
+    from materialyoucolor.scheme.scheme_fidelity import SchemeFidelity as Scheme
 else:
     from materialyoucolor.scheme.scheme_tonal_spot import SchemeTonalSpot as Scheme
 # Generate
@@ -119,6 +121,28 @@ for color in vars(MaterialDynamicColors).keys():
     if hasattr(color_name, "get_hct"):
         rgba = color_name.get_hct(scheme).to_rgba()
         material_colors[color] = rgba_to_hex(rgba)
+
+if args.scheme == 'scheme-intense':
+    _intense_surface_tokens = [
+        'background', 'surface', 'surfaceBright',
+        'surfaceContainer', 'surfaceContainerHigh', 'surfaceContainerHighest',
+        'surfaceContainerLow', 'surfaceContainerLowest', 'surfaceDim',
+        'surfaceVariant',
+    ]
+    for token in _intense_surface_tokens:
+        if token in material_colors:
+            argb = hex_to_argb(material_colors[token])
+            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=7.0))
+    
+    _intense_accent_tokens = [
+        'primary', 'primaryContainer', 'primaryFixed', 'primaryFixedDim',
+        'secondary', 'secondaryContainer', 'secondaryFixed', 'secondaryFixedDim',
+        'tertiary', 'tertiaryContainer', 'tertiaryFixed', 'tertiaryFixedDim',
+    ]
+    for token in _intense_accent_tokens:
+        if token in material_colors:
+            argb = hex_to_argb(material_colors[token])
+            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=2.5))
 
 # Extended material
 if darkmode == True:
