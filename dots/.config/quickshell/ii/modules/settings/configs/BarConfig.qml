@@ -75,62 +75,10 @@ Item {
             }
         }
 
-        // ── Layout ────────────────────────────────────────────────────────
+        // ── Position and Style ───────────────────────────────────────────
         ContentSection {
-            icon: "view_stream"
-            title: Translation.tr("Layout")
-
-            ContentSubsection {
-                title: Translation.tr("Left layout widgets")
-                icon: "align_horizontal_left"
-                tooltip: Translation.tr("Top layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 0
-                    listModel: Config.options.bar.layouts.left
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.left = newList;
-                    }
-                }
-
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Center layout widgets")
-                icon: "align_horizontal_center"
-                tooltip: Translation.tr("Center the component with the button")
-
-                ConfigListView {
-                    barSection: 1
-                    listModel: Config.options.bar.layouts.center
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.center = newList;
-                    }
-                }
-
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Right layout widgets")
-                icon: "align_horizontal_right"
-                tooltip: Translation.tr("Bottom layout in vertical mode")
-
-                ConfigListView {
-                    barSection: 2
-                    listModel: Config.options.bar.layouts.right
-                    onUpdated: (newList) => {
-                        Config.options.bar.layouts.right = newList;
-                    }
-                }
-
-            }
-
-        }
-
-        // ── Position & size ───────────────────────────────────────────────
-        ContentSection {
-            icon: "open_in_full"
-            title: Translation.tr("Position & size")
+            icon: "palette"
+            title: Translation.tr("Position and Style")
 
             ContentSubsection {
                 title: Translation.tr("Bar position")
@@ -187,13 +135,6 @@ Item {
                     Config.options.bar.sizes.width = value;
                 }
             }
-
-        }
-
-        // ── Style ─────────────────────────────────────────────────────────
-        ContentSection {
-            icon: "palette"
-            title: Translation.tr("Style")
 
             ContentSubsection {
                 title: Translation.tr("Corner style")
@@ -485,6 +426,58 @@ Item {
                         target: Config.options.bar
                     }
 
+                }
+
+            }
+
+        }
+
+        // ── Layout ────────────────────────────────────────────────────────
+        ContentSection {
+            icon: "view_stream"
+            title: Translation.tr("Layout")
+
+            ContentSubsection {
+                title: Translation.tr("Left layout widgets")
+                icon: "align_horizontal_left"
+                tooltip: Translation.tr("Top layout in vertical mode")
+
+                ConfigListView {
+                    barSection: 0
+                    listModel: Config.options.bar.layouts.left
+                    onUpdated: (newList) => {
+                        Config.options.bar.layouts.left = newList;
+                    }
+                }
+
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Center layout widgets")
+                icon: "align_horizontal_center"
+                tooltip: Translation.tr("Center the component with the button")
+
+                ConfigListView {
+                    barSection: 1
+                    listModel: Config.options.bar.layouts.center
+                    onUpdated: (newList) => {
+                        Config.options.bar.layouts.center = newList;
+                    }
+                }
+
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Right layout widgets")
+                icon: "align_horizontal_right"
+                tooltip: Translation.tr("Bottom layout in vertical mode")
+
+                ConfigListView {
+                    barSection: 2
+                    listModel: Config.options.bar.layouts.right
+                    onUpdated: (newList) => {
+                        Config.options.bar.layouts.right = newList;
+                    }
                 }
 
             }

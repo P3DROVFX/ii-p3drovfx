@@ -30,7 +30,7 @@ ContentPage {
                 if (idx < 0)
                     return ;
 
-                win.pendingSectionHighlight = Translation.tr("Position & size");
+                win.pendingSectionHighlight = Translation.tr("Position and Style");
                 win.currentPage = idx;
             }
             colBackground: Appearance.colors.colSecondaryContainer
