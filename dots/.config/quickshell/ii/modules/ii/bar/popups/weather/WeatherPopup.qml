@@ -143,6 +143,34 @@ StyledPopup {
             }
         }
 
+        Connections {
+            target: root
+            function onPopupOpenProgressChanged() {
+                if (root && root.popupOpenProgress === 0.0) {
+                    weatherHeroAnim.stop();
+                    hourlyForecastAnim.stop();
+                    metricsGridAnim.stop();
+                    inDayForecastAnim.stop();
+
+                    weatherHero.opacity = 0.0;
+                    weatherHero.scale = 0.85;
+                    weatherHeroTransform.y = 25;
+                    
+                    hourlyForecast.opacity = 0.0;
+                    hourlyForecast.scale = 0.85;
+                    hourlyForecastTransform.y = 25;
+                    
+                    metricsGrid.opacity = 0.0;
+                    metricsGrid.scale = 0.85;
+                    metricsGridTransform.y = 25;
+                    
+                    inDayForecast.opacity = 0.0;
+                    inDayForecast.scale = 0.85;
+                    inDayForecastTransform.y = 25;
+                }
+            }
+        }
+
         HeroCard {
             id: weatherHero
             Layout.minimumWidth: 320

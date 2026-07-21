@@ -170,6 +170,34 @@ StyledPopup {
                             });
                         }
                     }
+
+                    Connections {
+                        target: root
+                        function onPopupOpenProgressChanged() {
+                            if (root && root.popupOpenProgress === 0.0) {
+                                deviceCardAnim.stop();
+                                earbud1Anim.stop();
+                                earbud2Anim.stop();
+                                phoneContainerAnim.stop();
+
+                                deviceCard.opacity = 0.0;
+                                deviceCard.scale = 0.85;
+                                deviceCardTranslate.y = 25;
+
+                                earbud1.opacity = 0.0;
+                                earbud1.scale = 0.8;
+                                earbud1Trans.y = 30;
+
+                                earbud2.opacity = 0.0;
+                                earbud2.scale = 0.8;
+                                earbud2Trans.y = 30;
+
+                                phoneContainer.opacity = 0.0;
+                                phoneContainer.scale = 0.8;
+                                phoneContainerTrans.y = 30;
+                            }
+                        }
+                    }
                     
                     opacity: 0.0
                     scale: 1.0

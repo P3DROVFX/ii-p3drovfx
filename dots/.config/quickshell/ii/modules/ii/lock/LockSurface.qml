@@ -265,18 +265,86 @@ MouseArea {
 
         // Fingerprint
         Loader {
-            Layout.leftMargin: 10
-            Layout.rightMargin: 6
-            Layout.alignment: Qt.AlignVCenter
+            Layout.rightMargin: 2
+            Layout.fillHeight: true
+            Layout.preferredWidth: height
             active: root.context.fingerprintsConfigured
             visible: active
 
-            sourceComponent: MaterialSymbol {
-                id: fingerprintIcon
-                fill: 1
-                text: "fingerprint"
-                iconSize: Appearance.font.pixelSize.hugeass
-                color: Appearance.colors.colOnSurfaceVariant
+            sourceComponent: Rectangle {
+                id: fingerprintStatus
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSurfaceContainerHigh
+
+                readonly property int triesLeft: root.context.fingerprintTriesLeft
+                readonly property bool exhausted: triesLeft === 0
+                readonly property color colContent: (failureFlash || exhausted) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
+                property bool failureFlash: false
+
+                Connections {
+                    target: root.context
+                    function onFingerprintFailed() {
+                        fingerprintStatus.failureFlash = true;
+                        failureFlashTimer.restart();
+                        fingerprintShakeAnim.restart();
+                    }
+                }
+                Timer {
+                    id: failureFlashTimer
+                    interval: 800
+                    onTriggered: fingerprintStatus.failureFlash = false
+                }
+
+                // Shake via transform so the toolbar layout isn't disturbed
+                transform: Translate { id: fingerprintShakeOffset }
+                SequentialAnimation {
+                    id: fingerprintShakeAnim
+                    NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: -6; duration: 50 }
+                    NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 6; duration: 50 }
+                    NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: -3; duration: 40 }
+                    NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 3; duration: 40 }
+                    NumberAnimation { target: fingerprintShakeOffset; property: "x"; to: 0; duration: 30 }
+                }
+
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 1
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        fill: 1
+                        text: "fingerprint"
+                        iconSize: Appearance.font.pixelSize.hugeass
+                        color: fingerprintStatus.colContent
+                        opacity: fingerprintStatus.exhausted ? 0.5 : 1
+                        Behavior on color {
+                            ColorAnimation { duration: 200 }
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 200 }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 3
+                        Repeater {
+                            model: root.context.fingerprintMaxTries
+                            Rectangle {
+                                readonly property bool filled: index < fingerprintStatus.triesLeft
+                                implicitWidth: 4
+                                implicitHeight: 4
+                                radius: Appearance.rounding.full
+                                color: filled ? fingerprintStatus.colContent : "transparent"
+                                border.width: filled ? 0 : 1
+                                border.color: fingerprintStatus.exhausted ? Appearance.colors.colError : Appearance.colors.colOutline
+                                Behavior on color {
+                                    ColorAnimation { duration: 200 }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

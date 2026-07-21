@@ -59,6 +59,31 @@ StyledPopup {
             y: 25
         }
 
+        Connections {
+            target: popupRoot
+            function onPopupOpenProgressChanged() {
+                if (popupRoot && popupRoot.popupOpenProgress === 0.0) {
+                    mainCardAnim.stop();
+                    appNameContainerAnim.stop();
+                    popupTextAnim.stop();
+                    bottomRowAnim.stop();
+
+                    mainCard.opacity = 0.0;
+                    mainCard.scale = 0.85;
+                    mainCardTrans.y = 25;
+
+                    appNameContainer.opacity = 0.0;
+                    appNameContainerTrans.x = -15;
+
+                    popupText.opacity = 0.0;
+                    popupText.scale = 0.95;
+
+                    bottomRow.opacity = 0.0;
+                    bottomRowTrans.y = 10;
+                }
+            }
+        }
+
         SequentialAnimation {
             id: mainCardAnim
             ParallelAnimation {

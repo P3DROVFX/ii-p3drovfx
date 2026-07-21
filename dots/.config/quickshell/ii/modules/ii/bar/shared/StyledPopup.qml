@@ -252,7 +252,7 @@ LazyLoader {
                     openAnimSeq.stop();
                     closeAnim.from = popupWindow.animProgress;
                     closeAnim.start();
-                } else {
+                } else if (root._computedActive) {
                     closeAnim.stop();
                     destroyTimer.stop();
                     popupWindow.animProgress = 0.0;
@@ -372,6 +372,12 @@ LazyLoader {
                     scale: root.layoutScale
                     transformOrigin: Item.Center
                     clip: false
+
+                Component.onDestruction: {
+                    if (root && root.contentItem) {
+                        root.contentItem.parent = root;
+                    }
+                }
 
                 Component.onCompleted: {
                     if (root.contentItem) {

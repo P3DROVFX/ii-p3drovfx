@@ -143,6 +143,98 @@ StyledPopup {
             }
         }
 
+        Connections {
+            target: root
+            function onPopupOpenProgressChanged() {
+                if (root && root.popupOpenProgress === 0.0) {
+                    batteryHeroAnim.stop();
+                    dividerAnim.stop();
+                    cellHealthAnim.stop();
+                    cellWattageAnim.stop();
+                    cellCyclesAnim.stop();
+                    cellStatusAnim.stop();
+
+                    batteryHeroStatusTextAnim.stop();
+                    batteryHeroStatsRowAnim.stop();
+                    label0Anim.stop();
+                    label50Anim.stop();
+                    label100Anim.stop();
+                    batteryFillAnim.stop();
+
+                    cellHealthShapeAnim.stop();
+                    cellHealthTitleAnim.stop();
+                    cellHealthValueAnim.stop();
+
+                    cellWattageShapeAnim.stop();
+                    cellWattageTitleAnim.stop();
+                    cellWattageValueAnim.stop();
+
+                    cellCyclesShapeAnim.stop();
+                    cellCyclesTitleAnim.stop();
+                    cellCyclesValueAnim.stop();
+
+                    cellStatusShapeAnim.stop();
+                    cellStatusTitleAnim.stop();
+                    cellStatusValueAnim.stop();
+
+                    batteryHero.opacity = 0.0;
+                    batteryHero.scale = 0.85;
+                    batteryHeroTransform.y = 25;
+                    
+                    divider.opacity = 0.0;
+                    
+                    cellHealth.opacity = 0.0;
+                    cellHealth.scale = 0.85;
+                    cellHealthTransform.y = 25;
+                    
+                    cellWattage.opacity = 0.0;
+                    cellWattage.scale = 0.85;
+                    cellWattageTransform.y = 25;
+                    
+                    cellCycles.opacity = 0.0;
+                    cellCycles.scale = 0.85;
+                    cellCyclesTransform.y = 25;
+                    
+                    cellStatus.opacity = 0.0;
+                    cellStatus.scale = 0.85;
+                    cellStatusTransform.y = 25;
+
+                    batteryHero.animProgress = 0.0;
+                    batteryHeroStatusText.opacity = 0.0;
+                    batteryHeroStatusTextTrans.y = 10;
+                    batteryHeroStatsRow.opacity = 0.0;
+                    batteryHeroStatsRow.scale = 0.9;
+                    axisLabelZero.opacity = 0.0;
+                    axisLabel50.opacity = 0.0;
+                    axisLabel100.opacity = 0.0;
+
+                    cellHealthShape.scale = 0.8;
+                    cellHealthShape.rotation = -10;
+                    cellHealthTitle.opacity = 0.0;
+                    cellHealthValue.opacity = 0.0;
+                    cellHealthValue.scale = 0.9;
+
+                    cellWattageShape.scale = 0.8;
+                    cellWattageShape.rotation = -10;
+                    cellWattageTitle.opacity = 0.0;
+                    cellWattageValue.opacity = 0.0;
+                    cellWattageValue.scale = 0.9;
+
+                    cellCyclesShape.scale = 0.8;
+                    cellCyclesShape.rotation = -10;
+                    cellCyclesTitle.opacity = 0.0;
+                    cellCyclesValue.opacity = 0.0;
+                    cellCyclesValue.scale = 0.9;
+
+                    cellStatusShape.scale = 0.8;
+                    cellStatusShape.rotation = -10;
+                    cellStatusTitle.opacity = 0.0;
+                    cellStatusValue.opacity = 0.0;
+                    cellStatusValue.scale = 0.9;
+                }
+            }
+        }
+
         readonly property var _visList: [
             true, // HERO
             true, // divider

@@ -64,6 +64,37 @@ Rectangle {
         }
     }
 
+    Connections {
+        target: root
+        function onPopupOpenProgressChanged() {
+            if (root && root.popupOpenProgress === 0.0) {
+                alarmIconAnim.stop();
+                alarmsTitleAnim.stop();
+                alarmsCountAnim.stop();
+                deleteBtnAnim.stop();
+                addBtnAnim.stop();
+
+                alarmIcon.scale = 0.8;
+                alarmIconRotation.angle = -10;
+                alarmsTitle.opacity = 0.0;
+                alarmsCount.opacity = 0.0;
+                deleteButton.scale = 0.8;
+                deleteButton.opacity = 0.0;
+                addButton.scale = 0.8;
+                addButton.opacity = 0.0;
+                
+                for (var k = 0; k < listView.count; k++) {
+                    var resetItem = listView.itemAtIndex(k);
+                    if (resetItem) {
+                        resetItem.stopCardAnim();
+                        resetItem.cardOpacity = 0.0;
+                        resetItem.cardTranslateX = 80;
+                    }
+                }
+            }
+        }
+    }
+
     property string mode: "list" // "list", "add", "edit"
     property int editingIndex: -1
     property bool deleteMode: false

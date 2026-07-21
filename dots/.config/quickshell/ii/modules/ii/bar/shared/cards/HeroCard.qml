@@ -40,6 +40,26 @@ Rectangle {
         }
     }
 
+    Connections {
+        target: root
+        function onPopupOpenProgressChanged() {
+            if (root && root.popupOpenProgress === 0.0) {
+                shapeAnim.stop();
+                pillAnim.stop();
+                titleAnim.stop();
+                subtitleAnim.stop();
+
+                shapeItem.scale = 0.8;
+                shapeItem.rotation = -15;
+                pill.opacity = 0.0;
+                pillTranslate.x = 30;
+                mainText.opacity = 0.0;
+                mainText.scale = 0.9;
+                subtitleText.opacity = 0.0;
+            }
+        }
+    }
+
     radius: Appearance.rounding.normal
     color: Appearance.colors.colPrimaryContainer
 
