@@ -1,44 +1,110 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 ContentPage {
-    id: page
+    id: root
+
     forceWidth: false
-    signal goBack()
 
-    RowLayout {
-        spacing: 12
+    ContentSection {
+        icon: "album"
+        title: Translation.tr("Media Integrations")
 
-        RippleButton {
-            implicitWidth: implicitHeight
-            implicitHeight: 40
-            topLeftRadius: Appearance.rounding.full
-            topRightRadius: Appearance.rounding.full
-            bottomLeftRadius: Appearance.rounding.full
-            bottomRightRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Prioritized player (e.g. spotify)")
+            text: Config.options.media.priorityPlayer
+            wrapMode: TextEdit.NoWrap
+            onTextChanged: {
+                Config.options.media.priorityPlayer = text;
             }
-
-            onClicked: page.goBack()
         }
 
-        StyledText {
-            text: Translation.tr("Media Downloader")
-            font.pixelSize: Appearance.font.pixelSize.large
-            font.family: Appearance.font.family.title
-            color: Appearance.colors.colOnLayer0
+        ConfigSwitch {
+            buttonIcon: "filter_list"
+            text: Translation.tr("Filter duplicate players")
+            checked: Config.options.media.filterDuplicatePlayers
+            onCheckedChanged: {
+                Config.options.media.filterDuplicatePlayers = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Attempt to remove dupes (the aggregator playerctl one and browsers' native ones when there's plasma browser integration)")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "palette"
+            text: Translation.tr("Dynamic album art colors")
+            checked: Config.options.media.dynamicAlbumColors
+            onCheckedChanged: {
+                Config.options.media.dynamicAlbumColors = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Extract dominant colors from album art to theme media controls (buttons, text, progress bar)")
+            }
+        }
+
+        ContentSubsectionLabel { text: Translation.tr("Music Recognition") }
+
+        ConfigSpinBox {
+            icon: "timer_off"
+            text: Translation.tr("Total duration timeout (s)")
+            value: Config.options.musicRecognition.timeout
+            from: 10
+            to: 100
+            stepSize: 2
+            onValueChanged: {
+                Config.options.musicRecognition.timeout = value;
+            }
+        }
+        ConfigSpinBox {
+            icon: "av_timer"
+            text: Translation.tr("Polling interval (s)")
+            value: Config.options.musicRecognition.interval
+            from: 2
+            to: 10
+            stepSize: 1
+            onValueChanged: {
+                Config.options.musicRecognition.interval = value;
+            }
+        }
+
+        ContentSubsectionLabel { text: Translation.tr("Lyrics services") }
+
+        ConfigSwitch {
+            buttonIcon: "check"
+            text: Translation.tr("Enable lyrics service")
+            checked: Config.options.lyricsService.enable
+            onCheckedChanged: {
+                Config.options.lyricsService.enable = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.lyricsService.enable
+            buttonIcon: "mood"
+            text: Translation.tr("Enable Genius lyrics service")
+            checked: Config.options.lyricsService.enableGenius
+            onCheckedChanged: {
+                Config.options.lyricsService.enableGenius = checked;
+            }
+        }
+
+        ConfigSwitch {
+            enabled: Config.options.lyricsService.enable
+            buttonIcon: "library_books"
+            text: Translation.tr("Enable LrcLib lyrics service")
+            checked: Config.options.lyricsService.enableLrclib
+            onCheckedChanged: {
+                Config.options.lyricsService.enableLrclib = checked;
+            }
         }
     }
 
@@ -206,6 +272,22 @@ ContentPage {
                 StyledToolTip {
                     text: Translation.tr("Keep a log of all downloaded URLs to avoid re-downloading")
                 }
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "launcher"
+                label: Translation.tr("Search prefixes")
+                sectionHighlight: Translation.tr("Search Prefixes")
             }
         }
     }

@@ -120,7 +120,8 @@ Singleton {
             if (root._pendingNotifications.length > 0) {
                 const pending = root._pendingNotifications.slice();
                 root._pendingNotifications = [];
-                root.list = root.list.concat(pending);
+                root.list = [...root.list, ...pending];
+                root.scheduleDiskWrite();
             }
         }
     }
@@ -213,28 +214,36 @@ Singleton {
     })
 
     function soundPolicyFor(appName) {
-        const conf = Config.options.sounds.notificationApps;
+        const conf = Config.options?.sounds;
+        if (!conf) return "play";
         const lower = (appName || "").toLowerCase();
-        if (conf.neverPlayApps.some(app => app.toLowerCase() === lower)) return "mute";
-        if (conf.alwaysPlayApps.some(app => app.toLowerCase() === lower)) return "play";
-        return conf.defaultPolicy;
+        const neverApps = conf.neverPlayApps ?? [];
+        const alwaysApps = conf.alwaysPlayApps ?? [];
+        if (neverApps.some(app => app.toLowerCase() === lower)) return "mute";
+        if (alwaysApps.some(app => app.toLowerCase() === lower)) return "play";
+        return conf.notificationDefaultPolicy ?? "play";
     }
 
     function appSoundsMuted(appName) {
-        const conf = Config.options.sounds.notificationApps;
+        const conf = Config.options?.sounds;
+        if (!conf) return false;
         const lower = (appName || "").toLowerCase();
-        return conf.neverPlayApps.some(app => app.toLowerCase() === lower);
+        const neverApps = conf.neverPlayApps ?? [];
+        return neverApps.some(app => app.toLowerCase() === lower);
     }
 
     function toggleAppSoundMute(appName) {
         if (!appName) return;
-        const conf = Config.options.sounds.notificationApps;
+        const conf = Config.options?.sounds;
+        if (!conf) return;
         const lower = appName.toLowerCase();
+        const neverApps = conf.neverPlayApps ?? [];
+        const alwaysApps = conf.alwaysPlayApps ?? [];
         if (root.appSoundsMuted(appName)) {
-            conf.neverPlayApps = conf.neverPlayApps.filter(app => app.toLowerCase() !== lower);
+            conf.neverPlayApps = neverApps.filter(app => app.toLowerCase() !== lower);
         } else {
-            conf.alwaysPlayApps = conf.alwaysPlayApps.filter(app => app.toLowerCase() !== lower);
-            conf.neverPlayApps = [...conf.neverPlayApps, appName];
+            conf.alwaysPlayApps = alwaysApps.filter(app => app.toLowerCase() !== lower);
+            conf.neverPlayApps = [...neverApps, appName];
         }
     }
 
@@ -298,7 +307,11 @@ Singleton {
             }
 
             notification.tracked = true
-            root.playNotificationSound(notification);
+            try {
+                root.playNotificationSound(notification);
+            } catch (e) {
+                console.log("[Notifications] Sound playback error: " + e);
+            }
             const newNotifObject = notifComponent.createObject(root, {
                 "notificationId": notification.id + root.idOffset,
                 "notification": notification,
@@ -405,34 +418,43 @@ Singleton {
         refresh()
     }
 
+    property bool _initialized: false
+
     FileView {
         id: notifFileView
         path: Qt.resolvedUrl(filePath)
         atomicWrites: true
         onLoaded: {
-            const fileContents = notifFileView.text()
-            root.list = JSON.parse(fileContents).map((notif) => {
-                return notifComponent.createObject(root, {
-                    "notificationId": notif.notificationId,
-                    "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
-                    "appIcon": notif.appIcon,
-                    "appName": notif.appName,
-                    "body": notif.body,
-                    "image": notif.image,
-                    "summary": notif.summary,
-                    "time": notif.time,
-                    "urgency": notif.urgency,
+            if (root._initialized) return;
+            const fileContents = notifFileView.text();
+            try {
+                const parsed = JSON.parse(fileContents || "[]");
+                root.list = parsed.map((notif) => {
+                    return notifComponent.createObject(root, {
+                        "notificationId": notif.notificationId,
+                        "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
+                        "appIcon": notif.appIcon,
+                        "appName": notif.appName,
+                        "body": notif.body,
+                        "image": notif.image,
+                        "summary": notif.summary,
+                        "time": notif.time,
+                        "urgency": notif.urgency,
+                    });
                 });
-            });
+            } catch (e) {
+                console.log("[Notifications] Error parsing notifications JSON: " + e);
+            }
             // Find largest notificationId
-            let maxId = 0
+            let maxId = 0;
             root.list.forEach((notif) => {
-                maxId = Math.max(maxId, notif.notificationId)
-            })
+                maxId = Math.max(maxId, notif.notificationId);
+            });
 
-            console.log("[Notifications] File loaded")
-            root.idOffset = maxId
-            root.initDone()
+            console.log("[Notifications] File loaded");
+            root.idOffset = maxId;
+            root._initialized = true;
+            root.initDone();
         }
         onLoadFailed: (error) => {
             if(error != FileViewError.FileNotFound) {

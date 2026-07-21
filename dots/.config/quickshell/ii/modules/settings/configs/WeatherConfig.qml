@@ -1,6 +1,6 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.services
@@ -10,40 +10,9 @@ import qs.modules.common.widgets
 
 ContentPage {
     id: root
+
     forceWidth: false
-    signal goBack()
 
-    RowLayout {
-        spacing: 12
-
-        RippleButton {
-            implicitWidth: implicitHeight
-            implicitHeight: 40
-            topLeftRadius: Appearance.rounding.full
-            topRightRadius: Appearance.rounding.full
-            bottomLeftRadius: Appearance.rounding.full
-            bottomRightRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
-            }
-
-            onClicked: root.goBack()
-        }
-
-        StyledText {
-            text: Translation.tr("Weather Service")
-            font.pixelSize: Appearance.font.pixelSize.large
-            font.family: Appearance.font.family.title
-            color: Appearance.colors.colOnLayer0
-        }
-    }
     ContentSection {
         icon: "cloud"
         title: Translation.tr("Weather Service")
@@ -85,6 +54,27 @@ ContentPage {
             stepSize: 5
             onValueChanged: {
                 Config.options.bar.weather.fetchInterval = value;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "bar"
+                label: Translation.tr("Weather bar widget")
+                sectionHighlight: Translation.tr("Widgets")
+            }
+
+            RelatedChip {
+                pageId: "widgets"
+                label: Translation.tr("Desktop weather widget")
             }
         }
     }

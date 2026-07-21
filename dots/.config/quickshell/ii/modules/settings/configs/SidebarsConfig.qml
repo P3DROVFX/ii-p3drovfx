@@ -2,16 +2,18 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: page
-    forceWidth: false
 
     property bool showBackButton: false
+
     signal goBack()
+
+    forceWidth: false
 
     RowLayout {
         spacing: 12
@@ -27,6 +29,7 @@ ContentPage {
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: page.goBack()
 
             MaterialSymbol {
                 anchors.centerIn: parent
@@ -35,15 +38,15 @@ ContentPage {
                 color: Appearance.colors.colOnSecondaryContainer
             }
 
-            onClicked: page.goBack()
         }
 
         StyledText {
-            text: Translation.tr("Sidebars & Panels Settings")
+            text: Translation.tr("Sidebars")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
         }
+
     }
 
     ContentSection {
@@ -61,164 +64,106 @@ ContentPage {
             gridColumns: Math.max(1, Math.floor(parent.width / 300))
             currentValues: {
                 return {
-                    ai: Config.options.policies.ai,
-                    weeb: Config.options.policies.weeb,
-                    wallpapers: Config.options.policies.wallpapers,
-                    translator: Config.options.policies.translator,
-                    player: Config.options.policies.player,
-                    phone: Config.options.policies.phone
+                    "ai": Config.options.policies.ai,
+                    "weeb": Config.options.policies.weeb,
+                    "wallpapers": Config.options.policies.wallpapers,
+                    "translator": Config.options.policies.translator,
+                    "player": Config.options.policies.player,
+                    "phone": Config.options.policies.phone
                 };
             }
-            model: [
-                {
-                    key: "ai",
-                    name: Translation.tr("AI"),
-                    icon: "smart_toy",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
-                        { displayName: Translation.tr("Local"), icon: "sync_saved_locally", value: 2 }
-                    ]
-                },
-                {
-                    key: "weeb",
-                    name: Translation.tr("Weeb"),
-                    icon: "face",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 },
-                        { displayName: Translation.tr("Closet"), icon: "ev_shadow", value: 2 }
-                    ]
-                },
-                {
-                    key: "wallpapers",
-                    name: Translation.tr("Wallpaper browser"),
-                    icon: "wallpaper",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "translator",
-                    name: Translation.tr("Translator"),
-                    icon: "translate",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "player",
-                    name: Translation.tr("Sidebar player"),
-                    icon: "music_note",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                },
-                {
-                    key: "phone",
-                    name: Translation.tr("Phone"),
-                    icon: "smartphone",
-                    options: [
-                        { displayName: Translation.tr("No"), icon: "close", value: 0 },
-                        { displayName: Translation.tr("Yes"), icon: "check", value: 1 }
-                    ]
-                }
-            ]
+            model: [{
+                "key": "ai",
+                "name": Translation.tr("AI"),
+                "icon": "smart_toy",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }, {
+                    "displayName": Translation.tr("Local"),
+                    "icon": "sync_saved_locally",
+                    "value": 2
+                }]
+            }, {
+                "key": "weeb",
+                "name": Translation.tr("Weeb"),
+                "icon": "face",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }, {
+                    "displayName": Translation.tr("Closet"),
+                    "icon": "ev_shadow",
+                    "value": 2
+                }]
+            }, {
+                "key": "wallpapers",
+                "name": Translation.tr("Wallpaper browser"),
+                "icon": "wallpaper",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }]
+            }, {
+                "key": "translator",
+                "name": Translation.tr("Translator"),
+                "icon": "translate",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }]
+            }, {
+                "key": "player",
+                "name": Translation.tr("Sidebar player"),
+                "icon": "music_note",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }]
+            }, {
+                "key": "phone",
+                "name": Translation.tr("Phone"),
+                "icon": "smartphone",
+                "options": [{
+                    "displayName": Translation.tr("No"),
+                    "icon": "close",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Yes"),
+                    "icon": "check",
+                    "value": 1
+                }]
+            }]
             onItemChanged: (key, value) => {
                 Config.options.policies[key] = value;
             }
         }
-    }
 
-    ContentSection {
-        title: Translation.tr("Sidebar Profile Header Settings")
-        icon: "account_circle"
-
-        ContentSubsection {
-            title: Translation.tr("Profile Image Type")
-            icon: "image"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.dashboardHeader.profileImageType
-                onSelected: newValue => {
-                    Config.options.sidebar.dashboardHeader.profileImageType = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("User Profile"),
-                        icon: "account_circle",
-                        value: "user_profile"
-                    },
-                    {
-                        displayName: Translation.tr("Distro Icon"),
-                        icon: "computer",
-                        value: "distro"
-                    },
-                    {
-                        displayName: Translation.tr("None"),
-                        icon: "do_not_disturb",
-                        value: "none"
-                    }
-                ]
-            }
-        }
-
-
-        ContentSubsection {
-            title: Translation.tr("Header Text Mode")
-            icon: "title"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.dashboardHeader.textMode
-                onSelected: newValue => {
-                    Config.options.sidebar.dashboardHeader.textMode = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Username"),
-                        icon: "person",
-                        value: "username"
-                    },
-                    {
-                        displayName: Translation.tr("Uptime"),
-                        icon: "schedule",
-                        value: "uptime"
-                    },
-                    {
-                        displayName: Translation.tr("Custom Text"),
-                        icon: "edit",
-                        value: "custom"
-                    },
-                    {
-                        displayName: Translation.tr("None"),
-                        icon: "do_not_disturb",
-                        value: "none"
-                    }
-                ]
-            }
-        }
-
-        ContentSubsection {
-            visible: Config.options.sidebar.dashboardHeader.textMode === "custom"
-            title: Translation.tr("Custom Header Text")
-            icon: "edit_note"
-            Layout.fillWidth: true
-
-            MaterialTextArea {
-                Layout.fillWidth: true
-                placeholderText: Translation.tr("Enter custom text")
-                text: Config.options.sidebar.dashboardHeader.customText
-                wrapMode: TextEdit.NoWrap
-                onTextChanged: {
-                    Config.options.sidebar.dashboardHeader.customText = text;
-                }
-            }
-        }
     }
 
     ContentSection {
@@ -250,33 +195,30 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.sidebar.position
-                onSelected: newValue => {
+                onSelected: (newValue) => {
                     Config.options.sidebar.position = newValue;
                 }
-                options: [
-                    {
-                        displayName: Translation.tr("Default"),
-                        icon: "vertical_align_center",
-                        value: "default"
-                    },
-                    {
-                        displayName: Translation.tr("Inverted"),
-                        icon: "swap_horiz",
-                        value: "inverted"
-                    },
-                    {
-                        displayName: Translation.tr("Left"),
-                        icon: "keyboard_arrow_left",
-                        value: "left"
-                    },
-                    {
-                        displayName: Translation.tr("Right"),
-                        icon: "keyboard_arrow_right",
-                        value: "right"
-                    }
-                ]
+                options: [{
+                    "displayName": Translation.tr("Default"),
+                    "icon": "vertical_align_center",
+                    "value": "default"
+                }, {
+                    "displayName": Translation.tr("Inverted"),
+                    "icon": "swap_horiz",
+                    "value": "inverted"
+                }, {
+                    "displayName": Translation.tr("Left"),
+                    "icon": "keyboard_arrow_left",
+                    "value": "left"
+                }, {
+                    "displayName": Translation.tr("Right"),
+                    "icon": "keyboard_arrow_right",
+                    "value": "right"
+                }]
             }
+
         }
+
     }
 
     ContentSection {
@@ -290,22 +232,20 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.sidebar.quickToggles.style
-                onSelected: newValue => {
+                onSelected: (newValue) => {
                     Config.options.sidebar.quickToggles.style = newValue;
                 }
-                options: [
-                    {
-                        displayName: Translation.tr("Classic"),
-                        icon: "grid_view",
-                        value: "classic"
-                    },
-                    {
-                        displayName: Translation.tr("Android"),
-                        icon: "android",
-                        value: "android"
-                    }
-                ]
+                options: [{
+                    "displayName": Translation.tr("Classic"),
+                    "icon": "grid_view",
+                    "value": "classic"
+                }, {
+                    "displayName": Translation.tr("Android"),
+                    "icon": "android",
+                    "value": "android"
+                }]
             }
+
         }
 
         ConfigSpinBox {
@@ -329,9 +269,11 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.sidebar.quickToggles.useThreeWaySliders = checked;
             }
+
             StyledToolTip {
                 text: Translation.tr("Convert compatible 3-state widgets (ANC, Power Profiles, Keyboard Light) into 2x1 slide/swipe toggles.")
             }
+
         }
 
         ConfigSwitch {
@@ -341,9 +283,11 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.sidebar.quickSliders.enable = checked;
             }
+
             StyledToolTip {
                 text: Translation.tr("Enabling this, the sliders will be fixed on top of the sidebar, disable this if you wan sliders to be inside a page.")
             }
+
         }
 
         ConfigSwitch {
@@ -395,10 +339,11 @@ ContentPage {
                 Config.options.sidebar.quickSliders.vertical = checked;
             }
         }
+
     }
 
     ContentSection {
-        title: Translation.tr("Corner Mouse Actions")
+        title: Translation.tr("Screen corners")
         icon: "mouse"
 
         ConfigSwitch {
@@ -498,5 +443,7 @@ ContentPage {
                 Config.options.sidebar.cornerOpen.cornerRegionHeight = value;
             }
         }
+
     }
+
 }

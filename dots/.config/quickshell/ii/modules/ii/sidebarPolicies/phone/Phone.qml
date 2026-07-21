@@ -36,7 +36,7 @@ Item {
     id: root
 
     // ─── Sub-page navigation (Hub-and-spoke pattern) ─────
-    // Mirrors CoreServicesConfig.qml: activeSubPage holds the URL of the
+    // activeSubPage holds the URL of the
     // currently-open sub-page (PhoneWebcamPage or PhoneMicPage). When empty,
     // the main content is shown.
     property url activeSubPage: ""
@@ -1277,7 +1277,7 @@ Item {
 
 
         // ─── Sub-page overlay (slides in from right when activeSubPage != "") ───
-        // Mirrors the pattern from CoreServicesConfig.qml — slides in over the
+        // Sub-page overlay — slides in over the
         // main content with a fade parallax effect.
         Item {
             id: subPageOverlay

@@ -66,9 +66,9 @@ Item {
     // Calculate relative Y coordinate inside the Flickable viewport
     readonly property real relativeY: {
         if (!flickable || !parentItem) return 0;
-        // Bind to flickable scroll position and height to trigger updates
+        // Bind to flickable scroll position and layout polish tick to trigger updates
         var scrollY = flickable.contentY;
-        var viewH = flickable.height;
+        var tick = root._layoutTick;
         try {
             return parentItem.mapToItem(flickable, 0, 0).y;
         } catch (e) {

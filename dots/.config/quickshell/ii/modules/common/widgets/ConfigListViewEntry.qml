@@ -179,17 +179,17 @@ Item {
             }
 
             Loader {
-                active: wrapper.compInfo?.sidebarPage !== undefined
+                active: wrapper.compInfo?.pageId !== undefined
                 visible: active
                 sourceComponent: EntryButton {
                     iconText: "open_in_new"
                     tooltip: Translation.tr("Open sidebar page")
                     onClicked: {
                         var win = wrapper.QsWindow.window;
-                        if (win && win.currentPage !== undefined) {
+                        if (win && win.pageIndexById !== undefined) {
                             if (wrapper.compInfo.sectionTitle)
                                 win.pendingSectionHighlight = Translation.tr(wrapper.compInfo.sectionTitle);
-                            win.currentPage = wrapper.compInfo.sidebarPage;
+                            win.currentPage = win.pageIndexById(wrapper.compInfo.pageId);
                         }
                     }
                 }

@@ -4,11 +4,12 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-
 ContentPage {
     id: root
-    forceWidth: false
+
     signal goBack()
+
+    forceWidth: false
 
     RowLayout {
         spacing: 12
@@ -23,6 +24,7 @@ ContentPage {
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: root.goBack()
 
             MaterialSymbol {
                 anchors.centerIn: parent
@@ -31,7 +33,6 @@ ContentPage {
                 color: Appearance.colors.colOnSecondaryContainer
             }
 
-            onClicked: root.goBack()
         }
 
         StyledText {
@@ -40,6 +41,7 @@ ContentPage {
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
         }
+
     }
 
     ContentSection {
@@ -96,14 +98,15 @@ ContentPage {
                 Config.options.bar.dashboardButton.showNotifications = checked;
             }
         }
+
     }
 
     ShortcutBox {
         Layout.fillWidth: true
-        text: Translation.tr("Looking for Sidebars & Panels settings?")
-        value: Translation.tr("Sidebars & Panels")
-        targetPageIndex: 5
-        targetSectionTitle: Translation.tr("Sidebars & Panels")
+        text: Translation.tr("Looking for Sidebars settings?")
+        value: Translation.tr("Sidebars")
+        targetPageId: "sidebars"
         materialIcon: "side_navigation"
     }
+
 }

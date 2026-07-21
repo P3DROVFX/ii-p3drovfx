@@ -1,33 +1,15 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: page
+
     forceWidth: false
-
-    ContentSection {
-        title: Translation.tr("Animations")
-        icon: "animation"
-
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Animation Duration")
-            usePercentTooltip: false
-            from: 0.1
-            to: 3.0
-            stepSize: 0.05
-            value: Config.options.appearance.animationMultiplier ?? 1.0
-            onValueChanged: Config.options.appearance.animationMultiplier = value
-            StyledToolTip {
-                text: Translation.tr("Controls the duration of all UI animations.\n0.1 = ultra fast  |  1.0 = default  |  3.0 = very slow")
-            }
-        }
-    }
 
     ContentSection {
         title: Translation.tr("System Rounding")
@@ -53,48 +35,31 @@ ContentPage {
                     Config.options.appearance.sharpMode = (value === 0);
                 }
             }
+
         }
+
     }
 
     ContentSection {
-        title: Translation.tr("Decorative Options")
-        icon: "auto_awesome"
+        title: Translation.tr("Animations")
+        icon: "animation"
 
-        ConfigSwitch {
-            buttonIcon: "colors"
-            text: Translation.tr("Colorful scrollbar")
-            checked: Config.options.appearance.colorfulScrollbar
-            onCheckedChanged: {
-                Config.options.appearance.colorfulScrollbar = checked;
+        ConfigSlider {
+            buttonIcon: "speed"
+            text: Translation.tr("Animation Duration")
+            usePercentTooltip: false
+            from: 0.1
+            to: 3
+            stepSize: 0.05
+            value: Config.options.appearance.animationMultiplier ?? 1
+            onValueChanged: Config.options.appearance.animationMultiplier = value
+
+            StyledToolTip {
+                text: Translation.tr("Controls the duration of all UI animations.\n0.1 = ultra fast  |  1.0 = default  |  3.0 = very slow")
             }
+
         }
 
-        ConfigSwitch {
-            buttonIcon: "animation"
-            text: Translation.tr("Scroll animation in settings")
-            checked: Config.options.appearance.scrollAnimations
-            onCheckedChanged: {
-                Config.options.appearance.scrollAnimations = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "blur_linear"
-            text: Translation.tr("Scroll fade gradient mask in settings")
-            checked: Config.options.appearance.scrollFadeMask
-            onCheckedChanged: {
-                Config.options.appearance.scrollFadeMask = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "smart_toy"
-            text: Translation.tr("Show AI provider and model buttons")
-            checked: Config.options.sidebar.ai.showProviderAndModelButtons
-            onCheckedChanged: {
-                Config.options.sidebar.ai.showProviderAndModelButtons = checked;
-            }
-        }
     }
 
     ContentSection {
@@ -157,7 +122,7 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Base Icon Themes")
+        title: Translation.tr("Icons")
         icon: "category"
 
         ConfigSwitch {
@@ -167,11 +132,12 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.appearance.icons.enableThemed = checked;
             }
+
             StyledToolTip {
                 text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")
             }
-        }
 
+        }
 
         ContentSubsection {
             visible: Config.options.appearance.icons.enableThemed
@@ -182,15 +148,18 @@ ContentPage {
 
             ConfigSelectionArray {
                 currentValue: Config.options.appearance.iconTheme
-                onSelected: newValue => {
+                onSelected: (newValue) => {
                     Config.options.appearance.iconTheme = newValue;
                 }
-                options: IconThemes.availableThemes.map(theme => ({
-                    displayName: theme,
-                    value: theme,
-                    icon: "category"
-                }))
+                options: IconThemes.availableThemes.map((theme) => {
+                    return ({
+                        "displayName": theme,
+                        "value": theme,
+                        "icon": "category"
+                    });
+                })
             }
+
         }
 
         RippleButtonWithIcon {
@@ -218,26 +187,47 @@ ContentPage {
             }
         }
 
+    }
+
+    ContentSection {
+        title: Translation.tr("Details")
+        icon: "auto_awesome"
+
         ConfigSwitch {
-            buttonIcon: "palette"
-            text: Translation.tr("Tint workspaces icons")
-            checked: Config.options.bar.workspaces.monochromeIcons
+            buttonIcon: "colors"
+            text: Translation.tr("Colorful scrollbar")
+            checked: Config.options.appearance.colorfulScrollbar
             onCheckedChanged: {
-                Config.options.bar.workspaces.monochromeIcons = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("Applies monochrome tint to workspaces icons. Turn on show workspace icons to see this")
+                Config.options.appearance.colorfulScrollbar = checked;
             }
         }
 
-        ConfigSlider {
-            buttonIcon: "humidity_percentage"
-            text: Translation.tr("Tint percentage")
-            value: Config.options.appearance.iconTintPercentage ?? 0.6
-            onValueChanged: Config.options.appearance.iconTintPercentage = value;
-            enabled: Config.options.bar.workspaces.monochromeIcons
-            opacity: enabled ? 1.0 : 0.5
+
+        ContentSubsection {
+            title: Translation.tr("This window")
+            icon: "settings_applications"
+            Layout.fillWidth: true
+
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Scroll animation in settings")
+                checked: Config.options.appearance.scrollAnimations
+                onCheckedChanged: {
+                    Config.options.appearance.scrollAnimations = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_linear"
+                text: Translation.tr("Scroll fade gradient mask in settings")
+                checked: Config.options.appearance.scrollFadeMask
+                onCheckedChanged: {
+                    Config.options.appearance.scrollFadeMask = checked;
+                }
+            }
+
         }
+
     }
 
     ContentSection {
@@ -278,9 +268,11 @@ ContentPage {
                 Config.options.appearance.fonts.roundnessFull = checked;
                 Persistent.states.settings.fonts.roundnessFull = checked;
             }
+
             StyledToolTip {
                 text: Translation.tr("Use rounded font variant (ROND: 100) for variable fonts like Google Sans Flex")
             }
+
         }
 
         ContentSubsection {
@@ -295,11 +287,14 @@ ContentPage {
                 text: Persistent.states.settings.fonts.main
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.main = text;
                     Config.options.appearance.fonts.main = text;
                 }
             }
+
         }
 
         ContentSubsection {
@@ -314,11 +309,14 @@ ContentPage {
                 text: Persistent.states.settings.fonts.numbers
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.numbers = text;
                     Config.options.appearance.fonts.numbers = text;
                 }
             }
+
         }
 
         ContentSubsection {
@@ -333,11 +331,14 @@ ContentPage {
                 text: Persistent.states.settings.fonts.title
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.title = text;
                     Config.options.appearance.fonts.title = text;
                 }
             }
+
         }
 
         ContentSubsection {
@@ -352,17 +353,21 @@ ContentPage {
                 text: Persistent.states.settings.fonts.monospace
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.monospace = text;
                     Config.options.appearance.fonts.monospace = text;
                 }
             }
+
         }
 
         ContentSubsection {
             title: Translation.tr("Nerd font icons")
             icon: "emoji_symbols"
             Layout.fillWidth: true
+
             HelperLinkBox {
                 Layout.fillWidth: true
                 title: Translation.tr("NerdFonts Cheat Sheet")
@@ -378,9 +383,10 @@ ContentPage {
                     colBackgroundHover: Appearance.colors.colLayer0Hover
                     colRipple: Appearance.colors.colLayer0Active
                     downAction: () => {
-                        Qt.openUrlExternally("https://www.nerdfonts.com/cheat-sheet")
+                        Qt.openUrlExternally("https://www.nerdfonts.com/cheat-sheet");
                     }
                 }
+
             }
 
             MaterialTextArea {
@@ -390,11 +396,14 @@ ContentPage {
                 text: Persistent.states.settings.fonts.iconNerd
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.iconNerd = text;
                     Config.options.appearance.fonts.iconNerd = text;
                 }
             }
+
         }
 
         ContentSubsection {
@@ -409,11 +418,14 @@ ContentPage {
                 text: Persistent.states.settings.fonts.reading
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.reading = text;
                     Config.options.appearance.fonts.reading = text;
                 }
             }
+
         }
 
         ContentSubsection {
@@ -428,11 +440,15 @@ ContentPage {
                 text: Persistent.states.settings.fonts.expressive
                 wrapMode: TextEdit.NoWrap
                 onTextChanged: {
-                    if (!enabled) return
+                    if (!enabled)
+                        return ;
+
                     Persistent.states.settings.fonts.expressive = text;
                     Config.options.appearance.fonts.expressive = text;
                 }
             }
+
         }
+
     }
 }

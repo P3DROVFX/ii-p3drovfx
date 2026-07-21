@@ -756,5 +756,8 @@
   "Fr": "Пт/*keep*/",
   "Font family name": "Назв. семейства",
   "Pin": "Закреп",
-  "Unpin": "Откреп"
+  "Unpin": "Откреп",
+  "Low warning (%)": "Увед. о низком %",
+  "Critical warning (%)": "Критический %",
+  "Blur style": "Размытие"
 }

@@ -1143,4 +1143,19 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        title: Translation.tr("Wallpaper Browser")
+        icon: "download"
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Wallpaper Browser download path")
+            text: Config.options.wallpapers.paths.download
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Config.options.wallpapers.paths.download = text;
+            }
+        }
+    }
 }

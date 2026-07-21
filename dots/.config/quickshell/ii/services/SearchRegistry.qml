@@ -18,27 +18,26 @@ Item {
 
     function startIndexing() {
         sections = [];
-        let basePath = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/modules/settings/configs/";
-        
-        let widgetFiles = [
-            "ActiveWindowConfig.qml", "MediaPlayerConfig.qml", "UtilButtonsConfig.qml",
-            "KeyboardLayoutConfig.qml", "SystemMonitorConfig.qml", "IndicatorsConfig.qml",
-            "SportsConfig.qml", "BluetoothConfig.qml", "SystemTrayConfig.qml",
-            "DesktopClockWidgetConfig.qml", "DesktopWeatherWidgetConfig.qml",
-            "DesktopMediaWidgetConfig.qml", "BatteryConfig.qml", "CoreAudioConfig.qml",
-            "CorePowerConfig.qml", "CoreTimeDateConfig.qml", "CoreLanguageConfig.qml",
-            "CoreAlertsConfig.qml", "CoreMediaConfig.qml", "CorePoliciesConfig.qml",
-            "CoreNetworkConfig.qml", "CoreFilesConfig.qml", "CoreWeatherConfig.qml",
-            "CoreTerminalConfig.qml", "CoreWaffleConfig.qml", "GameOverlayConfig.qml",
-            "BTDeviceImagesConfig.qml", "DashboardButtonConfig.qml", "MediaDownloaderConfig.qml"
-        ];
-        
-        
-        let files = [basePath + "ColorsThemesConfig.qml", basePath + "BarConfig.qml", basePath + "BackgroundConfig.qml", basePath + "InterfaceFontsConfig.qml", basePath + "PresetsConfig.qml", basePath + "SidebarsConfig.qml", basePath + "DockConfig.qml", basePath + "WorkspacesConfig.qml", basePath + "OverviewConfig.qml", basePath + "WidgetsConfig.qml", basePath + "DynamicIslandConfig.qml", basePath + "OverlaysConfig.qml", basePath + "RegionSelectorConfig.qml", basePath + "AppSearchConfig.qml", basePath + "CheatSheetConfig.qml", basePath + "HyprlandRulesConfig.qml", basePath + "MonitorsConfig.qml", basePath + "CoreServicesConfig.qml", basePath + "SoundsConfig.qml", basePath + "LockScreenConfig.qml", basePath + "AboutConfig.qml", basePath + "UserProfileConfig.qml"];
-        
-        for (let w of widgetFiles) files.push(basePath + "widgets/" + w);
-        
-        pageFile.start(files);
+        let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
+        let basePath = configRoot + "modules/settings/configs/";
+
+        // Manifest comes from SettingsPageRegistry: every searchable page plus
+        // the widget sub-pages it hosts. Adding or moving a page is a
+        // one-place change in the registry.
+        let files = [];
+        let ids = [];
+        for (let p of SettingsPageRegistry.pages) {
+            if (p.searchable === false)
+                continue;
+            files.push(configRoot + p.component);
+            ids.push(p.id);
+            for (let sub of (p.subPages ?? [])) {
+                files.push(basePath + sub);
+                ids.push(p.id);
+            }
+        }
+
+        pageFile.start(files, ids);
         listPresetsSearchProc.running = false;
         listPresetsSearchProc.running = true;
     }
@@ -57,10 +56,12 @@ Item {
         blockLoading: true
 
         property var files: []
+        property var pageIds: []
         property int currentIndex: 0
 
-        function start(filesArray) {
+        function start(filesArray, idsArray) {
             files = filesArray;
+            pageIds = idsArray;
             currentIndex = 0;
             loadNext();
         }
@@ -72,7 +73,7 @@ Item {
         }
 
         onLoaded: {
-            root.indexQmlFile(text(), currentIndex);
+            root.indexQmlFile(text(), pageIds[currentIndex]);
             currentIndex++;
             Qt.callLater(() => loadNext());
         }
@@ -101,7 +102,7 @@ Item {
     function addDynamicPresetName(name) {
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i];
-            if (section.pageIndex === 4) {
+            if (section.pageId === "presets") {
                 if (section.searchStrings.indexOf(name) === -1) {
                     section.searchStrings.push(name);
                     let combined = (section.title + " " + section.searchStrings.join(" ")).toLowerCase();
@@ -141,7 +142,7 @@ Item {
         return items;
     }
 
-    function indexQmlFile(qmlText, pageIndex) {
+    function indexQmlFile(qmlText, pageId) {
         if (!qmlText) return;
         
         let fileImports = extractImports(qmlText);
@@ -185,7 +186,7 @@ Item {
             }
 
             registerSection({
-                pageIndex: pageIndex,
+                pageId: pageId,
                 title: title || "Unknown",
                 icon: icon || "",
                 searchStrings: searchStrings,
