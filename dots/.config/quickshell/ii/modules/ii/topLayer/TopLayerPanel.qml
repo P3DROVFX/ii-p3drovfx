@@ -64,6 +64,20 @@ PanelWindow {
     property real leftSidebarMaskWidth: 0
     property real rightSidebarMaskWidth: 0
 
+    readonly property real leftContentWidth: {
+        const pos = Config.options.sidebar.position;
+        if (pos === "inverted") return GlobalStates.dashboardWidth;
+        if (pos === "left") return GlobalStates.dashboardPanelOpen ? GlobalStates.dashboardWidth : GlobalStates.policiesWidth;
+        return GlobalStates.policiesWidth;
+    }
+
+    readonly property real rightContentWidth: {
+        const pos = Config.options.sidebar.position;
+        if (pos === "inverted") return GlobalStates.policiesWidth;
+        if (pos === "right") return GlobalStates.sidebarLeftOpen ? GlobalStates.policiesWidth : GlobalStates.dashboardWidth;
+        return GlobalStates.dashboardWidth;
+    }
+
     Connections {
         target: GlobalStates
         ignoreUnknownSignals: true
@@ -600,7 +614,7 @@ PanelWindow {
         id: leftSidebar
         x: -(width - GlobalStates.animatedLeftSidebarWidth)
         y: topPanel.sidebarTopOffset
-        width: Math.round(Math.max(GlobalStates.policiesWidth, GlobalStates.animatedLeftSidebarWidth))
+        width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
         height: Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset)
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
@@ -694,10 +708,11 @@ PanelWindow {
         id: rightSidebar
         x: parent.width - Math.round(GlobalStates.animatedRightSidebarWidth)
         y: topPanel.sidebarTopOffset
-        width: Math.round(GlobalStates.dashboardWidth)
+        width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
         height: Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset)
-        color: "transparent"
-        border.width: 0
+        color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        border.width: GlobalStates.connectModeActive ? 0 : 1
+        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         visible: topPanel.rightSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
