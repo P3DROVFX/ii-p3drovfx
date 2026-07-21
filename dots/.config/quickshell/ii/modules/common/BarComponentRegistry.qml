@@ -26,7 +26,7 @@ Singleton {
             title: "Policies panel button",
             styleConfigKey: "policies",
             styleOptions: defaultStyleOptions,
-            configPage: "CorePoliciesConfig.qml"
+            pageId: "privacy"
         },
         {
             id: "active_window",
@@ -102,7 +102,7 @@ Singleton {
             icon: "nest_clock_farsight_analog",
             title: "Clock",
             styleConfigKey: "clock",
-            configPage: "CoreTimeDateConfig.qml",
+            configPage: "ClockDateWidgetConfig.qml",
             styleOptions: [
                 {
                     displayName: qsTr("Default"),
@@ -153,13 +153,13 @@ Singleton {
             id: "phone_scrcpy_indicator",
             icon: "smart_display",
             title: "Phone scrcpy indicator",
-            configPage: "CorePoliciesConfig.qml"
+            pageId: "devicesPhone"
         },
         {
             id: "date",
             icon: "date_range",
             title: "Date",
-            configPage: "CoreTimeDateConfig.qml"
+            configPage: "ClockDateWidgetConfig.qml"
         },
         {
             id: "battery",
@@ -197,7 +197,7 @@ Singleton {
             title: "Weather",
             styleConfigKey: "weather",
             styleOptions: defaultStyleOptions,
-            configPage: "CoreWeatherConfig.qml"
+            pageId: "weather"
         },
         {
             id: "utility_buttons",
@@ -253,7 +253,7 @@ Singleton {
             title: "Power button",
             styleConfigKey: "power",
             styleOptions: defaultStyleOptions,
-            configPage: "CorePowerConfig.qml"
+            pageId: "power"
         }
     ]
 

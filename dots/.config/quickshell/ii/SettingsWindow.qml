@@ -33,159 +33,44 @@ FloatingWindow {
 
     property string pendingSectionHighlight: ""
 
-    // ── Flat page list (order determines pageIndex) ──────────────────────
-    property var pages: [
-        // Group 1 – Look & Feel (indices 0..4)
-        {
-            name: Translation.tr("Colors & Themes"),
-            icon: "palette",
-            component: "modules/settings/configs/ColorsThemesConfig.qml"
-        },
-        {
-            name: Translation.tr("Bar & Status Bar"),
-            icon: "space_bar",
-            component: "modules/settings/configs/BarConfig.qml"
-        },
-        {
-            name: Translation.tr("Backgrounds"),
-            icon: "wallpaper",
-            component: "modules/settings/configs/BackgroundConfig.qml"
-        },
-        {
-            name: Translation.tr("Interface & Fonts"),
-            icon: "font_download",
-            component: "modules/settings/configs/InterfaceFontsConfig.qml"
-        },
-        {
-            name: Translation.tr("Presets"),
-            icon: "auto_awesome",
-            component: "modules/settings/configs/PresetsConfig.qml"
-        },
-        // Group 2 – Modules (indices 5..10)
-        {
-            name: Translation.tr("Sidebars & Panels"),
-            icon: "side_navigation",
-            component: "modules/settings/configs/SidebarsConfig.qml"
-        },
-        {
-            name: Translation.tr("Dock"),
-            icon: "dock_to_bottom",
-            component: "modules/settings/configs/DockConfig.qml"
-        },
-        {
-            name: Translation.tr("Workspaces"),
-            icon: "workspaces",
-            component: "modules/settings/configs/WorkspacesConfig.qml"
-        },
-        {
-            name: Translation.tr("Overview Screen"),
-            icon: "grid_view",
-            component: "modules/settings/configs/OverviewConfig.qml"
-        },
-        {
-            name: Translation.tr("Desktop Widgets"),
-            icon: "widgets",
-            component: "modules/settings/configs/WidgetsConfig.qml"
-        },
-        {
-            name: Translation.tr("Dynamic Island"),
-            icon: "water_drop",
-            component: "modules/settings/configs/DynamicIslandConfig.qml"
-        },
-        // Group 3 – Tools & Overlays (indices 11..15)
-        {
-            name: Translation.tr("System Overlays"),
-            icon: "picture_in_picture",
-            component: "modules/settings/configs/OverlaysConfig.qml"
-        },
-        {
-            name: Translation.tr("Region Selector"),
-            icon: "screenshot_region",
-            component: "modules/settings/configs/RegionSelectorConfig.qml"
-        },
-        {
-            name: Translation.tr("App Search"),
-            icon: "search",
-            component: "modules/settings/configs/AppSearchConfig.qml"
-        },
-        {
-            name: Translation.tr("Cheat Sheet"),
-            icon: "help",
-            component: "modules/settings/configs/CheatSheetConfig.qml"
-        },
-        {
-            name: Translation.tr("Hyprland Rules"),
-            icon: "rule",
-            component: "modules/settings/configs/HyprlandRulesConfig.qml"
-        },
-        // Group 4 – System & Services (indices 16..20)
-        {
-            name: Translation.tr("Monitors"),
-            icon: "monitor",
-            component: "modules/settings/configs/MonitorsConfig.qml"
-        },
-        {
-            name: Translation.tr("Core Services"),
-            icon: "settings_suggest",
-            component: "modules/settings/configs/CoreServicesConfig.qml"
-        },
-        {
-            name: Translation.tr("Lock Screen"),
-            icon: "lock",
-            component: "modules/settings/configs/LockScreenConfig.qml"
-        },
-        {
-            name: Translation.tr("About & Updates"),
-            icon: "info",
-            component: "modules/settings/configs/AboutConfig.qml"
-        },
-        {
-            name: Translation.tr("User Profile"),
-            icon: "account_circle",
-            component: "modules/settings/configs/UserProfileConfig.qml"
-        },
-        {
-            name: Translation.tr("Search Results"),
-            icon: "search",
-            component: "modules/settings/configs/SearchPage.qml"
-        }
-    ]
+    // ── Flat page list, derived from SettingsPageRegistry ────────────────
+    // Pages are addressed by stable `id`, not index — use pageIndexById().
+    property var pages: SettingsPageRegistry.pages.map(p => ({
+                id: p.id,
+                name: Translation.tr(p.name),
+                icon: p.icon,
+                component: p.component,
+                hidden: p.hidden === true
+            }))
 
-    // ── Grouped page list for Sidebar (references indices above) ─────────
-    property var pageGroups: [
-        {
-            name: Translation.tr("Look & Feel"),
-            pages: [0, 1, 2, 3, 4].map(i => ({
-                        name: pages[i].name,
-                        icon: pages[i].icon,
-                        pageIndex: i
-                    }))
-        },
-        {
-            name: Translation.tr("Modules"),
-            pages: [5, 6, 7, 8, 9, 10].map(i => ({
-                        name: pages[i].name,
-                        icon: pages[i].icon,
-                        pageIndex: i
-                    }))
-        },
-        {
-            name: Translation.tr("Tools & Overlays"),
-            pages: [11, 12, 13, 14, 15].map(i => ({
-                        name: pages[i].name,
-                        icon: pages[i].icon,
-                        pageIndex: i
-                    }))
-        },
-        {
-            name: Translation.tr("System & Services"),
-            pages: [16, 17, 18, 19].map(i => ({
-                        name: pages[i].name,
-                        icon: pages[i].icon,
-                        pageIndex: i
-                    }))
+    // Hidden pages sit at the end of the list; nav pages come first.
+    readonly property int navPageCount: pages.filter(p => !p.hidden).length
+
+    function pageIndexById(id) {
+        return SettingsPageRegistry.pageIndexById(id);
+    }
+
+    function cycleNavPage(delta) {
+        if (root.currentPage >= root.navPageCount) {
+            root.currentPage = delta > 0 ? 0 : root.navPageCount - 1;
+            return;
         }
-    ]
+        root.currentPage = (root.currentPage + delta + root.navPageCount) % root.navPageCount;
+    }
+
+    // ── Grouped page list for Sidebar ────────────────────────────────────
+    property var pageGroups: SettingsPageRegistry.groups.map(g => ({
+                id: g.id,
+                name: Translation.tr(g.name),
+                pages: g.pageIds.map(id => {
+                    const i = SettingsPageRegistry.pageIndexById(id);
+                    return {
+                        name: Translation.tr(SettingsPageRegistry.pages[i].name),
+                        icon: SettingsPageRegistry.pages[i].icon,
+                        pageIndex: i
+                    };
+                })
+            }))
 
     title: "illogical-impulse Settings"
     implicitWidth: 1100
@@ -200,16 +85,14 @@ FloatingWindow {
             if (GlobalStates.settingsOpen) {
                 settingsSearchBar.forceFocus();
                 if (GlobalStates.settingsPendingPageName !== "") {
+                    // Accepts a page id ("tasksAccounts") or a component file name
                     for (let i = 0; i < root.pages.length; i++) {
-                        if (root.pages[i].component.indexOf(GlobalStates.settingsPendingPageName) !== -1) {
+                        if (root.pages[i].id === GlobalStates.settingsPendingPageName || root.pages[i].component.indexOf(GlobalStates.settingsPendingPageName) !== -1) {
                             root.currentPage = i;
                             break;
                         }
                     }
                     GlobalStates.settingsPendingPageName = "";
-                } else if (GlobalStates.settingsPendingPage >= 0) {
-                    root.currentPage = GlobalStates.settingsPendingPage;
-                    GlobalStates.settingsPendingPage = -1;
                 }
             }
         }
@@ -248,18 +131,20 @@ FloatingWindow {
         }
 
         Keys.onPressed: event => {
+            // Cycling only covers nav pages — hidden pages (profile, search
+            // results) are reachable through their own entry points.
             if (event.modifiers === Qt.ControlModifier) {
                 if (event.key === Qt.Key_PageDown) {
-                    root.currentPage = Math.min(root.currentPage + 1, root.pages.length - 1);
+                    root.currentPage = Math.min(root.currentPage + 1, root.navPageCount - 1);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_PageUp) {
-                    root.currentPage = Math.max(root.currentPage - 1, 0);
+                    root.currentPage = Math.max(Math.min(root.currentPage, root.navPageCount) - 1, 0);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Tab) {
-                    root.currentPage = (root.currentPage + 1) % root.pages.length;
+                    root.cycleNavPage(1);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Backtab) {
-                    root.currentPage = (root.currentPage - 1 + root.pages.length) % root.pages.length;
+                    root.cycleNavPage(-1);
                     event.accepted = true;
                 }
             }
@@ -276,8 +161,8 @@ FloatingWindow {
                 id: userHeader
                 Layout.preferredWidth: 230
                 Layout.fillHeight: true
-                isActive: root.currentPage === 20
-                onClicked: root.currentPage = 20
+                isActive: root.currentPage === root.pageIndexById("profile")
+                onClicked: root.currentPage = root.pageIndexById("profile")
             }
 
             SearchBar {
@@ -290,7 +175,7 @@ FloatingWindow {
 
                 onTextChanged: text => {
                     if (text === "") {
-                        if (root.currentPage === 21) {
+                        if (root.currentPage === root.pageIndexById("search")) {
                             root.currentPage = root.previousPage;
                         }
                         root.activeSearchQuery = "";
@@ -307,7 +192,7 @@ FloatingWindow {
                         root.activeSearchQuery = "";
                         root.resultsCount = 0;
                         root.lastSearchIndex = -1;
-                        if (root.currentPage === 21) {
+                        if (root.currentPage === root.pageIndexById("search")) {
                             root.currentPage = root.previousPage;
                         }
                         return;
@@ -324,12 +209,12 @@ FloatingWindow {
                     root.resultsCount = totalWidgets;
                     root.lastSearchIndex = 0;
 
-                    if (root.currentPage !== 21) {
+                    if (root.currentPage !== root.pageIndexById("search")) {
                         root.previousPage = root.currentPage;
                     }
                     root.activeSearchQuery = text;
                     SearchRegistry.currentSearch = text;
-                    root.currentPage = 21;
+                    root.currentPage = root.pageIndexById("search");
                 }
 
                 onCloseRequested: GlobalStates.settingsOpen = false

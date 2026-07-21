@@ -12,7 +12,7 @@ Item {
     id: widgetsConfigRoot
 
     property alias contentY: page.contentY
-    property url activeSubPage: ""
+    property alias activeSubPage: subPageOverlay.activeSubPage
     // When non-empty, opens the extension config schema sub-page for this extId
     property string extensionConfigExtId: ""
 
@@ -63,7 +63,7 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
-        opacity: subPageOverlay.width > 0 ? (subPageOverlay.x / subPageOverlay.width) : 1
+        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         ContentSection {
@@ -73,7 +73,7 @@ Item {
             ShortcutBox {
                 Layout.fillWidth: true
                 value: Translation.tr("Lock screen widget settings")
-                targetPageIndex: 18
+                targetPageId: "lockScreen"
                 targetSectionTitle: Translation.tr("Lockscreen widget")
                 materialIcon: "lock"
             }
@@ -1386,48 +1386,9 @@ Item {
         }
     }
 
-    Item {
+    ConfigSubPageHost {
         id: subPageOverlay
-        width: parent.width
-        height: parent.height
-        y: 0
+        anchors.fill: parent
         z: 10
-
-        property bool isOpen: widgetsConfigRoot.activeSubPage.toString() !== ""
-        property bool overlayActive: isOpen
-
-        onXChanged: {
-            if (!isOpen && x >= subPageOverlay.width - 1)
-                overlayActive = false;
-        }
-        onIsOpenChanged: {
-            if (isOpen)
-                overlayActive = true;
-        }
-
-        x: isOpen ? 0 : subPageOverlay.width
-
-        Behavior on x {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-            }
-        }
-
-        enabled: isOpen
-
-        Loader {
-            id: subPageLoader
-            anchors.fill: parent
-            source: widgetsConfigRoot.activeSubPage
-            active: subPageOverlay.overlayActive
-
-            onLoaded: {
-                item.goBack.connect(function () {
-                    widgetsConfigRoot.activeSubPage = "";
-                });
-            }
-        }
     }
 }

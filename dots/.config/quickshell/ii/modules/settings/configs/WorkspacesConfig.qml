@@ -1,16 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 ContentPage {
     id: page
-    forceWidth: false
 
     property bool showBackButton: false
+
     signal goBack()
+
+    forceWidth: false
 
     RowLayout {
         spacing: 12
@@ -26,6 +28,7 @@ ContentPage {
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: page.goBack()
 
             MaterialSymbol {
                 anchors.centerIn: parent
@@ -34,7 +37,6 @@ ContentPage {
                 color: Appearance.colors.colOnSecondaryContainer
             }
 
-            onClicked: page.goBack()
         }
 
         StyledText {
@@ -43,6 +45,7 @@ ContentPage {
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
         }
+
     }
 
     ContentSection {
@@ -61,9 +64,11 @@ ContentPage {
                 onCheckedChanged: {
                     Config.options.bar.workspaces.useWorkspaceMap = checked;
                 }
+
                 StyledToolTip {
                     text: Translation.tr("For multi-monitor setups, isolates workspaces ranges for each monitor")
                 }
+
             }
 
             ColumnLayout {
@@ -79,13 +84,16 @@ ContentPage {
                     onCheckedChanged: {
                         Config.options.overview.useWorkspaceMap = checked;
                     }
+
                     StyledToolTip {
                         text: Translation.tr("Apply the same workspace map constraints to the Overview screen")
                     }
+
                 }
 
                 Repeater {
                     model: HyprlandData.monitors
+
                     delegate: ConfigSpinBox {
                         Layout.fillWidth: true
                         icon: "monitor"
@@ -101,22 +109,28 @@ ContentPage {
                         onValueChanged: {
                             let map = JSON.parse(JSON.stringify(Config.options.bar.workspaces.workspaceMap || []));
                             // Ensure array reaches this index
-                            while (map.length <= index) {
+                            while (map.length <= index)
                                 map.push(map.length > 0 ? map[map.length - 1] + (Config.options.bar.workspaces.shown || 10) : 0);
-                            }
+
                             map[index] = value - 1;
                             Config.options.bar.workspaces.workspaceMap = map;
                         }
+
                         StyledToolTip {
                             text: Translation.tr("Set starting workspaces based on the number of workspaces shown to prevent overlapping.")
                         }
+
                     }
+
                 }
+
             }
 
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 2: Display behaviors
         ColumnLayout {
@@ -149,9 +163,21 @@ ContentPage {
                 onCheckedChanged: {
                     Config.options.bar.workspaces.monochromeIcons = checked;
                 }
+
                 StyledToolTip {
                     text: Translation.tr("Applies monochrome tint to workspaces icons")
                 }
+
+            }
+
+            ConfigSlider {
+                visible: Config.options.bar.workspaces.showAppIcons
+                buttonIcon: "humidity_percentage"
+                text: Translation.tr("Tint (%)")
+                value: Config.options.appearance.iconTintPercentage ?? 0.6
+                onValueChanged: Config.options.appearance.iconTintPercentage = value
+                enabled: Config.options.bar.workspaces.monochromeIcons
+                opacity: enabled ? 1 : 0.5
             }
 
             ConfigSwitch {
@@ -161,13 +187,18 @@ ContentPage {
                 onCheckedChanged: {
                     Config.options.bar.workspaces.dynamicWorkspaces = checked;
                 }
+
                 StyledToolTip {
                     text: Translation.tr("Hides the empty workspaces and only shows the ones with windows")
                 }
+
             }
+
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 3: Counts & Limits
         ColumnLayout {
@@ -198,9 +229,12 @@ ContentPage {
                     Config.options.bar.workspaces.maxWindowCount = value;
                 }
             }
+
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 4: Number styles
         ColumnLayout {
@@ -226,29 +260,28 @@ ContentPage {
 
                 ConfigSelectionArray {
                     currentValue: JSON.stringify(Config.options.bar.workspaces.numberMap)
-                    onSelected: newValue => {
+                    onSelected: (newValue) => {
                         Config.options.bar.workspaces.numberMap = JSON.parse(newValue);
                     }
-                    options: [
-                        {
-                            displayName: Translation.tr("Normal"),
-                            icon: "timer_10",
-                            value: '[]'
-                        },
-                        {
-                            displayName: Translation.tr("Han chars"),
-                            icon: "square_dot",
-                            value: '["一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十"]'
-                        },
-                        {
-                            displayName: Translation.tr("Roman"),
-                            icon: "account_balance",
-                            value: '["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"]'
-                        }
-                    ]
+                    options: [{
+                        "displayName": Translation.tr("Normal"),
+                        "icon": "timer_10",
+                        "value": '[]'
+                    }, {
+                        "displayName": Translation.tr("Han chars"),
+                        "icon": "square_dot",
+                        "value": '["一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十"]'
+                    }, {
+                        "displayName": Translation.tr("Roman"),
+                        "icon": "account_balance",
+                        "value": '["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"]'
+                    }]
                 }
+
             }
+
         }
+
     }
 
     ContentSection {
@@ -267,9 +300,11 @@ ContentPage {
                 onCheckedChanged: {
                     Config.options.appearance.icons.enableShapeMask = checked;
                 }
+
                 StyledToolTip {
                     text: Translation.tr("Crops the icons using the selected material shape")
                 }
+
                 extraComponent: Component {
                     RippleButtonWithShape {
                         enabled: Config.options.appearance.icons.enableShapeMask
@@ -279,40 +314,51 @@ ContentPage {
                         onClicked: {
                             iconsShapeMaskLoader.active = !iconsShapeMaskLoader.active;
                         }
+
                         StyledToolTip {
                             text: Translation.tr("Edit the material shape")
                         }
+
                     }
+
                 }
+
             }
 
             Loader {
                 id: iconsShapeMaskLoader
+
                 active: false
                 visible: active
                 Layout.fillWidth: true
+
                 sourceComponent: ContentSubsection {
                     title: Translation.tr("Mask shape")
                     icon: "shape_line"
 
                     ConfigSelectionArray {
                         currentValue: Config.options.appearance.icons.shapeMask
-                        onSelected: newValue => {
+                        onSelected: (newValue) => {
                             Config.options.appearance.icons.shapeMask = newValue;
                         }
-                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
+                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
                             return {
-                                displayName: "",
-                                shape: icon,
-                                value: icon
+                                "displayName": "",
+                                "shape": icon,
+                                "value": icon
                             };
                         })
                     }
+
                 }
+
             }
+
         }
 
-        Item { Layout.preferredHeight: 16 }
+        Item {
+            Layout.preferredHeight: 16
+        }
 
         // Group 2: Active indicator shapes
         ColumnLayout {
@@ -326,6 +372,7 @@ ContentPage {
                 onCheckedChanged: {
                     Config.options.bar.workspaces.useMaterialShapeForActiveIndicator = checked;
                 }
+
                 extraComponent: Component {
                     RippleButtonWithShape {
                         enabled: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
@@ -335,36 +382,44 @@ ContentPage {
                         onClicked: {
                             activeIndicatorShapeLoader.active = !activeIndicatorShapeLoader.active;
                         }
+
                         StyledToolTip {
                             text: Translation.tr("Edit the material shape")
                         }
+
                     }
+
                 }
+
             }
 
             Loader {
                 id: activeIndicatorShapeLoader
+
                 active: false
                 visible: active
                 Layout.fillWidth: true
+
                 sourceComponent: ContentSubsection {
                     title: Translation.tr("Active indicator shape")
                     icon: "shape_line"
 
                     ConfigSelectionArray {
                         currentValue: Config.options.bar.workspaces.activeIndicatorShape
-                        onSelected: newValue => {
+                        onSelected: (newValue) => {
                             Config.options.bar.workspaces.activeIndicatorShape = newValue;
                         }
-                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(icon => {
+                        options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
                             return {
-                                displayName: "",
-                                shape: icon,
-                                value: icon
+                                "displayName": "",
+                                "shape": icon,
+                                "value": icon
                             };
                         })
                     }
+
                 }
+
             }
 
             ConfigSwitch {
@@ -376,6 +431,9 @@ ContentPage {
                     Config.options.bar.workspaces.useRandomShapeForActiveIndicator = checked;
                 }
             }
+
         }
+
     }
+
 }

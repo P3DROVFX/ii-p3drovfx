@@ -90,6 +90,18 @@ ContentPage {
             checked: Config.options.bar.resources.showDocker
             onCheckedChanged: Config.options.bar.resources.showDocker = checked
         }
+
+        ConfigSpinBox {
+            icon: "memory"
+            text: Translation.tr("Resources polling interval (ms)")
+            value: Config.options.resources.updateInterval
+            from: 100
+            to: 10000
+            stepSize: 100
+            onValueChanged: {
+                Config.options.resources.updateInterval = value;
+            }
+        }
     }
 
     ContentSection {

@@ -901,4 +901,32 @@ command: ["bash", "-c",
             }
         }
     }
+
+    ContentSection {
+        icon: "tune"
+        title: Translation.tr("Advanced")
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("User agent string")
+            text: Config.options.networking.userAgent
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Config.options.networking.userAgent = text;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "memory"
+            text: Translation.tr("Free Settings memory after closing")
+            checked: Config.options.settingsApp.unloadAfterSeconds > 0
+            onCheckedChanged: {
+                Config.options.settingsApp.unloadAfterSeconds = checked ? 300 : 0;
+            }
+
+            StyledToolTip {
+                text: Translation.tr("When enabled, the Settings app is removed from memory 5 minutes after it is closed. The next opening will have a short cold-start delay.")
+            }
+        }
+    }
 }

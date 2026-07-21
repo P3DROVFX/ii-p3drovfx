@@ -1,6 +1,6 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.services
@@ -10,8 +10,9 @@ import qs.modules.common.widgets
 
 ContentPage {
     id: root
+
     forceWidth: false
-    signal goBack()
+
 
     // Temp state before saving
     property string tempClientId: ""
@@ -32,37 +33,6 @@ ContentPage {
         tempAccessToken = TickTickService.accessToken;
     }
 
-    RowLayout {
-        spacing: 12
-
-        RippleButton {
-            implicitWidth: implicitHeight
-            implicitHeight: 40
-            topLeftRadius: Appearance.rounding.full
-            topRightRadius: Appearance.rounding.full
-            bottomLeftRadius: Appearance.rounding.full
-            bottomRightRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colSecondaryContainer
-            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-            colRipple: Appearance.colors.colSecondaryContainerActive
-
-            MaterialSymbol {
-                anchors.centerIn: parent
-                text: "arrow_back"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
-            }
-
-            onClicked: root.goBack()
-        }
-
-        StyledText {
-            text: Translation.tr("TickTick Sync")
-            font.pixelSize: Appearance.font.pixelSize.large
-            font.family: Appearance.font.family.title
-            color: Appearance.colors.colOnLayer0
-        }
-    }
 
     WarningBox {
         Layout.fillWidth: true
@@ -253,5 +223,10 @@ ContentPage {
 
     Process {
         id: backupEnvProc
+    }
+
+    NoticeBox {
+        Layout.fillWidth: true
+        text: Translation.tr("Gmail credentials are set in ii/.env. Sports (ESPN) options live in the Sports bar widget page.")
     }
 }

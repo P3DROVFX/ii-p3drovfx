@@ -735,5 +735,8 @@
   "Night Light | Right-click to toggle Auto mode": "Luz Noturna | Botão direito para alternar modo Auto",
   "Inactive": "Inativo",
   "Full font roundness": "Arredondamento total da fonte",
-  "Use rounded font variant (ROND: 100) for variable fonts like Google Sans Flex": "Usar variante arredondada (ROND: 100) para fontes variáveis como Google Sans Flex"
+  "Use rounded font variant (ROND: 100) for variable fonts like Google Sans Flex": "Usar variante arredondada (ROND: 100) para fontes variáveis como Google Sans Flex",
+  "Low warning (%)": "Aviso de bateria fraca",
+  "Critical warning (%)": "Aviso crítico",
+  "Blur style": "Estilo: Desfocado"
 }

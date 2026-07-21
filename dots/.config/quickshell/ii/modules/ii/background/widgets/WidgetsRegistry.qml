@@ -121,7 +121,7 @@ Singleton {
             "qmlPath": Qt.resolvedUrl("DateWidget/DateWidget.qml"),
             "icon": "calendar_today",
             "description": Translation.tr("A simple card showing current month and day."),
-            "configPage": "widgets/DateDesktopWIdgetConfig.qml"
+            "configPage": "widgets/DateDesktopWidgetConfig.qml"
         },
         {
             "widgetId": "photo_default",

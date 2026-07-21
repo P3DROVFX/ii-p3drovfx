@@ -688,6 +688,7 @@ Singleton {
 
             property JsonObject bar: JsonObject {
                 property bool borderless: false
+                property bool expressiveGroupColor: false
                 property JsonObject clock: JsonObject {
                     property bool showSeconds: true
                     property bool secondaryOpposite: false
@@ -753,6 +754,7 @@ Singleton {
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
+                    property bool extraCompact: false
 
                     // Disables
                     property bool disableWorkspaces: false
@@ -1489,6 +1491,7 @@ Singleton {
                 property string position: "default"
                 property string sidebarStyle: "connect" // "default" | "connect"
                 property bool keepRightSidebarLoaded: true
+                property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false
                     property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
@@ -1586,9 +1589,37 @@ Singleton {
             }
 
             property JsonObject sounds: JsonObject {
-                property bool battery: false
-                property bool pomodoro: false
+                property bool enable: true
                 property string theme: "freedesktop"
+                property int volume: 100
+
+                property bool notifications: true
+                property bool volumeChange: true
+                property bool battery: false
+                property bool screenshot: true
+                property bool pomodoro: false
+                property bool alarm: true
+                property bool session: false
+                property bool devices: true
+                property bool lock: false
+
+                property bool alarmFadeIn: false
+
+                property string notificationDefaultPolicy: "play" // "play" | "mute"
+                property var alwaysPlayApps: []
+                property var neverPlayApps: []
+
+                property JsonObject custom: JsonObject {
+                    property string notifications: ""
+                    property string volumeChange: ""
+                    property string battery: ""
+                    property string screenshot: ""
+                    property string pomodoro: ""
+                    property string alarm: ""
+                    property string session: ""
+                    property string devices: ""
+                    property string lock: ""
+                }
             }
 
             property JsonObject soundcore: JsonObject {

@@ -43,7 +43,7 @@ ContentPage {
         ShortcutBox {
             Layout.fillWidth: true
             value: Translation.tr("Wallpaper zoom")
-            targetPageIndex: 2
+            targetPageId: "wallpaper"
             targetSectionTitle: Translation.tr("Parallax Engine")
             materialIcon: "loupe"
         }
@@ -252,11 +252,23 @@ ContentPage {
 
     ContentSection {
         icon: "style"
-        title: Translation.tr("Style: General")
+        title: Translation.tr("Widgets & layout")
 
         NoticeBox {
             Layout.fillWidth: true
             text: Translation.tr("You can also set per-widget lock behavior in the Widgets settings page. Multiple widgets can be centered simultaneously.")
+        }
+
+        ConfigSwitch {
+            buttonIcon: "timer_off"
+            text: Translation.tr("Disable clock animation on lock")
+            checked: Config.options.background.widgets.clock.disableAnimationOnLock
+            onCheckedChanged: {
+                Config.options.background.widgets.clock.disableAnimationOnLock = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Skip loading the clock widget during lock screen for better animation performance.")
+            }
         }
 
         ConfigSlider {
@@ -509,7 +521,7 @@ ContentPage {
 
     ContentSection {
         icon: "blur_on"
-        title: Translation.tr("Style: Blurred")
+        title: Translation.tr("Blur style")
 
         ConfigSwitch {
             buttonIcon: "lens_blur"
@@ -640,6 +652,27 @@ ContentPage {
             usePercentTooltip: true
             onValueChanged: {
                 Config.options.lock.vignette.amount = value / 100;
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "windows"
+                label: Translation.tr("Window blur")
+                sectionHighlight: Translation.tr("Transparency & Blur")
+            }
+
+            RelatedChip {
+                pageId: "wallpaper"
+                label: Translation.tr("Wallpaper blur")
             }
         }
     }
