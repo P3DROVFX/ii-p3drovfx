@@ -1,8 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 
 // Root Item wraps the scrollable page + the slide-in sub-page overlay.
@@ -50,20 +52,181 @@ Item {
                 icon: "style"
                 Layout.fillWidth: true
 
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.sidebarStyle
-                    onSelected: (newValue) => {
-                        Config.options.sidebar.sidebarStyle = newValue;
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Repeater {
+                        model: [{
+                            "displayName": Translation.tr("Default"),
+                            "description": Translation.tr("Classic bar with dual sidebars"),
+                            "icon": "view_sidebar",
+                            "value": "default",
+                            "preview": ""
+                        }, {
+                            "displayName": Translation.tr("Connect"),
+                            "description": Translation.tr("Unified search header & phone mode"),
+                            "icon": "phone_android",
+                            "value": "connect",
+                            "preview": ""
+                        }]
+
+                        delegate: Rectangle {
+                            id: presetItem
+                            required property var modelData
+                            required property int index
+
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 240
+                            Layout.preferredHeight: 165
+                            radius: Appearance.rounding.large
+                            color: Appearance.colors.colLayer0
+                            border.color: isActive ? Appearance.colors.colPrimary : (presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimaryHover : "transparent"))
+                            border.width: 2
+
+                            readonly property bool isActive: Config.options.sidebar.sidebarStyle === modelData.value
+
+                            Behavior on border.color {
+                                ColorAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+
+                            scale: presetButton.down ? 0.96 : (presetButton.hovered ? 1.01 : 1)
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+
+                            RippleButton {
+                                id: presetButton
+                                anchors.fill: parent
+                                buttonRadius: Appearance.rounding.large
+                                colBackground: "transparent"
+                                colBackgroundHover: "transparent"
+                                colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
+                                onClicked: {
+                                    if (Config.options.sidebar.sidebarStyle === modelData.value) return;
+                                    Config.options.sidebar.sidebarStyle = modelData.value;
+                                }
+                            }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 8
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+
+                                    // Preview / Screenshot Placeholder Container
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: Appearance.rounding.normal
+                                        color: Qt.rgba(0, 0, 0, 0.25)
+                                        clip: true
+
+                                        AnimatedImage {
+                                            id: previewImage
+                                            anchors.fill: parent
+                                            visible: modelData.preview !== undefined && modelData.preview !== ""
+                                            source: visible ? (modelData.preview.startsWith("/") || modelData.preview.startsWith("file://") ? modelData.preview : "file://" + modelData.preview) : ""
+                                            fillMode: Image.PreserveAspectCrop
+                                            layer.enabled: true
+                                            layer.effect: OpacityMask {
+                                                maskSource: Rectangle {
+                                                    width: previewImage.width
+                                                    height: previewImage.height
+                                                    radius: Appearance.rounding.normal
+                                                }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            visible: !previewImage.visible || previewImage.status !== Image.Ready
+
+                                            Item {
+                                                Layout.alignment: Qt.AlignHCenter
+                                                implicitWidth: 36
+                                                implicitHeight: 36
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: Appearance.rounding.normal
+                                                    color: modelData.value === "default" ? Appearance.colors.colPrimaryContainer : "transparent"
+                                                    visible: modelData.value === "default"
+                                                }
+
+                                                MaterialSymbol {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.icon
+                                                    iconSize: 22
+                                                    color: modelData.value === "default" ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colPrimary
+                                                }
+                                            }
+
+                                            StyledText {
+                                                Layout.alignment: Qt.AlignHCenter
+                                                text: Translation.tr("Screenshot Placeholder")
+                                                font.pixelSize: Appearance.font.pixelSize.caption
+                                                color: Appearance.colors.colSubtext
+                                            }
+                                        }
+                                    }
+
+                                    // Active Badge / Checkmark
+                                    Rectangle {
+                                        anchors {
+                                            top: parent.top
+                                            right: parent.right
+                                            margins: 6
+                                        }
+                                        width: 22
+                                        height: 22
+                                        radius: 11
+                                        color: Appearance.colors.colPrimary
+                                        visible: presetItem.isActive
+                                        z: 5
+
+                                        MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: "done"
+                                            iconSize: 14
+                                            color: Appearance.colors.colOnPrimary
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    StyledText {
+                                        text: modelData.displayName
+                                        font.weight: Font.Bold
+                                        font.pixelSize: Appearance.font.pixelSize.body
+                                        color: Appearance.colors.colOnSurface
+                                    }
+
+                                    StyledText {
+                                        text: modelData.description
+                                        font.pixelSize: Appearance.font.pixelSize.caption
+                                        color: Appearance.colors.colSubtext
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                }
+                            }
+                        }
                     }
-                    options: [{
-                        "displayName": Translation.tr("Default"),
-                        "icon": "view_sidebar",
-                        "value": "default"
-                    }, {
-                        "displayName": Translation.tr("Connect"),
-                        "icon": "phone_android",
-                        "value": "connect"
-                    }]
                 }
 
             }
