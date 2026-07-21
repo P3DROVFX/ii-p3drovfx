@@ -1111,7 +1111,8 @@ Singleton {
             return
         }
         ipFetcher.command = ["bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect " +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect " +
             "/modules/kdeconnect/devices/" + devId +
             " org.kde.kdeconnect.device.reachableAddresses 2>/dev/null"]
         ipFetcher.running = true

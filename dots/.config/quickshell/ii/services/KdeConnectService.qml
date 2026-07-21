@@ -818,7 +818,8 @@ Singleton {
                                  "/notifications/" + notif.publicId
                 Quickshell.execDetached([
                     "bash", "-c",
-                    "qdbus-qt6 org.kde.kdeconnect " + leafPath +
+                    "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+                    "$QDBUS org.kde.kdeconnect " + leafPath +
                     " org.kde.kdeconnect.device.notifications.notification.dismiss" +
                     " >/dev/null 2>&1 || true"
                 ])
@@ -851,7 +852,8 @@ Singleton {
                          "/notifications/" + publicId
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect " + leafPath +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect " + leafPath +
             " org.kde.kdeconnect.device.notifications.notification.dismiss" +
             " >/dev/null 2>&1 || true"
         ])
@@ -937,7 +939,8 @@ Singleton {
         if (!devId) return
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/" +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/" +
             devId + " org.kde.kdeconnect.device.acceptPairing " +
             ">/dev/null 2>&1 || true"
         ])
@@ -951,7 +954,8 @@ Singleton {
         if (!devId) return
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/" +
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/" +
             devId + " org.kde.kdeconnect.device.cancelPairing " +
             ">/dev/null 2>&1 || true"
         ])
@@ -1193,10 +1197,13 @@ Singleton {
             if (!devId) return
             Quickshell.execDetached([
                 "bash", "-c",
-                "MOUNT=$(qdbus-qt6 org.kde.kdeconnect /modules/kdeconnect/devices/"
+                "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); "
+                + "MOUNT=$($QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/"
+                + devId + "/sftp org.kde.kdeconnect.device.sftp.mountPoint 2>/dev/null); "
+                + "if [ -z \"$MOUNT\" ]; then MOUNT=$($QDBUS org.kde.kdeconnect /modules/kdeconnect/devices/"
                 + devId + "/sftp org.freedesktop.DBus.Properties.Get "
                 + "org.kde.kdeconnect.device.sftp mountPoint 2>/dev/null "
-                + " | sed 's/^.*: \"\\(.*\\)\"/\\1/'); "
+                + " | sed 's/^.*: \"\\(.*\\)\"/\\1/'); fi; "
                 + "if [ -n \"$MOUNT\" ]; then "
                 // gio open respects the system's default file manager via
                 // GVFS mimetype associations — unlike xdg-open which can
@@ -1245,7 +1252,8 @@ Singleton {
         const argString = (args || []).join(" ")
         Quickshell.execDetached([
             "bash", "-c",
-            "qdbus-qt6 org.kde.kdeconnect " + path + " " + fullMethod
+            "QDBUS=$(command -v qdbus-qt6 || command -v qdbus6 || command -v qdbus); " +
+            "$QDBUS org.kde.kdeconnect " + path + " " + fullMethod
                 + (argString.length > 0 ? " " + argString : "")
                 + " >/dev/null 2>&1 || true"
         ])
