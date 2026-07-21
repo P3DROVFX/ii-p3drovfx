@@ -2,6 +2,7 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs.modules.common
+import qs.modules.common.functions
 import qs
 import QtQuick
 import Quickshell
@@ -170,8 +171,8 @@ Singleton {
     property int _previousBattery: -1
     property bool _lowBatteryNotified: false
 
-    readonly property string _scriptPath: Directories.scriptPath + "/kdeconnect/monitor.py"
-    readonly property string _fetchNotifsScriptPath: Directories.scriptPath + "/kdeconnect/fetch_notifications.py"
+    readonly property string _scriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/monitor.py")
+    readonly property string _fetchNotifsScriptPath: FileUtils.trimFileProtocol(Directories.scriptPath + "/kdeconnect/fetch_notifications.py")
 
     IpcHandler {
         target: "kdeconnect"
@@ -369,12 +370,19 @@ Singleton {
         }
     }
 
+    Process {
+        id: cleanupProc
+        running: false
+        command: ["pkill", "-f", "kdeconnect/monitor.py"]
+        onExited: (code, status) => {
+            monitorProc.command = ["python3", root._scriptPath]
+            monitorProc.running = true
+        }
+    }
+
     function startMonitor() {
         if (monitorProc.running) return
-        // Kill any orphaned monitor.py processes from previous QS sessions
-        Quickshell.execDetached(["pkill", "-f", "kdeconnect/monitor.py"])
-        monitorProc.command = ["python3", root._scriptPath]
-        monitorProc.running = true
+        cleanupProc.running = true
     }
 
     Process {
