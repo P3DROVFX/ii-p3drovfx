@@ -202,7 +202,7 @@ Scope {
     Connections {
         target: Brightness
         function onBrightnessChanged() {
-            if (GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen)
+            if (GlobalStates.dashboardPanelOpen)
                 return;
             root.protectionMessage = "";
             root.currentIndicator = "brightness";
@@ -213,7 +213,7 @@ Scope {
     Connections {
         target: Hyprsunset
         function onGammaChangeAttempt() {
-            if (GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen)
+            if (GlobalStates.dashboardPanelOpen)
                 return;
             root.protectionMessage = "";
             root.currentIndicator = "gamma";
@@ -224,7 +224,7 @@ Scope {
     Connections {
         target: KeyboardBacklight
         function onCurrentValueChanged() {
-            if (root.isStartup || GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen)
+            if (root.isStartup || GlobalStates.dashboardPanelOpen)
                 return;
             if (!KeyboardBacklight.initialValueLoaded) {
                 KeyboardBacklight.initialValueLoaded = true;
@@ -239,13 +239,13 @@ Scope {
     Connections {
         target: Audio
         function onValueChanged() {
-            if (!Audio.ready || root.isStartup || GlobalStates.blockVolumeOsdForBluetooth || GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen)
+            if (!Audio.ready || root.isStartup || GlobalStates.blockVolumeOsdForBluetooth || GlobalStates.dashboardPanelOpen)
                 return;
             root.currentIndicator = "volume";
             root.triggerOsd();
         }
         function onMutedChanged() {
-            if (!Audio.ready || root.isStartup || GlobalStates.blockVolumeOsdForBluetooth || GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen)
+            if (!Audio.ready || root.isStartup || GlobalStates.blockVolumeOsdForBluetooth || GlobalStates.dashboardPanelOpen)
                 return;
             root.currentIndicator = "volume";
             root.triggerOsd();
@@ -271,9 +271,20 @@ Scope {
         }
     }
 
+    Connections {
+        target: Config.ready ? Config.options.osd : null
+        ignoreUnknownSignals: true
+        function onEnableChanged() {
+            if (!Config.options.osd.enable) {
+                GlobalStates.osdVolumeOpen = false;
+                root.isClosing = false;
+            }
+        }
+    }
+
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && Config.options.bar.floatingNotch.enable) && !(Config.ready && Config.options.osd && !Config.options.osd.enable)
+        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && Config.options.bar.floatingNotch.enable)
 
         sourceComponent: PanelWindow {
             id: osdRoot
@@ -283,7 +294,7 @@ Scope {
             property alias deviceOutputPopup: deviceOutputPopup
 
             // === SIZING TOKENS ===
-            readonly property real osdBaseHeight: 500
+            readonly property real osdBaseHeight: (Config.ready && Config.options.osd && Config.options.osd.height) ? Config.options.osd.height : 500
             readonly property real osdMargin: 12
             readonly property real osdItemSpacing: 10
             readonly property real osdRowSpacing: 8
@@ -352,11 +363,15 @@ Scope {
                 readonly property bool prevIsToggled: _leftNeighbor ? (_leftNeighbor.isSelfToggled || _leftNeighbor.toggledState || _leftNeighbor.toggled || (_leftNeighbor.activated !== undefined && _leftNeighbor.activated)) : false
                 readonly property bool nextIsToggled: _rightNeighbor ? (_rightNeighbor.isSelfToggled || _rightNeighbor.toggledState || _rightNeighbor.toggled || (_rightNeighbor.activated !== undefined && _rightNeighbor.activated)) : false
 
-                // Physical Left side radius (isLastInGroup is physically on the left in RightToLeft layout):
-                readonly property real leftRadiusCalc: (isLastInGroup || isSelfToggled || nextIsToggled) ? rFull : rSmall
+                // Physical Left side radius:
+                readonly property real leftRadiusCalc: osdRoot.isLeftPosition
+                    ? ((isFirstInGroup || isSelfToggled || prevIsToggled) ? rFull : rSmall)
+                    : ((isLastInGroup || isSelfToggled || nextIsToggled) ? rFull : rSmall)
 
-                // Physical Right side radius (isFirstInGroup is physically on the right in RightToLeft layout):
-                readonly property real rightRadiusCalc: (isFirstInGroup || isSelfToggled || prevIsToggled) ? rFull : rSmall
+                // Physical Right side radius:
+                readonly property real rightRadiusCalc: osdRoot.isLeftPosition
+                    ? ((isLastInGroup || isSelfToggled || nextIsToggled) ? rFull : rSmall)
+                    : ((isFirstInGroup || isSelfToggled || prevIsToggled) ? rFull : rSmall)
 
                 topLeftRadius: leftRadiusCalc
                 bottomLeftRadius: leftRadiusCalc
@@ -378,15 +393,21 @@ Scope {
                 }
             }
 
+            readonly property bool isLeftPosition: (Config.ready && Config.options.osd && Config.options.osd.position === "left")
+
             WlrLayershell.namespace: "quickshell:onScreenDisplay"
             WlrLayershell.layer: WlrLayer.Overlay
             anchors {
                 top: true
                 bottom: true
-                right: true
+                right: !osdRoot.isLeftPosition
+                left: osdRoot.isLeftPosition
             }
             mask: Region {
                 item: osdGroupWrapper
+                Region {
+                    item: musicCircleContainer
+                }
             }
 
             exclusionMode: ExclusionMode.Ignore
@@ -437,7 +458,12 @@ Scope {
             }
 
             Component.onCompleted: {
+                root.isClosing = false;
                 openedProgress = 1.0;
+            }
+
+            Component.onDestruction: {
+                root.isClosing = false;
             }
 
             Connections {
@@ -527,8 +553,10 @@ Scope {
 
                 Item {
                     id: protectionMessageWrapper
-                    anchors.right: osdGroupWrapper.left
-                    anchors.rightMargin: -12
+                    anchors.left: osdRoot.isLeftPosition ? osdGroupWrapper.right : undefined
+                    anchors.right: !osdRoot.isLeftPosition ? osdGroupWrapper.left : undefined
+                    anchors.leftMargin: osdRoot.isLeftPosition ? 12 : undefined
+                    anchors.rightMargin: !osdRoot.isLeftPosition ? -12 : undefined
                     anchors.verticalCenter: osdGroupWrapper.verticalCenter
                     implicitHeight: protectionMessageBackground.implicitHeight
                     implicitWidth: protectionMessageBackground.implicitWidth
@@ -574,10 +602,12 @@ Scope {
                 Item {
                     id: osdGroupWrapper
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.right: parent.right
-                    anchors.rightMargin: -width + width * osdRoot.openedProgress
+                    anchors.left: osdRoot.isLeftPosition ? parent.left : undefined
+                    anchors.right: !osdRoot.isLeftPosition ? parent.right : undefined
+                    anchors.leftMargin: osdRoot.isLeftPosition ? (-width + width * osdRoot.openedProgress) : undefined
+                    anchors.rightMargin: !osdRoot.isLeftPosition ? (-width + width * osdRoot.openedProgress) : undefined
                     width: osdContainer.width + 2 * osdMargin
-                    height: osdContainer.height + 2 * osdMargin + (osdGroupWrapper.hasExpandableIndicator ? (1.0 - osdRoot.expandedProgress) * (osdButtonHeight + osdMargin) : 0)
+                    height: osdBaseHeight + 2 * osdMargin + (osdGroupWrapper.hasExpandableIndicator ? osdContractedWidth + osdMargin : 0)
                     opacity: osdRoot.openedProgress
 
                     readonly property bool hasExpandableIndicator: root.currentIndicator === "volume" || root.currentIndicator === "playerVolume" || root.currentIndicator === "brightness" || root.currentIndicator === "gamma"
@@ -600,7 +630,12 @@ Scope {
 
                     Rectangle {
                         id: osdContainer
-                        anchors.centerIn: parent
+                        anchors.top: parent.top
+                        anchors.topMargin: osdMargin
+                        anchors.left: osdRoot.isLeftPosition ? parent.left : undefined
+                        anchors.leftMargin: osdRoot.isLeftPosition ? osdMargin : undefined
+                        anchors.right: !osdRoot.isLeftPosition ? parent.right : undefined
+                        anchors.rightMargin: !osdRoot.isLeftPosition ? osdMargin : undefined
 
                         width: osdContractedWidth + (osdExpandedWidth - osdContractedWidth) * osdRoot.expandedProgress
                         height: osdBaseHeight
@@ -628,7 +663,7 @@ Scope {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
                                 Layout.fillHeight: false
-                                layoutDirection: Qt.RightToLeft
+                                layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                 RippleButton {
                                     id: muteSoundBtn
@@ -684,7 +719,7 @@ Scope {
                                      StyledToolTip {
                                          id: muteSoundBtnToolTip
                                          text: muteSoundBtn.toggledState ? Translation.tr("Unmute sound") : Translation.tr("Mute sound")
-                                         extraVisibleCondition: !muteSoundBtnText.visible
+                                         extraVisibleCondition: !muteSoundBtnText.visible || muteSoundBtnText.truncated
                                      }
                                 }
 
@@ -699,7 +734,7 @@ Scope {
                                     RowLayout {
                                         anchors.fill: parent
                                         spacing: 4
-                                        layoutDirection: Qt.RightToLeft
+                                        layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                         OsdMorphToggle {
                                             id: disableSystemSoundsBtn
@@ -752,7 +787,7 @@ Scope {
                                             StyledToolTip {
                                                 id: disableSystemSoundsBtnToolTip
                                                 text: Config.options.sounds.enable ? Translation.tr("Disable system sounds") : Translation.tr("Enable system sounds")
-                                                extraVisibleCondition: !disableSystemSoundsBtnText.visible
+                                                extraVisibleCondition: !disableSystemSoundsBtnText.visible || disableSystemSoundsBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -821,7 +856,7 @@ Scope {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
                                 Layout.fillHeight: false
-                                layoutDirection: Qt.RightToLeft
+                                layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                 RippleButton {
                                     id: darkModeBtn
@@ -879,7 +914,7 @@ Scope {
                                     StyledToolTip {
                                         id: darkModeBtnToolTip
                                         text: darkModeBtn.toggledState ? Translation.tr("Dark mode") : Translation.tr("Light mode")
-                                        extraVisibleCondition: !darkModeBtnText.visible
+                                        extraVisibleCondition: !darkModeBtnText.visible || darkModeBtnText.truncated
                                     }
                                 }
 
@@ -894,7 +929,7 @@ Scope {
                                     RowLayout {
                                         anchors.fill: parent
                                         spacing: 4
-                                        layoutDirection: Qt.RightToLeft
+                                        layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                         OsdMorphToggle {
                                             id: nightlightBtn
@@ -947,7 +982,7 @@ Scope {
                                             StyledToolTip {
                                                 id: nightlightBtnToolTip
                                                 text: nightlightBtn.toggledState ? Translation.tr("Disable nightlight") : Translation.tr("Enable nightlight")
-                                                extraVisibleCondition: !nightlightBtnText.visible
+                                                extraVisibleCondition: !nightlightBtnText.visible || nightlightBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1072,7 +1107,7 @@ Scope {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
                                 Layout.fillHeight: false
-                                layoutDirection: Qt.RightToLeft
+                                layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                 OsdCollapseButton {
                                     id: volumeCollapseButton
@@ -1104,7 +1139,7 @@ Scope {
                                     RowLayout {
                                         anchors.fill: parent
                                         spacing: 4
-                                        layoutDirection: Qt.RightToLeft
+                                        layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                         OsdMorphToggle {
                                             id: stereoMonoBtn
@@ -1155,7 +1190,7 @@ Scope {
                                             StyledToolTip {
                                                 id: stereoMonoBtnToolTip
                                                 text: Config.options.sounds.monoAudio ? Translation.tr("Mono") : Translation.tr("Stereo")
-                                                extraVisibleCondition: !stereoMonoBtnText.visible
+                                                extraVisibleCondition: !stereoMonoBtnText.visible || stereoMonoBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1212,7 +1247,7 @@ Scope {
                                             StyledToolTip {
                                                 id: easyEffectsBtnToolTip
                                                 text: EasyEffects.active ? Translation.tr("EasyEffects On") : Translation.tr("EasyEffects Off")
-                                                extraVisibleCondition: !easyEffectsBtnText.visible
+                                                extraVisibleCondition: !easyEffectsBtnText.visible || easyEffectsBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1270,7 +1305,7 @@ Scope {
                                             StyledToolTip {
                                                 id: muteMicBtnToolTip
                                                 text: (Audio.source && Audio.source.audio && Audio.source.audio.muted) ? Translation.tr("Unmute Mic") : Translation.tr("Mute Mic")
-                                                extraVisibleCondition: !muteMicBtnText.visible
+                                                extraVisibleCondition: !muteMicBtnText.visible || muteMicBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1289,7 +1324,7 @@ Scope {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: osdButtonHeight
                                 Layout.fillHeight: false
-                                layoutDirection: Qt.RightToLeft
+                                layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                 OsdCollapseButton {
                                     id: brightnessCollapseButton
@@ -1321,7 +1356,7 @@ Scope {
                                     RowLayout {
                                         anchors.fill: parent
                                         spacing: 4
-                                        layoutDirection: Qt.RightToLeft
+                                        layoutDirection: osdRoot.isLeftPosition ? Qt.LeftToRight : Qt.RightToLeft
 
                                         OsdMorphToggle {
                                             id: keyboardBacklightBtn
@@ -1374,7 +1409,7 @@ Scope {
                                             StyledToolTip {
                                                 id: keyboardBacklightBtnToolTip
                                                 text: KeyboardBacklight.currentValue > 0 ? Translation.tr("Kbd Backlight On") : Translation.tr("Kbd Backlight Off")
-                                                extraVisibleCondition: !keyboardBacklightBtnText.visible
+                                                extraVisibleCondition: !keyboardBacklightBtnText.visible || keyboardBacklightBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1436,7 +1471,7 @@ Scope {
                                             StyledToolTip {
                                                 id: gammaResetBtnToolTip
                                                 text: Hyprsunset.gamma !== 100 ? Translation.tr("Low Gamma") : Translation.tr("Normal Gamma")
-                                                extraVisibleCondition: !gammaResetBtnText.visible
+                                                extraVisibleCondition: !gammaResetBtnText.visible || gammaResetBtnText.truncated
                                             }
 
                                             Component.onCompleted: {
@@ -1482,12 +1517,11 @@ Scope {
                         }
                     }
 
-                    RippleButton {
-                        id: musicCircle
+                    Rectangle {
+                        id: musicCircleContainer
                         width: osdRoot ? osdRoot.osdContractedWidth : 80
                         height: osdRoot ? osdRoot.osdContractedWidth : 80
-                        buttonRadius: width / 2
-                        rippleEnabled: true
+                        radius: width / 2
                         anchors.top: osdContainer.bottom
                         anchors.topMargin: osdMargin
                         anchors.horizontalCenter: osdContainer.horizontalCenter
@@ -1495,56 +1529,66 @@ Scope {
                         opacity: (root.currentIndicator === "volume" || root.currentIndicator === "gamma") && !osdRoot.isExpanded ? osdRoot.openedProgress : 0.0
                         scale: opacity
 
-                        toggled: {
-                            if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma")
-                                return Hyprsunset.temperatureActive;
-                            return SongRec.running;
-                        }
-                        colBackground: {
-                            if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
-                                return Hyprsunset.temperatureActive ? Appearance.colors.colPrimary : (Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer);
-                            }
-                            return SongRec.running ? Appearance.colors.colPrimary : (Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer);
-                        }
-                        colBackgroundToggled: Appearance.colors.colPrimary
-                        colRipple: Appearance.colors.colLayer0Active
-                        colRippleToggled: Appearance.colors.colPrimaryActive
+                        color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
 
-                        contentItem: MaterialSymbol {
-                            id: musicIcon
-                            text: {
+                        HoverHandler {
+                            id: musicCircleContainerHoverHandler
+                            onHoveredChanged: osdRoot._updateOsdHover(hovered)
+                        }
+
+                        RippleButton {
+                            id: musicCircle
+                            anchors.centerIn: parent
+                            width: osdButtonHeight
+                            height: osdButtonHeight
+                            buttonRadius: width / 2
+                            rippleEnabled: true
+
+                            toggled: {
                                 if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma")
-                                    return "wb_twilight";
-                                return "music_note";
+                                    return Hyprsunset.temperatureActive;
+                                return SongRec.running;
                             }
-                            color: {
-                                if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
-                                    return Hyprsunset.temperatureActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0;
-                                }
-                                return SongRec.running ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0;
-                            }
-                            iconSize: 24
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
+                            colBackground: Appearance.colors.colSecondaryContainer
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            colBackgroundToggled: Appearance.colors.colPrimary
+                            colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                            colRipple: Appearance.colors.colSecondaryContainerActive
+                            colRippleToggled: Appearance.colors.colPrimaryActive
 
-                        onClicked: {
-                            if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
-                                Hyprsunset.toggleTemperature();
-                            } else {
-                                SongRec.toggleRunning();
-                            }
-                            root.triggerOsd();
-                        }
+                            readonly property color contentColor: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
 
-                        StyledToolTip {
-                            text: {
-                                if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
-                                    return Hyprsunset.temperatureActive ? Translation.tr("Disable nightlight") : Translation.tr("Enable nightlight");
+                            contentItem: MaterialSymbol {
+                                id: musicIcon
+                                text: {
+                                    if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma")
+                                        return "wb_twilight";
+                                    return "music_note";
                                 }
-                                return SongRec.running ? Translation.tr("Stop music recognition") : Translation.tr("Start music recognition");
+                                color: musicCircle.contentColor
+                                iconSize: 24
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                             }
-                            extraVisibleCondition: musicCircle.hovered
+
+                            onClicked: {
+                                if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
+                                    Hyprsunset.toggleTemperature();
+                                } else {
+                                    SongRec.toggleRunning();
+                                }
+                                root.triggerOsd();
+                            }
+
+                            StyledToolTip {
+                                text: {
+                                    if (root.currentIndicator === "brightness" || root.currentIndicator === "gamma") {
+                                        return Hyprsunset.temperatureActive ? Translation.tr("Disable nightlight") : Translation.tr("Enable nightlight");
+                                    }
+                                    return SongRec.running ? Translation.tr("Stop music recognition") : Translation.tr("Start music recognition");
+                                }
+                                extraVisibleCondition: musicCircle.hovered
+                            }
                         }
                     }
                 }

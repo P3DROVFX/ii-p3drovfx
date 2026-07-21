@@ -1281,6 +1281,8 @@ Singleton {
 
             property JsonObject osd: JsonObject {
                 property bool enable: true
+                property string position: "right"
+                property int height: 500
                 property int timeout: 2500
                 property bool showValues: true
             }

@@ -45,6 +45,43 @@ ContentPage {
             }
         }
 
+        ContentSubsection {
+            title: Translation.tr("OSD Position")
+            icon: "align_horizontal_right"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.osd.position ?? "right"
+                onSelected: (newValue) => {
+                    Config.options.osd.position = newValue;
+                }
+                options: [{
+                    "displayName": Translation.tr("Left"),
+                    "icon": "align_horizontal_left",
+                    "value": "left"
+                }, {
+                    "displayName": Translation.tr("Right"),
+                    "icon": "align_horizontal_right",
+                    "value": "right"
+                }]
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "height"
+            text: Translation.tr("OSD Height")
+            usePercentTooltip: false
+            stopIndicatorValues: [500]
+            tooltipContent: `${value}px`
+            from: 300
+            to: 800
+            stepSize: 10
+            value: Config.options.osd.height ?? 500
+            onValueChanged: {
+                Config.options.osd.height = value;
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "tag"
             text: Translation.tr("Show OSD value number")
