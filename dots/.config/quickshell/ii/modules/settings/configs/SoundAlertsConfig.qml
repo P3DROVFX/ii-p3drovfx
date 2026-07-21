@@ -64,6 +64,7 @@ ContentPage {
         }
 
         ConfigSlider {
+            visible: Config.options.sounds.enable
             buttonIcon: "volume_up"
             text: Translation.tr("Sound volume")
             from: 0
@@ -86,6 +87,7 @@ ContentPage {
 
     ContentSection {
         id: themeSection
+        visible: Config.options.sounds.enable
 
         icon: "library_music"
         title: Translation.tr("Sound theme")
@@ -150,6 +152,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: Config.options.sounds.enable
         icon: "notifications_active"
         title: Translation.tr("Events")
 
@@ -283,6 +286,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: Config.options.sounds.enable
         icon: "apps"
         title: Translation.tr("Per-app notification sounds")
         tooltip: Translation.tr("Choose which apps may play notification sounds. Apps can also be muted straight from an expanded notification popup.")
@@ -291,6 +295,7 @@ ContentPage {
     }
 
     ContentSection {
+        visible: Config.options.sounds.enable
         icon: "tune"
         title: Translation.tr("Custom sounds")
         tooltip: Translation.tr("Override the theme sound for any event with your own audio file.")
