@@ -15,51 +15,21 @@ ContentPage {
         title: Translation.tr("System Rounding")
         icon: "rounded_corner"
 
-        ContentSubsection {
-            title: Translation.tr("Rounding value")
-            icon: "rounded_corner"
-            Layout.fillWidth: true
-
-            ConfigSlider {
-                buttonIcon: "rounded_corner"
-                text: Translation.tr("Corner radius")
-                usePercentTooltip: false
-                stopIndicatorValues: [24]
-                tooltipContent: `${value}px`
-                from: 0
-                to: 48
-                stepSize: 1
-                value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
-                onValueChanged: {
-                    Config.options.appearance.roundingValue = value;
-                    Config.options.appearance.sharpMode = (value === 0);
-                }
-            }
-
-        }
-
-    }
-
-    ContentSection {
-        title: Translation.tr("Animations")
-        icon: "animation"
-
         ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Animation Duration")
+            buttonIcon: "rounded_corner"
+            text: Translation.tr("Corner radius")
             usePercentTooltip: false
-            from: 0.1
-            to: 3
-            stepSize: 0.05
-            value: Config.options.appearance.animationMultiplier ?? 1
-            onValueChanged: Config.options.appearance.animationMultiplier = value
-
-            StyledToolTip {
-                text: Translation.tr("Controls the duration of all UI animations.\n0.1 = ultra fast  |  1.0 = default  |  3.0 = very slow")
+            stopIndicatorValues: [24]
+            tooltipContent: `${value}px`
+            from: 0
+            to: 48
+            stepSize: 1
+            value: Config.options.appearance.roundingValue >= 0 ? Config.options.appearance.roundingValue : 24
+            onValueChanged: {
+                Config.options.appearance.roundingValue = value;
+                Config.options.appearance.sharpMode = (value === 0);
             }
-
         }
-
     }
 
     ContentSection {
@@ -82,42 +52,6 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.osd.showValues = checked;
             }
-        }
-    }
-
-    ContentSection {
-        icon: "phone_android"
-        title: Translation.tr("ii Mode")
-
-        ContentSubsection {
-            title: Translation.tr("Style")
-            icon: "style"
-            Layout.fillWidth: true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.sidebar.sidebarStyle
-                onSelected: newValue => {
-                    Config.options.sidebar.sidebarStyle = newValue;
-                }
-                options: [
-                    {
-                        displayName: Translation.tr("Default"),
-                        icon: "view_sidebar",
-                        value: "default"
-                    },
-                    {
-                        displayName: Translation.tr("Connect"),
-                        icon: "phone_android",
-                        value: "connect"
-                    }
-                ]
-            }
-        }
-
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: Config.options.bar.autoHide.enable
-            text: Translation.tr("Bar auto-hide is not supported by Search Connect Mode yet. Disable auto-hide to use the drop search.")
         }
     }
 
