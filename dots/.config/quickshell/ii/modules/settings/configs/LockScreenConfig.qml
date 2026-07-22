@@ -200,27 +200,25 @@ ContentPage {
             AppRulesEditor {}
         }
 
-        ContentSubsection {
-            title: Translation.tr("Filters")
-            icon: "filter_alt"
-            Layout.fillWidth: true
+        ContentSubsectionLabel {
+            text: Translation.tr("Filters")
+        }
 
-            ConfigSwitch {
-                buttonIcon: "hourglass_disabled"
-                text: Translation.tr("Hide transient notifications")
-                checked: Config.options.lock.notifications.filters.skipTransient
-                onCheckedChanged: {
-                    Config.options.lock.notifications.filters.skipTransient = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "hourglass_disabled"
+            text: Translation.tr("Hide transient notifications")
+            checked: Config.options.lock.notifications.filters.skipTransient
+            onCheckedChanged: {
+                Config.options.lock.notifications.filters.skipTransient = checked;
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "low_priority"
-                text: Translation.tr("Hide low-urgency notifications")
-                checked: Config.options.lock.notifications.filters.skipLowUrgency
-                onCheckedChanged: {
-                    Config.options.lock.notifications.filters.skipLowUrgency = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "low_priority"
+            text: Translation.tr("Hide low-urgency notifications")
+            checked: Config.options.lock.notifications.filters.skipLowUrgency
+            onCheckedChanged: {
+                Config.options.lock.notifications.filters.skipLowUrgency = checked;
             }
         }
 

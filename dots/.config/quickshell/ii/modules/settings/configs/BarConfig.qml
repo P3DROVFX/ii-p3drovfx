@@ -388,44 +388,41 @@ Item {
                 }
             }
 
-            ContentSubsection {
-                title: Translation.tr("Top Left Brand Icon")
-                icon: "star"
-                Layout.fillWidth: true
+            ContentSubsectionLabel {
+                text: Translation.tr("Top Left Brand Icon")
+            }
 
-                ConfigSwitch {
-                    buttonIcon: "text_fields"
-                    text: Translation.tr("Use Material Symbol for top-left icon")
-                    checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
-                    onCheckedChanged: {
-                        Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
-                    }
+            ConfigSwitch {
+                buttonIcon: "text_fields"
+                text: Translation.tr("Use Material Symbol for top-left icon")
+                checked: Config.options.bar.useMaterialSymbolForTopLeftIcon
+                onCheckedChanged: {
+                    Config.options.bar.useMaterialSymbolForTopLeftIcon = checked;
+                }
+            }
+
+            ConfigTextField {
+                id: topLeftIconField
+                text: Translation.tr("Top-left icon identifier")
+                icon: "image"
+                tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
+                placeholderText: Translation.tr("Identifier...")
+                Component.onCompleted: {
+                    inputText = Config.options.bar.topLeftIcon;
+                }
+                textField.onTextChanged: {
+                    var val = textField.text.trim();
+                    if (val !== "" && textField.activeFocus)
+                        Config.options.bar.topLeftIcon = val;
+
                 }
 
-                ConfigTextField {
-                    id: topLeftIconField
-                    text: Translation.tr("Top-left icon identifier")
-                    icon: "image"
-                    tooltip: Translation.tr("If not using Material Symbol, enter a preset SVG name (e.g. arch, fedora) or a Material Symbol name if the switch above is on.")
-                    placeholderText: Translation.tr("Identifier...")
-                    Component.onCompleted: {
-                        inputText = Config.options.bar.topLeftIcon;
-                    }
-                    textField.onTextChanged: {
-                        var val = textField.text.trim();
-                        if (val !== "" && textField.activeFocus)
-                            Config.options.bar.topLeftIcon = val;
-
+                Connections {
+                    function onTopLeftIconChanged() {
+                        topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
                     }
 
-                    Connections {
-                        function onTopLeftIconChanged() {
-                            topLeftIconField.textField.text = Config.options.bar.topLeftIcon;
-                        }
-
-                        target: Config.options.bar
-                    }
-
+                    target: Config.options.bar
                 }
 
             }
@@ -498,96 +495,90 @@ Item {
                 }
             }
 
-            ContentSubsection {
-                title: Translation.tr("Scroll Actions")
-                icon: "mouse"
-                Layout.fillWidth: true
+            ContentSubsectionLabel {
+                text: Translation.tr("Scroll Actions")
+            }
 
-                ConfigSwitch {
-                    buttonIcon: "volume_up"
-                    text: Translation.tr("Scroll to change volume")
-                    checked: Config.options.bar.enableVolumeScroll
-                    onCheckedChanged: {
-                        Config.options.bar.enableVolumeScroll = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Enable or disable scrolling on the bar to change volume")
-                    }
-
+            ConfigSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("Scroll to change volume")
+                checked: Config.options.bar.enableVolumeScroll
+                onCheckedChanged: {
+                    Config.options.bar.enableVolumeScroll = checked;
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "brightness_5"
-                    text: Translation.tr("Scroll to change brightness")
-                    checked: Config.options.bar.enableBrightnessScroll
-                    onCheckedChanged: {
-                        Config.options.bar.enableBrightnessScroll = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
-                    }
-
+                StyledToolTip {
+                    text: Translation.tr("Enable or disable scrolling on the bar to change volume")
                 }
 
             }
 
-            ContentSubsection {
-                title: Translation.tr("Tooltips & Popups")
-                icon: "tooltip"
-                Layout.fillWidth: true
-
-                ConfigSwitch {
-                    buttonIcon: "ads_click"
-                    text: Translation.tr("Click to show tooltips")
-                    checked: Config.options.bar.tooltips.clickToShow
-                    onCheckedChanged: {
-                        Config.options.bar.tooltips.clickToShow = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("You will not be able to use the buttons on some popups if you enable this option.")
-                    }
-
+            ConfigSwitch {
+                buttonIcon: "brightness_5"
+                text: Translation.tr("Scroll to change brightness")
+                checked: Config.options.bar.enableBrightnessScroll
+                onCheckedChanged: {
+                    Config.options.bar.enableBrightnessScroll = checked;
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "compress"
-                    text: Translation.tr("Compact popups")
-                    checked: Config.options.bar.tooltips.compactPopups
-                    onCheckedChanged: {
-                        Config.options.bar.tooltips.compactPopups = checked;
-                    }
+                StyledToolTip {
+                    text: Translation.tr("Enable or disable scrolling on the bar to change brightness")
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "colorize"
-                    text: Translation.tr("Enable color picker popup")
-                    checked: Config.options.bar.tooltips.enableColorPickerPopup
-                    onCheckedChanged: {
-                        Config.options.bar.tooltips.enableColorPickerPopup = checked;
-                    }
+            }
+
+            ContentSubsectionLabel {
+                text: Translation.tr("Tooltips & Popups")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "ads_click"
+                text: Translation.tr("Click to show tooltips")
+                checked: Config.options.bar.tooltips.clickToShow
+                onCheckedChanged: {
+                    Config.options.bar.tooltips.clickToShow = checked;
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "bluetooth"
-                    text: Translation.tr("Enable Bluetooth connection popup")
-                    checked: Config.options.bar.tooltips.enableBluetoothConnectionPopup
-                    onCheckedChanged: {
-                        Config.options.bar.tooltips.enableBluetoothConnectionPopup = checked;
-                    }
+                StyledToolTip {
+                    text: Translation.tr("You will not be able to use the buttons on some popups if you enable this option.")
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "keyboard"
-                    text: Translation.tr("Enable keyboard layout transition popup")
-                    checked: Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup
-                    onCheckedChanged: {
-                        Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup = checked;
-                    }
-                }
+            }
 
+            ConfigSwitch {
+                buttonIcon: "compress"
+                text: Translation.tr("Compact popups")
+                checked: Config.options.bar.tooltips.compactPopups
+                onCheckedChanged: {
+                    Config.options.bar.tooltips.compactPopups = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "colorize"
+                text: Translation.tr("Enable color picker popup")
+                checked: Config.options.bar.tooltips.enableColorPickerPopup
+                onCheckedChanged: {
+                    Config.options.bar.tooltips.enableColorPickerPopup = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "bluetooth"
+                text: Translation.tr("Enable Bluetooth connection popup")
+                checked: Config.options.bar.tooltips.enableBluetoothConnectionPopup
+                onCheckedChanged: {
+                    Config.options.bar.tooltips.enableBluetoothConnectionPopup = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keyboard"
+                text: Translation.tr("Enable keyboard layout transition popup")
+                checked: Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup
+                onCheckedChanged: {
+                    Config.options.bar.tooltips.enableKeyboardLayoutTransitionPopup = checked;
+                }
             }
 
         }
@@ -657,6 +648,7 @@ Item {
 
                     delegate: ServiceCard {
                         required property var modelData
+                        required property int index
 
                         cardIcon: modelData.icon ?? "widgets"
                         cardHue: 210

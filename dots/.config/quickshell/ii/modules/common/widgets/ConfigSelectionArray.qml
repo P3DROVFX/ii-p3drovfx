@@ -13,6 +13,7 @@ Flow {
 
     ScrollAnimate {}
 
+    property int clickIndex: -1
     property real calculatedWidth: 0
 
     function updateWidth() {

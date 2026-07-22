@@ -174,29 +174,26 @@ ContentPage {
         }
 
 
-        ContentSubsection {
-            title: Translation.tr("This window")
-            icon: "settings_applications"
-            Layout.fillWidth: true
+        ContentSubsectionLabel {
+            text: Translation.tr("This window")
+        }
 
-            ConfigSwitch {
-                buttonIcon: "animation"
-                text: Translation.tr("Scroll animation in settings")
-                checked: Config.options.appearance.scrollAnimations
-                onCheckedChanged: {
-                    Config.options.appearance.scrollAnimations = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "animation"
+            text: Translation.tr("Scroll animation in settings")
+            checked: Config.options.appearance.scrollAnimations
+            onCheckedChanged: {
+                Config.options.appearance.scrollAnimations = checked;
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "blur_linear"
-                text: Translation.tr("Scroll fade gradient mask in settings")
-                checked: Config.options.appearance.scrollFadeMask
-                onCheckedChanged: {
-                    Config.options.appearance.scrollFadeMask = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "blur_linear"
+            text: Translation.tr("Scroll fade gradient mask in settings")
+            checked: Config.options.appearance.scrollFadeMask
+            onCheckedChanged: {
+                Config.options.appearance.scrollFadeMask = checked;
             }
-
         }
 
     }

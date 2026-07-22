@@ -13,7 +13,7 @@ Item {
     readonly property var compInfo: BarComponentRegistry.getComponent(modelData.id)
 
     property bool alternateColor: visualIndex % 2 == 0
-    property color colBackground: alternateColor ? Appearance.colors.colLayer3 : Appearance.colors.colLayer2Base
+    property color colBackground: alternateColor ? Appearance.colors.colLayer3 : Appearance.colors.colLayer2
     property color colHover: alternateColor ? Appearance.colors.colLayer3Hover : Appearance.colors.colLayer2Hover
     property color colActive: alternateColor ? Appearance.colors.colLayer3Active : Appearance.colors.colLayer2Active
 

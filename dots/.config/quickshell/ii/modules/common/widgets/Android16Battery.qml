@@ -7,6 +7,9 @@ import qs.modules.common.widgets
 Item {
     id: root
 
+    implicitWidth: container.width
+    implicitHeight: container.height
+
     component HDText : Text {
         renderType: Text.QtRendering
     }

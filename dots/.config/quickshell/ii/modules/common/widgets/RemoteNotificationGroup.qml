@@ -6,6 +6,7 @@ import qs.modules.common.functions
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 
 /**
@@ -166,11 +167,6 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
         onClicked: mouse => {
-            // Suppress click if a drag actually happened during this press
-            // cycle. This prevents the scrcpy/notification-app launch when
-            // the user intended a slow swipe-to-dismiss that didn't quite
-            // cross the threshold — onClicked would otherwise fire after
-            // onDragReleased, opening the phone app unintentionally.
             if (root._wasDragged) {
                 root._wasDragged = false
                 return
@@ -179,9 +175,6 @@ Item {
                 root.destroyWithAnimation()
             else if (mouse.button === Qt.RightButton)
                 root.toggleExpanded()
-            // Left-click opens the latest notification's app on the phone
-            // via ADB. This gives the user a quick way to jump to the app
-            // without expanding the group first.
             else if (mouse.button === Qt.LeftButton) {
                 const latest = root.notifications[0]
                 if (latest && latest.publicId) {
@@ -213,9 +206,15 @@ Item {
         id: background
         anchors.left: parent.left
         width: parent.width
-        color: Appearance.colors.colLayer2
+        color: hoverHandler.hovered && !dragManager.dragging
+               ? Appearance.colors.colSecondaryContainerHover
+               : Appearance.colors.colSecondaryContainer
         radius: Appearance.rounding.windowRounding
         anchors.leftMargin: root.xOffset
+
+        HoverHandler {
+            id: hoverHandler
+        }
 
         // Subtle tactile feedback: lighter press, no visible change while dragging.
         scale: dragManager.dragging ? 1.0 : (dragManager.pressed ? 0.993 : 1.0)
@@ -226,13 +225,7 @@ Item {
             }
         }
 
-        // Hover outline — gives the group a connected “focus” feel without
-        // changing the background color or adding a shadow layer.
-        border.width: 1
-        border.color: dragManager.containsMouse && !dragManager.dragging
-            ? ColorUtils.transparentize(Appearance.colors.colOutline, 0.55)
-            : "transparent"
-        Behavior on border.color {
+        Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
@@ -267,7 +260,7 @@ Item {
         // match the height of multi-notification groups visually, rather than
         // appearing smaller just because they have less body text.
         implicitHeight: root.expanded ? row.implicitHeight + root.padding * 2
-            : Math.max(82, Math.min(120, row.implicitHeight + root.padding * 2))
+            : Math.max(58, Math.min(120, row.implicitHeight + root.padding * 2))
 
         Behavior on implicitHeight {
             id: implicitHeightAnim
@@ -285,9 +278,35 @@ Item {
             NotificationAppIcon {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: false
-                image: ""
                 appIcon: root.notificationGroup?.appIcon || ""
                 summary: root.notificationGroup?.appName || ""
+                color: Appearance.colors.colSurfaceContainerHighest
+            }
+
+            Rectangle {
+                Layout.alignment: Qt.AlignTop
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 45
+                visible: !root.expanded && !root.multipleNotifications && (root.notifications[0]?.image || "") !== ""
+                radius: Appearance.rounding.verysmall
+                color: Appearance.colors.colSurfaceContainerHighest
+
+                Image {
+                    id: groupThumbImage
+                    anchors.fill: parent
+                    source: visible ? (root.notifications[0]?.image || "") : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: groupThumbImage.width
+                            height: groupThumbImage.height
+                            radius: Appearance.rounding.verysmall
+                        }
+                    }
+                }
             }
 
             ColumnLayout {
@@ -321,8 +340,8 @@ Item {
                                 ? topRow.fontSize
                                 : Appearance.font.pixelSize.small
                             color: root.multipleNotifications
-                                ? Appearance.colors.colSubtext
-                                : Appearance.colors.colOnLayer2
+                                 ? ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
+                                 : Appearance.colors.colOnSecondaryContainer
                         }
 
                         StyledText {
@@ -339,7 +358,7 @@ Item {
                                     root.notificationGroup?.time ?? 0)
                             }
                             font.pixelSize: topRow.fontSize
-                            color: Appearance.colors.colSubtext
+                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
                         }
                     }
 
@@ -350,8 +369,36 @@ Item {
                         count: root.notificationCount
                         expanded: root.expanded
                         fontSize: topRow.fontSize
+                        colBackground: Appearance.colors.colSecondaryContainerHover
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerActive
+                        colRipple: Appearance.colors.colSecondaryContainerActive
                         onClicked: root.toggleExpanded()
                         altAction: () => root.toggleExpanded()
+                        contentItem: Item {
+                            anchors.centerIn: parent
+                            implicitWidth: contentRow.implicitWidth
+                            RowLayout {
+                                id: contentRow
+                                anchors.centerIn: parent
+                                spacing: 3 * expandButton.zoom
+                                StyledText {
+                                    Layout.leftMargin: 4 * expandButton.zoom
+                                    visible: root.count > 1
+                                    text: root.count
+                                    font.pixelSize: expandButton.fontSize
+                                    color: Appearance.colors.colOnSecondaryContainer
+                                }
+                                MaterialSymbol {
+                                    text: "keyboard_arrow_down"
+                                    iconSize: expandButton.iconSize
+                                    color: Appearance.colors.colOnSecondaryContainer
+                                    rotation: expanded ? 180 : 0
+                                    Behavior on rotation {
+                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                    }
+                                }
+                            }
+                        }
                         StyledToolTip {
                             text: Translation.tr("Tip: right-clicking a group\nalso expands it")
                         }

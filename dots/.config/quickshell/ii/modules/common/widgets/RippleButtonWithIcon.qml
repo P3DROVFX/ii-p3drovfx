@@ -24,13 +24,16 @@ RippleButton {
     colBackground: Appearance.colors.colLayer2
 
     contentItem: RowLayout {
+        spacing: buttonWithIconRoot.mainText !== "" ? 6 : 0
         Item {
-            Layout.fillWidth: false
+            Layout.fillWidth: buttonWithIconRoot.mainText === ""
+            Layout.alignment: Qt.AlignCenter
             implicitWidth: Math.max(materialIconLoader.implicitWidth, nerdIconLoader.implicitWidth)
+            implicitHeight: Math.max(materialIconLoader.implicitHeight, nerdIconLoader.implicitHeight)
             Loader {
                 id: materialIconLoader
                 anchors.centerIn: parent
-                active: !nerdIcon
+                active: !buttonWithIconRoot.nerdIcon
                 sourceComponent: MaterialSymbol {
                     text: buttonWithIconRoot.materialIcon
                     iconSize: Appearance.font.pixelSize.larger
@@ -41,7 +44,7 @@ RippleButton {
             Loader {
                 id: nerdIconLoader
                 anchors.centerIn: parent
-                active: nerdIcon
+                active: !!buttonWithIconRoot.nerdIcon
                 sourceComponent: StyledText {
                     text: buttonWithIconRoot.nerdIcon
                     font.pixelSize: Appearance.font.pixelSize.larger
@@ -51,9 +54,10 @@ RippleButton {
             }
         }
         Loader {
-            Layout.fillWidth: true
-            sourceComponent: buttonWithIconRoot.mainContentComponent
+            visible: buttonWithIconRoot.mainText !== ""
+            Layout.fillWidth: buttonWithIconRoot.mainText !== ""
             Layout.alignment: Qt.AlignVCenter
+            sourceComponent: buttonWithIconRoot.mainContentComponent
         }
     }
 }

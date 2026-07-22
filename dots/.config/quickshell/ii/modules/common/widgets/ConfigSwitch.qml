@@ -15,10 +15,11 @@ RippleButton {
     Layout.fillWidth: true
     implicitHeight: contentLayout.implicitHeight + 20
     font.pixelSize: Appearance.font.pixelSize.small
+    useDynamicRadius: true
 
     onClicked: checked = !checked
 
-    property color normalColor: Appearance.colors.colLayer2Base
+    property color normalColor: Appearance.colors.colLayer2
     property color highlightColor: Appearance.colors.colSecondaryContainer
 
     colBackground: normalColor
@@ -26,6 +27,7 @@ RippleButton {
     colRipple: Appearance.colors.colLayer2Active
 
     readonly property int itemIndex: {
+        if (typeof index !== "undefined") return index;
         var p = parent;
         if (!p) return 0;
         var children = p.children;
@@ -58,6 +60,15 @@ RippleButton {
     readonly property int totalItems: {
         var p = parent;
         if (!p) return 1;
+        if (typeof index !== "undefined" && p.children) {
+            var cardCount = 0;
+            for (var i = 0; i < p.children.length; ++i) {
+                if (typeof p.children[i].isFirst !== "undefined" || typeof p.children[i].topLeftRadius !== "undefined") {
+                    cardCount++;
+                }
+            }
+            if (cardCount > 0) return cardCount;
+        }
         var children = p.children;
         var selfIdx = -1;
         for (var i = 0; i < children.length; ++i) {
@@ -93,8 +104,8 @@ RippleButton {
         return count;
     }
 
-    property bool isFirst: itemIndex === 0
-    property bool isLast: itemIndex === totalItems - 1
+    property bool isFirst: (typeof index !== "undefined") ? (index === 0) : (itemIndex === 0)
+    property bool isLast: (typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1)
 
 
 
@@ -158,11 +169,18 @@ RippleButton {
         return false;
     }
 
+    readonly property bool isHorizontalLayout: {
+        var p = parent;
+        if (!p) return false;
+        var pStr = p.toString();
+        return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
+    }
+
     readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
 
     topLeftRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    topRightRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
-    bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
+    topRightRadius: (isPressed || prevIsPressed) ? rFull : (isHorizontalLayout ? (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall))
+    bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
     bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
 
     Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }

@@ -70,15 +70,6 @@ ContentPage {
             }
 
             ConfigSwitch {
-                buttonIcon: "palette"
-                text: Translation.tr("Expressive Colors")
-                checked: Config.options.background.widgets.date.expressiveColors ?? false
-                onCheckedChanged: {
-                    Config.options.background.widgets.date.expressiveColors = checked;
-                }
-            }
-
-            ConfigSwitch {
                 buttonIcon: "wb_sunny"
                 text: Translation.tr("Enable Shadows")
                 checked: Config.options.background.widgets.enableShadows ?? true

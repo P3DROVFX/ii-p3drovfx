@@ -441,32 +441,32 @@ ContentPage {
             text: openRgbSection.openRgbError
         }
 
-        ContentSubsection {
-            title: Translation.tr("Detected Devices")
-            icon: "memory"
+        ContentSubsectionLabel {
+            text: Translation.tr("Detected Devices")
             visible: openRgbSection.openRgbRefreshing || (openRgbSection.openRgbDevices || []).length > 0
+        }
 
-            StyledText {
-                visible: openRgbSection.openRgbRefreshing
-                text: Translation.tr("Querying OpenRGB server...")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnLayer2
-                Layout.margins: 8
-            }
+        StyledText {
+            visible: openRgbSection.openRgbRefreshing
+            text: Translation.tr("Querying OpenRGB server...")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colOnLayer2
+            Layout.margins: 8
+        }
 
-            Repeater {
-                model: openRgbSection.openRgbDevices || []
-                ConfigSwitch {
-                    required property var modelData
-                    buttonIcon: "memory"
-                    text: modelData.name && modelData.name.length > 0 ? modelData.name : Translation.tr("Device %1").arg(modelData.id)
-                    checked: modelData.enabled === true
-                    onCheckedChanged: {
-                        openRgbSection.updateDevice(modelData.id, {
-                            enabled: checked,
-                            name: modelData.name
-                        });
-                    }
+        Repeater {
+            model: openRgbSection.openRgbDevices || []
+            ConfigSwitch {
+                required property var modelData
+                required property int index
+                buttonIcon: "memory"
+                text: modelData.name && modelData.name.length > 0 ? modelData.name : Translation.tr("Device %1").arg(modelData.id)
+                checked: modelData.enabled === true
+                onCheckedChanged: {
+                    openRgbSection.updateDevice(modelData.id, {
+                        enabled: checked,
+                        name: modelData.name
+                    });
                 }
             }
         }
@@ -478,32 +478,31 @@ ContentPage {
             text: Translation.tr("No OpenRGB devices detected. Ensure the server is running.")
         }
 
-        ContentSubsection {
-            title: Translation.tr("Integration Settings")
-            icon: "settings"
+        ContentSubsectionLabel {
+            text: Translation.tr("Integration Settings")
+        }
 
-            ConfigSpinBox {
-                icon: "av_timer"
-                text: Translation.tr("Fade duration (ms)")
-                value: Config.options.appearance.openrgb.fadeDuration * 1000
-                from: 0
-                to: 10000
-                stepSize: 100
-                onValueChanged: {
-                    Config.options.appearance.openrgb.fadeDuration = value / 1000;
-                }
+        ConfigSpinBox {
+            icon: "av_timer"
+            text: Translation.tr("Fade duration (ms)")
+            value: Config.options.appearance.openrgb.fadeDuration * 1000
+            from: 0
+            to: 10000
+            stepSize: 100
+            onValueChanged: {
+                Config.options.appearance.openrgb.fadeDuration = value / 1000;
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "power_settings_new"
-                text: Translation.tr("Apply on startup")
-                checked: Config.options.appearance.openrgb.applyOnStartup
-                onCheckedChanged: {
-                    Config.options.appearance.openrgb.applyOnStartup = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Runs the OpenRGB apply script after startup once config is loaded.")
-                }
+        ConfigSwitch {
+            buttonIcon: "power_settings_new"
+            text: Translation.tr("Apply on startup")
+            checked: Config.options.appearance.openrgb.applyOnStartup
+            onCheckedChanged: {
+                Config.options.appearance.openrgb.applyOnStartup = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Runs the OpenRGB apply script after startup once config is loaded.")
             }
         }
     }
@@ -959,105 +958,107 @@ ContentPage {
         }
 
         // Performance & Behavior Settings
-        ContentSubsection {
+        ContentSubsectionLabel {
+            text: Translation.tr("Performance & Behavior")
             visible: Config.options.background.useWallpaperEngine
-            title: Translation.tr("Performance & Behavior")
+        }
+
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine
+            buttonIcon: "pause_circle_outline"
+            text: Translation.tr("Pause animations when windows are open")
+            checked: Config.options.background.wpePauseWhenWindowsOpen
+            onCheckedChanged: {
+                if (Config.options.background.wpePauseWhenWindowsOpen === checked) return;
+                Config.options.background.wpePauseWhenWindowsOpen = checked;
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine
+            buttonIcon: "pause_circle"
+            text: Translation.tr("No Fullscreen Pause")
+            checked: Config.options.background.wpeNoFullscreenPause
+            onCheckedChanged: {
+                if (Config.options.background.wpeNoFullscreenPause === checked) return;
+                Config.options.background.wpeNoFullscreenPause = checked;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
+                }
+            }
+        }
+
+        ConfigSpinBox {
+            visible: Config.options.background.useWallpaperEngine
             icon: "speed"
-            Layout.fillWidth: true
-
-            ConfigSwitch {
-                buttonIcon: "pause_circle_outline"
-                text: Translation.tr("Pause animations when windows are open")
-                checked: Config.options.background.wpePauseWhenWindowsOpen
-                onCheckedChanged: {
-                    if (Config.options.background.wpePauseWhenWindowsOpen === checked) return;
-                    Config.options.background.wpePauseWhenWindowsOpen = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "pause_circle"
-                text: Translation.tr("No Fullscreen Pause")
-                checked: Config.options.background.wpeNoFullscreenPause
-                onCheckedChanged: {
-                    if (Config.options.background.wpeNoFullscreenPause === checked) return;
-                    Config.options.background.wpeNoFullscreenPause = checked;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "speed"
-                text: Translation.tr("Framerate Limit (FPS)")
-                value: Config.options.background.wpeFps ?? 30
-                from: 15
-                to: 144
-                stepSize: 5
-                onValueChanged: {
-                    if (Config.options.background.wpeFps === value) return;
-                    Config.options.background.wpeFps = value;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
+            text: Translation.tr("Framerate Limit (FPS)")
+            value: Config.options.background.wpeFps ?? 30
+            from: 15
+            to: 144
+            stepSize: 5
+            onValueChanged: {
+                if (Config.options.background.wpeFps === value) return;
+                Config.options.background.wpeFps = value;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
                 }
             }
         }
 
         // Display & Interaction Settings
+        ContentSubsectionLabel {
+            text: Translation.tr("Display & Interaction")
+            visible: Config.options.background.useWallpaperEngine
+        }
+
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine
+            buttonIcon: "mouse"
+            text: Translation.tr("Disable Mouse Interaction")
+            checked: Config.options.background.wpeDisableMouse
+            onCheckedChanged: {
+                if (Config.options.background.wpeDisableMouse === checked) return;
+                Config.options.background.wpeDisableMouse = checked;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
+                }
+            }
+        }
+
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine
+            buttonIcon: "blur_off"
+            text: Translation.tr("Disable Parallax Effect")
+            checked: Config.options.background.wpeDisableParallax
+            onCheckedChanged: {
+                if (Config.options.background.wpeDisableParallax === checked) return;
+                Config.options.background.wpeDisableParallax = checked;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
+                }
+            }
+        }
+
+        ConfigTextField {
+            visible: Config.options.background.useWallpaperEngine
+            text: Translation.tr("Screen Span (e.g. HDMI-A-1,eDP-1)")
+            icon: "settings_overscan"
+            placeholderText: Translation.tr("Stretch single wallpaper across monitors (Optional)")
+            inputText: Config.options.background.wpeScreenSpan
+            textField.onEditingFinished: {
+                if (Config.options.background.wpeScreenSpan === textField.text) return;
+                Config.options.background.wpeScreenSpan = textField.text;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
+                }
+            }
+        }
+
         ContentSubsection {
             visible: Config.options.background.useWallpaperEngine
-            title: Translation.tr("Display & Interaction")
-            icon: "monitor"
+            title: Translation.tr("Wallpaper scaling")
+            icon: "aspect_ratio"
             Layout.fillWidth: true
-
-            ConfigSwitch {
-                buttonIcon: "mouse"
-                text: Translation.tr("Disable Mouse Interaction")
-                checked: Config.options.background.wpeDisableMouse
-                onCheckedChanged: {
-                    if (Config.options.background.wpeDisableMouse === checked) return;
-                    Config.options.background.wpeDisableMouse = checked;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "blur_off"
-                text: Translation.tr("Disable Parallax Effect")
-                checked: Config.options.background.wpeDisableParallax
-                onCheckedChanged: {
-                    if (Config.options.background.wpeDisableParallax === checked) return;
-                    Config.options.background.wpeDisableParallax = checked;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
-                }
-            }
-
-            ConfigTextField {
-                text: Translation.tr("Screen Span (e.g. HDMI-A-1,eDP-1)")
-                icon: "settings_overscan"
-                placeholderText: Translation.tr("Stretch single wallpaper across monitors (Optional)")
-                inputText: Config.options.background.wpeScreenSpan
-                textField.onEditingFinished: {
-                    if (Config.options.background.wpeScreenSpan === textField.text) return;
-                    Config.options.background.wpeScreenSpan = textField.text;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
-                }
-            }
-
-            StyledText {
-                text: Translation.tr("Wallpaper scaling")
-                font.bold: true
-                color: Appearance.colors.colOnLayer2
-                Layout.leftMargin: 4
-            }
 
             ConfigSelectionArray {
                 currentValue: Config.options.background.wpeScaling ?? "default"
@@ -1093,52 +1094,53 @@ ContentPage {
         }
 
         // Audio Settings (hidden when Silent Mode is active)
-        ContentSubsection {
+        ContentSubsectionLabel {
+            text: Translation.tr("Audio Settings")
             visible: Config.options.background.useWallpaperEngine && !Config.options.background.wpeSilent
-            title: Translation.tr("Audio Settings")
-            icon: "volume_up"
-            Layout.fillWidth: true
+        }
 
-            ConfigSlider {
-                buttonIcon: "volume_down"
-                text: Translation.tr("Volume Level")
-                usePercentTooltip: true
-                from: 0
-                to: 100
-                stepSize: 1
-                value: Config.options.background.wpeVolume ?? 50
-                onValueChanged: {
-                    if (Config.options.background.wpeVolume === Math.round(value)) return;
-                    Config.options.background.wpeVolume = Math.round(value);
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
+        ConfigSlider {
+            visible: Config.options.background.useWallpaperEngine && !Config.options.background.wpeSilent
+            buttonIcon: "volume_down"
+            text: Translation.tr("Volume Level")
+            usePercentTooltip: true
+            from: 0
+            to: 100
+            stepSize: 1
+            value: Config.options.background.wpeVolume ?? 50
+            onValueChanged: {
+                if (Config.options.background.wpeVolume === Math.round(value)) return;
+                Config.options.background.wpeVolume = Math.round(value);
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
                 }
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "music_off"
-                text: Translation.tr("Don't Auto Mute")
-                checked: Config.options.background.wpeNoAutoMute
-                onCheckedChanged: {
-                    if (Config.options.background.wpeNoAutoMute === checked) return;
-                    Config.options.background.wpeNoAutoMute = checked;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine && !Config.options.background.wpeSilent
+            buttonIcon: "music_off"
+            text: Translation.tr("Don't Auto Mute")
+            checked: Config.options.background.wpeNoAutoMute
+            onCheckedChanged: {
+                if (Config.options.background.wpeNoAutoMute === checked) return;
+                Config.options.background.wpeNoAutoMute = checked;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
                 }
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "graphic_eq"
-                text: Translation.tr("Disable Audio Reactive Features")
-                checked: Config.options.background.wpeNoAudioProcessing
-                onCheckedChanged: {
-                    if (Config.options.background.wpeNoAudioProcessing === checked) return;
-                    Config.options.background.wpeNoAudioProcessing = checked;
-                    if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
-                        Wallpapers.apply(Config.options.background.wallpaperEngineId);
-                    }
+        ConfigSwitch {
+            visible: Config.options.background.useWallpaperEngine && !Config.options.background.wpeSilent
+            buttonIcon: "graphic_eq"
+            text: Translation.tr("Disable Audio Reactive Features")
+            checked: Config.options.background.wpeNoAudioProcessing
+            onCheckedChanged: {
+                if (Config.options.background.wpeNoAudioProcessing === checked) return;
+                Config.options.background.wpeNoAudioProcessing = checked;
+                if (Config.options.background.useWallpaperEngine && Config.options.background.wallpaperEngineId) {
+                    Wallpapers.apply(Config.options.background.wallpaperEngineId);
                 }
             }
         }

@@ -27,38 +27,35 @@ ContentPage {
             }
         }
 
-        ContentSubsection {
-            title: Translation.tr("Hint target regions")
-            icon: "center_focus_strong"
-            Layout.fillWidth: true
+        ContentSubsectionLabel {
+            text: Translation.tr("Hint target regions")
+        }
 
-            ConfigSwitch {
-                buttonIcon: "desktop_windows"
-                text: Translation.tr("Windows")
-                checked: Config.options.regionSelector.targetRegions.windows
-                onCheckedChanged: {
-                    Config.options.regionSelector.targetRegions.windows = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "desktop_windows"
+            text: Translation.tr("Windows")
+            checked: Config.options.regionSelector.targetRegions.windows
+            onCheckedChanged: {
+                Config.options.regionSelector.targetRegions.windows = checked;
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "layers"
-                text: Translation.tr("Layers")
-                checked: Config.options.regionSelector.targetRegions.layers
-                onCheckedChanged: {
-                    Config.options.regionSelector.targetRegions.layers = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "layers"
+            text: Translation.tr("Layers")
+            checked: Config.options.regionSelector.targetRegions.layers
+            onCheckedChanged: {
+                Config.options.regionSelector.targetRegions.layers = checked;
             }
+        }
 
-            ConfigSwitch {
-                buttonIcon: "article"
-                text: Translation.tr("Content")
-                checked: Config.options.regionSelector.targetRegions.content
-                onCheckedChanged: {
-                    Config.options.regionSelector.targetRegions.content = checked;
-                }
+        ConfigSwitch {
+            buttonIcon: "article"
+            text: Translation.tr("Content")
+            checked: Config.options.regionSelector.targetRegions.content
+            onCheckedChanged: {
+                Config.options.regionSelector.targetRegions.content = checked;
             }
-
         }
 
     }
@@ -91,53 +88,50 @@ ContentPage {
 
         }
 
-        ContentSubsection {
-            title: Translation.tr("Rectangular selection")
-            icon: "crop_square"
+        ContentSubsectionLabel {
+            text: Translation.tr("Rectangular selection")
             visible: !Config.options.search.imageSearch.useCircleSelection
-            Layout.fillWidth: true
-
-            ConfigSwitch {
-                buttonIcon: "border_inner"
-                text: Translation.tr("Show aim lines")
-                checked: Config.options.regionSelector.rect.showAimLines
-                onCheckedChanged: {
-                    Config.options.regionSelector.rect.showAimLines = checked;
-                }
-            }
-
         }
 
-        ContentSubsection {
-            title: Translation.tr("Circle selection")
-            icon: "panorama_fish_eye"
+        ConfigSwitch {
+            visible: !Config.options.search.imageSearch.useCircleSelection
+            buttonIcon: "border_inner"
+            text: Translation.tr("Show aim lines")
+            checked: Config.options.regionSelector.rect.showAimLines
+            onCheckedChanged: {
+                Config.options.regionSelector.rect.showAimLines = checked;
+            }
+        }
+
+        ContentSubsectionLabel {
+            text: Translation.tr("Circle selection")
             visible: Config.options.search.imageSearch.useCircleSelection
-            Layout.fillWidth: true
+        }
 
-            ConfigSpinBox {
-                icon: "line_weight"
-                text: Translation.tr("Stroke width")
-                value: Config.options.regionSelector.circle.strokeWidth
-                from: 1
-                to: 20
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.regionSelector.circle.strokeWidth = value;
-                }
+        ConfigSpinBox {
+            visible: Config.options.search.imageSearch.useCircleSelection
+            icon: "line_weight"
+            text: Translation.tr("Stroke width")
+            value: Config.options.regionSelector.circle.strokeWidth
+            from: 1
+            to: 20
+            stepSize: 1
+            onValueChanged: {
+                Config.options.regionSelector.circle.strokeWidth = value;
             }
+        }
 
-            ConfigSpinBox {
-                icon: "padding"
-                text: Translation.tr("Padding")
-                value: Config.options.regionSelector.circle.padding
-                from: 0
-                to: 100
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.regionSelector.circle.padding = value;
-                }
+        ConfigSpinBox {
+            visible: Config.options.search.imageSearch.useCircleSelection
+            icon: "padding"
+            text: Translation.tr("Padding")
+            value: Config.options.regionSelector.circle.padding
+            from: 0
+            to: 100
+            stepSize: 1
+            onValueChanged: {
+                Config.options.regionSelector.circle.padding = value;
             }
-
         }
 
     }

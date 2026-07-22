@@ -185,7 +185,9 @@ Item {
         anchors.leftMargin: root.xOffset
         radius: Appearance.rounding.small
 
-        color: (root.expanded && !root.onlyNotification) ? Appearance.colors.colLayer3 : ColorUtils.transparentize(Appearance.colors.colLayer3)
+        color: (root.expanded && !root.onlyNotification)
+               ? Appearance.colors.colPrimaryContainer
+               : ColorUtils.transparentize(Appearance.colors.colSecondaryContainerHover)
 
         // Subtle hover/press feedback; suppressed during drag.
         scale: dragManager.dragging ? 1.0 : (dragManager.pressed ? 0.992 : 1.0)
@@ -196,9 +198,7 @@ Item {
             }
         }
 
-        border.width: 1
-        border.color: dragManager.containsMouse && !dragManager.dragging ? ColorUtils.transparentize(Appearance.colors.colOutline, 0.6) : "transparent"
-        Behavior on border.color {
+        Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
@@ -228,7 +228,7 @@ Item {
         implicitHeight: root.expanded ? (contentColumn.implicitHeight + root.padding * 2) : summaryRow.implicitHeight
 
         Behavior on implicitHeight {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
         clip: true
@@ -254,7 +254,9 @@ Item {
                     Layout.fillWidth: true
                     visible: !root.onlyNotification
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colOnLayer3
+                    color: root.expanded
+                           ? Appearance.colors.colOnPrimaryContainer
+                           : Appearance.colors.colOnSecondaryContainer
                     elide: Text.ElideRight
                     text: root.modelData?.summary || root.modelData?.appName || Translation.tr("Notification")
                 }
@@ -263,13 +265,14 @@ Item {
                     opacity: !root.expanded ? 1 : 0
                     visible: opacity > 0
                     Layout.fillWidth: true
+                    Layout.preferredHeight: summaryText.implicitHeight
                     Behavior on opacity {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colSubtext
+                    color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
                     elide: Text.ElideRight
-                    wrapMode: Text.Wrap
+                    wrapMode: root.expanded ? Text.Wrap : Text.NoWrap
                     maximumLineCount: 1
                     textFormat: Text.StyledText
                     text: NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, " ")
@@ -286,10 +289,36 @@ Item {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.preferredHeight: Math.round(parent.width * 9 / 16)
+                    visible: (root.modelData?.image || "") !== ""
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colSurfaceContainerHighest
+
+                    Image {
+                        id: expandedThumbImage
+                        anchors.fill: parent
+                        source: visible ? (root.modelData?.image || "") : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                width: expandedThumbImage.width
+                                height: expandedThumbImage.height
+                                radius: Appearance.rounding.normal
+                            }
+                        }
+                    }
+                }
+
                 StyledText {
                     Layout.fillWidth: true
                     font.pixelSize: root.fontSize
-                    color: Appearance.colors.colSubtext
+                    color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.35)
                     wrapMode: Text.Wrap
                     elide: Text.ElideRight
                     textFormat: Text.RichText
@@ -300,12 +329,8 @@ Item {
 
                     onLinkActivated: link => {
                         Qt.openUrlExternally(link);
-                        // Phone lives in the left sidebar (Policies), not the
-                        // right sidebar, so close the correct panel.
                         GlobalStates.policiesPanelOpen = false;
                     }
-
-                    PointingHandLinkHover {}
                 }
 
                 Item {
@@ -373,13 +398,13 @@ Item {
                                         leftPadding: 15
                                         rightPadding: 15
                                         buttonRadius: Appearance.rounding.small
-                                        colBackground: Appearance.colors.colLayer4
-                                        colBackgroundHover: Appearance.colors.colLayer4Hover
+                                        colBackground: Appearance.colors.colPrimaryContainerHover
+                                        colBackgroundHover: Appearance.colors.colPrimaryContainerActive
                                         buttonText: _label
                                         contentItem: StyledText {
                                             text: notifAction._label
                                             font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnLayer4
+                                            color: Appearance.colors.colOnPrimaryContainer
                                         }
                                         onClicked: {
                                             KdeConnectService.sendAction(KdeConnectService.activeDeviceId, root.publicId, modelData.key);
@@ -398,7 +423,7 @@ Item {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 36
                                     radius: Appearance.rounding.full
-                                    color: Appearance.colors.colLayer4
+                                    color: Appearance.colors.colPrimaryContainerHover
                                     border.width: replyField.activeFocus ? 2 : 1
                                     border.color: replyField.activeFocus ? Appearance.colors.colPrimary : Appearance.colors.colOutlineVariant
 
@@ -420,7 +445,7 @@ Item {
                                         anchors.rightMargin: 14
                                         verticalAlignment: Text.AlignVCenter
                                         text: root.replyDraft
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         onTextEdited: root.replyDraft = text
                                         Keys.onPressed: event => {
                                             if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -437,7 +462,7 @@ Item {
                                         visible: !replyField.activeFocus && root.replyDraft.length === 0
                                         verticalAlignment: Text.AlignVCenter
                                         text: root.modelData?.replyPlaceholder || Translation.tr("Send reply…")
-                                        color: Appearance.colors.colSubtext
+                                        color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.35)
                                         font.pixelSize: Appearance.font.pixelSize.small
                                     }
                                 }
@@ -487,12 +512,15 @@ Item {
                                     Behavior on opacity {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     buttonText: Translation.tr("Reply")
                                     onClicked: replyField.forceActiveFocus()
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "reply"
                                     }
                                     StyledToolTip {
@@ -504,17 +532,26 @@ Item {
                                     buttonText: Translation.tr("Close")
                                     Layout.fillWidth: true
                                     onClicked: root.destroyWithAnimation()
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "close"
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Dismiss this notification")
                                     }
                                 }
 
                                 NotificationActionButton {
                                     buttonText: Translation.tr("Copy")
                                     Layout.fillWidth: true
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     onClicked: {
                                         Quickshell.clipboardText = root.modelData?.body || "";
                                         copyIcon.text = "inventory";
@@ -530,8 +567,11 @@ Item {
                                         id: copyIcon
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "content_copy"
+                                    }
+                                    StyledToolTip {
+                                        text: Translation.tr("Copy notification text to clipboard")
                                     }
                                 }
 
@@ -546,6 +586,9 @@ Item {
                                     Behavior on opacity {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }
+                                    colBackground: Appearance.colors.colPrimaryContainerHover
+                                    colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                    colRipple: Appearance.colors.colPrimaryContainerActive
                                     buttonText: Translation.tr("Open on phone")
                                     onClicked: {
                                         KdeConnectService.openNotificationIntent(root.publicId);
@@ -553,7 +596,7 @@ Item {
                                     contentItem: MaterialSymbol {
                                         iconSize: Appearance.font.pixelSize.larger
                                         horizontalAlignment: Text.AlignHCenter
-                                        color: Appearance.colors.colOnLayer4
+                                        color: Appearance.colors.colOnPrimaryContainer
                                         text: "open_in_phone"
                                     }
                                     StyledToolTip {

@@ -12,7 +12,12 @@ GroupButton {
     id: root
     horizontalPadding: 12
     verticalPadding: 8
-    bounce: false
+    bounce: true
+    clickedWidth: baseWidth + (isAtSide ? 8 : 12)
+    buttonRadiusPressed: Appearance.rounding.small
+    Layout.fillWidth: false
+    Layout.fillHeight: false
+    scale: 1.0
     property string buttonIcon
     property string buttonShape
     property string buttonSymbol
@@ -22,8 +27,8 @@ GroupButton {
     
     readonly property bool sharpModeEnabled: Config.options.appearance.sharpMode
     readonly property int fullRadius: sharpModeEnabled ? Appearance.rounding.full : height / 2
-    leftRadius: (toggled || leftmost) ? fullRadius : Appearance.rounding.unsharpenmore
-    rightRadius: (toggled || rightmost) ? fullRadius : Appearance.rounding.unsharpenmore
+    leftRadius: root.isPressed ? root.buttonRadiusPressed : ((toggled || leftmost) ? fullRadius : Appearance.rounding.unsharpenmore)
+    rightRadius: root.isPressed ? root.buttonRadiusPressed : ((toggled || rightmost) ? fullRadius : Appearance.rounding.unsharpenmore)
     colBackground: Appearance.colors.colSecondaryContainer
     colBackgroundHover: Appearance.colors.colSecondaryContainerHover
     colBackgroundActive: Appearance.colors.colSecondaryContainerActive
