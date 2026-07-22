@@ -22,12 +22,41 @@ Rectangle {
 
     property list<var> messageBlocks: StringUtils.splitMarkdownBlocks(root.messageData?.content)
 
+    property int entranceTrigger: -1
+    property bool hasAnimated: false
+
     anchors.left: parent?.left
     anchors.right: parent?.right
     implicitHeight: columnLayout.implicitHeight + root.messagePadding * 2
 
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
+
+    opacity: root.hasAnimated ? 1.0 : (root.entranceTrigger >= 0 ? 0.0 : 0.0)
+    scale: root.hasAnimated ? 1.0 : 0.85
+    transform: Translate {
+        id: messageTransform
+        y: root.hasAnimated ? 0 : 25
+    }
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0 && !root.hasAnimated) {
+            Qt.callLater(function() {
+                messageEntranceAnim.start();
+            });
+        }
+    }
+
+    SequentialAnimation {
+        id: messageEntranceAnim
+        PauseAnimation { duration: Math.min(root.messageIndex * 80, 600) }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+            NumberAnimation { target: root; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+            NumberAnimation { target: messageTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+        }
+        ScriptAction { script: root.hasAnimated = true; }
+    }
 
     function saveMessage() {
         if (!root.editing) return;

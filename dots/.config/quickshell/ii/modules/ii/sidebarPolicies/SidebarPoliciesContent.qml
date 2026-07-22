@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -110,6 +111,17 @@ Item {
         }
     }
 
+    Connections {
+        target: GlobalStates
+        function onSidebarLeftOpenChanged() {
+            if (GlobalStates.sidebarLeftOpen && swipeView.currentItem?.item) {
+                if (typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
+                    swipeView.currentItem.item.triggerContentEntrance();
+                }
+            }
+        }
+    }
+
     function focusActiveItem() {
         if (swipeView.currentItem && swipeView.currentItem.item) {
             swipeView.currentItem.item.forceActiveFocus();
@@ -197,6 +209,10 @@ Item {
                     Qt.callLater(() => {
                         root._prevTabIndex = currentIndex;
                     });
+                    
+                    if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
+                        swipeView.currentItem.item.triggerContentEntrance();
+                    }
                 }
 
                 Component.onCompleted: {
@@ -228,6 +244,11 @@ Item {
                             x: 0
                         }
 
+                        onLoaded: {
+                            if (item)
+                                item.anchors.fill = this;
+                        }
+
                         readonly property bool isCurrent: swipeView.currentIndex === index
                         onIsCurrentChanged: {
                             if (isCurrent) {
@@ -240,6 +261,12 @@ Item {
                                     bounceAnim.start();
                                     opacityAnim.start();
                                 }
+                                // Trigger entrance animation for the tab content
+                                Qt.callLater(function() {
+                                    if (tabDelegate.item && typeof tabDelegate.item.triggerContentEntrance === "function") {
+                                        tabDelegate.item.triggerContentEntrance();
+                                    }
+                                });
                             } else {
                                 tabDelegate.opacity = 1;
                                 trans.x = 0;
@@ -264,11 +291,6 @@ Item {
                             to: 1
                             duration: 280
                             easing.type: Easing.OutCubic
-                        }
-
-                        onLoaded: {
-                            if (item)
-                                item.anchors.fill = this;
                         }
                     }
                 }

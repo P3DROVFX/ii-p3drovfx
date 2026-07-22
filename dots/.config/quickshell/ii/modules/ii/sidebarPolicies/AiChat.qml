@@ -23,6 +23,12 @@ Item {
     property bool containsDrag: false
     property string previewPath: ""
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance() {
+        root.entranceTrigger++;
+    }
+
     onFocusChanged: focus => {
         if (focus) {
             root.inputField.forceActiveFocus();
@@ -250,9 +256,42 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         property string icon
         property string statusText
         property string description
+        property int animIndex: 0
+        property var rootRef: null
         hoverEnabled: true
         implicitHeight: statusItemRowLayout.implicitHeight
         implicitWidth: statusItemRowLayout.implicitWidth
+
+        opacity: 0.0
+        scale: 0.85
+        transform: Translate {
+            id: statusItemTransform
+            y: 20
+        }
+
+        Connections {
+            target: statusItem.rootRef
+            function onEntranceTriggerChanged() {
+                if (statusItem.rootRef && statusItem.rootRef.entranceTrigger >= 0) {
+                    statusItem.opacity = 0.0;
+                    statusItem.scale = 0.85;
+                    statusItemTransform.y = 20;
+                    Qt.callLater(function() {
+                        statusItemAnim.start();
+                    });
+                }
+            }
+        }
+
+        SequentialAnimation {
+            id: statusItemAnim
+            PauseAnimation { duration: 140 + statusItem.animIndex * 80 }
+            ParallelAnimation {
+                NumberAnimation { target: statusItem; property: "opacity"; from: 0.0; to: 1.0; duration: 280 }
+                NumberAnimation { target: statusItem; property: "scale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                NumberAnimation { target: statusItemTransform; property: "y"; from: 20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+            }
+        }
 
         RowLayout {
             id: statusItemRowLayout
@@ -293,6 +332,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         spacing: root.padding
 
         Item {
+            id: messagesArea
             // Messages
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -302,6 +342,38 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     width: swipeView.width
                     height: swipeView.height
                     radius: Appearance.rounding.small
+                }
+            }
+
+            // Animation properties
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: messagesAreaTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        messagesArea.opacity = 0.0;
+                        messagesArea.scale = 0.85;
+                        messagesAreaTransform.y = 25;
+                        Qt.callLater(function() {
+                            messagesAreaAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: messagesAreaAnim
+                PauseAnimation { duration: 100 }
+                ParallelAnimation {
+                    NumberAnimation { target: messagesArea; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: messagesArea; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: messagesAreaTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -335,12 +407,16 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     spacing: 10
 
                     StatusItem {
+                        rootRef: root
+                        animIndex: 0
                         icon: Ai.currentModelHasApiKey ? "key" : "key_off"
                         statusText: ""
                         description: Ai.currentModelHasApiKey ? Translation.tr("API key is set\nChange with /key YOUR_API_KEY") : Translation.tr("No API key\nSet it with /key YOUR_API_KEY")
                     }
                     StatusSeparator {}
                     StatusItem {
+                        rootRef: root
+                        animIndex: 1
                         icon: "device_thermostat"
                         statusText: Ai.temperature.toFixed(1)
                         description: Translation.tr("Temperature\nChange with /temp VALUE")
@@ -349,6 +425,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         visible: Ai.tokenCount.total > 0
                     }
                     StatusItem {
+                        rootRef: root
+                        animIndex: 2
                         visible: Ai.tokenCount.total > 0
                         icon: "token"
                         statusText: Ai.tokenCount.total
@@ -369,6 +447,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 anchors.fill: parent
                 spacing: 10
                 popin: false
+                animateAppearance: false
                 topMargin: statusBg.implicitHeight + statusBg.anchors.topMargin * 2
 
                 touchpadScrollFactor: Config.options.interactions.scrolling.touchpadScrollFactor * 1.4
@@ -401,16 +480,19 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         Ai.messageByID[modelData];
                     }
                     messageInputField: root.inputField
+                    entranceTrigger: root.entranceTrigger
                 }
             }
 
             PagePlaceholder {
+                id: emptyStatePlaceholder
                 z: 2
                 shown: Ai.messageIDs.length === 0
                 icon: "neurology"
                 title: Translation.tr("Large language models")
                 description: Translation.tr("Type /key to get started with online models\nCtrl+O to expand sidebar\nCtrl+P to pin sidebar\nCtrl+D to detach sidebar")
                 shape: MaterialShape.Shape.PixelCircle
+                animateIconOnShow: true
             }
 
             ScrollToBottomButton {
@@ -420,8 +502,40 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         }
 
         DescriptionBox {
+            id: descriptionBox
             text: root.suggestionList[suggestions.selectedIndex]?.description ?? ""
             showArrows: root.suggestionList.length > 1
+
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: descriptionBoxTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        descriptionBox.opacity = 0.0;
+                        descriptionBox.scale = 0.85;
+                        descriptionBoxTransform.y = 25;
+                        Qt.callLater(function() {
+                            descriptionBoxAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: descriptionBoxAnim
+                PauseAnimation { duration: 160 }
+                ParallelAnimation {
+                    NumberAnimation { target: descriptionBox; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: descriptionBox; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: descriptionBoxTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
         }
 
         Loader {
@@ -432,9 +546,70 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             active: Config.options.sidebar.ai.showProviderAndModelButtons && Ai.messageIDs.length === 0
             visible: active
 
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: modelProviderTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
+                        modelAndProviderLoader.opacity = 0.0;
+                        modelAndProviderLoader.scale = 0.85;
+                        modelProviderTransform.y = 25;
+                        Qt.callLater(function() {
+                            modelProviderAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: modelProviderAnim
+                PauseAnimation { duration: 220 }
+                ParallelAnimation {
+                    NumberAnimation { target: modelAndProviderLoader; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: modelAndProviderLoader; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: modelProviderTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
+
             sourceComponent: ColumnLayout {
                 id: contentLayout
                 width: modelAndProviderLoader.width
+
+                Connections {
+                    target: root
+                    function onEntranceTriggerChanged() {
+                        if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
+                            providerButton1.opacity = 0.0;
+                            providerButton1.scale = 0.85;
+                            providerButton1Transform.y = 20;
+                            
+                            providerButton2.opacity = 0.0;
+                            providerButton2.scale = 0.85;
+                            providerButton2Transform.y = 20;
+                            
+                            providerButton3.opacity = 0.0;
+                            providerButton3.scale = 0.85;
+                            providerButton3Transform.y = 20;
+                            
+                            modelSelector.opacity = 0.0;
+                            modelSelector.scale = 0.85;
+                            modelSelectorTransform.y = 20;
+                            
+                            Qt.callLater(function() {
+                                providerButton1Anim.start();
+                                providerButton2Anim.start();
+                                providerButton3Anim.start();
+                                modelSelectorAnim.start();
+                            });
+                        }
+                    }
+                }
 
                 RowLayout {
                     id: providerSelector
@@ -444,6 +619,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     property string currentValue: Persistent.states.ai.provider
 
                     SelectionGroupButton {
+                        id: providerButton1
                         Layout.fillWidth: true
                         leftmost: true
                         rightmost: false
@@ -454,8 +630,26 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             Persistent.states.ai.provider = "google";
                             Persistent.states.ai.model = Ai.modelsOfProviders["google"][0].value;
                         }
+                        
+                        opacity: 0.0
+                        scale: 0.85
+                        transform: Translate {
+                            id: providerButton1Transform
+                            y: 20
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton1Anim
+                            PauseAnimation { duration: 220 + 0 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton1; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton1; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                NumberAnimation { target: providerButton1Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                            }
+                        }
                     }
                     SelectionGroupButton {
+                        id: providerButton2
                         Layout.fillWidth: true
                         leftmost: false
                         rightmost: false
@@ -466,8 +660,26 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             Persistent.states.ai.provider = "openrouter";
                             Persistent.states.ai.model = Ai.modelsOfProviders["openrouter"][0].value;
                         }
+                        
+                        opacity: 0.0
+                        scale: 0.85
+                        transform: Translate {
+                            id: providerButton2Transform
+                            y: 20
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton2Anim
+                            PauseAnimation { duration: 220 + 1 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton2; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton2; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                NumberAnimation { target: providerButton2Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                            }
+                        }
                     }
                     SelectionGroupButton {
+                        id: providerButton3
                         Layout.fillWidth: true
                         leftmost: false
                         rightmost: true
@@ -477,6 +689,23 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         onClicked: {
                             Persistent.states.ai.provider = "others";
                             Persistent.states.ai.model = Ai.modelsOfProviders["others"][0].value;
+                        }
+                        
+                        opacity: 0.0
+                        scale: 0.85
+                        transform: Translate {
+                            id: providerButton3Transform
+                            y: 20
+                        }
+                        
+                        SequentialAnimation {
+                            id: providerButton3Anim
+                            PauseAnimation { duration: 220 + 2 * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: providerButton3; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                                NumberAnimation { target: providerButton3; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                                NumberAnimation { target: providerButton3Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                            }
                         }
                     }
                 }
@@ -504,6 +733,23 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
 
                     onActivated: index => updateModel(index)
+                    
+                    opacity: 0.0
+                    scale: 0.85
+                    transform: Translate {
+                        id: modelSelectorTransform
+                        y: 20
+                    }
+                    
+                    SequentialAnimation {
+                        id: modelSelectorAnim
+                        PauseAnimation { duration: 220 + 3 * 60 }
+                        ParallelAnimation {
+                            NumberAnimation { target: modelSelector; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                            NumberAnimation { target: modelSelector; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                            NumberAnimation { target: modelSelectorTransform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                        }
+                    }
                 }
             }
         }
@@ -516,6 +762,37 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             property int selectedIndex: 0
             Layout.fillWidth: true
             spacing: 5
+
+            opacity: visible ? 1.0 : 0.0
+            scale: visible ? 1.0 : 0.85
+            transform: Translate {
+                id: suggestionsTransform
+                y: visible ? 0 : 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0 && suggestions.visible) {
+                        suggestions.opacity = 0.0;
+                        suggestions.scale = 0.85;
+                        suggestionsTransform.y = 25;
+                        Qt.callLater(function() {
+                            suggestionsAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: suggestionsAnim
+                PauseAnimation { duration: 280 }
+                ParallelAnimation {
+                    NumberAnimation { target: suggestions; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: suggestions; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: suggestionsTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
 
             Repeater {
                 id: suggestionRepeater
@@ -595,6 +872,37 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             color: Appearance.colors.colLayer2
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
             clip: true
+
+            opacity: 0.0
+            scale: 0.85
+            transform: Translate {
+                id: inputWrapperTransform
+                y: 25
+            }
+
+            Connections {
+                target: root
+                function onEntranceTriggerChanged() {
+                    if (root.entranceTrigger >= 0) {
+                        inputWrapper.opacity = 0.0;
+                        inputWrapper.scale = 0.85;
+                        inputWrapperTransform.y = 25;
+                        Qt.callLater(function() {
+                            inputWrapperAnim.start();
+                        });
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: inputWrapperAnim
+                PauseAnimation { duration: 340 }
+                ParallelAnimation {
+                    NumberAnimation { target: inputWrapper; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
+                    NumberAnimation { target: inputWrapper; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+                    NumberAnimation { target: inputWrapperTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                }
+            }
 
             Behavior on implicitHeight {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -948,6 +1256,19 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     buttonRadius: Appearance.rounding.small
                     enabled: messageInputField.text.length > 0
                     toggled: enabled
+
+                    Behavior on enabled {
+                        SequentialAnimation {
+                            PauseAnimation { duration: 50 }
+                            NumberAnimation {
+                                target: sendButton
+                                property: "opacity"
+                                to: sendButton.enabled ? 1.0 : 0.5
+                                duration: 200
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
 
                     MouseArea {
                         anchors.fill: parent
