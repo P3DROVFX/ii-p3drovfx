@@ -236,6 +236,7 @@ Item {
                     visible: !root._isConnecting && !root._isActive
                     text: "arrow_forward"
                     iconSize: 18
+                    fill: 1.0
                     color: root._foreground
                     opacity: 0.4
                 }
@@ -408,6 +409,7 @@ Item {
                             anchors.centerIn: parent
                             text: chip.modelData?.icon ?? ""
                             iconSize: 18
+                            fill: 1.0
                             color: Appearance.colors.colOnPrimaryContainer
                             animateChange: true
                         }

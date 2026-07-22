@@ -411,51 +411,60 @@ Item {
                                 id: recentMenuItem
                                 required property var modelData
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 40
+                                Layout.preferredHeight: 44
                                 buttonRadius: Appearance.rounding.small
                                 colBackground: "transparent"
-                                colBackgroundHover: Appearance.colors.colLayer2Hover
-                                contentItem: RowLayout {
-                                    spacing: 8
-                                    MaterialSymbol {
-                                        Layout.alignment: Qt.AlignVCenter
-                                        text: "history"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: modelData?.reachable
-                                            ? Appearance.colors.colOnLayer2
-                                            : Appearance.colors.colSubtext
-                                    }
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 0
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: modelData?.name || Translation.tr("Unknown")
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            font.weight: Font.DemiBold
+                                colBackgroundHover: Appearance.colors.colLayer4Hover
+                                colBackgroundActive: Appearance.colors.colLayer4Active ?? Appearance.colors.colLayer4Hover
+                                contentItem: Item {
+                                    anchors.fill: parent
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 10
+                                        MaterialSymbol {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            text: "history"
+                                            iconSize: Appearance.font.pixelSize.normal
                                             color: modelData?.reachable
-                                                ? Appearance.colors.colOnLayer2
+                                                ? Appearance.colors.colOnLayer4
                                                 : Appearance.colors.colSubtext
-                                            elide: Text.ElideRight
                                         }
-                                        StyledText {
+                                        ColumnLayout {
                                             Layout.fillWidth: true
-                                            text: modelData?.reachable
-                                                ? Translation.tr("Tap to use")
-                                                : Translation.tr("Offline · paired")
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            color: Appearance.colors.colSubtext
-                                            opacity: 0.8
+                                            Layout.alignment: Qt.AlignVCenter
+                                            spacing: -2
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData?.name || Translation.tr("Unknown")
+                                                font.pixelSize: Appearance.font.pixelSize.small
+                                                font.weight: Font.DemiBold
+                                                color: modelData?.reachable
+                                                    ? Appearance.colors.colOnLayer4
+                                                    : Appearance.colors.colSubtext
+                                                elide: Text.ElideRight
+                                            }
+                                            StyledText {
+                                                Layout.fillWidth: true
+                                                text: modelData?.reachable
+                                                    ? Translation.tr("Tap to use")
+                                                    : Translation.tr("Offline · paired")
+                                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                                color: Appearance.colors.colSubtext
+                                                opacity: 0.85
+                                                elide: Text.ElideRight
+                                            }
                                         }
-                                    }
-                                    MaterialSymbol {
-                                        Layout.alignment: Qt.AlignVCenter
-                                        text: modelData?.reachable
-                                            ? "radio_button_unchecked"
-                                            : "do_not_disturb_on"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: Appearance.colors.colSubtext
-                                        animateChange: true
+                                        MaterialSymbol {
+                                            Layout.alignment: Qt.AlignVCenter
+                                            text: modelData?.reachable
+                                                ? "radio_button_unchecked"
+                                                : "do_not_disturb_on"
+                                            iconSize: Appearance.font.pixelSize.normal
+                                            color: Appearance.colors.colSubtext
+                                            animateChange: true
+                                        }
                                     }
                                 }
                                 onClicked: () => {
@@ -492,65 +501,78 @@ Item {
                             id: deviceMenuItem
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 40
+                            Layout.preferredHeight: 44
                             buttonRadius: Appearance.rounding.small
                             colBackground: modelData?.id === KdeConnectService.activeDeviceId
                                 ? Appearance.colors.colPrimaryContainer
                                 : "transparent"
                             colBackgroundHover: modelData?.id === KdeConnectService.activeDeviceId
                                 ? Appearance.colors.colPrimaryContainerHover
-                                : Appearance.colors.colLayer2Hover
-                            contentItem: RowLayout {
-                                spacing: 8
-                                MaterialSymbol {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: "smartphone"
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: modelData?.id === KdeConnectService.activeDeviceId
-                                        ? Appearance.colors.colOnPrimaryContainer
-                                        : (modelData?.reachable
-                                            ? Appearance.colors.colOnLayer2
-                                            : Appearance.colors.colSubtext)
-                                }
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 0
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: modelData?.name || "Unknown"
-                                        font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: Font.DemiBold
+                                : Appearance.colors.colLayer4Hover
+                            colBackgroundActive: modelData?.id === KdeConnectService.activeDeviceId
+                                ? (Appearance.colors.colPrimaryContainerActive ?? Appearance.colors.colPrimaryContainerHover)
+                                : (Appearance.colors.colLayer4Active ?? Appearance.colors.colLayer4Hover)
+                            contentItem: Item {
+                                anchors.fill: parent
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 10
+                                    MaterialSymbol {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: "smartphone"
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        fill: modelData?.id === KdeConnectService.activeDeviceId ? 1 : 0
                                         color: modelData?.id === KdeConnectService.activeDeviceId
                                             ? Appearance.colors.colOnPrimaryContainer
                                             : (modelData?.reachable
-                                                ? Appearance.colors.colOnLayer2
+                                                ? Appearance.colors.colOnLayer4
                                                 : Appearance.colors.colSubtext)
-                                        elide: Text.ElideRight
                                     }
-                                    StyledText {
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        text: modelData?.reachable
-                                            ? Translation.tr("Tap to use")
-                                            : Translation.tr("Offline · paired")
-                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: -2
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: modelData?.name || "Unknown"
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.DemiBold
+                                            color: modelData?.id === KdeConnectService.activeDeviceId
+                                                ? Appearance.colors.colOnPrimaryContainer
+                                                : (modelData?.reachable
+                                                    ? Appearance.colors.colOnLayer4
+                                                    : Appearance.colors.colSubtext)
+                                            elide: Text.ElideRight
+                                        }
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: modelData?.reachable
+                                                ? Translation.tr("Tap to use")
+                                                : Translation.tr("Offline · paired")
+                                            font.pixelSize: Appearance.font.pixelSize.smaller
+                                            color: modelData?.id === KdeConnectService.activeDeviceId
+                                                ? Appearance.colors.colOnPrimaryContainer
+                                                : Appearance.colors.colSubtext
+                                            opacity: 0.85
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                    MaterialSymbol {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: modelData?.id === KdeConnectService.activeDeviceId
+                                            ? "check_circle"
+                                            : (modelData?.reachable
+                                                ? "radio_button_unchecked"
+                                                : "do_not_disturb_on")
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        fill: modelData?.id === KdeConnectService.activeDeviceId ? 1 : 0
                                         color: modelData?.id === KdeConnectService.activeDeviceId
                                             ? Appearance.colors.colOnPrimaryContainer
                                             : Appearance.colors.colSubtext
-                                        opacity: 0.8
+                                        animateChange: true
                                     }
-                                }
-                                MaterialSymbol {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: modelData?.id === KdeConnectService.activeDeviceId
-                                        ? "check_circle"
-                                        : (modelData?.reachable
-                                            ? "radio_button_unchecked"
-                                            : "do_not_disturb_on")
-                                    iconSize: Appearance.font.pixelSize.normal
-                                    color: modelData?.id === KdeConnectService.activeDeviceId
-                                        ? Appearance.colors.colOnPrimaryContainer
-                                        : Appearance.colors.colSubtext
-                                    animateChange: true
                                 }
                             }
                             onClicked: () => {
@@ -573,21 +595,22 @@ Item {
                         Layout.preferredHeight: 36
                         buttonRadius: Appearance.rounding.small
                         colBackground: "transparent"
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundHover: Appearance.colors.colLayer4Hover
+                        colBackgroundActive: Appearance.colors.colLayer4Active ?? Appearance.colors.colLayer4Hover
                         contentItem: RowLayout {
                             spacing: 8
                             MaterialSymbol {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: "refresh"
                                 iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnLayer2
+                                color: Appearance.colors.colOnLayer4
                             }
                             StyledText {
                                 Layout.fillWidth: true
                                 text: Translation.tr("Refresh devices")
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 font.weight: Font.DemiBold
-                                color: Appearance.colors.colOnLayer2
+                                color: Appearance.colors.colOnLayer4
                             }
                         }
                         onClicked: {
@@ -684,6 +707,7 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
                             text: "phonelink_setup"
                             iconSize: Appearance.font.pixelSize.large
+                            fill: 1
                             color: Appearance.colors.colOnPrimaryContainer
                         }
 
@@ -718,6 +742,7 @@ Item {
                                 anchors.centerIn: parent
                                 text: "close"
                                 iconSize: Appearance.font.pixelSize.normal
+                                fill: 1
                                 color: Appearance.colors.colOnPrimaryContainer
                             }
                             onClicked: KdeConnectService.declinePairing(modelData?.id)
@@ -789,26 +814,18 @@ Item {
 
                     RippleButtonWithIcon {
                         Layout.preferredHeight: 36
-                        horizontalPadding: 10
-                        rippleEnabled: false
-                        scale: 1.0
+                        horizontalPadding: 12
+                        rippleEnabled: true
                         buttonRadius: 18
                         buttonRadiusPressed: 18
-                        colBackground: Appearance.colors.colLayer2
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colText: Appearance.colors.colOnLayer2
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colBackgroundActive: Appearance.colors.colSecondaryContainerActive ?? Appearance.colors.colSecondaryContainerHover
+                        colText: Appearance.colors.colOnSecondaryContainer
                         enabled: KdeConnectService.activeReachable
-                        opacity: enabled ? 1.0 : 0.5
+                        opacity: enabled ? 1.0 : 0.4
                         materialIcon: "sync"
                         mainText: ""
-                        background: Rectangle {
-                            anchors.fill: parent
-                            radius: parent.buttonEffectiveRadius
-                            color: parent.buttonColor
-                            Behavior on color {
-                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                            }
-                        }
                         onClicked: () => KdeConnectService.requestNotificationsRefresh()
                         StyledToolTip {
                             text: Translation.tr("Sync notifications")
@@ -822,9 +839,9 @@ Item {
                         scale: 1.0
                         buttonRadius: 18
                         buttonRadiusPressed: 18
-                        colBackground: Appearance.colors.colLayer2
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colText: Appearance.colors.colOnLayer2
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colText: Appearance.colors.colOnSecondaryContainer
                         enabled: false
                         hoverEnabled: false
                         opacity: 1.0
@@ -851,34 +868,28 @@ Item {
                     }
                     RippleButtonWithIcon {
                         Layout.preferredHeight: 36
-                        horizontalPadding: 10
-                        rippleEnabled: false
-                        scale: 1.0
+                        horizontalPadding: 12
+                        rippleEnabled: true
                         buttonRadius: 18
                         buttonRadiusPressed: 18
-                        colBackground: Appearance.colors.colLayer2
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colText: Appearance.colors.colOnLayer2
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colBackgroundActive: Appearance.colors.colSecondaryContainerActive ?? Appearance.colors.colSecondaryContainerHover
+                        colText: Appearance.colors.colOnSecondaryContainer
                         enabled: KdeConnectService.available
                                    && KdeConnectService.activeReachable
                                    && KdeConnectService.hasDevices
                                    && KdeConnectService.notificationCount > 0
-                        opacity: enabled ? 1.0 : 0.5
+                        opacity: enabled ? 1.0 : 0.4
                         materialIcon: KdeConnectService.notificationCount > 0
                                     ? "delete_sweep"
                                     : "do_not_disturb_on"
                         mainText: ""
-                        background: Rectangle {
-                            anchors.fill: parent
-                            radius: parent.buttonEffectiveRadius
-                            color: parent.buttonColor
-                            Behavior on color {
-                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                            }
-                        }
                         onClicked: () => KdeConnectService.discardAllNotifications()
                         StyledToolTip {
-                            text: Translation.tr("Dismiss all phone notifications")
+                            text: KdeConnectService.notificationCount > 0
+                                ? Translation.tr("Dismiss all phone notifications")
+                                : Translation.tr("No notifications to clear")
                         }
                     }
                 }
