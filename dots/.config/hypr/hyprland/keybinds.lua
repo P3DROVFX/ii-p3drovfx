@@ -338,6 +338,10 @@ hl.bind("SUPER + Equal", function() zoomfunction(0.3) end, { repeating = true, d
 hl.bind("SUPER + code:82", function() zoomfunction(-0.3) end, { repeating = true })
 hl.bind("SUPER + code:86", function() zoomfunction(0.3) end, { repeating = true })
 
+-- Toggle OLED saver (blackout overlay on the focused monitor)
+hl.bind("SUPER + R", hl.dsp.global("quickshell:oledSaverToggle"),
+    { locked = true, description = "Utilities: Toggle OLED saver (blackout)" })
+
 --##! Media
 local mediaNextCommand =
 "playerctl next || playerctl position `bc <<< \"100 * $(playerctl metadata mpris:length) / 1000000 / 100\"`"
@@ -358,6 +362,8 @@ hl.bind("ALT + XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ 
 hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ toggle"), { locked = true })
 hl.bind("SUPER + ALT + M", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SOURCE@ toggle"),
     { locked = true, description = "Misc: Toggle mic" })
+hl.bind("SUPER + Z", hl.dsp.global("quickshell:mediaModeToggle"), { locked = true, description = "Shell: Toggle media mode" })
+
 --##! Apps
 hl.bind("SUPER + Return", hl.dsp.exec_cmd(terminal), { description = "App: Terminal" })
 hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
