@@ -140,10 +140,12 @@ Item {
     }
 
     // ── Shared animation spec ────────────────────────────────────────────────
-    // Open: OutBack curve for a subtle physical bounce + slide + blur reveal.
-    // Close: InCubic/OutCubic fast exit with blur increasing as it closes.
-    readonly property int _animDurationOpen: Math.round(420 * Appearance.animMultiplier)
-    readonly property int _animDurationClose: Math.round(260 * Appearance.animMultiplier)
+    // Open:  emphasizedDecel [0.05,0.7,0.1,1] — fast-start, slow-settle (EaseOut).
+    // Close: same curve but shorter — panel snaps shut quickly then eases out.
+    readonly property int _animDurationOpen: Math.round(450 * Appearance.animMultiplier)
+    readonly property int _animDurationClose: Math.round(280 * Appearance.animMultiplier)
+    readonly property var _openBezier: Appearance.animationCurves.emphasizedDecel
+    readonly property var _closeBezier: Appearance.animationCurves.emphasizedDecel
 
     // openProgress: 0 = fully closed, 1 = fully open
     property real openProgress: 0.0
@@ -178,8 +180,8 @@ Item {
                 target: root
                 property: "openProgress"
                 duration: root._animDurationOpen
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.2
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: root._openBezier
             }
         },
         Transition {
@@ -189,7 +191,8 @@ Item {
                 target: root
                 property: "openProgress"
                 duration: root._animDurationClose
-                easing.type: Easing.InCubic
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: root._closeBezier
             }
         }
     ]
@@ -199,21 +202,14 @@ Item {
         x: positioner.anchorX
         y: root.isBottomBar ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
         width: dropState.targetW
-        height: Math.max(0, root.animHeight)
-        visible: root.openProgress > 0.001
+        height: root.animHeight
+        visible: root.animHeight > 0.001
 
         // Publish drop bounds to GlobalStates for background blur exclusion
         onXChanged: root._updateBlurExclusion()
         onYChanged: root._updateBlurExclusion()
         onWidthChanged: root._updateBlurExclusion()
         onHeightChanged: root._updateBlurExclusion()
-
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 64.0
-            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
-        }
 
         // ── Notch background (unclipped) ─────────────────────────────────────
         Notch {
@@ -249,7 +245,6 @@ Item {
                 width: dropContainer.width
                 height: dropState.targetH
                 y: isBottomBar ? parent.height - height : 0
-                opacity: Math.min(1.0, Math.max(0.0, root.openProgress))
 
                 Loader {
                     id: searchWidgetLoader
@@ -331,19 +326,26 @@ Item {
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
-        visible: root.openProgress > 0.001
+        visible: opacity > 0.01
 
-        opacity: root.isOverviewVisible ? Math.min(1.0, Math.max(0.0, root.openProgress)) : 0.0
-
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 64.0
-            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
+        opacity: root.isOverviewVisible ? 1.0 : 0.0
+        transform: Translate {
+            y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
+            Behavior on y {
+                NumberAnimation {
+                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                }
+            }
         }
 
-        transform: Translate {
-            y: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * (root.isBottomBar ? 40 : -40)
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+            }
         }
 
         sourceComponent: OverviewWidget {
@@ -359,19 +361,26 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         active: root.isWidgetActive && root.isScrollingLayout
-        visible: root.openProgress > 0.001
+        visible: opacity > 0.01
 
-        opacity: root.isOverviewVisible ? Math.min(1.0, Math.max(0.0, root.openProgress)) : 0.0
-
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            blurEnabled: true
-            blurMax: 64.0
-            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
+        opacity: root.isOverviewVisible ? 1.0 : 0.0
+        transform: Translate {
+            y: root.isOverviewVisible ? 0 : (root.isBottomBar ? -30 : 30)
+            Behavior on y {
+                NumberAnimation {
+                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+                }
+            }
         }
 
-        transform: Translate {
-            y: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * (root.isBottomBar ? 40 : -40)
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
+            }
         }
 
         sourceComponent: ScrollingOverviewWidget {

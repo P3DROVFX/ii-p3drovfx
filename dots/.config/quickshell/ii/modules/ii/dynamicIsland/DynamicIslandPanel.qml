@@ -668,7 +668,8 @@ Scope {
     onHoverActiveChanged: {
         if (hoverActive) {
             hoverCollapseTimer.stop();
-            if (root._lsServiceChoice !== 0) lsReadyCollapseTimer.restart();
+            if (root._lsServiceChoice !== 0)
+                lsReadyCollapseTimer.restart();
             if (!root.clickToExpandEnabled) {
                 isHoverExpanded = true;
             }
@@ -683,7 +684,8 @@ Scope {
         if (root._lsServiceChoice !== 0) {
             lsReadyCollapseTimer.restart();
             isHoverExpanded = true;
-            if (root.clickToExpandEnabled) root.clickedExpanded = true;
+            if (root.clickToExpandEnabled)
+                root.clickedExpanded = true;
         } else {
             lsReadyCollapseTimer.stop();
             if (!hoverActive) {
@@ -722,7 +724,8 @@ Scope {
         onTriggered: {
             const lsWidget = root._localSendWidget;
             if (!hoverActive && !(lsWidget && lsWidget.kdeSent)) {
-                if (root.clickToExpandEnabled) root.clickedExpanded = false;
+                if (root.clickToExpandEnabled)
+                    root.clickedExpanded = false;
                 isHoverExpanded = false;
             }
         }
@@ -1173,7 +1176,10 @@ Scope {
                 color: Appearance.colors.colPrimary
                 opacity: root.peekGlowOpacity
                 Behavior on opacity {
-                    NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
                 }
             }
 
@@ -1222,26 +1228,26 @@ Scope {
                         }
                     }
 
-                Connections {
-                    target: root
-                    function onModeChanged() {
-                        if (root.mode !== "search" && searchWidgetLoader.item) {
-                            searchWidgetLoader.item.cancelSearch();
+                    Connections {
+                        target: root
+                        function onModeChanged() {
+                            if (root.mode !== "search" && searchWidgetLoader.item) {
+                                searchWidgetLoader.item.cancelSearch();
+                            }
                         }
                     }
-                }
 
-                onVisibleChanged: {
-                    if (visible && item) {
-                        if (GlobalStates.activeSearchQuery) {
-                            item.setSearchingText(GlobalStates.activeSearchQuery);
-                            GlobalStates.activeSearchQuery = "";
-                        } else {
-                            item.cancelSearch();
+                    onVisibleChanged: {
+                        if (visible && item) {
+                            if (GlobalStates.activeSearchQuery) {
+                                item.setSearchingText(GlobalStates.activeSearchQuery);
+                                GlobalStates.activeSearchQuery = "";
+                            } else {
+                                item.cancelSearch();
+                            }
+                            Qt.callLater(() => item.focusSearchInput());
                         }
-                        Qt.callLater(() => item.focusSearchInput());
                     }
-                }
 
                     sourceComponent: Component {
                         SearchWidget {
@@ -1424,7 +1430,10 @@ Scope {
                     }
                     Behavior on scale {
                         enabled: !root.morphActive
-                        NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
+                        NumberAnimation {
+                            duration: 200
+                            easing.type: Easing.OutQuad
+                        }
                     }
 
                     Row {
@@ -1603,10 +1612,7 @@ Scope {
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             keys: ["text/uri-list"]
-            enabled: root.idleHidden
-                && Config.options.bar.floatingNotch.enable
-                && !Config.options.bar.floatingNotch.disableLocalSend
-                && LocalSend.available
+            enabled: root.idleHidden && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableLocalSend && LocalSend.available
             onEntered: drag => {
                 drag.accept(Qt.CopyAction);
                 topHoverCollapseTimer.stop();
@@ -1619,11 +1625,7 @@ Scope {
             onDropped: drop => {
                 if (!drop.hasUrls)
                     return;
-                const kdeReady = !Config.options.bar.floatingNotch.disableKdeConnectInLocalSend
-                    && typeof KdeConnectService !== "undefined"
-                    && KdeConnectService.available
-                    && KdeConnectService.activeReachable
-                    && KdeConnectService.activeDevice;
+                const kdeReady = !Config.options.bar.floatingNotch.disableKdeConnectInLocalSend && typeof KdeConnectService !== "undefined" && KdeConnectService.available && KdeConnectService.activeReachable && KdeConnectService.activeDevice;
                 const useKde = kdeReady && drop.x >= width / 2;
                 const cleanPaths = drop.urls.map(function (u) {
                     return u.toString().replace(/^file:\/\//, "");

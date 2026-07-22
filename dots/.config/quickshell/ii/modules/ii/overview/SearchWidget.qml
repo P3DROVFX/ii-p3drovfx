@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import Qt.labs.synchronizer
 import Qt5Compat.GraphicalEffects
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -16,7 +17,7 @@ import qs.modules.common.functions
 Item {
     id: root
     width: implicitWidth
-    height: searchWidgetContent.height
+    height: searchWidgetContent.height + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
@@ -251,9 +252,13 @@ Item {
         }
     }
 
+    property real shadowOpacity: 1.0
+
     StyledRectangularShadow {
         target: searchWidgetContent
         visible: !GlobalStates.searchConnectActive
+        opacity: root.shadowOpacity
+        offset: Qt.vector2d(0.0, 0.0)
     }
     Rectangle {
         id: searchWidgetContent

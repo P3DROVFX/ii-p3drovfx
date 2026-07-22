@@ -15,12 +15,12 @@ ContentPage {
         Layout.bottomMargin: 8
         isFirst: true
         materialIcon: "warning"
-        text: Translation.tr("The Floating Dynamic Island only works when the Bar is in Vertical mode.")
+        text: Translation.tr("The search only works with dynamic island in connect mode.")
 
         RippleButtonWithIcon {
             buttonRadius: Appearance.rounding.small
             materialIcon: "arrow_forward"
-            mainText: Translation.tr("Go to Bar Position")
+            mainText: Translation.tr("Switch to connect mode")
             onClicked: {
                 var win = dynamicIslandConfigRoot.QsWindow.window;
                 if (!win || win.pageIndexById === undefined)
@@ -30,7 +30,7 @@ ContentPage {
                 if (idx < 0)
                     return ;
 
-                win.pendingSectionHighlight = Translation.tr("Position and Style");
+                win.pendingSectionHighlight = Translation.tr("Shell mode");
                 win.currentPage = idx;
             }
             colBackground: Appearance.colors.colSecondaryContainer

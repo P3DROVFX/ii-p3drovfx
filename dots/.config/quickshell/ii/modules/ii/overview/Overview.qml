@@ -169,7 +169,7 @@ Scope {
 
                                 layer.enabled: !isNotchMode
                                 layer.effect: MultiEffect {
-                                    blurEnabled: true
+                                    blurEnabled: (1.0 - searchWidgetWrapper.slideOpacity) > 0.001
                                     blurMax: 64.0
                                     blur: (1.0 - searchWidgetWrapper.slideOpacity) * 1.0
                                 }
@@ -286,6 +286,7 @@ Scope {
 
                                 SearchWidget {
                                     id: searchWidget
+                                    shadowOpacity: searchWidgetWrapper.slideOpacity
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     Synchronizer on searchingText {
                                         property alias source: root.searchingText
