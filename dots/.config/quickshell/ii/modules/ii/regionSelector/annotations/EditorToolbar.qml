@@ -48,6 +48,21 @@ Toolbar {
     ToolbarSeparator {
     }
 
+    // Rectangular region re-crop — drag a fresh selection over the frozen screen.
+    IconToolbarButton {
+        id: recropBtn
+
+        text: "crop_free"
+        toggled: editor.currentTool === "recrop"
+        onClicked: editor.currentTool = editor.currentTool === "recrop" ? "none" : "recrop"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Select region")
+        }
+
+    }
+
     // Select / pointer — pick, move and restyle existing annotations.
     IconToolbarButton {
         id: selectBtn
@@ -262,11 +277,26 @@ Toolbar {
 
     }
 
-    // Blur/Pixelate
+    // Blur (soft / gaussian)
+    IconToolbarButton {
+        id: gaussBlurBtn
+
+        text: "blur_on"
+        toggled: editor.currentTool === "gaussblur"
+        onClicked: editor.currentTool = editor.currentTool === "gaussblur" ? "none" : "gaussblur"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Blur")
+        }
+
+    }
+
+    // Pixelate (blocky)
     IconToolbarButton {
         id: blurBtn
 
-        text: "blur_on"
+        text: "grid_on"
         toggled: editor.currentTool === "blur"
         onClicked: editor.currentTool = editor.currentTool === "blur" ? "none" : "blur"
 
@@ -282,7 +312,7 @@ Toolbar {
     Item {
         id: blurStrengthContainer
 
-        visible: editor.currentTool === "blur"
+        visible: editor.currentTool === "blur" || editor.currentTool === "gaussblur"
         implicitWidth: visible ? blurStrengthRow.implicitWidth : 0
         implicitHeight: 32
 

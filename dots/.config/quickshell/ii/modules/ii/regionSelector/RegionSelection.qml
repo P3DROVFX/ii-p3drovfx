@@ -64,7 +64,7 @@ PanelWindow {
     property bool exporting: false
     // Monotonic source for annotation ids and z-order; reset in clearEditor().
     property int annotationCounter: 0
-    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "none"
+    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
     property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
@@ -112,7 +112,7 @@ PanelWindow {
     // fixed masking style). Each edit is one undo step.
     onCurrentColorChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
             return;
         root.pushUndo();
         root.restyleSelected("stroke", String(root.currentColor));
@@ -122,7 +122,7 @@ PanelWindow {
     }
     onCurrentLineWidthChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
             return;
         root.pushUndo();
         root.restyleSelected("strokeWidth", root.currentLineWidth);
@@ -217,6 +217,7 @@ PanelWindow {
                 break;
             case "pencil":
             case "blur":
+            case "gaussblur":
             case "highlighter":
                 for (var p = 0; p < g.points.length; p++) {
                     g.points[p].x += dx;
@@ -237,7 +238,7 @@ PanelWindow {
         for (var i = 0; i < newList.length; i++) {
             if (newList[i].id !== root.selectedId)
                 continue;
-            if (newList[i].type === "blur")
+            if (newList[i].type === "blur" || newList[i].type === "gaussblur")
                 return;
             var ann = AnnotationModel.clone(newList[i]);
             ann.style[key] = value;
@@ -1043,80 +1044,97 @@ PanelWindow {
                 onHeightChanged: blurCanvas.requestPaint()
             }
 
+            // Isolated scratch buffer. source-in clobbers whatever is already
+            // on a canvas, so the pixelate and blur groups are each rendered
+            // here in turn and then drawn back over the visible blur canvas.
+            Canvas {
+                id: blurGroupCanvas
+                anchors.fill: parent
+                visible: false
+            }
+
             Canvas {
                 id: blurCanvas
                 anchors.fill: parent
                 z: 1
                 visible: root.inlineEditorActive
 
+                // Rasterise one group's masking strokes, keep the processed
+                // image only under them (source-in), then composite the result
+                // over the visible canvas. smooth=false -> blocky pixelation;
+                // smooth=true -> soft blur (bilinear upscale of the same
+                // downscaled screenshot).
+                function paintMaskedGroup(anns, smooth) {
+                    if (!anns || anns.length === 0)
+                        return;
+                    var gctx = blurGroupCanvas.getContext("2d");
+                    gctx.clearRect(0, 0, width, height);
+                    gctx.save();
+                    gctx.lineCap = "round";
+                    gctx.lineJoin = "round";
+                    for (var j = 0; j < anns.length; j++) {
+                        var ann = anns[j];
+                        var pts = (ann.geom ?? ann).points;
+                        if (!pts || pts.length === 0)
+                            continue;
+                        gctx.lineWidth = (ann.style ?? ann).strokeWidth ?? ann.lineWidth;
+                        gctx.strokeStyle = "rgba(0,0,0,1.0)";
+                        gctx.fillStyle = "rgba(0,0,0,1.0)";
+                        gctx.beginPath();
+                        gctx.moveTo(pts[0].x, pts[0].y);
+                        for (var k = 1; k < pts.length - 2; k++) {
+                            var xc = (pts[k].x + pts[k + 1].x) / 2;
+                            var yc = (pts[k].y + pts[k + 1].y) / 2;
+                            gctx.quadraticCurveTo(pts[k].x, pts[k].y, xc, yc);
+                        }
+                        if (pts.length > 2) {
+                            gctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, pts[pts.length - 1].x, pts[pts.length - 1].y);
+                        } else if (pts.length === 2) {
+                            gctx.lineTo(pts[1].x, pts[1].y);
+                        } else if (pts.length === 1) {
+                            gctx.arc(pts[0].x, pts[0].y, ((ann.style ?? ann).strokeWidth ?? ann.lineWidth) / 2, 0, 2 * Math.PI);
+                            gctx.fill();
+                            continue;
+                        }
+                        gctx.stroke();
+                    }
+                    gctx.globalCompositeOperation = "source-in";
+                    gctx.imageSmoothingEnabled = smooth;
+                    gctx.drawImage(smallCanvas, 0, 0, smallCanvas.width, smallCanvas.height, 0, 0, width, height);
+                    gctx.restore();
+                    getContext("2d").drawImage(blurGroupCanvas, 0, 0);
+                }
+
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
 
-                    var blurAnns = [];
+                    var pixelateAnns = [];
+                    var gaussAnns = [];
                     for (var i = 0; i < root.annotations.length; i++) {
-                        if (root.annotations[i].type === "blur") {
-                            blurAnns.push(root.annotations[i]);
-                        }
+                        var t = root.annotations[i].type;
+                        if (t === "blur")
+                            pixelateAnns.push(root.annotations[i]);
+                        else if (t === "gaussblur")
+                            gaussAnns.push(root.annotations[i]);
                     }
-                    if (drawingArea.tempAnnotation && drawingArea.tempAnnotation.type === "blur") {
-                        blurAnns.push(drawingArea.tempAnnotation);
-                    }
+                    var temp = drawingArea.tempAnnotation;
+                    if (temp && temp.type === "blur")
+                        pixelateAnns.push(temp);
+                    else if (temp && temp.type === "gaussblur")
+                        gaussAnns.push(temp);
 
-                    if (blurAnns.length === 0)
+                    if (pixelateAnns.length === 0 && gaussAnns.length === 0)
                         return;
 
-                    ctx.save();
-
-                    // 1. Draw all masking strokes as standard solid drawings first
-                    ctx.lineCap = "round";
-                    ctx.lineJoin = "round";
-
-                    for (var j = 0; j < blurAnns.length; j++) {
-                        var ann = blurAnns[j];
-                        var pts = (ann.geom ?? ann).points;
-                        if (!pts || pts.length === 0)
-                            continue;
-
-                        ctx.lineWidth = (ann.style ?? ann).strokeWidth ?? ann.lineWidth;
-                        ctx.strokeStyle = "rgba(0,0,0,1.0)";
-                        ctx.fillStyle = "rgba(0,0,0,1.0)";
-
-                        ctx.beginPath();
-                        ctx.moveTo(pts[0].x, pts[0].y);
-                        for (var k = 1; k < pts.length - 2; k++) {
-                            var xc = (pts[k].x + pts[k + 1].x) / 2;
-                            var yc = (pts[k].y + pts[k + 1].y) / 2;
-                            ctx.quadraticCurveTo(pts[k].x, pts[k].y, xc, yc);
-                        }
-                        if (pts.length > 2) {
-                            ctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, pts[pts.length - 1].x, pts[pts.length - 1].y);
-                        } else if (pts.length === 2) {
-                            ctx.lineTo(pts[1].x, pts[1].y);
-                        } else if (pts.length === 1) {
-                            // Support single dot on single click
-                            ctx.arc(pts[0].x, pts[0].y, ((ann.style ?? ann).strokeWidth ?? ann.lineWidth) / 2, 0, 2 * Math.PI);
-                            ctx.fill();
-                            continue;
-                        }
-                        ctx.stroke();
-                    }
-
-                    // 2. Switch composite operation to source-in (draw image only where strokes exist)
-                    ctx.globalCompositeOperation = "source-in";
-
-                    // 3. Draw the screenshot portion downscaled onto the small canvas
+                    // Downscaled screenshot region, shared by both groups.
                     var smallCtx = smallCanvas.getContext("2d");
                     smallCtx.clearRect(0, 0, smallCanvas.width, smallCanvas.height);
                     smallCtx.drawImage(editorImage, root.editorRegionX, root.editorRegionY, width, height, 0, 0, smallCanvas.width, smallCanvas.height);
 
-                    // 4. Draw the pixelated, upscaled image to fill the main canvas (smoothing disabled)
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(smallCanvas, 0, 0, smallCanvas.width, smallCanvas.height, 0, 0, width, height);
-
-                    ctx.restore();
+                    paintMaskedGroup(pixelateAnns, false);
+                    paintMaskedGroup(gaussAnns, true);
                 }
-
                 Connections {
                     target: root
                     function onAnnotationsChanged() {
@@ -1146,11 +1164,11 @@ PanelWindow {
                 anchors.fill: parent
                 // Disabled while editing text so canvas clicks don't place a
                 // second text box (the commit catcher handles those clicks).
-                enabled: root.currentTool !== "none" && root.editingTextId === null
+                enabled: root.currentTool !== "none" && root.currentTool !== "recrop" && root.editingTextId === null
                 cursorShape: {
                     if (root.currentTool === "text")
                         return Qt.IBeamCursor;
-                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter")
+                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter")
                         return Qt.CrossCursor;
                     return Qt.ArrowCursor;
                 }
@@ -1253,9 +1271,9 @@ PanelWindow {
                                 }
                             ]
                         }, style);
-                    } else if (root.currentTool === "blur") {
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
                         var blurStyle = AnnotationModel.defaultStyle("#ffffff", root.currentLineWidth * 10);
-                        tempAnnotation = AnnotationModel.make("blur", id, z, {
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
                             "points": [
                                 {
                                     "x": startX,
@@ -1312,7 +1330,7 @@ PanelWindow {
                             "outerR": outerRadius,
                             "innerR": innerRadius
                         }, style);
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter") {
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
                         var pts = tempAnnotation.geom.points;
                         var lastPoint = pts[pts.length - 1];
                         var dxP = mouse.x - lastPoint.x;
@@ -1353,7 +1371,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter") {
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
                         if (g.points.length < 2) {
                             tempAnnotation = null;
                             return;
@@ -1668,7 +1686,7 @@ PanelWindow {
                 // centre the grips on that visible line, not the raw edge.
                 readonly property real outset: 6
                 z: 9999
-                visible: !root.exporting && root.editingTextId === null
+                visible: !root.exporting && root.editingTextId === null && root.currentTool !== "recrop"
                 width: hitSize
                 height: hitSize
                 x: (root.editorRegionX - outset) + (root.editorRegionW + outset * 2) * modelData.ax - width / 2
@@ -1764,7 +1782,7 @@ PanelWindow {
                 readonly property int thickness: 14
                 readonly property bool horizontal: modelData.side === "t" || modelData.side === "b"
                 z: 9998
-                visible: !root.exporting && root.editingTextId === null
+                visible: !root.exporting && root.editingTextId === null && root.currentTool !== "recrop"
                 cursorShape: modelData.cur
                 preventStealing: true
                 x: {
@@ -1806,6 +1824,60 @@ PanelWindow {
                     var p = mapToItem(editorOverlay, mouse.x, mouse.y);
                     root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
                 }
+            }
+        }
+
+        // Rectangular region re-crop. Active only while the "recrop" tool is
+        // selected; drag anywhere over the frozen screen to pick a new crop.
+        MouseArea {
+            id: recropArea
+            anchors.fill: parent
+            z: 9997
+            visible: root.inlineEditorActive && root.currentTool === "recrop"
+            enabled: visible
+            cursorShape: Qt.CrossCursor
+            preventStealing: true
+
+            property real sx: 0
+            property real sy: 0
+            property bool active: false
+
+            onPressed: mouse => {
+                sx = mouse.x;
+                sy = mouse.y;
+                active = true;
+                recropRect.x = sx;
+                recropRect.y = sy;
+                recropRect.width = 0;
+                recropRect.height = 0;
+            }
+            onPositionChanged: mouse => {
+                if (!active)
+                    return;
+                recropRect.x = Math.min(sx, mouse.x);
+                recropRect.y = Math.min(sy, mouse.y);
+                recropRect.width = Math.abs(mouse.x - sx);
+                recropRect.height = Math.abs(mouse.y - sy);
+            }
+            onReleased: mouse => {
+                active = false;
+                if (recropRect.width < 8 || recropRect.height < 8) {
+                    root.currentTool = "none";
+                    return;
+                }
+                root.editorRegionX = recropRect.x;
+                root.editorRegionY = recropRect.y;
+                root.editorRegionW = recropRect.width;
+                root.editorRegionH = recropRect.height;
+                root.currentTool = "none";
+            }
+
+            Rectangle {
+                id: recropRect
+                visible: recropArea.active
+                color: "#33ffffff"
+                border.width: 1
+                border.color: root.selectionBorderColor
             }
         }
 
