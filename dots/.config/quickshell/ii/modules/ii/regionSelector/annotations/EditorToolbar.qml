@@ -1,11 +1,17 @@
+// Annotation toolbar for the inline region editor. `editor` points back at the
+// owning RegionSelection so each button can drive its tool / undo / export state.
+
 import QtQuick
+import QtQuick.Layouts
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-// Annotation toolbar for the inline region editor. `editor` points back at the
-// owning RegionSelection so each button can drive its tool / undo / export state.
+// Layout mirrors KDE Spectacle's utility bar: history (undo/redo) first, then a
+// separator, then the pointer/select tool followed by the drawing tools.
+// Copy/Save sit behind a trailing separator for now; they move to the middle
+// action bar in a later phase.
 Toolbar {
     id: toolbar
 
@@ -13,17 +19,76 @@ Toolbar {
 
     spacing: 8
 
-    // Arrow
+    // Undo
     IconToolbarButton {
-        id: arrowBtn
-
-        text: "north_east"
-        toggled: editor.currentTool === "arrow"
-        onClicked: editor.currentTool = editor.currentTool === "arrow" ? "none" : "arrow"
+        text: "undo"
+        enabled: editor.undoStack.length > 0
+        onClicked: editor.undo()
 
         StyledToolTip {
             z: 9999
-            text: Translation.tr("Arrow")
+            text: Translation.tr("Undo")
+        }
+
+    }
+
+    // Redo
+    IconToolbarButton {
+        text: "redo"
+        enabled: editor.redoStack.length > 0
+        onClicked: editor.redo()
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Redo")
+        }
+
+    }
+
+    ToolbarSeparator {
+    }
+
+    // Select / pointer — pick, move and restyle existing annotations.
+    IconToolbarButton {
+        id: selectBtn
+
+        text: "arrow_selector_tool"
+        toggled: editor.currentTool === "none"
+        onClicked: editor.currentTool = "none"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Select")
+        }
+
+    }
+
+    // Pencil
+    IconToolbarButton {
+        id: pencilBtn
+
+        text: "edit"
+        toggled: editor.currentTool === "pencil"
+        onClicked: editor.currentTool = editor.currentTool === "pencil" ? "none" : "pencil"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Pencil")
+        }
+
+    }
+
+    // Highlighter
+    IconToolbarButton {
+        id: highlighterBtn
+
+        text: "ink_highlighter"
+        toggled: editor.currentTool === "highlighter"
+        onClicked: editor.currentTool = editor.currentTool === "highlighter" ? "none" : "highlighter"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Highlighter")
         }
 
     }
@@ -43,7 +108,22 @@ Toolbar {
 
     }
 
-    // Rectangle with shape accordion
+    // Arrow
+    IconToolbarButton {
+        id: arrowBtn
+
+        text: "north_east"
+        toggled: editor.currentTool === "arrow"
+        onClicked: editor.currentTool = editor.currentTool === "arrow" ? "none" : "arrow"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Arrow")
+        }
+
+    }
+
+    // Rectangle with shape accordion (extra shapes: star)
     Item {
         id: shapeSelectorContainer
 
@@ -85,20 +165,6 @@ Toolbar {
 
                     spacing: 2
                     scale: editor.shapePopupVisible ? 1 : 0.9
-
-                    IconToolbarButton {
-                        id: circleBtn
-
-                        text: "circle"
-                        toggled: editor.currentTool === "circle"
-                        onClicked: editor.currentTool = editor.currentTool === "circle" ? "none" : "circle"
-
-                        StyledToolTip {
-                            z: 9999
-                            text: Translation.tr("Circle")
-                        }
-
-                    }
 
                     IconToolbarButton {
                         id: starBtn
@@ -166,6 +232,21 @@ Toolbar {
 
     }
 
+    // Ellipse / circle (top-level, next to the rectangle)
+    IconToolbarButton {
+        id: circleBtn
+
+        text: "circle"
+        toggled: editor.currentTool === "circle"
+        onClicked: editor.currentTool = editor.currentTool === "circle" ? "none" : "circle"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Circle")
+        }
+
+    }
+
     // Fill toggle for closed shapes (rectangle / circle / star)
     IconToolbarButton {
         id: fillBtn
@@ -177,66 +258,6 @@ Toolbar {
         StyledToolTip {
             z: 9999
             text: Translation.tr("Fill shapes")
-        }
-
-    }
-
-    // Pencil
-    IconToolbarButton {
-        id: pencilBtn
-
-        text: "edit"
-        toggled: editor.currentTool === "pencil"
-        onClicked: editor.currentTool = editor.currentTool === "pencil" ? "none" : "pencil"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Pencil")
-        }
-
-    }
-
-    // Highlighter
-    IconToolbarButton {
-        id: highlighterBtn
-
-        text: "ink_highlighter"
-        toggled: editor.currentTool === "highlighter"
-        onClicked: editor.currentTool = editor.currentTool === "highlighter" ? "none" : "highlighter"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Highlighter")
-        }
-
-    }
-
-    // Text
-    IconToolbarButton {
-        id: textBtn
-
-        text: "text_fields"
-        toggled: editor.currentTool === "text"
-        onClicked: editor.currentTool = editor.currentTool === "text" ? "none" : "text"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Text")
-        }
-
-    }
-
-    // Number badge
-    IconToolbarButton {
-        id: numberBtn
-
-        text: "counter_1"
-        toggled: editor.currentTool === "number"
-        onClicked: editor.currentTool = editor.currentTool === "number" ? "none" : "number"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Number badge")
         }
 
     }
@@ -310,6 +331,36 @@ Toolbar {
                 easing.type: Easing.InOutCubic
             }
 
+        }
+
+    }
+
+    // Text
+    IconToolbarButton {
+        id: textBtn
+
+        text: "text_fields"
+        toggled: editor.currentTool === "text"
+        onClicked: editor.currentTool = editor.currentTool === "text" ? "none" : "text"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Text")
+        }
+
+    }
+
+    // Number badge
+    IconToolbarButton {
+        id: numberBtn
+
+        text: "counter_1"
+        toggled: editor.currentTool === "number"
+        onClicked: editor.currentTool = editor.currentTool === "number" ? "none" : "number"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Number badge")
         }
 
     }
@@ -557,33 +608,10 @@ Toolbar {
 
     }
 
-    // Undo
-    IconToolbarButton {
-        text: "undo"
-        enabled: editor.undoStack.length > 0
-        onClicked: editor.undo()
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Undo")
-        }
-
+    ToolbarSeparator {
     }
 
-    // Redo
-    IconToolbarButton {
-        text: "redo"
-        enabled: editor.redoStack.length > 0
-        onClicked: editor.redo()
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Redo")
-        }
-
-    }
-
-    // Copy
+    // Copy — temporary; moves to the middle action bar in a later phase.
     IconToolbarButton {
         text: "content_copy"
         onClicked: editor.finalizeScreenshot(false)
@@ -595,7 +623,7 @@ Toolbar {
 
     }
 
-    // Save
+    // Save — temporary; moves to the middle action bar in a later phase.
     IconToolbarButton {
         text: "save"
         onClicked: editor.finalizeScreenshot(true)
@@ -605,6 +633,14 @@ Toolbar {
             text: Translation.tr("Save to file")
         }
 
+    }
+
+    // Reusable vertical divider (Spectacle-style toolbar separator).
+    component ToolbarSeparator: Rectangle {
+        implicitWidth: 1
+        implicitHeight: 24
+        Layout.alignment: Qt.AlignVCenter
+        color: Appearance.colors.colOutlineVariant
     }
 
 }
