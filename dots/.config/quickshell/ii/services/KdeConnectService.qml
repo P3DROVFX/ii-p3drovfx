@@ -701,13 +701,6 @@ Singleton {
     }
 
     function _normaliseNotifications(list) {
-        // Build a lookup of existing notification timestamps AND content by
-        // publicId so we can:
-        //   1. PRESERVE timestamps across syncs (so "Now" → "1m" works)
-        //   2. UPDATE the timestamp when the notification content changes
-        //      (e.g. WhatsApp group receives a new message — the publicId
-        //      stays the same but the ticker/body changes, and the group
-        //      should move to the top of the notification list)
         const existing = {}
         for (let i = 0; i < root.notifications.length; i++) {
             const n = root.notifications[i]
@@ -729,15 +722,11 @@ Singleton {
             let time
             const prev = existing[publicId]
             if (prev) {
-                // Notification already existed — check if content changed.
                 const contentChanged = (ticker !== prev.ticker)
                     || (body !== prev.body)
                 if (contentChanged) {
-                    // Content changed (new message in a conversation, etc.)
-                    // Update timestamp so the group moves to the top.
                     time = Date.now()
                 } else {
-                    // No content change — preserve existing timestamp.
                     time = prev.time
                 }
             } else if (typeof n.time === "number") {
@@ -745,9 +734,9 @@ Singleton {
             } else if (n.time) {
                 time = parseInt(n.time, 10)
             } else {
-                // New notification — use current time.
                 time = Date.now()
             }
+            const image = root._extractNotificationImage(n)
             return {
                 publicId: publicId,
                 appName: appName,
@@ -759,6 +748,7 @@ Singleton {
                     ? Boolean(n.dismissable)
                     : (n.isCancel !== false),
                 iconPath: n.iconPath ?? "",
+                image: image,
                 actions: (n.actions ?? []).map(a => ({
                     key: a.key ?? "",
                     label: a.label ?? a.text ?? "",
@@ -768,6 +758,21 @@ Singleton {
                 package: n.package ?? "",
             }
         })
+    }
+
+    function _extractNotificationImage(n) {
+        const internalId = n.internalId ?? ""
+        if (internalId.indexOf("com.google.android.youtube") >= 0) {
+            const segments = internalId.split("|")
+            if (segments.length >= 4) {
+                const videoIdPart = segments[3]
+                const videoId = videoIdPart.split("::")[0]
+                if (videoId && videoId.length === 11) {
+                    return "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg"
+                }
+            }
+        }
+        return ""
     }
 
     function requestNotificationsRefresh() {
@@ -1537,6 +1542,7 @@ Singleton {
             replyPlaceholder: n.replyPlaceholder,
             dismissable: n.dismissable,
             iconPath: n.iconPath,
+            image: n.image,
             actions: (n.actions || []).map(a => ({ key: a.key, label: a.label }))
         }))
         root._notificationsCache[root.activeDeviceId] = {

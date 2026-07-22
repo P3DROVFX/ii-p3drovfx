@@ -127,12 +127,13 @@ Singleton {
     // ─── Granular dependency flags (for the install guide UI) ───
     property bool droidcamCliPresent: false
     property bool v4l2loopbackLoaded: false
+    property bool v4l2loopbackInstalled: false
     property bool v4lUtilsPresent: false
     property bool mpvPresent: false
 
-    // Composite: droidcam-cli + v4l2loopback module are the hard requirements.
+    // Composite: droidcam-cli + v4l2loopback module (loaded or installed on system) are the hard requirements.
     // v4l-utils and mpv are recommended (device detection + preview window).
-    readonly property bool available: root.droidcamCliPresent && root.v4l2loopbackLoaded
+    readonly property bool available: root.droidcamCliPresent && (root.v4l2loopbackLoaded || root.v4l2loopbackInstalled)
 
     /** Array of missing dependency descriptors for the install guide popup.
      *  Each entry: { key, name, description, present, installCommands: {distro: cmd} } */
@@ -146,7 +147,7 @@ Singleton {
                 present: false,
                 installCommands: _droidcamInstallCommands
             })
-        if (!root.v4l2loopbackLoaded)
+        if (!root.v4l2loopbackLoaded && !root.v4l2loopbackInstalled)
             deps.push({
                 key: "v4l2loopback",
                 name: Translation.tr("v4l2loopback kernel module"),
@@ -179,9 +180,9 @@ Singleton {
         debian: "# Download from https://www.dev47apps.com/droidcam/linux/\n# Or: sudo apt install droidcam",
     })
     readonly property var _v4l2loopbackInstallCommands: ({
-        arch: "yay -S v4l2loopback-dkms\nsudo modprobe v4l2loopback",
-        fedora: "sudo dnf install akmod-v4l2loopback\nsudo modprobe v4l2loopback",
-        debian: "sudo apt install v4l2loopback-dkms\nsudo modprobe v4l2loopback",
+        arch: "yay -S v4l2loopback-dkms\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
+        fedora: "sudo dnf install akmod-v4l2loopback\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
+        debian: "sudo apt install v4l2loopback-dkms\nsudo modprobe v4l2loopback\necho v4l2loopback | sudo tee /etc/modules-load.d/v4l2loopback.conf",
     })
     readonly property var _v4lUtilsInstallCommands: ({
         arch: "sudo pacman -S v4l-utils",
@@ -217,24 +218,39 @@ Singleton {
 
     // ─── Granular dependency check ────────────────────────
     // Checks all 4 deps in a single bash invocation and parses the results.
-    // Replaces the old single-binary checkAvailProc.
+    // Checks both loaded (lsmod) and installed on kernel (modinfo).
     Process {
         id: checkAvailProc
         running: false
         command: ["bash", "-c",
             // Each line: "dep=0" or "dep=1"
             "command -v droidcam-cli >/dev/null 2>&1 && echo 'droidcam=1' || echo 'droidcam=0'; " +
-            "lsmod 2>/dev/null | grep -q '^v4l2loopback' && echo 'v4l2loopback=1' || echo 'v4l2loopback=0'; " +
+            "lsmod 2>/dev/null | grep -q '^v4l2loopback' && echo 'v4l2loopback_loaded=1' || echo 'v4l2loopback_loaded=0'; " +
+            "modinfo v4l2loopback >/dev/null 2>&1 && echo 'v4l2loopback_installed=1' || echo 'v4l2loopback_installed=0'; " +
             "command -v v4l2-ctl >/dev/null 2>&1 && echo 'v4lutils=1' || echo 'v4lutils=0'; " +
             "command -v mpv >/dev/null 2>&1 && echo 'mpv=1' || echo 'mpv=0'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const out = String(this.text)
                 root.droidcamCliPresent = out.indexOf("droidcam=1") >= 0
-                root.v4l2loopbackLoaded = out.indexOf("v4l2loopback=1") >= 0
+                root.v4l2loopbackLoaded = out.indexOf("v4l2loopback_loaded=1") >= 0
+                root.v4l2loopbackInstalled = out.indexOf("v4l2loopback_installed=1") >= 0
                 root.v4lUtilsPresent = out.indexOf("v4lutils=1") >= 0
                 root.mpvPresent = out.indexOf("mpv=1") >= 0
                 root.stateChanged()
+            }
+        }
+    }
+
+    // Process to auto-load v4l2loopback kernel module if installed but not loaded
+    Process {
+        id: loadModuleProc
+        running: false
+        command: ["bash", "-c", "sudo -n modprobe v4l2loopback 2>/dev/null || pkexec modprobe v4l2loopback 2>/dev/null || modprobe v4l2loopback 2>/dev/null"]
+        onExited: (code, status) => {
+            checkAvailProc.running = true
+            if (root.connecting && !root.running) {
+                root._doStartCamera()
             }
         }
     }
@@ -451,6 +467,15 @@ Singleton {
         root._userStopped = false
         root.stateChanged()
 
+        if (root.v4l2loopbackInstalled && !root.v4l2loopbackLoaded) {
+            loadModuleProc.running = true
+            return
+        }
+
+        root._doStartCamera()
+    }
+
+    function _doStartCamera(): void {
         const conf = Config.options.phone.webcam
         const port = conf.port || 4747
 

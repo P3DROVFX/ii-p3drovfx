@@ -212,6 +212,7 @@ case "$DISTRO" in
         # against the running kernel during the dnf install above).
         echo "▸ Loading v4l2loopback kernel module..."
         sudo modprobe v4l2loopback || echo "  ! modprobe v4l2loopback failed — you may need to reboot."
+        echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf >/dev/null 2>&1 || true
         echo ""
 
         # Install the DroidCam client binary from official zip
