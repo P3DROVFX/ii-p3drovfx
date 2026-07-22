@@ -817,6 +817,7 @@ PanelWindow {
                 color: root.selectionBorderColor
                 overlayColor: root.overlayColor
                 breathingBorderOnly: root.phase === RegionSelection.Phase.Post
+                showDimensions: !root.inlineEditorActive
             }
         }
 
@@ -924,7 +925,7 @@ PanelWindow {
         Row {
             id: regionSelectionControls
             z: 10
-            visible: root.phase === RegionSelection.Phase.Select
+            visible: root.phase === RegionSelection.Phase.Select && !root.inlineEditorActive
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 bottom: parent.bottom
@@ -1446,9 +1447,9 @@ PanelWindow {
                     var newList = root.annotations.slice();
                     newList.push(AnnotationModel.clone(tempAnnotation));
                     root.annotations = newList;
-                    // Keep the just-drawn shape selected so a fill/colour/width
-                    // toggle applies to it without re-selecting it first.
-                    root.selectedId = tempAnnotation.id;
+                    // Don't auto-select the freshly drawn shape; the user picks
+                    // the Select tool explicitly to edit it.
+                    root.selectedId = null;
                     tempAnnotation = null;
                 }
 
@@ -1924,13 +1925,13 @@ PanelWindow {
 
             x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
             y: {
-                var below = root.editorRegionY + root.editorRegionH + 12;
+                var gap = 12;
+                var below = root.editorRegionY + root.editorRegionH + gap;
                 if (below + height <= root.screen.height - 8)
                     return below;
-                var above = root.editorRegionY - height - 12;
-                if (above >= 8)
-                    return above;
-                return root.screen.height - height - 8;
+                // No room below the selection: tuck the bar just inside its
+                // bottom edge instead of flinging it to the top of the screen.
+                return Math.max(8, root.editorRegionY + root.editorRegionH - height - gap);
             }
 
             component ActionButton: RippleButton {
