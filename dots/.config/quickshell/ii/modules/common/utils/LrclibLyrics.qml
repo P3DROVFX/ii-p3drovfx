@@ -26,6 +26,7 @@ Item {
     property string error: ""
     property bool instrumental: false
     property var lines: []
+    property string plainLyricsText: ""  // plain (unsynced) lyrics from LRCLib as fallback
     property var _cache: ({})
 
     property string loadedKey: ""
@@ -306,6 +307,7 @@ Item {
         root.error = "";
         root.instrumental = false;
         root.lines = [];
+        root.plainLyricsText = "";
         root.loadedKey = "";
         root.requestKey = "";
         root.attempt = 0;
@@ -385,6 +387,7 @@ Item {
         if (cached) {
             root.instrumental = cached.instrumental || false;
             root.lines = cached.lines || [];
+            root.plainLyricsText = cached.plainLyrics || "";
             root.loading = false;
             root.error = "";
             root.loadedKey = root.fetchKey;
@@ -403,6 +406,12 @@ Item {
         const key = `${track}||${artist}||${duration}`;
         root._cache[key] = data;
         saveCache();
+    }
+
+    function applyPlainLyrics(plain) {
+        if (plain && plain.trim().length > 0) {
+            root.plainLyricsText = plain.trim();
+        }
     }
 
     function saveCache() {
@@ -432,6 +441,7 @@ Item {
                     if (cached) {
                         root.instrumental = cached.instrumental || false;
                         root.lines = cached.lines || [];
+                        root.plainLyricsText = cached.plainLyrics || "";
                         root.loading = false;
                         root.error = "";
                         root.loadedKey = root.fetchKey;
@@ -532,8 +542,10 @@ Item {
 
                     root.setCache(root.queryTitle, root.queryArtist, root.queryDuration, {
                         instrumental: root.instrumental,
-                        lines: root.lines
+                        lines: root.lines,
+                        plainLyrics: (best.plainLyrics ?? "").trim()
                     });
+                    root.applyPlainLyrics(best.plainLyrics ?? "");
 
                     root.loading = false;
                     root.error = root.lines.length === 0 && root.instrumental ? "Instrumental" : "";
