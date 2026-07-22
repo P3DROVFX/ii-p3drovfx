@@ -12,6 +12,7 @@ Item {
     property alias description: widgetDescriptionText.text
     property alias shape: shapeWidget.shape
     property alias descriptionHorizontalAlignment: widgetDescriptionText.horizontalAlignment
+    property bool animateIconOnShow: false
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -23,6 +24,45 @@ Item {
 
     Behavior on opacity {
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+    }
+
+    onOpacityChanged: {
+        if (opacity > 0.9 && animateIconOnShow && !_iconAnimated) {
+            _iconAnimated = true;
+            iconEntranceAnim.start();
+        } else if (opacity < 0.1) {
+            _iconAnimated = false;
+        }
+    }
+
+    property bool _iconAnimated: false
+
+    onShownChanged: {
+        if (shown && animateIconOnShow) {
+            iconEntranceAnim.start();
+        }
+    }
+
+    SequentialAnimation {
+        id: iconEntranceAnim
+        ParallelAnimation {
+            NumberAnimation {
+                target: shapeWidget
+                property: "scale"
+                from: 0.3
+                to: 1.0
+                duration: 500
+                easing.type: Easing.OutBack
+            }
+            NumberAnimation {
+                target: iconRotation
+                property: "angle"
+                from: -360
+                to: 0
+                duration: 600
+                easing.type: Easing.OutCubic
+            }
+        }
     }
 
     ColumnLayout {
@@ -39,6 +79,13 @@ Item {
             padding: 12
             iconSize: 56
             rotation: -30 * (1 - root.opacity)
+            
+            transform: Rotation {
+                id: iconRotation
+                origin.x: shapeWidget.width / 2
+                origin.y: shapeWidget.height / 2
+                angle: 0
+            }
         }
         StyledText {
             id: widgetNameText

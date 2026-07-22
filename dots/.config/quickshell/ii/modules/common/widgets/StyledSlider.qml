@@ -152,9 +152,10 @@ Slider {
                     frequency: root.waveFrequency
                     fullLength: root.width
                     color: root.highlightColor
-                    amplitudeMultiplier: root.wavy ? 0.5 : 0
+                    lineWidth: Math.max(6, root.trackWidth)
+                    amplitudeMultiplier: root.wavy ? 0.6 : 0
                     width: parent.width
-                    height: root.trackWidth
+                    height: root.trackWidth * 1.5
                     Connections {
                         target: root
                         function onValueChanged() { wavyFill.requestPaint(); }

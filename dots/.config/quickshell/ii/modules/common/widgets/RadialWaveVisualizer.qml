@@ -2,30 +2,49 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
-import QtQuick.Effects
 
-Canvas { // Visualizer
+Canvas { // High-performance silky-smooth radial wave visualizer
     id: root
     property list<var> points: []
-    property list<var> smoothPoints: [] 
+    property list<var> renderedPoints: []
+    property list<var> smoothPoints: []
     property real maxVisualizerValue: 800
     property int smoothing: 2
     property bool live: true
     property color color: Appearance.m3colors.m3primary
+    property real waveOpacity: 0.20
+    property real waveBlur: 0
+    property real barThickness: 10
 
-    property real waveOpacity: 0.15
-    property real waveBlur: 1
-
-    onPointsChanged: () => {
-        root.requestPaint()
+    // Frame animation loop for organic LERP interpolation
+    FrameAnimation {
+        running: root.live && root.points.length > 0
+        onTriggered: {
+            var n = root.points.length;
+            if (n === 0) return;
+            if (root.renderedPoints.length !== n) {
+                root.renderedPoints = root.points.slice();
+            } else {
+                var lerpSpeed = 0.20;
+                var arr = root.renderedPoints.slice();
+                for (var i = 0; i < n; i++) {
+                    var target = root.live ? (root.points[i] || 0) : 0;
+                    arr[i] += (target - arr[i]) * lerpSpeed;
+                }
+                root.renderedPoints = arr;
+            }
+            root.requestPaint();
+        }
     }
 
     anchors.fill: parent
+    renderTarget: Canvas.Image
+
     onPaint: {
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
 
-        var points = root.points;
+        var points = root.renderedPoints;
         var maxVal = root.maxVisualizerValue || 1;
         var w = width;
         var h = height;
@@ -94,12 +113,5 @@ Canvas { // Visualizer
         ctx.fill();
     }
 
-    layer.enabled: true
-    layer.effect: MultiEffect {
-        source: root
-        saturation: 1.0
-        blurEnabled: true
-        blurMax: 7
-        blur: root.waveBlur
-    }
+    layer.enabled: false
 }
