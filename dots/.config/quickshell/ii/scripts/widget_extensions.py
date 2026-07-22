@@ -117,24 +117,69 @@ def cmd_install(url_or_path: str, dest_dir: str):
         }))
         return
 
-    # Ensure URL is a valid https:// or git:// URL (basic safety check)
+    # Support shorthand "user/repo" format — expand to full GitHub URL
+    if re.match(r'^[a-zA-Z0-9_\-]+/[a-zA-Z0-9_\-]+$', url_or_path):
+        url_or_path = f"https://github.com/{url_or_path}"
+
+    # Ensure URL is a valid https://, git@, or git:// URL (basic safety check)
     if not (url_or_path.startswith("https://") or url_or_path.startswith("git@") or url_or_path.startswith("git://")):
         print(json.dumps({"status": "error", "error": "URL must start with https://, git@, or git://"}))
         return
 
-    try:
-        result = subprocess.run(
-            ["git", "clone", "--depth", "1", url_or_path, installed_path],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.returncode != 0:
-            print(json.dumps({"status": "error", "error": result.stderr.strip() or "git clone failed"}))
-            return
-    except subprocess.TimeoutExpired:
-        print(json.dumps({"status": "error", "error": "git clone timed out"}))
-        return
-    except Exception as e:
-        print(json.dumps({"status": "error", "error": str(e)}))
+    def _https_to_ssh(url):
+        """Convert HTTPS GitHub URL to SSH format."""
+        # https://github.com/user/repo -> git@github.com:user/repo
+        m = re.match(r'^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$', url)
+        if m:
+            return f"git@github.com:{m.group(1)}/{m.group(2)}.git"
+        return None
+
+    def _ssh_to_https(url):
+        """Convert SSH GitHub URL to HTTPS format."""
+        # git@github.com:user/repo.git -> https://github.com/user/repo
+        m = re.match(r'^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$', url)
+        if m:
+            return f"https://github.com/{m.group(1)}/{m.group(2)}"
+        return None
+
+    def _try_clone(clone_url, target):
+        """Attempt a shallow clone. Returns (success, error_msg)."""
+        try:
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", clone_url, target],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode != 0:
+                return False, result.stderr.strip() or "git clone failed"
+            return True, ""
+        except subprocess.TimeoutExpired:
+            return False, "git clone timed out"
+        except Exception as e:
+            return False, str(e)
+
+    # Try primary URL, then fallback to alternate protocol (SSH <-> HTTPS)
+    urls_to_try = [url_or_path]
+    if url_or_path.startswith("https://"):
+        alt = _https_to_ssh(url_or_path)
+        if alt:
+            urls_to_try.append(alt)
+    elif url_or_path.startswith("git@"):
+        alt = _ssh_to_https(url_or_path)
+        if alt:
+            urls_to_try.append(alt)
+
+    clone_ok = False
+    clone_err = ""
+    for attempt_url in urls_to_try:
+        clone_ok, clone_err = _try_clone(attempt_url, installed_path)
+        if clone_ok:
+            break
+        # Clean up failed attempt before trying next
+        if os.path.isdir(installed_path):
+            subprocess.run(["rm", "-rf", installed_path])
+
+    if not clone_ok:
+        print(json.dumps({"status": "error", "error": clone_err}))
         return
 
     widget_json_path = os.path.join(installed_path, "widget.json")
