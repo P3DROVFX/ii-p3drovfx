@@ -75,6 +75,32 @@ PanelWindow {
     property bool shapePopupVisible: false
     property bool colorPopupVisible: false
     property bool lineWidthPopupVisible: false
+    // Id of the annotation currently selected for editing (move/delete/restyle),
+    // and the one under the cursor while hovering in select mode.
+    property var selectedId: null
+    property var hoveredId: null
+
+    // Picking a drawing tool cancels any active selection.
+    onCurrentToolChanged: {
+        if (root.currentTool !== "none")
+            root.selectedId = null;
+    }
+    // Toolbar color/width edits retarget the selected annotation (blur keeps its
+    // fixed masking style). Each edit is one undo step.
+    onCurrentColorChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || sel.type === "blur")
+            return;
+        root.pushUndo();
+        root.restyleSelected("stroke", String(root.currentColor));
+    }
+    onCurrentLineWidthChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || sel.type === "blur")
+            return;
+        root.pushUndo();
+        root.restyleSelected("strokeWidth", root.currentLineWidth);
+    }
 
     function pushUndo() {
         var newStack = root.undoStack.slice();
@@ -105,11 +131,91 @@ PanelWindow {
         root.redoStack = newRedo;
     }
 
+    function selectedAnnotation() {
+        if (root.selectedId === null)
+            return null;
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id === root.selectedId)
+                return root.annotations[i];
+        }
+        return null;
+    }
+
+    function deleteSelected() {
+        if (root.selectedId === null)
+            return;
+        root.pushUndo();
+        var newList = [];
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id !== root.selectedId)
+                newList.push(root.annotations[i]);
+        }
+        root.annotations = newList;
+        root.selectedId = null;
+    }
+
+    // Shift the selected annotation's geometry by (dx, dy) in editor-local space.
+    // Caller owns the undo bookkeeping (one push per drag, not per motion event).
+    function translateSelected(dx, dy) {
+        if (root.selectedId === null)
+            return;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== root.selectedId)
+                continue;
+            var ann = AnnotationModel.clone(newList[i]);
+            var g = ann.geom;
+            switch (ann.type) {
+            case "rect":
+            case "circle":
+            case "star":
+                g.x += dx;
+                g.y += dy;
+                break;
+            case "arrow":
+                g.x1 += dx;
+                g.y1 += dy;
+                g.x2 += dx;
+                g.y2 += dy;
+                break;
+            case "pencil":
+            case "blur":
+                for (var p = 0; p < g.points.length; p++) {
+                    g.points[p].x += dx;
+                    g.points[p].y += dy;
+                }
+                break;
+            }
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+    }
+
+    function restyleSelected(key, value) {
+        if (root.selectedId === null)
+            return;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== root.selectedId)
+                continue;
+            if (newList[i].type === "blur")
+                return;
+            var ann = AnnotationModel.clone(newList[i]);
+            ann.style[key] = value;
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+    }
+
     function clearEditor() {
         root.annotations = [];
         root.undoStack = [];
         root.redoStack = [];
         root.annotationCounter = 0;
+        root.selectedId = null;
+        root.hoveredId = null;
         root.currentTool = "none";
         root.inlineEditorActive = false;
         root.phase = RegionSelection.Phase.Select;
@@ -693,6 +799,9 @@ PanelWindow {
             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_C) {
                 root.finalizeScreenshot(false);
                 event.accepted = true;
+            } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                root.deleteSelected();
+                event.accepted = true;
             }
         }
 
@@ -1062,22 +1171,70 @@ PanelWindow {
                 }
             }
 
+            // Select / move mode (active when no drawing tool is chosen).
+            // Pressing on an annotation selects and drags it; pressing empty
+            // canvas deselects and moves the whole capture region instead.
             MouseArea {
                 id: moveArea
                 anchors.fill: parent
                 enabled: root.currentTool === "none"
-                cursorShape: enabled ? Qt.SizeAllCursor : Qt.ArrowCursor
+                hoverEnabled: true
+                cursorShape: {
+                    if (!enabled)
+                        return Qt.ArrowCursor;
+                    if (movingAnnotation)
+                        return Qt.ClosedHandCursor;
+                    if (root.hoveredId !== null)
+                        return Qt.OpenHandCursor;
+                    return Qt.SizeAllCursor;
+                }
                 property real startMouseX: 0
                 property real startMouseY: 0
+                property real lastX: 0
+                property real lastY: 0
+                property bool movingAnnotation: false
+                property bool movedThisDrag: false
 
                 onPressed: mouse => {
+                    var hit = AnnotationModel.annotationAt(root.annotations, mouse.x, mouse.y, 6);
+                    if (hit) {
+                        root.selectedId = hit.id;
+                        movingAnnotation = true;
+                        movedThisDrag = false;
+                        lastX = mouse.x;
+                        lastY = mouse.y;
+                        return;
+                    }
+                    root.selectedId = null;
+                    movingAnnotation = false;
                     startMouseX = mouse.x;
                     startMouseY = mouse.y;
                 }
 
+                onReleased: {
+                    movingAnnotation = false;
+                }
+
                 onPositionChanged: mouse => {
-                    if (!pressed)
+                    if (!pressed) {
+                        var h = AnnotationModel.annotationAt(root.annotations, mouse.x, mouse.y, 6);
+                        root.hoveredId = h ? h.id : null;
                         return;
+                    }
+
+                    // Moving the selected annotation
+                    if (movingAnnotation) {
+                        if (!movedThisDrag) {
+                            root.pushUndo();
+                            movedThisDrag = true;
+                        }
+                        root.translateSelected(mouse.x - lastX, mouse.y - lastY);
+                        lastX = mouse.x;
+                        lastY = mouse.y;
+                        return;
+                    }
+
+                    // Moving the whole capture region
                     var deltaX = mouse.x - startMouseX;
                     var deltaY = mouse.y - startMouseY;
 
@@ -1094,6 +1251,55 @@ PanelWindow {
                     root.dragStartY = newY;
                     root.draggingX = newX + root.editorRegionW;
                     root.draggingY = newY + root.editorRegionH;
+                }
+            }
+
+            // Selection outline + delete affordance for the selected annotation.
+            // Sits above the move area so its chip wins the click; hidden during
+            // export so it never bakes into the PNG.
+            Item {
+                id: selectionOverlay
+                z: 6
+                readonly property var sel: root.selectedAnnotation()
+                readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
+                readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
+                visible: sel !== null && !root.exporting
+                x: bb ? bb.x - pad : 0
+                y: bb ? bb.y - pad : 0
+                width: bb ? bb.w + pad * 2 : 0
+                height: bb ? bb.h + pad * 2 : 0
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    radius: 4
+                    border.width: 1.5
+                    border.color: Appearance.colors.colPrimary
+                }
+
+                Rectangle {
+                    id: deleteChip
+                    width: 22
+                    height: 22
+                    radius: width / 2
+                    color: Appearance.colors.colPrimary
+                    anchors.left: parent.right
+                    anchors.bottom: parent.top
+                    anchors.leftMargin: -width / 2
+                    anchors.bottomMargin: -height / 2
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: 16
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.deleteSelected()
+                    }
                 }
             }
         }
