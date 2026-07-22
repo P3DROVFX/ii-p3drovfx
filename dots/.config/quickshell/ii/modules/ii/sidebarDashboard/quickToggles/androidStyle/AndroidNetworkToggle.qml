@@ -14,6 +14,8 @@ AndroidQuickToggleButton {
     tall1x2OverrideComponent: netTall1x2
     wide2x2OverrideComponent: netWide2x2
 
+    backgroundIcon: "wifi"
+
     // ── 1x2 (tall, narrow) component ─────────────────────────────────────────
     Component {
         id: netTall1x2
@@ -45,6 +47,17 @@ AndroidQuickToggleButton {
 
                     Behavior on color {
                         ColorAnimation { duration: 200 }
+                    }
+
+                    MaterialSymbol {
+                        visible: root.backgroundIcon !== ""
+                        anchors.centerIn: parent
+                        iconSize: 26
+                        opacity: 0.3
+                        color: root.toggled
+                            ? Appearance.colors.colOnPrimary
+                            : Appearance.colors.colOnLayer3
+                        text: root.backgroundIcon
                     }
 
                     MaterialSymbol {
@@ -148,6 +161,17 @@ AndroidQuickToggleButton {
 
                         Behavior on color {
                             ColorAnimation { duration: 200 }
+                        }
+
+                        MaterialSymbol {
+                            visible: root.backgroundIcon !== ""
+                            anchors.centerIn: parent
+                            iconSize: 28
+                            opacity: 0.3
+                            color: root.toggled
+                                ? Appearance.colors.colOnPrimary
+                                : Appearance.colors.colOnLayer3
+                            text: root.backgroundIcon
                         }
 
                         MaterialSymbol {

@@ -196,6 +196,23 @@ Item {
             ExpressiveIconWrapper {
                 id: netWrapper
                 vertical: root.vertical
+
+                readonly property string fullWifiIcon: {
+                    var sym = Network.materialSymbol;
+                    if (sym.startsWith("android_wifi") || sym.startsWith("wifi") || sym.startsWith("signal_wifi")) return "wifi";
+                    return "";
+                }
+
+                MaterialSymbol {
+                    visible: netWrapper.fullWifiIcon !== ""
+                    width: parent.width
+                    height: parent.height
+                    text: netWrapper.fullWifiIcon
+                    iconSize: Appearance.font.pixelSize.larger
+                    opacity: 0.3
+                    color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                }
+
                 MaterialSymbol {
                     width: parent.width
                     height: parent.height

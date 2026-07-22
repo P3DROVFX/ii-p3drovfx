@@ -66,6 +66,9 @@ Item {
     // Optional custom layout for 1x2 (tall) size — set by subclasses to override tallLayout
     property Component tall1x2OverrideComponent: null
 
+    // Optional background icon for wifi signal effect (ghost behind foreground)
+    property string backgroundIcon: ""
+
     // Edit mode state
     property bool editMode: false
     property bool isUnused: false // injected by delegate chooser
@@ -294,6 +297,15 @@ Item {
                         anchors.top: parent.top
 
                         MaterialSymbol {
+                            visible: root.backgroundIcon !== ""
+                            anchors.centerIn: parent
+                            iconSize: 26
+                            opacity: 0.3
+                            color: root.toggled ? Appearance.colors.colOnPrimary : visualButton.colIcon
+                            text: root.backgroundIcon
+                        }
+
+                        MaterialSymbol {
                             anchors.centerIn: parent
                             fill: root.toggled ? 1 : 0
                             iconSize: 26
@@ -393,6 +405,15 @@ Item {
 
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        visible: root.backgroundIcon !== ""
+                        anchors.centerIn: parent
+                        iconSize: 22
+                        opacity: 0.3
+                        color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        text: root.backgroundIcon
                     }
 
                     MaterialSymbol {
@@ -509,6 +530,15 @@ Item {
                     }
                     Behavior on color {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        visible: root.backgroundIcon !== ""
+                        anchors.centerIn: parent
+                        iconSize: root.isWide ? 22 : 24
+                        opacity: 0.3
+                        color: visualButton.colIcon
+                        text: root.backgroundIcon
                     }
 
                     MaterialSymbol {

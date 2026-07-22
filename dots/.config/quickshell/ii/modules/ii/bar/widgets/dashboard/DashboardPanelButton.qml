@@ -108,10 +108,33 @@ RippleButton { // Right sidebar button
                 ExpressiveNotificationUnreadCount {}
             }
         }
-        MaterialSymbol {
-            text: Network.materialSymbol
-            iconSize: Appearance.font.pixelSize.larger
-            color: rightSidebarButton.colText
+        Item {
+            Layout.fillHeight: true
+            implicitWidth: netFgIcon.implicitWidth
+            implicitHeight: netFgIcon.implicitHeight
+
+            readonly property string fullWifiIcon: {
+                var sym = Network.materialSymbol;
+                if (sym.startsWith("android_wifi") || sym.startsWith("wifi") || sym.startsWith("signal_wifi")) return "wifi";
+                return "";
+            }
+
+            MaterialSymbol {
+                visible: parent.fullWifiIcon !== ""
+                anchors.centerIn: parent
+                text: parent.fullWifiIcon
+                iconSize: Appearance.font.pixelSize.larger
+                opacity: 0.3
+                color: rightSidebarButton.colText
+            }
+
+            MaterialSymbol {
+                id: netFgIcon
+                anchors.centerIn: parent
+                text: Network.materialSymbol
+                iconSize: Appearance.font.pixelSize.larger
+                color: rightSidebarButton.colText
+            }
         }
         MaterialSymbol {
             Layout.leftMargin: indicatorsRowLayout.realSpacing

@@ -135,13 +135,23 @@ Item {
                         width: 22
                         height: 22
 
+                        property int strength: root.wifiNetwork?.strength ?? 0
+                        readonly property string fullWifiIcon: "wifi"
+
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            property int strength: root.wifiNetwork?.strength ?? 0
-                            text: strength > 80 ? "android_wifi_4_bar" 
-                                  : strength > 60 ? "android_wifi_3_bar" 
-                                  : strength > 40 ? "wifi_2_bar" 
-                                  : strength > 20 ? "wifi_1_bar" 
+                            text: parent.fullWifiIcon
+                            iconSize: 22
+                            opacity: 0.3
+                            color: Appearance.colors.colOnSurface
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: parent.strength > 80 ? "android_wifi_4_bar" 
+                                  : parent.strength > 60 ? "android_wifi_3_bar" 
+                                  : parent.strength > 40 ? "wifi_2_bar" 
+                                  : parent.strength > 20 ? "wifi_1_bar" 
                                   : "signal_wifi_0_bar"
                             fill: 1
                             iconSize: 22
