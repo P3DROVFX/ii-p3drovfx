@@ -101,6 +101,141 @@ Item {
         }
     }
 
+    // Entrance Animations Trigger
+    property int entranceTrigger: -1
+    function triggerContentEntrance() {
+        root.entranceTrigger++;
+    }
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            // Reset transforms & opacities
+            sourceLangBtn.opacity = 0
+            sourceLangTrans.x = -30
+            sourceLangBtn.scale = 0.85
+
+            swapBtn.opacity = 0
+            swapBtnTrans.y = -20
+            swapBtn.scale = 0.7
+            swapBtnRot.angle = 0
+
+            targetLangBtn.opacity = 0
+            targetLangTrans.x = 30
+            targetLangBtn.scale = 0.85
+
+            inputCard.opacity = 0
+            inputCardTrans.y = 25
+            inputCard.scale = 0.95
+
+            clearBtn.opacity = 0
+            clearBtn.scale = 0.6
+            pasteBtn.opacity = 0
+            pasteBtn.scale = 0.6
+
+            outputCard.opacity = 0
+            outputCardTrans.y = 35
+            outputCard.scale = 0.95
+
+            copyBtn.opacity = 0
+            copyBtn.scale = 0.6
+            searchBtn.opacity = 0
+            searchBtn.scale = 0.6
+
+            Qt.callLater(function() {
+                translatorEntranceAnim.stop()
+                translatorEntranceAnim.start()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: translatorEntranceAnim
+
+        // Source Language Button Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 60 }
+            ParallelAnimation {
+                NumberAnimation { target: sourceLangBtn; property: "opacity"; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: sourceLangTrans; property: "x"; to: 0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { target: sourceLangBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+        }
+
+        // Swap Button Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 120 }
+            ParallelAnimation {
+                NumberAnimation { target: swapBtn; property: "opacity"; to: 1.0; duration: 300; easing.type: Easing.OutCubic }
+                NumberAnimation { target: swapBtnTrans; property: "y"; to: 0; duration: 360; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+                NumberAnimation { target: swapBtn; property: "scale"; to: 1.0; duration: 360; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+            }
+        }
+
+        // Target Language Button Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 180 }
+            ParallelAnimation {
+                NumberAnimation { target: targetLangBtn; property: "opacity"; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: targetLangTrans; property: "x"; to: 0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { target: targetLangBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+        }
+
+        // Input Card Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 240 }
+            ParallelAnimation {
+                NumberAnimation { target: inputCard; property: "opacity"; to: 1.0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: inputCardTrans; property: "y"; to: 0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+                NumberAnimation { target: inputCard; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+            }
+        }
+
+        // Input Action Buttons (Clear & Paste) Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 320 }
+            ParallelAnimation {
+                NumberAnimation { target: clearBtn; property: "opacity"; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                NumberAnimation { target: clearBtn; property: "scale"; to: 1.0; duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                NumberAnimation { target: pasteBtn; property: "opacity"; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                NumberAnimation { target: pasteBtn; property: "scale"; to: 1.0; duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+            }
+        }
+
+        // Output Card Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 340 }
+            ParallelAnimation {
+                NumberAnimation { target: outputCard; property: "opacity"; to: 1.0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: outputCardTrans; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+                NumberAnimation { target: outputCard; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+            }
+        }
+
+        // Output Action Buttons Entrance
+        SequentialAnimation {
+            PauseAnimation { duration: 400 }
+            ParallelAnimation {
+                NumberAnimation { target: copyBtn; property: "opacity"; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                NumberAnimation { target: copyBtn; property: "scale"; to: 1.0; duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                NumberAnimation { target: searchBtn; property: "opacity"; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                NumberAnimation { target: searchBtn; property: "scale"; to: 1.0; duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+            }
+        }
+    }
+
+    // Swap rotation animation
+    NumberAnimation {
+        id: swapRotateAnim
+        target: swapBtnRot
+        property: "angle"
+        from: 0
+        to: 180
+        duration: 350
+        easing.type: Easing.OutBack
+        easing.overshoot: 1.5
+    }
+
     Process {
         id: translateProc
         property bool canTransliterate: true
@@ -175,11 +310,19 @@ Item {
             spacing: Appearance.rounding.small
 
             RippleButton {
+                id: sourceLangBtn
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
                 Layout.preferredWidth: 1
                 buttonRadius: Appearance.rounding.full
                 colBackground: pressed ? colLangBtnActive : (hovered ? colLangBtnHover : colLangBtn)
+
+                transform: Translate {
+                    id: sourceLangTrans
+                    x: 0
+                }
+
+                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 contentItem: RowLayout {
                     anchors.fill: parent
@@ -201,6 +344,13 @@ Item {
                         text: "arrow_drop_down"
                         color: colLangText
                         iconSize: Appearance.font.pixelSize.larger
+
+                        transform: Rotation {
+                            origin.x: 12
+                            origin.y: 12
+                            angle: sourceLangBtn.pressed ? 180 : 0
+                            Behavior on angle { NumberAnimation { duration: 250; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+                        }
                     }
                     Item {
                         Layout.fillWidth: true
@@ -210,10 +360,27 @@ Item {
             }
 
             RippleButton {
+                id: swapBtn
                 implicitWidth: 50
                 implicitHeight: 50
                 buttonRadius: Appearance.rounding.full
                 colBackground: pressed ? colSwapBtnActive : (hovered ? colSwapBtnHover : colSwapBtn)
+
+                transform: [
+                    Translate {
+                        id: swapBtnTrans
+                        y: 0
+                    },
+                    Rotation {
+                        id: swapBtnRot
+                        origin.x: 25
+                        origin.y: 25
+                        angle: 0
+                    }
+                ]
+
+                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+
                 contentItem: Item {
                     anchors.fill: parent
                     MaterialSymbol {
@@ -224,6 +391,8 @@ Item {
                     }
                 }
                 onClicked: {
+                    swapRotateAnim.stop()
+                    swapRotateAnim.start()
                     let temp = root.sourceLanguage;
                     root.sourceLanguage = root.targetLanguage;
                     root.targetLanguage = temp;
@@ -235,11 +404,19 @@ Item {
             }
 
             RippleButton {
+                id: targetLangBtn
                 Layout.fillWidth: true
                 Layout.preferredHeight: 50
                 Layout.preferredWidth: 1
                 buttonRadius: Appearance.rounding.full
                 colBackground: pressed ? colLangBtnActive : (hovered ? colLangBtnHover : colLangBtn)
+
+                transform: Translate {
+                    id: targetLangTrans
+                    x: 0
+                }
+
+                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 contentItem: RowLayout {
                     anchors.fill: parent
@@ -261,6 +438,13 @@ Item {
                         text: "arrow_drop_down"
                         color: colLangText
                         iconSize: Appearance.font.pixelSize.larger
+
+                        transform: Rotation {
+                            origin.x: 12
+                            origin.y: 12
+                            angle: targetLangBtn.pressed ? 180 : 0
+                            Behavior on angle { NumberAnimation { duration: 250; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+                        }
                     }
                     Item {
                         Layout.fillWidth: true
@@ -272,10 +456,18 @@ Item {
 
         // Input Area (Source)
         Rectangle {
+            id: inputCard
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Appearance.rounding.large
             color: colInputBox
+
+            transform: Translate {
+                id: inputCardTrans
+                y: 0
+            }
+
+            Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -309,10 +501,15 @@ Item {
                         Layout.fillWidth: true
                     }
                     RippleButton {
+                        id: clearBtn
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
                         colBackground: pressed ? colPasteBtnActive : (hovered ? colPasteBtnHover : colPasteBtn)
+                        
+                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
                         contentItem: Item {
                             anchors.fill: parent
                             MaterialSymbol {
@@ -325,10 +522,14 @@ Item {
                         visible: root.inputField.text.length > 0
                     }
                     RippleButton {
+                        id: pasteBtn
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
                         colBackground: pressed ? colPasteBtnActive : (hovered ? colPasteBtnHover : colPasteBtn)
+
+                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+
                         contentItem: Item {
                             anchors.fill: parent
                             MaterialSymbol {
@@ -345,10 +546,18 @@ Item {
 
         // Output Area (Target)
         Rectangle {
+            id: outputCard
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Appearance.rounding.large
             color: colResultBox
+
+            transform: Translate {
+                id: outputCardTrans
+                y: 0
+            }
+
+            Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -377,6 +586,8 @@ Item {
                             color: root.translatedText !== "" ? colResultText : Appearance.colors.colSubtext
                             opacity: root.translatedText !== "" ? 1.0 : 0.6
 
+                            Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
                             Layout.fillWidth: true
                         }
 
@@ -388,7 +599,10 @@ Item {
                             visible: root.secondTranslatedText.length > 0
                             
                             opacity: visible ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            scale: visible ? 1.0 : 0.92
+
+                            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                            Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
 
                             radius: Appearance.rounding.large
                             color: Qt.darker(colResultBox, 1.8)
@@ -456,10 +670,15 @@ Item {
                         Layout.fillWidth: true
                     }
                     RippleButton {
+                        id: copyBtn
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
                         colBackground: pressed ? colResultActionBtnActive : (hovered ? colResultActionBtnHover : colResultActionBtn)
+                        
+                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
                         contentItem: Item {
                             anchors.fill: parent
                             MaterialSymbol {
@@ -472,10 +691,15 @@ Item {
                         visible: root.translatedText.length > 0
                     }
                     RippleButton {
+                        id: searchBtn
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
                         colBackground: pressed ? colResultActionBtnActive : (hovered ? colResultActionBtnHover : colResultActionBtn)
+
+                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
                         contentItem: Item {
                             anchors.fill: parent
                             MaterialSymbol {
@@ -530,3 +754,4 @@ Item {
         }
     }
 }
+

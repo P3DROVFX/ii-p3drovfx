@@ -4,6 +4,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 import QtQuick
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import Quickshell
 
 /**
@@ -39,23 +41,96 @@ StyledListView {
     model: ScriptModel {
         values: KdeConnectService.appNameList
     }
+    property int entranceTrigger: -1
+    onEntranceTriggerChanged: {
+        placeholder.animateIconOnShow = true
+    }
+
     delegate: RemoteNotificationGroup {
+        id: groupDelegate
         required property int index
         required property var modelData
         width: ListView.view.width
+        opacity: delegateAnim.running ? opacity : (_validGroup ? 1.0 : 0.0)
+
+        groupPosition: {
+            const count = root.count
+            if (count <= 1) return 0 // single
+            if (index === 0) return 1 // top
+            if (index === count - 1) return 3 // bottom
+            return 2 // middle
+        }
         notificationGroup: {
             const g = KdeConnectService.groupsByAppName[modelData]
-            // Guard against the transient state where appNameList has been
-            // updated but groupsByAppName hasn't finished recomputing yet
-            // (or vice versa). Returning undefined would render an empty
-            // delegate that still consumes spacing/height.
             return g || null
+        }
+
+        property real itemBlurProgress: 0.0
+
+        layer.enabled: itemBlurProgress > 0.01
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 128.0
+            blur: groupDelegate.itemBlurProgress
+        }
+
+        transform: [
+            Translate {
+                id: groupTransform
+                y: 0
+            },
+            Scale {
+                id: groupScale
+                origin.x: groupDelegate.width / 2
+                origin.y: groupDelegate.height / 2
+                xScale: 1.0
+                yScale: 1.0
+            }
+        ]
+
+        function startEntranceAnim() {
+            delegateAnim.stop()
+            groupDelegate.opacity = 0
+            groupTransform.y = 35
+            groupScale.xScale = 0.75
+            groupScale.yScale = 0.75
+            groupDelegate.itemBlurProgress = 1.0
+            delegateAnim.start()
+        }
+
+        Component.onCompleted: {
+            if (root.entranceTrigger >= 0) {
+                Qt.callLater(startEntranceAnim)
+            }
+        }
+
+        Connections {
+            target: root
+            function onEntranceTriggerChanged() {
+                if (root.entranceTrigger >= 0) {
+                    Qt.callLater(startEntranceAnim)
+                }
+            }
+        }
+
+        SequentialAnimation {
+            id: delegateAnim
+            PauseAnimation { duration: 120 + Math.min(250, groupDelegate.index * 45) }
+            ParallelAnimation {
+                NumberAnimation { target: groupDelegate; property: "opacity"; to: (groupDelegate._validGroup ? 1.0 : 0.0); duration: 380; easing.type: Easing.OutQuart }
+                NumberAnimation { target: groupTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutQuart }
+                NumberAnimation { target: groupScale; property: "xScale"; to: 1.0; duration: 380; easing.type: Easing.OutQuart }
+                NumberAnimation { target: groupScale; property: "yScale"; to: 1.0; duration: 380; easing.type: Easing.OutQuart }
+                NumberAnimation { target: groupDelegate; property: "itemBlurProgress"; to: 0.0; duration: 380; easing.type: Easing.OutQuart }
+            }
         }
     }
 
     PagePlaceholder {
+        id: placeholder
         anchors.fill: parent
         shown: KdeConnectService.notifications.length === 0
+        animateIconOnShow: true
         icon: "notifications_off"
         description: {
             if (KdeConnectService.activeReachable

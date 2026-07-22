@@ -5,6 +5,7 @@ import qs.modules.common.functions
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 
 Rectangle {
@@ -32,28 +33,65 @@ Rectangle {
     radius: Appearance.rounding.normal
     color: Appearance.colors.colLayer1
 
-    opacity: root.hasAnimated ? 1.0 : (root.entranceTrigger >= 0 ? 0.0 : 0.0)
-    scale: root.hasAnimated ? 1.0 : 0.85
-    transform: Translate {
-        id: messageTransform
-        y: root.hasAnimated ? 0 : 25
+    layer.enabled: msgBlur.radius > 0
+    layer.effect: FastBlur {
+        id: msgBlur
+        radius: 0
+    }
+
+    opacity: root.hasAnimated ? 1.0 : 0.0
+    transform: [
+        Translate {
+            id: messageTransform
+            x: 0
+            y: 0
+        },
+        Scale {
+            id: messageScale
+            origin.x: root.messageData?.role === 'user' ? root.width : 0
+            origin.y: root.height / 2
+            xScale: 1.0
+            yScale: 1.0
+        }
+    ]
+
+    function startEntrance() {
+        messageEntranceAnim.stop();
+        root.hasAnimated = false;
+        
+        // Reset properties prior to animation trigger based on role
+        const isUser = root.messageData?.role === 'user';
+        const isAssistant = root.messageData?.role === 'assistant';
+        
+        messageTransform.x = isUser ? 80 : (isAssistant ? -60 : 0);
+        messageTransform.y = (!isUser && !isAssistant) ? 25 : 0;
+        messageScale.xScale = isUser ? 0.7 : 1.0;
+        messageScale.yScale = (!isUser && !isAssistant) ? 0.8 : 1.0;
+        msgBlur.radius = isAssistant ? 12 : 0;
+
+        messageEntranceAnim.start();
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(startEntrance);
     }
 
     onEntranceTriggerChanged: {
-        if (entranceTrigger >= 0 && !root.hasAnimated) {
-            Qt.callLater(function() {
-                messageEntranceAnim.start();
-            });
+        if (entranceTrigger >= 0) {
+            Qt.callLater(startEntrance);
         }
     }
 
     SequentialAnimation {
         id: messageEntranceAnim
-        PauseAnimation { duration: Math.min(root.messageIndex * 80, 600) }
+        PauseAnimation { duration: Math.min(root.messageIndex * 55, 450) }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-            NumberAnimation { target: root; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-            NumberAnimation { target: messageTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "opacity"; from: 0.0; to: 1.0; duration: 320; easing.type: Easing.OutQuart }
+            NumberAnimation { target: messageTransform; property: "x"; to: 0; duration: 380; easing.type: Easing.OutQuart }
+            NumberAnimation { target: messageTransform; property: "y"; to: 0; duration: 380; easing.type: Easing.OutQuart }
+            NumberAnimation { target: messageScale; property: "xScale"; to: 1.0; duration: 380; easing.type: Easing.OutBack }
+            NumberAnimation { target: messageScale; property: "yScale"; to: 1.0; duration: 380; easing.type: Easing.OutQuart }
+            NumberAnimation { target: msgBlur; property: "radius"; to: 0; duration: 250; easing.type: Easing.OutCubic }
         }
         ScriptAction { script: root.hasAnimated = true; }
     }
@@ -363,9 +401,30 @@ Rectangle {
                     values: root.messageData?.annotationSources || []
                 }
                 delegate: AnnotationSourceButton {
+                    id: annotBtn
                     required property var modelData
+                    required property int index
                     displayText: modelData.text
                     url: modelData.url
+
+                    opacity: 0.0
+                    transform: Translate {
+                        id: annotTrans
+                        x: -10
+                    }
+
+                    Component.onCompleted: {
+                        annotAnim.start();
+                    }
+
+                    SequentialAnimation {
+                        id: annotAnim
+                        PauseAnimation { duration: index * 35 }
+                        ParallelAnimation {
+                            NumberAnimation { target: annotBtn; property: "opacity"; from: 0.0; to: 1.0; duration: 220; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: annotTrans; property: "x"; from: -10; to: 0; duration: 250; easing.type: Easing.OutCubic }
+                        }
+                    }
                 }
             }
         }
@@ -381,8 +440,29 @@ Rectangle {
                     values: root.messageData?.searchQueries || []
                 }
                 delegate: SearchQueryButton {
+                    id: searchBtn
                     required property var modelData
+                    required property int index
                     query: modelData
+
+                    opacity: 0.0
+                    transform: Translate {
+                        id: searchTrans
+                        x: -10
+                    }
+
+                    Component.onCompleted: {
+                        searchAnim.start();
+                    }
+
+                    SequentialAnimation {
+                        id: searchAnim
+                        PauseAnimation { duration: index * 35 }
+                        ParallelAnimation {
+                            NumberAnimation { target: searchBtn; property: "opacity"; from: 0.0; to: 1.0; duration: 220; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: searchTrans; property: "x"; from: -10; to: 0; duration: 250; easing.type: Easing.OutCubic }
+                        }
+                    }
                 }
             }
         }

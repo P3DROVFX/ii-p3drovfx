@@ -29,6 +29,8 @@ Rectangle {
 
     property bool isVertical: Config.options.sidebar.quickSliders.vertical
 
+    property int entranceTrigger: -1
+
     GridLayout {
         id: contentItem
         anchors {
@@ -111,6 +113,7 @@ Rectangle {
 
             QuickSlider {
                 required property var modelData
+                required property int index
                 Layout.fillWidth: true
                 visible: modelData.show
                 materialSymbol: {
@@ -132,7 +135,9 @@ Rectangle {
                     return modelData.icon;
                 }
                 secondaryMaterialSymbol: modelData?.secondaryIcon ?? ""
-                value: modelData.getVal()
+                targetValue: modelData.getVal()
+                sliderIndex: index
+                parentEntranceTrigger: root.entranceTrigger
                 onMoved: modelData.setVal(value)
             }
         }
@@ -142,6 +147,31 @@ Rectangle {
         id: quickSlider
         required property string materialSymbol
         property string secondaryMaterialSymbol
+        property real targetValue: 0
+        property int sliderIndex: 0
+        property int parentEntranceTrigger: -1
+        property real currentSliderValue: 0
+
+        value: currentSliderValue
+
+        function animateProgress() {
+            quickSlider.valueAnimationDuration = 0;
+            currentSliderValue = 0;
+            sliderDelayTimer.restart();
+        }
+
+        Timer {
+            id: sliderDelayTimer
+            interval: 180 + sliderIndex * 70
+            repeat: false
+            onTriggered: {
+                quickSlider.valueAnimationDuration = 650;
+                currentSliderValue = targetValue;
+            }
+        }
+
+        onParentEntranceTriggerChanged: animateProgress()
+        Component.onCompleted: animateProgress()
         configuration: StyledSlider.Configuration.M
         stopIndicatorValues: []
         dividerValues: secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []

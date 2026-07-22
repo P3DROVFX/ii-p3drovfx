@@ -38,17 +38,68 @@ Item {
     property bool containsDrag: false  
     property string previewPath: ""
       
+    // Entrance Animations Trigger
+    property int entranceTrigger: -1
+    function triggerContentEntrance() {
+        root.entranceTrigger++;
+    }
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            columnLayout.opacity = 0
+            columnLayoutTrans.y = 25
+            columnLayout.scale = 0.96
+
+            searchInputContainer.opacity = 0
+            searchInputContainerTrans.y = 15
+            searchInputContainer.scale = 0.95
+
+            Qt.callLater(function() {
+                wallpaperEntranceAnim.stop()
+                wallpaperEntranceAnim.start()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: wallpaperEntranceAnim
+
+        SequentialAnimation {
+            PauseAnimation { duration: 60 }
+            ParallelAnimation {
+                NumberAnimation { target: columnLayout; property: "opacity"; to: 1.0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: columnLayoutTrans; property: "y"; to: 0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+                NumberAnimation { target: columnLayout; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+            }
+        }
+
+        SequentialAnimation {
+            PauseAnimation { duration: 180 }
+            ParallelAnimation {
+                NumberAnimation { target: searchInputContainer; property: "opacity"; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: searchInputContainerTrans; property: "y"; to: 0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { target: searchInputContainer; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+        }
+    }
+
     onFocusChanged: focus => {  
         if (focus) {  
             root.inputField.forceActiveFocus();  
         }  
     }  
+
       
     ColumnLayout {  
         id: columnLayout
         anchors.fill: parent  
         anchors.margins: 4
         spacing: 10  
+
+        transform: Translate {
+            id: columnLayoutTrans
+            y: 0
+        }
           
         Item {  
             Layout.fillWidth: true  
@@ -215,6 +266,13 @@ Item {
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + statusRowLayout.implicitHeight + statusRowLayout.anchors.bottomMargin + spacing, 45)  
             clip: true  
               
+            transform: Translate {
+                id: searchInputContainerTrans
+                y: 0
+            }
+
+            Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
 
             DropArea {
                 id: dropArea

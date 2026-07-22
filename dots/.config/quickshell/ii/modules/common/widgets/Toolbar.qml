@@ -11,7 +11,7 @@ Item {
     id: root
 
     property bool enableShadow: true
-    property real padding: 4
+    property real padding: 6
     property alias colBackground: background.color
     property alias spacing: toolbarLayout.spacing
     default property alias toolbarData: toolbarLayout.data
@@ -32,7 +32,7 @@ Item {
         id: background
         anchors.fill: parent
         color: Appearance.m3colors.m3surfaceContainer
-        implicitHeight: 56
+        implicitHeight: 52
         implicitWidth: toolbarLayout.implicitWidth + root.padding * 2
         readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
         radius: fullRadius

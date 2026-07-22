@@ -68,9 +68,13 @@ Slider {
     from: 0
     to: 1
 
-    Behavior on value { // This makes the adjusted value (like volume) shift smoothly
-        SmoothedAnimation {
-            velocity: Appearance.animation.elementMoveFast.velocity
+    property int valueAnimationDuration: 0
+
+    Behavior on value {
+        enabled: root.valueAnimationDuration > 0
+        NumberAnimation {
+            duration: root.valueAnimationDuration
+            easing.type: Easing.OutCubic
         }
     }
 

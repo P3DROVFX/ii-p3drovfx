@@ -37,6 +37,25 @@ ColumnLayout {
         color: Appearance.colors.colSurfaceContainerHighest
         implicitHeight: codeBlockTitleBarRowLayout.implicitHeight + codeBlockHeaderPadding * 2
 
+        transform: Translate {
+            id: headerTranslate
+            y: -10
+        }
+        opacity: 0.0
+
+        Component.onCompleted: {
+            headerEntranceAnim.start();
+        }
+
+        SequentialAnimation {
+            id: headerEntranceAnim
+            PauseAnimation { duration: 100 }
+            ParallelAnimation {
+                NumberAnimation { target: headerTranslate; property: "y"; from: -10; to: 0; duration: 250; easing.type: Easing.OutCubic }
+                NumberAnimation { target: headerTranslate.parent; property: "opacity"; from: 0.0; to: 1.0; duration: 220; easing.type: Easing.OutCubic }
+            }
+        }
+
         RowLayout { // Language and buttons
             id: codeBlockTitleBarRowLayout
             anchors.verticalCenter: parent.verticalCenter

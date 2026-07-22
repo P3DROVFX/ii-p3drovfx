@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.functions
@@ -27,11 +28,7 @@ Rectangle {
     Behavior on color {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
-    visible: dialogBackground.implicitHeight > 0
-
-    onShowChanged: {
-        dialogBackgroundHeightAnimation.easing.bezierCurve = (show ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.emphasizedAccel)
-    }
+    visible: dialogBackground.opacity > 0.01
 
     radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
@@ -50,22 +47,33 @@ Rectangle {
         color: Appearance.m3colors.m3surfaceContainerHigh // Use opaque version of layer3
         
         property real targetY: root.height / 2 - root.backgroundHeight / 2
-        y: root.show ? targetY : (targetY - root.backgroundAnimationMovementDistance)
+        y: root.show ? targetY : (targetY + 40)
+        scale: root.show ? 1.0 : 0.88
+        opacity: root.show ? 1.0 : 0.0
+
         implicitWidth: root.backgroundWidth
-        implicitHeight: root.show ? root.backgroundHeight : 0
-        Behavior on implicitHeight {
-            NumberAnimation {
-                id: dialogBackgroundHeightAnimation
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-            }
-        }
+        implicitHeight: root.backgroundHeight
+
         Behavior on y {
             NumberAnimation {
-                duration: dialogBackgroundHeightAnimation.duration
-                easing.type: dialogBackgroundHeightAnimation.easing.type
-                easing.bezierCurve: dialogBackgroundHeightAnimation.easing.bezierCurve
+                duration: 350
+                easing.type: root.show ? Easing.OutBack : Easing.InCubic
+                easing.overshoot: 1.2
+            }
+        }
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 350
+                easing.type: root.show ? Easing.OutBack : Easing.InCubic
+                easing.overshoot: 1.2
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.show ? 280 : 200
+                easing.type: Easing.OutCubic
             }
         }
 

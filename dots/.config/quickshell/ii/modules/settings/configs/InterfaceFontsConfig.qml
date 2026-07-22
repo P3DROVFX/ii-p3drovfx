@@ -33,6 +33,35 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("Animations")
+        icon: "motion_photos_on"
+
+        ConfigSlider {
+            buttonIcon: "speed"
+            text: Translation.tr("Animation speed multiplier")
+            usePercentTooltip: false
+            stopIndicatorValues: [1.0]
+            tooltipContent: `${value.toFixed(2)}x`
+            from: 0.25
+            to: 2.5
+            stepSize: 0.05
+            value: Config.options.appearance.animationMultiplier ?? 1.0
+            onValueChanged: {
+                Config.options.appearance.animationMultiplier = value;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "animation"
+            text: Translation.tr("Scroll animations")
+            checked: Config.options.appearance.scrollAnimations ?? true
+            onCheckedChanged: {
+                Config.options.appearance.scrollAnimations = checked;
+            }
+        }
+    }
+
+    ContentSection {
         title: Translation.tr("On-Screen Display (OSD)")
         icon: "desktop_windows"
 

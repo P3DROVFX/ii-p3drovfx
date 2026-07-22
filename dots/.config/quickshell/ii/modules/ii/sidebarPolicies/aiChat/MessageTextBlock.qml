@@ -126,22 +126,16 @@ ColumnLayout {
             required property int index
             required property string modelData
 
-            // Fade in animation
+            // Fade in animation with subtle upward slide
             visible: opacity > 0
             opacity: fadeChunkSplitting ? (textLinesRepeater.textLineOpacities[index] ?? (root.messageData.done ? 1 : 0)) : 1
-            Connections {
-                target: root.messageData
-                function onDoneChanged() {
-                    if (root.messageData.done) {
-                        textLinesRepeater.textLineOpacities[textArea.index] = 1
-                    }
-                }
-            }
-            Connections {
-                target: textLinesRepeater.model
-                function onValuesChanged() {
-                    if (textLinesRepeater.model.values.length > textArea.index + 1) {
-                        textLinesRepeater.textLineOpacities[textArea.index] = 1
+            transform: Translate {
+                id: textTranslate
+                y: (fadeChunkSplitting && textArea.opacity < 0.9) ? 12 : 0
+                Behavior on y {
+                    NumberAnimation {
+                        duration: 220
+                        easing.type: Easing.OutCubic
                     }
                 }
             }

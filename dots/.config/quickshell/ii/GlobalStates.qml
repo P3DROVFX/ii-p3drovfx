@@ -437,6 +437,10 @@ Singleton {
 
     onLeftSidebarTargetWidthChanged: {
         leftSidebarAnimation.stop();
+        if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
+            animatedLeftSidebarWidth = leftSidebarTargetWidth;
+            return;
+        }
         if (leftSidebarTargetWidth > 0) {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
@@ -456,6 +460,10 @@ Singleton {
 
     onRightSidebarTargetWidthChanged: {
         rightSidebarAnimation.stop();
+        if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
+            animatedRightSidebarWidth = rightSidebarTargetWidth;
+            return;
+        }
         if (rightSidebarTargetWidth > 0) {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;

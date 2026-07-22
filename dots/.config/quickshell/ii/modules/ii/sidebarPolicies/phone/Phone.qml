@@ -56,6 +56,22 @@ Item {
                                                || !KdeConnectService.hasDevices
 
 
+    property int entranceTrigger: -1
+
+    function triggerContentEntrance(): void {
+        root.entranceTrigger++;
+        phoneHeader.entranceTrigger = root.entranceTrigger;
+        actionsRow.entranceTrigger = root.entranceTrigger;
+        notifList.entranceTrigger = root.entranceTrigger;
+        phoneFooter.entranceTrigger = root.entranceTrigger;
+    }
+
+    Component.onCompleted: {
+        Qt.callLater(() => {
+            triggerContentEntrance();
+        })
+    }
+
     function openSubPage(url: url): void {
         root.activeSubPage = Qt.resolvedUrl(url)
     }
@@ -812,7 +828,57 @@ Item {
                     }
                     spacing: 5
 
+                    Connections {
+                        target: root
+                        function onEntranceTriggerChanged() {
+                            if (root.entranceTrigger >= 0) {
+                                notifSyncBtn.opacity = 0; notifSyncBtnTransform.x = -20; notifSyncBtn.scale = 0.8
+                                notifBadgeBtn.opacity = 0; notifBadgeBtn.scale = 0.8
+                                notifClearBtn.opacity = 0; notifClearBtnTransform.x = 20; notifClearBtn.scale = 0.8
+
+                                Qt.callLater(function() {
+                                    notifToolbarAnim.stop()
+                                    notifToolbarAnim.start()
+                                })
+                            }
+                        }
+                    }
+
+                    ParallelAnimation {
+                        id: notifToolbarAnim
+
+                        // Sync button animation
+                        SequentialAnimation {
+                            PauseAnimation { duration: 420 }
+                            ParallelAnimation {
+                                NumberAnimation { target: notifSyncBtn; property: "opacity"; to: (notifSyncBtn.enabled ? 1.0 : 0.4); duration: 300; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: notifSyncBtnTransform; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: notifSyncBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+                            }
+                        }
+
+                        // Badge count animation
+                        SequentialAnimation {
+                            PauseAnimation { duration: 470 }
+                            ParallelAnimation {
+                                NumberAnimation { target: notifBadgeBtn; property: "opacity"; to: 1.0; duration: 300; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: notifBadgeBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                            }
+                        }
+
+                        // Clear button animation
+                        SequentialAnimation {
+                            PauseAnimation { duration: 520 }
+                            ParallelAnimation {
+                                NumberAnimation { target: notifClearBtn; property: "opacity"; to: (notifClearBtn.enabled ? 1.0 : 0.4); duration: 300; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: notifClearBtnTransform; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: notifClearBtn; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+                            }
+                        }
+                    }
+
                     RippleButtonWithIcon {
+                        id: notifSyncBtn
                         Layout.preferredHeight: 36
                         horizontalPadding: 12
                         rippleEnabled: true
@@ -823,20 +889,23 @@ Item {
                         colBackgroundActive: Appearance.colors.colSecondaryContainerActive ?? Appearance.colors.colSecondaryContainerHover
                         colText: Appearance.colors.colOnSecondaryContainer
                         enabled: KdeConnectService.activeReachable
-                        opacity: enabled ? 1.0 : 0.4
+                        opacity: 0
+                        scale: 0.8
                         materialIcon: "sync"
                         mainText: ""
+                        transform: Translate { id: notifSyncBtnTransform; x: -20 }
                         onClicked: () => KdeConnectService.requestNotificationsRefresh()
                         StyledToolTip {
                             text: Translation.tr("Sync notifications")
                         }
                     }
                     RippleButtonWithIcon {
+                        id: notifBadgeBtn
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
                         horizontalPadding: 10
                         rippleEnabled: false
-                        scale: 1.0
+                        scale: 0.8
                         buttonRadius: 18
                         buttonRadiusPressed: 18
                         colBackground: Appearance.colors.colSecondaryContainer
@@ -844,7 +913,7 @@ Item {
                         colText: Appearance.colors.colOnSecondaryContainer
                         enabled: false
                         hoverEnabled: false
-                        opacity: 1.0
+                        opacity: 0
                         materialIcon: ""
                         mainText: KdeConnectService.activeReachable
                                     ? Translation.tr("%1 notif.").arg(
@@ -867,6 +936,7 @@ Item {
                         }
                     }
                     RippleButtonWithIcon {
+                        id: notifClearBtn
                         Layout.preferredHeight: 36
                         horizontalPadding: 12
                         rippleEnabled: true
@@ -880,11 +950,13 @@ Item {
                                    && KdeConnectService.activeReachable
                                    && KdeConnectService.hasDevices
                                    && KdeConnectService.notificationCount > 0
-                        opacity: enabled ? 1.0 : 0.4
+                        opacity: 0
+                        scale: 0.8
                         materialIcon: KdeConnectService.notificationCount > 0
                                     ? "delete_sweep"
                                     : "do_not_disturb_on"
                         mainText: ""
+                        transform: Translate { id: notifClearBtnTransform; x: 20 }
                         onClicked: () => KdeConnectService.discardAllNotifications()
                         StyledToolTip {
                             text: KdeConnectService.notificationCount > 0
@@ -912,16 +984,63 @@ Item {
                 enabled: visible
                 z: 100
 
+                Connections {
+                    target: root
+                    function onEntranceTriggerChanged() {
+                        if (root.entranceTrigger >= 0 && root.emptyStateVisible) {
+                            emptyIcon.scale = 0.2
+                            emptyIconRotation.angle = -35
+                            emptyTitleTranslate.y = 25
+                            emptyTitle.opacity = 0
+                            emptyDescTranslate.x = -15
+                            emptyDesc.opacity = 0
+                            emptyInstallBtn.scale = 0.8
+                            emptyInstallBtn.opacity = 0
+                            
+                            Qt.callLater(() => {
+                                emptyStateAnim.stop()
+                                emptyStateAnim.start()
+                            })
+                        }
+                    }
+                }
+
+                SequentialAnimation {
+                    id: emptyStateAnim
+                    ParallelAnimation {
+                        NumberAnimation { target: emptyIcon; property: "scale"; from: 0.2; to: 1.15; duration: 400; easing.type: Easing.OutBack }
+                        NumberAnimation { target: emptyIconRotation; property: "angle"; from: -35; to: 0; duration: 500; easing.type: Easing.OutCubic }
+                    }
+                    NumberAnimation { target: emptyIcon; property: "scale"; to: 1.0; duration: 120; easing.type: Easing.InOutCubic }
+                    ParallelAnimation {
+                        NumberAnimation { target: emptyTitleTranslate; property: "y"; from: 25; to: 0; duration: 400; easing.type: Easing.OutExpo }
+                        NumberAnimation { target: emptyTitle; property: "opacity"; from: 0; to: 1; duration: 350; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: emptyDescTranslate; property: "x"; from: -15; to: 0; duration: 450; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: emptyDesc; property: "opacity"; from: 0; to: 0.7; duration: 350; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: emptyInstallBtn; property: "scale"; from: 0.8; to: 1.0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+                        NumberAnimation { target: emptyInstallBtn; property: "opacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
+                    }
+                }
+
                 Item { Layout.fillHeight: true }
 
                 MaterialSymbol {
+                    id: emptyIcon
                     Layout.alignment: Qt.AlignHCenter
                     text: KdeConnectService.available
                           ? "phonelink_off" : "phonelink_erase"
                     iconSize: 64
                     color: Appearance.colors.colSubtext
+
+                    transform: Rotation {
+                        id: emptyIconRotation
+                        origin.x: emptyIcon.width / 2
+                        origin.y: emptyIcon.height / 2
+                        angle: 0
+                    }
                 }
                 StyledText {
+                    id: emptyTitle
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
                     text: KdeConnectService.available
@@ -931,8 +1050,14 @@ Item {
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnLayer2
                     horizontalAlignment: Text.AlignHCenter
+
+                    transform: Translate {
+                        id: emptyTitleTranslate
+                        y: 0
+                    }
                 }
                 StyledText {
+                    id: emptyDesc
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
                     text: KdeConnectService.available
@@ -943,9 +1068,15 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     opacity: 0.7
+
+                    transform: Translate {
+                        id: emptyDescTranslate
+                        x: 0
+                    }
                 }
 
                 RippleButton {
+                    id: emptyInstallBtn
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredHeight: 36
                     Layout.preferredWidth: 220

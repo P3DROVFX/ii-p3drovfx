@@ -25,15 +25,15 @@ MouseArea { // Notification group area
 
     // Entrance animation properties
     property real _entranceOpacity: 0
-    property real _entranceScale: 0.75
-    property real _entranceTranslateY: 35
+    property real _entranceScale: 0.65
+    property real _entranceTranslateY: 50
     property bool _entranceDone: false
 
     onEntranceTriggerChanged: {
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.75;
-        _entranceTranslateY = 35;
+        _entranceScale = 0.65;
+        _entranceTranslateY = 50;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -42,8 +42,8 @@ MouseArea { // Notification group area
     Component.onCompleted: {
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.75;
-        _entranceTranslateY = 35;
+        _entranceScale = 0.65;
+        _entranceTranslateY = 50;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -51,11 +51,11 @@ MouseArea { // Notification group area
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.globalIndex, 0), 15) * 35 }
+        PauseAnimation { duration: 150 + Math.min(Math.max(root.globalIndex, 0), 15) * 65 }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.75; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 35; to: 0; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.65; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 0.8 }
+            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 50; to: 0; duration: 380; easing.type: Easing.OutQuart }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
@@ -155,11 +155,10 @@ MouseArea { // Notification group area
             }
         }
         onFinished: () => {
-            root.notifications.forEach(notif => {
-                Qt.callLater(() => {
-                    Notifications.discardNotification(notif.notificationId);
-                });
-            });
+            const ids = root.notifications.map(n => n.notificationId);
+            if (ids.length > 0) {
+                Notifications.discardMultipleNotifications(ids);
+            }
         }
     }
 

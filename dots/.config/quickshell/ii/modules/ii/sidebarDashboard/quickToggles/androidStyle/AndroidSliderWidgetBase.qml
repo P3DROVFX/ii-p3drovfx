@@ -34,21 +34,67 @@ Item {
     property real _entranceTranslateY: 20
     property bool _entranceDone: false
 
+    property real currentSliderValue: 0
+
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
+
+    function resetAndAnimateSlider() {
+        if (_animationsDisabled) {
+            quickSlider.valueAnimationDuration = 0;
+            currentSliderValue = root.sliderValue;
+            return;
+        }
+        // Step 1: Instant reset to 0 without animation
+        quickSlider.valueAnimationDuration = 0;
+        currentSliderValue = 0;
+        
+        // Step 2: Set animation duration and assign final target value after entrance delay
+        sliderDelayTimer.restart();
+    }
+
+    Timer {
+        id: sliderDelayTimer
+        interval: 180 + Math.min(Math.max(root.buttonIndex, 0), 15) * 40
+        repeat: false
+        onTriggered: {
+            quickSlider.valueAnimationDuration = _animationsDisabled ? 0 : 650;
+            currentSliderValue = root.sliderValue;
+        }
+    }
+
     onEntranceTriggerChanged: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceTranslateY = 0;
+            resetAndAnimateSlider();
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.85;
         _entranceTranslateY = 20;
+        resetAndAnimateSlider();
         Qt.callLater(function() {
             entranceAnim.start();
         });
     }
 
     Component.onCompleted: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceTranslateY = 0;
+            resetAndAnimateSlider();
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.85;
         _entranceTranslateY = 20;
+        resetAndAnimateSlider();
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -56,7 +102,7 @@ Item {
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.buttonIndex, 0), 15) * 35 }
+        PauseAnimation { duration: 150 + Math.min(Math.max(root.buttonIndex, 0), 15) * 55 }
         ParallelAnimation {
             NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
             NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
@@ -179,7 +225,7 @@ Item {
                 configuration: StyledSlider.Configuration.M
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
-                value: root.sliderValue
+                value: root.currentSliderValue
                 onMoved: root.moved(value)
                 
                 // To prevent flickable dragging when using slider

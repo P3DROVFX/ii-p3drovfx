@@ -263,19 +263,30 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         implicitWidth: statusItemRowLayout.implicitWidth
 
         opacity: 0.0
-        scale: 0.85
-        transform: Translate {
-            id: statusItemTransform
-            y: 20
-        }
+        transform: [
+            Translate {
+                id: statusItemTransform
+                x: 0
+                y: 0
+            },
+            Rotation {
+                id: statusItemRotation
+                origin.x: statusItem.width / 2
+                origin.y: statusItem.height / 2
+                axis { x: 1; y: 0; z: 0 }
+                angle: 0
+            }
+        ]
 
         Connections {
             target: statusItem.rootRef
             function onEntranceTriggerChanged() {
                 if (statusItem.rootRef && statusItem.rootRef.entranceTrigger >= 0) {
                     statusItem.opacity = 0.0;
-                    statusItem.scale = 0.85;
-                    statusItemTransform.y = 20;
+                    statusItem.scale = statusItem.animIndex === 2 ? 0.2 : 1.0;
+                    statusItemTransform.x = statusItem.animIndex === 1 ? -20 : 0;
+                    statusItemTransform.y = statusItem.animIndex === 0 ? 15 : 0;
+                    statusItemRotation.angle = statusItem.animIndex === 0 ? 90 : 0;
                     Qt.callLater(function() {
                         statusItemAnim.start();
                     });
@@ -288,8 +299,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             PauseAnimation { duration: 140 + statusItem.animIndex * 80 }
             ParallelAnimation {
                 NumberAnimation { target: statusItem; property: "opacity"; from: 0.0; to: 1.0; duration: 280 }
-                NumberAnimation { target: statusItem; property: "scale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-                NumberAnimation { target: statusItemTransform; property: "y"; from: 20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusItem; property: "scale"; to: 1.0; duration: 350; easing.type: Easing.OutBack }
+                NumberAnimation { target: statusItemTransform; property: "x"; to: 0; duration: 350; easing.type: Easing.OutBack }
+                NumberAnimation { target: statusItemTransform; property: "y"; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusItemRotation; property: "angle"; to: 0; duration: 350; easing.type: Easing.OutBack }
             }
         }
 
@@ -454,15 +467,18 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 mouseScrollFactor: Config.options.interactions.scrolling.mouseScrollFactor * 1.4
 
                 property int lastResponseLength: 0
-                // onContentHeightChanged: {
-                //     if (atYEnd)
-                //         Qt.callLater(positionViewAtEnd);
-                // }
-                // onCountChanged: {
-                //     // Auto-scroll when new messages are added
-                //     if (atYEnd)
-                //         Qt.callLater(positionViewAtEnd);
-                // }
+                onContentHeightChanged: {
+                    if (atYEnd) {
+                        Qt.callLater(function() {
+                            messageListView.positionViewAtEnd();
+                        });
+                    }
+                }
+                onCountChanged: {
+                    Qt.callLater(function() {
+                        messageListView.positionViewAtEnd();
+                    });
+                }
 
                 add: null // Prevent function calls from being janky
 
@@ -493,6 +509,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 description: Translation.tr("Type /key to get started with online models\nCtrl+O to expand sidebar\nCtrl+P to pin sidebar\nCtrl+D to detach sidebar")
                 shape: MaterialShape.Shape.PixelCircle
                 animateIconOnShow: true
+                entranceTrigger: root.entranceTrigger
             }
 
             ScrollToBottomButton {
@@ -586,20 +603,20 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     function onEntranceTriggerChanged() {
                         if (root.entranceTrigger >= 0 && modelAndProviderLoader.active) {
                             providerButton1.opacity = 0.0;
-                            providerButton1.scale = 0.85;
-                            providerButton1Transform.y = 20;
+                            providerButton1Transform.x = -35;
+                            providerButton1Transform.y = 0;
                             
                             providerButton2.opacity = 0.0;
-                            providerButton2.scale = 0.85;
-                            providerButton2Transform.y = 20;
+                            providerButton2Transform.x = 0;
+                            providerButton2Transform.y = 25;
                             
                             providerButton3.opacity = 0.0;
-                            providerButton3.scale = 0.85;
-                            providerButton3Transform.y = 20;
+                            providerButton3Transform.x = 35;
+                            providerButton3Transform.y = 0;
                             
                             modelSelector.opacity = 0.0;
-                            modelSelector.scale = 0.85;
-                            modelSelectorTransform.y = 20;
+                            modelSelectorScale.xScale = 0.8;
+                            modelSelectorTransform.y = 0;
                             
                             Qt.callLater(function() {
                                 providerButton1Anim.start();
@@ -632,10 +649,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         }
                         
                         opacity: 0.0
-                        scale: 0.85
                         transform: Translate {
                             id: providerButton1Transform
-                            y: 20
+                            x: -35
+                            y: 0
                         }
                         
                         SequentialAnimation {
@@ -643,8 +660,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             PauseAnimation { duration: 220 + 0 * 60 }
                             ParallelAnimation {
                                 NumberAnimation { target: providerButton1; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton1; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                                NumberAnimation { target: providerButton1Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: providerButton1Transform; property: "x"; from: -35; to: 0; duration: 380; easing.type: Easing.OutBack }
                             }
                         }
                     }
@@ -662,10 +678,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         }
                         
                         opacity: 0.0
-                        scale: 0.85
                         transform: Translate {
                             id: providerButton2Transform
-                            y: 20
+                            x: 0
+                            y: 25
                         }
                         
                         SequentialAnimation {
@@ -673,8 +689,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             PauseAnimation { duration: 220 + 1 * 60 }
                             ParallelAnimation {
                                 NumberAnimation { target: providerButton2; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton2; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                                NumberAnimation { target: providerButton2Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: providerButton2Transform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutBack }
                             }
                         }
                     }
@@ -692,10 +707,10 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         }
                         
                         opacity: 0.0
-                        scale: 0.85
                         transform: Translate {
                             id: providerButton3Transform
-                            y: 20
+                            x: 35
+                            y: 0
                         }
                         
                         SequentialAnimation {
@@ -703,8 +718,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             PauseAnimation { duration: 220 + 2 * 60 }
                             ParallelAnimation {
                                 NumberAnimation { target: providerButton3; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                                NumberAnimation { target: providerButton3; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                                NumberAnimation { target: providerButton3Transform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: providerButton3Transform; property: "x"; from: 35; to: 0; duration: 380; easing.type: Easing.OutBack }
                             }
                         }
                     }
@@ -735,19 +749,26 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     onActivated: index => updateModel(index)
                     
                     opacity: 0.0
-                    scale: 0.85
-                    transform: Translate {
-                        id: modelSelectorTransform
-                        y: 20
-                    }
+                    transform: [
+                        Translate {
+                            id: modelSelectorTransform
+                            y: 0
+                        },
+                        Scale {
+                            id: modelSelectorScale
+                            origin.x: modelSelector.width / 2
+                            origin.y: modelSelector.height / 2
+                            xScale: 0.8
+                            yScale: 1.0
+                        }
+                    ]
                     
                     SequentialAnimation {
                         id: modelSelectorAnim
                         PauseAnimation { duration: 220 + 3 * 60 }
                         ParallelAnimation {
                             NumberAnimation { target: modelSelector; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                            NumberAnimation { target: modelSelector; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                            NumberAnimation { target: modelSelectorTransform; property: "y"; from: 20; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: modelSelectorScale; property: "xScale"; from: 0.8; to: 1.0; duration: 380; easing.type: Easing.OutBack }
                         }
                     }
                 }
@@ -802,8 +823,30 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 }
                 delegate: ApiCommandButton {
                     id: commandButton
+                    required property int index
+                    required property var modelData
                     colBackground: suggestions.selectedIndex === index ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer
                     bounce: false
+                    
+                    opacity: 0.0
+                    transform: Translate {
+                        id: cmdBtnTranslate
+                        y: 10
+                    }
+
+                    Component.onCompleted: {
+                        btnEntranceAnim.start();
+                    }
+
+                    SequentialAnimation {
+                        id: btnEntranceAnim
+                        PauseAnimation { duration: index * 40 }
+                        ParallelAnimation {
+                            NumberAnimation { target: commandButton; property: "opacity"; from: 0.0; to: 1.0; duration: 250; easing.type: Easing.OutCubic }
+                            NumberAnimation { target: cmdBtnTranslate; property: "y"; from: 10; to: 0; duration: 280; easing.type: Easing.OutBack }
+                        }
+                    }
+
                     contentItem: StyledText {
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.m3colors.m3onSurface
@@ -873,11 +916,22 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + spacing, 45) + (attachedFileIndicator.implicitHeight + spacing + attachedFileIndicator.anchors.topMargin)
             clip: true
 
+            FastBlur {
+                id: inputBlur
+                radius: 0
+            }
+
+            layer.enabled: inputBlur.radius > 0
+            layer.effect: Component {
+                FastBlur {
+                    radius: inputBlur.radius
+                }
+            }
+
             opacity: 0.0
-            scale: 0.85
             transform: Translate {
                 id: inputWrapperTransform
-                y: 25
+                y: 40
             }
 
             Connections {
@@ -885,8 +939,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                 function onEntranceTriggerChanged() {
                     if (root.entranceTrigger >= 0) {
                         inputWrapper.opacity = 0.0;
-                        inputWrapper.scale = 0.85;
-                        inputWrapperTransform.y = 25;
+                        inputBlur.radius = 20;
+                        inputWrapperTransform.y = 40;
                         Qt.callLater(function() {
                             inputWrapperAnim.start();
                         });
@@ -896,11 +950,11 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
             SequentialAnimation {
                 id: inputWrapperAnim
-                PauseAnimation { duration: 340 }
+                PauseAnimation { duration: 320 }
                 ParallelAnimation {
-                    NumberAnimation { target: inputWrapper; property: "opacity"; from: 0.0; to: 1.0; duration: 300 }
-                    NumberAnimation { target: inputWrapper; property: "scale"; from: 0.85; to: 1.0; duration: 380; easing.type: Easing.OutBack }
-                    NumberAnimation { target: inputWrapperTransform; property: "y"; from: 25; to: 0; duration: 380; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: inputWrapper; property: "opacity"; from: 0.0; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: inputBlur; property: "radius"; from: 20; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: inputWrapperTransform; property: "y"; from: 40; to: 0; duration: 450; easing.type: Easing.OutExpo }
                 }
             }
 

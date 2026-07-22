@@ -33,7 +33,12 @@ Item {
     property bool multipleNotifications: notificationCount > 1
     property bool expanded: false
     property real padding: 10
-    property int lazyLimit: 2
+    property int groupPosition: 0 // 0: single, 1: top, 2: middle, 3: bottom
+    property bool isFirstInGroup: groupPosition === 0 || groupPosition === 1
+    property bool isLastInGroup: groupPosition === 0 || groupPosition === 3
+
+    readonly property real outerRadius: Appearance.rounding.large ?? 23
+    readonly property real innerRadius: Appearance.rounding.verysmall ?? 4
 
     onExpandedChanged: {
         if (expanded) {
@@ -118,10 +123,6 @@ Item {
     }
 
     function toggleExpanded() {
-        if (expanded)
-            implicitHeightAnim.enabled = true
-        else
-            implicitHeightAnim.enabled = false
         root.expanded = !root.expanded
     }
 
@@ -207,9 +208,31 @@ Item {
         anchors.left: parent.left
         width: parent.width
         color: hoverHandler.hovered && !dragManager.dragging
-               ? Appearance.colors.colSecondaryContainerHover
-               : Appearance.colors.colSecondaryContainer
-        radius: Appearance.rounding.windowRounding
+               ? Appearance.colors.colLayer3Hover
+               : Appearance.colors.colLayer3
+        
+        readonly property real activeDragDistance: dragIndexDiff === 0 ? parentDragDistance : (parentDragIndex >= 0 ? parentDragDistance * 0.4 : 0)
+        readonly property real dragRatio: Math.min(1.0, Math.abs(activeDragDistance) / Math.max(1, root.dragConfirmThreshold))
+        readonly property real swipePillRadius: root.innerRadius + (root.outerRadius - root.innerRadius) * dragRatio
+
+        topLeftRadius: (activeDragDistance < 0 || (dragIndexDiff === 1 && activeDragDistance !== 0))
+                       ? swipePillRadius
+                       : (root.isFirstInGroup ? root.outerRadius : root.innerRadius)
+        topRightRadius: (activeDragDistance > 0 || (dragIndexDiff === 1 && activeDragDistance !== 0))
+                        ? swipePillRadius
+                        : (root.isFirstInGroup ? root.outerRadius : root.innerRadius)
+        bottomLeftRadius: (activeDragDistance < 0 || (dragIndexDiff === 1 && activeDragDistance !== 0))
+                          ? swipePillRadius
+                          : (root.isLastInGroup ? root.outerRadius : root.innerRadius)
+        bottomRightRadius: (activeDragDistance > 0 || (dragIndexDiff === 1 && activeDragDistance !== 0))
+                           ? swipePillRadius
+                           : (root.isLastInGroup ? root.outerRadius : root.innerRadius)
+
+        Behavior on topLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on topRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+
         anchors.leftMargin: root.xOffset
 
         HoverHandler {
@@ -264,7 +287,11 @@ Item {
 
         Behavior on implicitHeight {
             id: implicitHeightAnim
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            enabled: true
+            NumberAnimation {
+                duration: 380
+                easing.type: Easing.OutQuart
+            }
         }
 
         RowLayout {
@@ -278,6 +305,7 @@ Item {
             NotificationAppIcon {
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: false
+                visible: !(root.expanded && root.multipleNotifications)
                 appIcon: root.notificationGroup?.appIcon || ""
                 summary: root.notificationGroup?.appName || ""
                 color: Appearance.colors.colSurfaceContainerHighest
@@ -318,10 +346,88 @@ Item {
                 }
 
                 Item {
+                    id: expandedGroupHeader
+                    Layout.fillWidth: true
+                    visible: root.expanded && root.multipleNotifications
+                    implicitHeight: visible ? 28 : 0
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: 6
+
+                        NotificationAppIcon {
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.fillWidth: false
+                            appIcon: root.notificationGroup?.appIcon || ""
+                            summary: root.notificationGroup?.appName || ""
+                            color: Appearance.colors.colSurfaceContainerHighest
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            text: root.notificationGroup?.appName || ""
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnLayer3
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: {
+                                KdeConnectService._timeTick
+                                return NotificationUtils.getFriendlyNotifTimeString(
+                                    root.notificationGroup?.time ?? 0)
+                            }
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
+                        }
+
+                        NotificationGroupExpandButton {
+                            Layout.alignment: Qt.AlignVCenter
+                            count: root.notificationCount
+                            expanded: root.expanded
+                            fontSize: Appearance.font.pixelSize.smaller
+                            colBackground: Appearance.colors.colLayer2
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            colRipple: Appearance.colors.colLayer2Active
+                            onClicked: root.toggleExpanded()
+                            altAction: () => root.toggleExpanded()
+                            contentItem: Item {
+                                anchors.centerIn: parent
+                                implicitWidth: expandedContentRow.implicitWidth
+                                RowLayout {
+                                    id: expandedContentRow
+                                    anchors.centerIn: parent
+                                    spacing: 3
+                                    StyledText {
+                                        Layout.leftMargin: 4
+                                        text: root.notificationCount
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colOnLayer3
+                                    }
+                                    MaterialSymbol {
+                                        text: "keyboard_arrow_down"
+                                        iconSize: 16
+                                        color: Appearance.colors.colOnLayer3
+                                        rotation: root.expanded ? 180 : 0
+                                        Behavior on rotation {
+                                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item {
                     id: topRow
                     Layout.fillWidth: true
+                    visible: !(root.expanded && root.multipleNotifications)
                     property real fontSize: Appearance.font.pixelSize.smaller
-                    implicitHeight: Math.max(topTextRow.implicitHeight, expandButton.implicitHeight)
+                    implicitHeight: visible ? Math.max(topTextRow.implicitHeight, expandButton.implicitHeight) : 0
 
                     RowLayout {
                         id: topTextRow
@@ -340,8 +446,8 @@ Item {
                                 ? topRow.fontSize
                                 : Appearance.font.pixelSize.small
                             color: root.multipleNotifications
-                                 ? ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
-                                 : Appearance.colors.colOnSecondaryContainer
+                                 ? ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
+                                 : Appearance.colors.colOnLayer3
                         }
 
                         StyledText {
@@ -358,7 +464,7 @@ Item {
                                     root.notificationGroup?.time ?? 0)
                             }
                             font.pixelSize: topRow.fontSize
-                            color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
+                            color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
                         }
                     }
 
@@ -369,9 +475,9 @@ Item {
                         count: root.notificationCount
                         expanded: root.expanded
                         fontSize: topRow.fontSize
-                        colBackground: Appearance.colors.colSecondaryContainerHover
-                        colBackgroundHover: Appearance.colors.colSecondaryContainerActive
-                        colRipple: Appearance.colors.colSecondaryContainerActive
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
                         onClicked: root.toggleExpanded()
                         altAction: () => root.toggleExpanded()
                         contentItem: Item {
@@ -386,12 +492,12 @@ Item {
                                     visible: root.count > 1
                                     text: root.count
                                     font.pixelSize: expandButton.fontSize
-                                    color: Appearance.colors.colOnSecondaryContainer
+                                    color: Appearance.colors.colOnLayer3
                                 }
                                 MaterialSymbol {
                                     text: "keyboard_arrow_down"
                                     iconSize: expandButton.iconSize
-                                    color: Appearance.colors.colOnSecondaryContainer
+                                    color: Appearance.colors.colOnLayer3
                                     rotation: expanded ? 180 : 0
                                     Behavior on rotation {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -423,29 +529,70 @@ Item {
                 // With llvmpipe software rendering, each animation frame
                 // requires CPU-intensive software rendering → 380% CPU.
                 // Without the Transition, items reposition instantly (no
-                // animation) but the CPU stays at baseline.
-                // The `Behavior on opacity` at the delegate level still
-                // provides the fade-out when a group is removed.
-                Column {
-                    id: notifChildList
+                // When collapsed, notifications form a stacked preview (latest on top, previous behind/below).
+                // Using an Item with absolute positioning when collapsed prevents Column layout overflow/overlap bugs.
+                Item {
+                    id: notifChildContainer
                     Layout.fillWidth: true
-                    spacing: root.expanded ? 5 : 3
+                    implicitHeight: root.expanded ? notifChildColumn.implicitHeight : (childRepeater.count > 1 ? 44 : (notifChildColumn.children[0]?.implicitHeight ?? 36))
 
-                    Behavior on spacing {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    Column {
+                        id: notifChildColumn
+                        width: parent.width
+                        visible: root.expanded
+                        spacing: 5
+
+                        Repeater {
+                            id: childRepeaterExpanded
+                            model: root.expanded ? root.notifications.slice().reverse().slice(0, root.lazyLimit) : []
+                            delegate: Column {
+                                id: childWrapperExp
+                                required property int index
+                                required property var modelData
+                                width: notifChildColumn.width
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 1
+                                    visible: childWrapperExp.index > 0
+                                    color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.88)
+                                }
+
+                                RemoteNotificationItem {
+                                    width: parent.width
+                                    modelData: childWrapperExp.modelData
+                                    expanded: true
+                                    onlyNotification: root.notificationCount === 1
+                                    itemPosition: {
+                                        const count = childRepeaterExpanded.count
+                                        if (count <= 1) return 0
+                                        if (childWrapperExp.index === 0) return 1
+                                        if (childWrapperExp.index === count - 1) return 3
+                                        return 2
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    Repeater {
-                        model: root.notifications.slice().reverse().slice(0, root.lazyLimit)
-                        delegate: RemoteNotificationItem {
-                            required property int index
-                            required property var modelData
-                            anchors.left: parent?.left
-                            anchors.right: parent?.right
-                            expanded: root.expanded
-                            onlyNotification: root.notificationCount === 1
-                            opacity: (!root.expanded && index === 1 && root.notificationCount > 2) ? 0.5 : 1
-                            visible: root.expanded || (index < 2)
+                    // Collapsed preview stacked layout (max 2 items)
+                    Column {
+                        id: notifChildColumnCollapsed
+                        width: parent.width
+                        visible: !root.expanded
+                        spacing: 2
+
+                        Repeater {
+                            id: childRepeater
+                            model: !root.expanded ? root.notifications.slice().reverse().slice(0, Math.min(2, root.notifications.length)) : []
+                            delegate: RemoteNotificationItem {
+                                required property int index
+                                required property var modelData
+                                width: notifChildColumnCollapsed.width
+                                expanded: false
+                                onlyNotification: root.notificationCount === 1
+                                opacity: index === 1 ? 0.55 : 1.0
+                            }
                         }
                     }
                 }

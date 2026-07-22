@@ -29,6 +29,52 @@ Item {
     property int pullLoadingGap: 80
     property real normalizedPullDistance: Math.max(0, (1 - Math.exp(-booruResponseListView.verticalOvershoot / 50)) * booruResponseListView.dragging)
 
+    // Entrance Animations Trigger
+    property int entranceTrigger: -1
+    function triggerContentEntrance() {
+        root.entranceTrigger++;
+    }
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            columnLayout.opacity = 0
+            columnLayoutTrans.y = 25
+            columnLayout.scale = 0.96
+
+            tagInputContainer.opacity = 0
+            tagInputContainerTrans.y = 15
+            tagInputContainer.scale = 0.95
+
+            Qt.callLater(function() {
+                animeEntranceAnim.stop()
+                animeEntranceAnim.start()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: animeEntranceAnim
+
+        SequentialAnimation {
+            PauseAnimation { duration: 60 }
+            ParallelAnimation {
+                NumberAnimation { target: columnLayout; property: "opacity"; to: 1.0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: columnLayoutTrans; property: "y"; to: 0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+                NumberAnimation { target: columnLayout; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.15 }
+            }
+        }
+
+        SequentialAnimation {
+            PauseAnimation { duration: 180 }
+            ParallelAnimation {
+                NumberAnimation { target: tagInputContainer; property: "opacity"; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: tagInputContainerTrans; property: "y"; to: 0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { target: tagInputContainer; property: "scale"; to: 1.0; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+        }
+    }
+
+
     Connections {
         target: Booru
         function onTagSuggestion(query, suggestions) {
@@ -148,6 +194,12 @@ Item {
             margins: root.padding
         }
         spacing: root.padding
+
+        transform: Translate {
+            id: columnLayoutTrans
+            y: 0
+        }
+
 
         Item {
             Layout.fillWidth: true
@@ -329,6 +381,14 @@ Item {
             implicitHeight: Math.max(inputFieldRowLayout.implicitHeight + inputFieldRowLayout.anchors.topMargin 
                 + commandButtonsRow.implicitHeight + commandButtonsRow.anchors.bottomMargin + columnSpacing, 45)
             clip: true
+
+            transform: Translate {
+                id: tagInputContainerTrans
+                y: 0
+            }
+
+            Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
 
             Behavior on implicitHeight {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)

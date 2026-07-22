@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -26,10 +27,18 @@ Item {
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
 
+    property int entranceTrigger: -1
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0 && shown) {
+            triggerEntrance();
+        }
+    }
+
     onOpacityChanged: {
         if (opacity > 0.9 && animateIconOnShow && !_iconAnimated) {
             _iconAnimated = true;
-            iconEntranceAnim.start();
+            triggerEntrance();
         } else if (opacity < 0.1) {
             _iconAnimated = false;
         }
@@ -39,28 +48,130 @@ Item {
 
     onShownChanged: {
         if (shown && animateIconOnShow) {
-            iconEntranceAnim.start();
+            triggerEntrance();
         }
+    }
+
+    property real rippleProgress: 0.0
+
+    function triggerEntrance() {
+        iconEntranceAnim.stop();
+        
+        // Reset sub-element animation states before starting
+        shapeWidget.scale = 0.2;
+        iconRotation.angle = -45;
+        iconBlur.radius = 30;
+        
+        root.rippleProgress = 0.0;
+        
+        widgetNameTextTranslate.y = 30;
+        widgetNameTextContainer.opacity = 0.0;
+        
+        descTranslate.x = -15;
+        descBlur.radius = 12;
+        widgetDescriptionText.opacity = 0.0;
+
+        iconEntranceAnim.start();
     }
 
     SequentialAnimation {
         id: iconEntranceAnim
+        ScriptAction {
+            script: {
+                iconBlur.enabled = true;
+                descBlur.enabled = true;
+            }
+        }
         ParallelAnimation {
             NumberAnimation {
                 target: shapeWidget
                 property: "scale"
-                from: 0.3
-                to: 1.0
-                duration: 500
+                from: 0.2
+                to: 1.15
+                duration: 450
                 easing.type: Easing.OutBack
             }
             NumberAnimation {
                 target: iconRotation
                 property: "angle"
-                from: -360
+                from: -45
                 to: 0
                 duration: 600
                 easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: iconBlur
+                property: "radius"
+                from: 30
+                to: 0
+                duration: 500
+                easing.type: Easing.OutCubic
+            }
+        }
+        NumberAnimation {
+            target: shapeWidget
+            property: "scale"
+            to: 1.0
+            duration: 150
+            easing.type: Easing.InOutCubic
+        }
+        ParallelAnimation {
+            // Radial wave ripple animation (Lockscreen style)
+            NumberAnimation {
+                target: root
+                property: "rippleProgress"
+                from: 0.0
+                to: 1.0
+                duration: 650
+                easing.type: Easing.OutQuart
+            }
+            // Title reveal (text translate up inside clip)
+            NumberAnimation {
+                target: widgetNameTextTranslate
+                property: "y"
+                from: 30
+                to: 0
+                duration: 500
+                easing.type: Easing.OutExpo
+            }
+            NumberAnimation {
+                target: widgetNameTextContainer
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: 400
+                easing.type: Easing.OutCubic
+            }
+            // Description reveal (drift horizontal + blur)
+            NumberAnimation {
+                target: descTranslate
+                property: "x"
+                from: -15
+                to: 0
+                duration: 500
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: descBlur
+                property: "radius"
+                from: 12
+                to: 0
+                duration: 450
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: widgetDescriptionText
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: 400
+                easing.type: Easing.OutCubic
+            }
+        }
+        ScriptAction {
+            script: {
+                iconBlur.enabled = false;
+                descBlur.enabled = false;
             }
         }
     }
@@ -73,32 +184,96 @@ Item {
         anchors.rightMargin: 20
         spacing: 5
 
-        MaterialShapeWrappedMaterialSymbol {
-            id: shapeWidget
+        Item {
             Layout.alignment: Qt.AlignHCenter
-            padding: 12
-            iconSize: 56
-            rotation: -30 * (1 - root.opacity)
-            
-            transform: Rotation {
-                id: iconRotation
-                origin.x: shapeWidget.width / 2
-                origin.y: shapeWidget.height / 2
-                angle: 0
+            implicitWidth: shapeWidget.implicitWidth
+            implicitHeight: shapeWidget.implicitHeight
+
+            Item {
+                id: rippleContainer
+                anchors.centerIn: parent
+                width: shapeWidget.width * 2.5
+                height: shapeWidget.height * 2.5
+
+                Rectangle {
+                    id: rippleWave1
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
+                    radius: width / 2
+                    color: Appearance.colors.colPrimary
+                    opacity: (1.0 - root.rippleProgress) * 0.4
+                    scale: root.rippleProgress
+                }
+
+                Rectangle {
+                    id: rippleWave2
+                    anchors.centerIn: parent
+                    width: parent.width
+                    height: parent.height
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: Appearance.colors.colPrimary
+                    border.width: 3
+                    opacity: (1.0 - root.rippleProgress) * 0.8
+                    scale: Math.pow(root.rippleProgress, 0.7)
+                }
+            }
+
+            MaterialShapeWrappedMaterialSymbol {
+                id: shapeWidget
+                anchors.centerIn: parent
+                padding: 12
+                iconSize: 56
+                rotation: -30 * (1 - root.opacity)
+                
+                FastBlur {
+                    id: iconBlur
+                    radius: 0
+                }
+
+                layer.enabled: iconBlur.radius > 0
+                layer.effect: Component {
+                    FastBlur {
+                        radius: iconBlur.radius
+                    }
+                }
+
+                transform: Rotation {
+                    id: iconRotation
+                    origin.x: shapeWidget.width / 2
+                    origin.y: shapeWidget.height / 2
+                    angle: 0
+                }
             }
         }
-        StyledText {
-            id: widgetNameText
+
+        Item {
+            id: widgetNameTextContainer
+            Layout.alignment: Qt.AlignHCenter
+            implicitWidth: widgetNameText.implicitWidth
+            implicitHeight: widgetNameText.implicitHeight
+            clip: true
             visible: title !== ""
-            Layout.alignment: Qt.AlignHCenter
-            font {
-                family: Appearance.font.family.title
-                pixelSize: Appearance.font.pixelSize.larger
-                variableAxes: Appearance.font.variableAxes.title
+
+            StyledText {
+                id: widgetNameText
+                anchors.fill: parent
+                font {
+                    family: Appearance.font.family.title
+                    pixelSize: Appearance.font.pixelSize.larger
+                    variableAxes: Appearance.font.variableAxes.title
+                }
+                color: Appearance.m3colors.m3outline
+                horizontalAlignment: Text.AlignHCenter
+
+                transform: Translate {
+                    id: widgetNameTextTranslate
+                    y: 0
+                }
             }
-            color: Appearance.m3colors.m3outline
-            horizontalAlignment: Text.AlignHCenter
         }
+
         StyledText {
             id: widgetDescriptionText
             visible: description !== ""
@@ -108,6 +283,24 @@ Item {
             color: Appearance.m3colors.m3outline
             horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap
+
+            FastBlur {
+                id: descBlur
+                radius: 0
+            }
+
+            layer.enabled: descBlur.radius > 0
+            layer.effect: Component {
+                FastBlur {
+                    radius: descBlur.radius
+                }
+            }
+
+            transform: Translate {
+                id: descTranslate
+                x: 0
+            }
         }
     }
 }
+

@@ -30,10 +30,19 @@ import Quickshell
 Item {
     id: root
 
+    property var modelData: null
+    property int index: 0
     property bool expanded: false
     property bool onlyNotification: false
     property real fontSize: Appearance.font.pixelSize.small
     property real padding: onlyNotification ? 0 : 8
+    property int itemPosition: 0 // 0: single item in group, 1: top, 2: middle, 3: bottom
+    property bool isFirstInItemGroup: itemPosition === 0 || itemPosition === 1
+    property bool isLastInItemGroup: itemPosition === 0 || itemPosition === 3
+
+    readonly property real outerRadius: Appearance.rounding.large ?? 23
+    readonly property real innerRadius: Appearance.rounding.verysmall ?? 4
+
     property real summaryElideRatio: 0.85
 
     property real dragConfirmThreshold: 70
@@ -183,11 +192,37 @@ Item {
         width: parent.width
         anchors.left: parent.left
         anchors.leftMargin: root.xOffset
-        radius: Appearance.rounding.small
 
-        color: (root.expanded && !root.onlyNotification)
-               ? Appearance.colors.colPrimaryContainer
-               : ColorUtils.transparentize(Appearance.colors.colSecondaryContainerHover)
+        readonly property real dragRatio: Math.min(1.0, Math.abs(root.xOffset) / Math.max(1, root.dragConfirmThreshold))
+        readonly property real swipePillRadius: root.innerRadius + (root.outerRadius - root.innerRadius) * dragRatio
+
+        topLeftRadius: root.xOffset < 0
+                       ? swipePillRadius
+                       : ((root.expanded && !root.onlyNotification)
+                          ? (root.isFirstInItemGroup ? root.outerRadius : root.innerRadius)
+                          : Appearance.rounding.small)
+        topRightRadius: root.xOffset > 0
+                        ? swipePillRadius
+                        : ((root.expanded && !root.onlyNotification)
+                           ? (root.isFirstInItemGroup ? root.outerRadius : root.innerRadius)
+                           : Appearance.rounding.small)
+        bottomLeftRadius: root.xOffset < 0
+                          ? swipePillRadius
+                          : ((root.expanded && !root.onlyNotification)
+                             ? (root.isLastInItemGroup ? root.outerRadius : root.innerRadius)
+                             : Appearance.rounding.small)
+        bottomRightRadius: root.xOffset > 0
+                           ? swipePillRadius
+                           : ((root.expanded && !root.onlyNotification)
+                              ? (root.isLastInItemGroup ? root.outerRadius : root.innerRadius)
+                              : Appearance.rounding.small)
+
+        Behavior on topLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on topRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomLeftRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+        Behavior on bottomRightRadius { NumberAnimation { duration: dragManager.dragging ? 50 : 250; easing.type: Easing.OutCubic } }
+
+        color: "transparent"
 
         // Subtle hover/press feedback; suppressed during drag.
         scale: dragManager.dragging ? 1.0 : (dragManager.pressed ? 0.992 : 1.0)
@@ -228,7 +263,10 @@ Item {
         implicitHeight: root.expanded ? (contentColumn.implicitHeight + root.padding * 2) : summaryRow.implicitHeight
 
         Behavior on implicitHeight {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            NumberAnimation {
+                duration: 380
+                easing.type: Easing.OutQuart
+            }
         }
 
         clip: true
@@ -240,7 +278,10 @@ Item {
             spacing: 3
 
             Behavior on anchors.margins {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: 380
+                    easing.type: Easing.OutQuart
+                }
             }
 
             RowLayout {
@@ -255,8 +296,8 @@ Item {
                     visible: !root.onlyNotification
                     font.pixelSize: root.fontSize
                     color: root.expanded
-                           ? Appearance.colors.colOnPrimaryContainer
-                           : Appearance.colors.colOnSecondaryContainer
+                           ? Appearance.colors.colOnLayer3
+                           : Appearance.colors.colOnLayer3
                     elide: Text.ElideRight
                     text: root.modelData?.summary || root.modelData?.appName || Translation.tr("Notification")
                 }
@@ -267,10 +308,13 @@ Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: summaryText.implicitHeight
                     Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: 250
+                            easing.type: Easing.OutCubic
+                        }
                     }
                     font.pixelSize: root.fontSize
-                    color: ColorUtils.transparentize(Appearance.colors.colOnSecondaryContainer, 0.35)
+                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
                     elide: Text.ElideRight
                     wrapMode: root.expanded ? Text.Wrap : Text.NoWrap
                     maximumLineCount: 1
@@ -286,7 +330,10 @@ Item {
                 visible: opacity > 0
 
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
                 }
 
                 Rectangle {
@@ -318,7 +365,7 @@ Item {
                 StyledText {
                     Layout.fillWidth: true
                     font.pixelSize: root.fontSize
-                    color: ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.35)
+                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
                     wrapMode: Text.Wrap
                     elide: Text.ElideRight
                     textFormat: Text.RichText
@@ -398,13 +445,13 @@ Item {
                                         leftPadding: 15
                                         rightPadding: 15
                                         buttonRadius: Appearance.rounding.small
-                                        colBackground: Appearance.colors.colPrimaryContainerHover
-                                        colBackgroundHover: Appearance.colors.colPrimaryContainerActive
+                                        colBackground: Appearance.colors.colLayer2
+                                        colBackgroundHover: Appearance.colors.colLayer2Hover
                                         buttonText: _label
                                         contentItem: StyledText {
                                             text: notifAction._label
                                             font.pixelSize: Appearance.font.pixelSize.small
-                                            color: Appearance.colors.colOnPrimaryContainer
+                                            color: Appearance.colors.colOnLayer3
                                         }
                                         onClicked: {
                                             KdeConnectService.sendAction(KdeConnectService.activeDeviceId, root.publicId, modelData.key);

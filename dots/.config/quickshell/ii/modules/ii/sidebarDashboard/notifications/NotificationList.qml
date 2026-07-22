@@ -10,6 +10,52 @@ Item {
     id: root
 
     property int entranceTrigger: -1
+    property real _entranceScale: 0.94
+    property bool _entranceDone: false
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
+
+    onEntranceTriggerChanged: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceScale = 1;
+            return;
+        }
+        _entranceDone = false;
+        _entranceScale = 0.94;
+        Qt.callLater(function() {
+            notifScaleAnim.start();
+        });
+    }
+
+    Component.onCompleted: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceScale = 1;
+            return;
+        }
+        _entranceDone = false;
+        _entranceScale = 0.94;
+        Qt.callLater(function() {
+            notifScaleAnim.start();
+        });
+    }
+
+    SequentialAnimation {
+        id: notifScaleAnim
+        PauseAnimation { duration: 100 }
+        NumberAnimation {
+            target: root
+            property: "_entranceScale"
+            from: 0.94
+            to: 1.0
+            duration: 350
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.1
+        }
+        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    }
+
+    scale: root._entranceDone ? 1.0 : root._entranceScale
 
     NotificationListView { // Scrollable window
         id: listview
@@ -49,6 +95,7 @@ Item {
 
     ButtonGroup {
         id: statusRow
+        clip: true
         anchors {
             left: parent.left
             right: parent.right
@@ -56,23 +103,41 @@ Item {
         }
 
         property int entranceTrigger: root.entranceTrigger
+        property real _leftTranslateX: -40
+        property real _rightTranslateX: 40
         property real _entranceOpacity: 0
-        property real _entranceTranslateY: 20
         property bool _entranceDone: false
+        readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
         onEntranceTriggerChanged: {
+            if (_animationsDisabled) {
+                _entranceDone = true;
+                _entranceOpacity = 1;
+                _leftTranslateX = 0;
+                _rightTranslateX = 0;
+                return;
+            }
             _entranceDone = false;
             _entranceOpacity = 0;
-            _entranceTranslateY = 20;
+            _leftTranslateX = -40;
+            _rightTranslateX = 40;
             Qt.callLater(function() {
                 entranceAnim.start();
             });
         }
 
         Component.onCompleted: {
+            if (_animationsDisabled) {
+                _entranceDone = true;
+                _entranceOpacity = 1;
+                _leftTranslateX = 0;
+                _rightTranslateX = 0;
+                return;
+            }
             _entranceDone = false;
             _entranceOpacity = 0;
-            _entranceTranslateY = 20;
+            _leftTranslateX = -40;
+            _rightTranslateX = 40;
             Qt.callLater(function() {
                 entranceAnim.start();
             });
@@ -80,17 +145,13 @@ Item {
 
         SequentialAnimation {
             id: entranceAnim
-            PauseAnimation { duration: 200 }
+            PauseAnimation { duration: 250 }
             ParallelAnimation {
-                NumberAnimation { target: statusRow; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-                NumberAnimation { target: statusRow; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusRow; property: "_entranceOpacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusRow; property: "_leftTranslateX"; from: -40; to: 0; duration: 350; easing.type: Easing.OutCubic }
+                NumberAnimation { target: statusRow; property: "_rightTranslateX"; from: 40; to: 0; duration: 350; easing.type: Easing.OutCubic }
             }
             PropertyAction { target: statusRow; property: "_entranceDone"; value: true }
-        }
-
-        opacity: statusRow._entranceDone ? 1.0 : statusRow._entranceOpacity
-        transform: Translate {
-            y: statusRow._entranceDone ? 0 : statusRow._entranceTranslateY
         }
 
         GroupButtonWithIcon {
@@ -101,25 +162,17 @@ Item {
             onClicked: () => {
                 Notifications.silent = !Notifications.silent;
             }
-
-            SequentialAnimation {
-                id: snoozeEntranceAnim
-                NumberAnimation { target: snoozeButton; property: "rotation"; from: -360; to: 0; duration: 450; easing.type: Easing.OutCubic }
-            }
-            Connections {
-                target: statusRow
-                function onEntranceTriggerChanged() {
-                    if (statusRow.entranceTrigger >= 0) {
-                        rotation = -360;
-                        snoozeEntranceAnim.start();
-                    }
-                }
+            opacity: statusRow._entranceDone ? 1.0 : statusRow._entranceOpacity
+            transform: Translate {
+                x: statusRow._entranceDone ? 0 : statusRow._leftTranslateX
             }
         }
         GroupButtonWithIcon {
+            id: countButton
             enabled: false
             Layout.fillWidth: true
             buttonText: Translation.tr("%1 notifications").arg(Notifications.list.length)
+            opacity: statusRow._entranceDone ? 1.0 : statusRow._entranceOpacity
         }
         GroupButtonWithIcon {
             id: deleteAllButton
@@ -128,19 +181,9 @@ Item {
             onClicked: () => {
                 Notifications.discardAllNotifications()
             }
-
-            SequentialAnimation {
-                id: deleteEntranceAnim
-                NumberAnimation { target: deleteAllButton; property: "rotation"; from: 360; to: 0; duration: 450; easing.type: Easing.OutCubic }
-            }
-            Connections {
-                target: statusRow
-                function onEntranceTriggerChanged() {
-                    if (statusRow.entranceTrigger >= 0) {
-                        rotation = 360;
-                        deleteEntranceAnim.start();
-                    }
-                }
+            opacity: statusRow._entranceDone ? 1.0 : statusRow._entranceOpacity
+            transform: Translate {
+                x: statusRow._entranceDone ? 0 : statusRow._rightTranslateX
             }
         }
     }

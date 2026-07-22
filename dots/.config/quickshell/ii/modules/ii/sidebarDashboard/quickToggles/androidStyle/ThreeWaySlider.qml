@@ -19,18 +19,18 @@ Item {
     property real _entranceScale: 0.85
     property real _entranceTranslateY: 20
     property bool _entranceDone: false
-    property real _knobEntranceTranslateX: -30
+    property real _knobEntranceTranslateX: -50
     property real _knobEntranceScale: 0.7
-    property real _knobEntranceRotation: -15
+    property real _knobEntranceRotation: -20
 
     onEntranceTriggerChanged: {
         _entranceDone = false;
         _entranceOpacity = 0;
         _entranceScale = 0.85;
         _entranceTranslateY = 20;
-        _knobEntranceTranslateX = -30;
+        _knobEntranceTranslateX = -50;
         _knobEntranceScale = 0.7;
-        _knobEntranceRotation = -15;
+        _knobEntranceRotation = -20;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -41,9 +41,9 @@ Item {
         _entranceOpacity = 0;
         _entranceScale = 0.85;
         _entranceTranslateY = 20;
-        _knobEntranceTranslateX = -30;
+        _knobEntranceTranslateX = -50;
         _knobEntranceScale = 0.7;
-        _knobEntranceRotation = -15;
+        _knobEntranceRotation = -20;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -58,9 +58,9 @@ Item {
             NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
         }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_knobEntranceTranslateX"; from: -30; to: 0; duration: 350; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_knobEntranceScale"; from: 0.7; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_knobEntranceRotation"; from: -15; to: 0; duration: 350; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_knobEntranceTranslateX"; from: -50; to: 0; duration: 400; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_knobEntranceScale"; from: 0.7; to: 1.0; duration: 400; easing.type: Easing.OutBack }
+            NumberAnimation { target: root; property: "_knobEntranceRotation"; from: -20; to: 0; duration: 400; easing.type: Easing.OutBack }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }

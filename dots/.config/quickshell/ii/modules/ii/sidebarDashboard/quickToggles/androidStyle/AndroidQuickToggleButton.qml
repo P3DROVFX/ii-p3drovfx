@@ -80,28 +80,48 @@ Item {
     property var panel: null
     property var gridRef: null
 
-    // Entrance animation
+    // Entrance animation (Reorder animation effect - tuned delay & full opacity fade)
     property int entranceTrigger: -1
     property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
+    property real _entranceScale: 0.92
+    property real _entranceOffsetX: ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18)
+    property real _entranceOffsetY: ((buttonIndex % 2 === 0) ? -12 : 12)
     property bool _entranceDone: false
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
     onEntranceTriggerChanged: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceOffsetX = 0;
+            _entranceOffsetY = 0;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
+        _entranceScale = 0.92;
+        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
+        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
         Qt.callLater(function() {
             entranceAnim.start();
         });
     }
 
     Component.onCompleted: {
+        if (_animationsDisabled) {
+            _entranceDone = true;
+            _entranceOpacity = 1;
+            _entranceScale = 1;
+            _entranceOffsetX = 0;
+            _entranceOffsetY = 0;
+            return;
+        }
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
+        _entranceScale = 0.92;
+        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
+        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -109,11 +129,12 @@ Item {
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.buttonIndex, 0), 15) * 35 }
+        PauseAnimation { duration: 80 + Math.min(Math.max(root.buttonIndex, 0), 15) * 25 }
         ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
+            NumberAnimation { target: root; property: "_entranceScale"; from: 0.92; to: 1.0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+            NumberAnimation { target: root; property: "_entranceOffsetX"; from: ((root.buttonIndex % 3 === 0) ? -18 : (root.buttonIndex % 3 === 1) ? 0 : 18); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
+            NumberAnimation { target: root; property: "_entranceOffsetY"; from: ((root.buttonIndex % 2 === 0) ? -12 : 12); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
         }
         PropertyAction { target: root; property: "_entranceDone"; value: true }
     }
@@ -125,7 +146,9 @@ Item {
 
     Connections {
         target: root.panel
-        ignoreUnknownSignals: true
+        function onDragScrollPageChanged(newPage) {
+            // Drag scroll handler
+        }
         function onCurrentPageChanged() {
             if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
                 pageEntranceAnimation.restart();
@@ -175,16 +198,16 @@ Item {
         id: visualButton
         
         parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
-        
+
         x: root.isDragging ? dragAbsX : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.x + root.x : root.x))
         y: root.isDragging ? dragAbsY : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.y + root.y : root.y))
         
         Behavior on x {
-            enabled: !root.isDragging
+            enabled: !root.isDragging && !entranceAnim.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         Behavior on y {
-            enabled: !root.isDragging
+            enabled: !root.isDragging && !entranceAnim.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         
@@ -207,9 +230,10 @@ Item {
             return 1.0;
         }
         z: root.isDragging ? 99 : 1
-        
+
         transform: Translate {
-            y: root._entranceDone ? 0 : root._entranceTranslateY
+            x: root._entranceDone ? 0 : root._entranceOffsetX
+            y: root._entranceDone ? 0 : root._entranceOffsetY
         }
         
         Behavior on scale {

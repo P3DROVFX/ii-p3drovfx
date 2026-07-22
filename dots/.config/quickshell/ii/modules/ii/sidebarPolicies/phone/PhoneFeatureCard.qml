@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -77,6 +78,9 @@ Item {
         : 68
     height: implicitHeight
 
+    opacity: 1.0
+    scale: 1.0
+
     readonly property bool _isActive: state === "active"
     readonly property bool _isConnecting: state === "connecting"
     readonly property bool _isUnavailable: state === "unavailable"
@@ -85,6 +89,17 @@ Item {
 
     Behavior on implicitHeight {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
+    onStateChanged: {
+        statePulseAnim.stop()
+        statePulseAnim.start()
+    }
+
+    SequentialAnimation {
+        id: statePulseAnim
+        NumberAnimation { target: cardBackground; property: "scale"; to: 1.025; duration: 120; easing.type: Easing.OutQuad }
+        NumberAnimation { target: cardBackground; property: "scale"; to: 1.0; duration: 150; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
     }
 
     // Flat card background — no RippleButton, no OpacityMask layer, no shadow.
@@ -163,64 +178,154 @@ Item {
             }
         }
 
-        // Top row: icon + title + subtitle + status indicator.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
+    property int entranceTrigger: -1
 
-            MaterialShapeWrappedMaterialSymbol {
-                id: featureIcon
-                Layout.alignment: Qt.AlignVCenter
-                implicitSize: 36
-                iconSize: 18
-                padding: 9
-                text: root._isUnavailable ? "download"
-                    : root._isOffline ? "cast"
-                    : root.iconName
-                shape: root.iconShape
-                color: ColorUtils.transparentize(root._foreground, 0.82)
-                colSymbol: root._foreground
-                animateChange: true
-                SequentialAnimation on opacity {
-                    loops: Animation.Infinite
-                    running: root._isConnecting
-                    NumberAnimation {
-                        from: 0.45; to: 1.0
-                        duration: 750
-                        easing.type: Easing.InOutCubic
-                    }
-                    NumberAnimation {
-                        from: 1.0; to: 0.45
-                        duration: 750
-                        easing.type: Easing.InOutCubic
-                    }
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            triggerEntrance()
+        }
+    }
+
+    function triggerEntrance() {
+        cardAnim.stop()
+
+        featureIcon.scale = 0.3
+        featureIconRotation.angle = -30
+        iconBlur.radius = 16
+
+        titleContainer.opacity = 0
+        titleTranslate.y = 15
+
+        subTitleBlur.radius = 10
+        subTitleTranslate.x = -12
+        cardSubtitle.opacity = 0
+
+        cardAnim.start()
+    }
+
+    SequentialAnimation {
+        id: cardAnim
+        ScriptAction {
+            script: {
+                iconBlur.enabled = true
+                subTitleBlur.enabled = true
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation { target: featureIcon; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.4 }
+            NumberAnimation { target: featureIconRotation; property: "angle"; to: 0; duration: 480; easing.type: Easing.OutCubic }
+            NumberAnimation { target: iconBlur; property: "radius"; to: 0; duration: 380; easing.type: Easing.OutCubic }
+        }
+        ParallelAnimation {
+            NumberAnimation { target: titleTranslate; property: "y"; to: 0; duration: 380; easing.type: Easing.OutExpo }
+            NumberAnimation { target: titleContainer; property: "opacity"; to: 1.0; duration: 320; easing.type: Easing.OutCubic }
+            NumberAnimation { target: subTitleTranslate; property: "x"; to: 0; duration: 420; easing.type: Easing.OutCubic }
+            NumberAnimation { target: subTitleBlur; property: "radius"; to: 0; duration: 350; easing.type: Easing.OutCubic }
+            NumberAnimation { target: cardSubtitle; property: "opacity"; to: 0.7; duration: 320; easing.type: Easing.OutCubic }
+        }
+        ScriptAction {
+            script: {
+                iconBlur.enabled = false
+                subTitleBlur.enabled = false
+            }
+        }
+    }
+
+    // Top row: icon + title + subtitle + status indicator.
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 10
+
+        MaterialShapeWrappedMaterialSymbol {
+            id: featureIcon
+            Layout.alignment: Qt.AlignVCenter
+            implicitSize: 36
+            iconSize: 18
+            padding: 9
+            text: root._isUnavailable ? "download"
+                : root._isOffline ? "cast"
+                : root.iconName
+            shape: root.iconShape
+            color: ColorUtils.transparentize(root._foreground, 0.82)
+            colSymbol: root._foreground
+            animateChange: true
+
+            FastBlur {
+                id: iconBlur
+                radius: 0
+            }
+
+            layer.enabled: iconBlur.radius > 0
+            layer.effect: Component {
+                FastBlur {
+                    radius: iconBlur.radius
                 }
             }
 
-            ColumnLayout {
+            transform: Rotation {
+                id: featureIconRotation
+                origin.x: featureIcon.width / 2
+                origin.y: featureIcon.height / 2
+                angle: 0
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 0
+
+            Item {
+                id: titleContainer
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 0
+                implicitHeight: cardTitle.implicitHeight
+                clip: true
 
                 StyledText {
-                    Layout.fillWidth: true
+                    id: cardTitle
+                    anchors.fill: parent
                     text: root.title
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: root._foreground
                     elide: Text.ElideRight
                     maximumLineCount: 1
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.subtitle
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root._foreground
-                    opacity: 0.7
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
+
+                    transform: Translate {
+                        id: titleTranslate
+                        y: 0
+                    }
                 }
             }
+
+            StyledText {
+                id: cardSubtitle
+                Layout.fillWidth: true
+                text: root.subtitle
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: root._foreground
+                opacity: 0.7
+                elide: Text.ElideRight
+                maximumLineCount: 1
+
+                FastBlur {
+                    id: subTitleBlur
+                    radius: 0
+                }
+
+                layer.enabled: subTitleBlur.radius > 0
+                layer.effect: Component {
+                    FastBlur {
+                        radius: subTitleBlur.radius
+                    }
+                }
+
+                transform: Translate {
+                    id: subTitleTranslate
+                    x: 0
+                }
+            }
+        }
 
             // Status indicator on the right:
             //   • connecting → spinner icon rotating

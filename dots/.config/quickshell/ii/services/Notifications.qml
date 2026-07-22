@@ -358,6 +358,20 @@ Singleton {
         root.discard(id); // Emit signal
     }
 
+    function discardMultipleNotifications(ids) {
+        if (!ids || ids.length === 0) return;
+        const idSet = new Set(ids);
+        root.list = root.list.filter(notif => !idSet.has(notif.notificationId));
+        root.scheduleDiskWrite();
+        triggerListChange();
+        notifServer.trackedNotifications.values.forEach(notif => {
+            if (idSet.has(notif.id + root.idOffset)) {
+                notif.dismiss();
+            }
+        });
+        ids.forEach(id => root.discard(id));
+    }
+
     function discardAllNotifications() {
         root.list = []
         triggerListChange()

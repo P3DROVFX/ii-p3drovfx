@@ -81,17 +81,33 @@ Item {
                 spacing: 10
 
                 MaterialSymbol {
+                    id: thinkIcon
                     Layout.fillWidth: false
                     Layout.topMargin: 7
                     Layout.bottomMargin: 7
                     Layout.leftMargin: 3
                     text: "linked_services"
+
+                    NumberAnimation on rotation {
+                        running: !root.completed
+                        from: 0
+                        to: 360
+                        duration: 3000
+                        loops: Animation.Infinite
+                    }
                 }
                 StyledText {
                     id: thinkBlockLanguage
                     Layout.fillWidth: false
                     Layout.alignment: Qt.AlignLeft
                     text: root.completed ? Translation.tr("Thought") : (Translation.tr("Thinking") + ".".repeat(Math.random() * 4))
+
+                    SequentialAnimation on opacity {
+                        running: !root.completed
+                        loops: Animation.Infinite
+                        NumberAnimation { to: 0.4; duration: 600; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                    }
                 }
                 Item { Layout.fillWidth: true }
                 RippleButton { // Expand button

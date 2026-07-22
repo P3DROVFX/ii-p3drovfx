@@ -20,11 +20,17 @@ RippleButton {
     property int entranceKey: 0
 
     property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
+    property real _entranceScale: 0.82
+    property real _entranceTranslateX: -15
+    property real _entranceTranslateY: -10
     property bool _entranceDone: false
 
     opacity: _entranceDone ? 1.0 : _entranceOpacity
     scale: _entranceDone ? 1.0 : _entranceScale
+    transform: Translate {
+        x: button._entranceDone ? 0 : button._entranceTranslateX
+        y: button._entranceDone ? 0 : button._entranceTranslateY
+    }
 
     function resetAndAnimate() {
         if (gridRow < 0 || gridCol < 0) {
@@ -33,7 +39,9 @@ RippleButton {
         }
         _entranceDone = false;
         _entranceOpacity = 0;
-        _entranceScale = 0.85;
+        _entranceScale = 0.82;
+        _entranceTranslateX = -15;
+        _entranceTranslateY = -10;
         Qt.callLater(function() {
             entranceAnim.start();
         });
@@ -44,10 +52,12 @@ RippleButton {
 
     SequentialAnimation {
         id: entranceAnim
-        PauseAnimation { duration: Math.max(0, button.gridRow * 4 + button.gridCol * 2) }
+        PauseAnimation { duration: (button.gridRow + button.gridCol) * 28 }
         ParallelAnimation {
-            NumberAnimation { target: button; property: "_entranceOpacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-            NumberAnimation { target: button; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 220; easing.type: Easing.OutBack }
+            NumberAnimation { target: button; property: "_entranceOpacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
+            NumberAnimation { target: button; property: "_entranceScale"; from: 0.82; to: 1.0; duration: 280; easing.type: Easing.OutBack }
+            NumberAnimation { target: button; property: "_entranceTranslateX"; from: -15; to: 0; duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { target: button; property: "_entranceTranslateY"; from: -10; to: 0; duration: 260; easing.type: Easing.OutCubic }
         }
         PropertyAction { target: button; property: "_entranceDone"; value: true }
     }

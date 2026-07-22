@@ -7,6 +7,7 @@ import qs.modules.ii.bar.shared
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Hyprland
@@ -91,7 +92,7 @@ Item {
 
     Loader {
         id: sidebarRightShadowLoader
-        active: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom
+        active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
         anchors.fill: sidebarRightBackground
         sourceComponent: Component {
             StyledDropShadow {
@@ -119,10 +120,22 @@ Item {
         bottomRightRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && !root.isLoadedOnLeft) ? 0 : defaultRadius)
         bottomLeftRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !isConnectDynamicIslandBottom) ? 0 : ((isConnectDynamicIslandBottom && root.isLoadedOnLeft) ? 0 : defaultRadius)
 
+        property real dialogBlurProgress: root.anyDialogVisible ? 1.0 : 0.0
+        Behavior on dialogBlurProgress {
+            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
+        }
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
+
+            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.01
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 32
+                blur: sidebarRightBackground.dialogBlurProgress
+            }
 
             SystemButtonRow {
                 id: headerRow
@@ -302,23 +315,46 @@ Item {
         signal editModeToggled(bool newEditMode)
 
         // Entrance animation properties
+        property real _leftTranslateX: -30
+        property real _rightTranslateX: 30
+        property real _entranceTranslateY: -15
         property real _entranceOpacity: 0
-        property real _entranceTranslateY: -20
         property bool _entranceDone: false
+        readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
 
         onEntranceTriggerChanged: {
+            if (_animationsDisabled) {
+                _entranceDone = true;
+                _entranceOpacity = 1;
+                _leftTranslateX = 0;
+                _rightTranslateX = 0;
+                _entranceTranslateY = 0;
+                return;
+            }
             _entranceDone = false;
             _entranceOpacity = 0;
-            _entranceTranslateY = -20;
+            _leftTranslateX = -30;
+            _rightTranslateX = 30;
+            _entranceTranslateY = -15;
             Qt.callLater(function() {
                 entranceAnim.start();
             });
         }
 
         Component.onCompleted: {
+            if (_animationsDisabled) {
+                _entranceDone = true;
+                _entranceOpacity = 1;
+                _leftTranslateX = 0;
+                _rightTranslateX = 0;
+                _entranceTranslateY = 0;
+                return;
+            }
             _entranceDone = false;
             _entranceOpacity = 0;
-            _entranceTranslateY = -20;
+            _leftTranslateX = -30;
+            _rightTranslateX = 30;
+            _entranceTranslateY = -15;
             Qt.callLater(function() {
                 entranceAnim.start();
             });
@@ -328,7 +364,9 @@ Item {
             id: entranceAnim
             ParallelAnimation {
                 NumberAnimation { target: systemButtonRowRoot; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_entranceTranslateY"; from: -20; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: systemButtonRowRoot; property: "_leftTranslateX"; from: -30; to: 0; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: systemButtonRowRoot; property: "_rightTranslateX"; from: 30; to: 0; duration: 340; easing.type: Easing.OutCubic }
+                NumberAnimation { target: systemButtonRowRoot; property: "_entranceTranslateY"; from: -15; to: 0; duration: 300; easing.type: Easing.OutCubic }
             }
             PropertyAction { target: systemButtonRowRoot; property: "_entranceDone"; value: true }
         }
@@ -348,6 +386,7 @@ Item {
 
             opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
             transform: Translate {
+                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._leftTranslateX
                 y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
             }
 
@@ -586,6 +625,7 @@ Item {
 
             opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
             transform: Translate {
+                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._rightTranslateX
                 y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
             }
 

@@ -54,6 +54,16 @@ Rectangle {
     ]
 
     property int entranceTrigger: -1
+    property bool _entranceDone: false
+    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
+
+    onEntranceTriggerChanged: {
+        _entranceDone = true;
+    }
+
+    Component.onCompleted: {
+        _entranceDone = true;
+    }
 
     function triggerContentEntrance() {
         entranceTrigger++;
@@ -213,6 +223,7 @@ Rectangle {
                 Repeater {
                     model: root.tabs
                     NavigationRailButton {
+                        id: navButton
                         required property int index
                         required property var modelData
                         showToggledHighlight: false
@@ -222,6 +233,35 @@ Rectangle {
                         onPressed: {
                             root.selectedTab = index;
                             Persistent.states.sidebar.bottomGroup.tab = index;
+                        }
+
+                        scale: _navBtnDone ? 1.0 : _navBtnScale
+                        opacity: _navBtnDone ? 1.0 : _navBtnOpacity
+
+                        property real _navBtnScale: 0.75
+                        property real _navBtnOpacity: 0
+                        property bool _navBtnDone: false
+
+                        SequentialAnimation {
+                            id: navBtnAnim
+                            PauseAnimation { duration: navButton.index * 60 }
+                            ParallelAnimation {
+                                NumberAnimation { target: navButton; property: "_navBtnOpacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
+                                NumberAnimation { target: navButton; property: "_navBtnScale"; from: 0.75; to: 1.0; duration: 320; easing.type: Easing.OutBack }
+                            }
+                            PropertyAction { target: navButton; property: "_navBtnDone"; value: true }
+                        }
+
+                        Connections {
+                            target: root
+                            function onEntranceTriggerChanged() {
+                                if (root.entranceTrigger >= 0) {
+                                    _navBtnDone = false;
+                                    _navBtnScale = 0.75;
+                                    _navBtnOpacity = 0;
+                                    Qt.callLater(function() { navBtnAnim.start(); });
+                                }
+                            }
                         }
                     }
                 }
@@ -279,7 +319,9 @@ Rectangle {
                 }
 
                 onLoaded: {
-                    root.triggerContentEntrance();
+                    if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger")) {
+                        tabStack.item.entranceTrigger = root.entranceTrigger;
+                    }
                 }
 
                 Connections {

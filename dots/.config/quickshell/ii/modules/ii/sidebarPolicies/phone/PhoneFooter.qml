@@ -76,6 +76,52 @@ Item {
         return h + "h " + (rm < 10 ? "0" : "") + rm + "m"
     }
 
+    property int entranceTrigger: -1
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            card1.opacity = 0; card1Transform.y = 25; card1.scale = 0.88
+            card2.opacity = 0; card2Transform.y = 25; card2.scale = 0.88
+            card3.opacity = 0; card3Transform.y = 25; card3.scale = 0.88
+
+            Qt.callLater(function() {
+                footerEntranceAnim.stop()
+                footerEntranceAnim.start()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: footerEntranceAnim
+
+        SequentialAnimation {
+            PauseAnimation { duration: 150 }
+            ParallelAnimation {
+                ScriptAction { script: card1.triggerEntrance() }
+                NumberAnimation { target: card1; property: "opacity"; to: (card1.enabled ? 1.0 : 0.55); duration: 340; easing.type: Easing.OutCubic }
+                NumberAnimation { target: card1Transform; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                NumberAnimation { target: card1; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 210 }
+            ParallelAnimation {
+                ScriptAction { script: card2.triggerEntrance() }
+                NumberAnimation { target: card2; property: "opacity"; to: (card2.enabled ? 1.0 : 0.55); duration: 340; easing.type: Easing.OutCubic }
+                NumberAnimation { target: card2Transform; property: "y"; to: 0; duration: 400; easing.type: Easing.OutExpo }
+                NumberAnimation { target: card2; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
+            }
+        }
+        SequentialAnimation {
+            PauseAnimation { duration: 270 }
+            ParallelAnimation {
+                ScriptAction { script: card3.triggerEntrance() }
+                NumberAnimation { target: card3; property: "opacity"; to: (card3.enabled ? 1.0 : 0.55); duration: 340; easing.type: Easing.OutCubic }
+                NumberAnimation { target: card3Transform; property: "y"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { target: card3; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+        }
+    }
+
     ColumnLayout {
         id: footerColumn
         anchors.left: parent.left
@@ -84,7 +130,9 @@ Item {
 
         // ─── 1. Scrcpy Mirror ──────────────────────────────
         PhoneFeatureCard {
+            id: card1
             Layout.fillWidth: true
+            transform: Translate { id: card1Transform; y: 0 }
             iconName: "smart_display"
             iconShape: MaterialShape.Shape.Cookie9Sided
             title: root._scrcpyPresent
@@ -172,7 +220,9 @@ Item {
 
         // ─── 2. Phone Webcam ────────────────────────────────
         PhoneFeatureCard {
+            id: card2
             Layout.fillWidth: true
+            transform: Translate { id: card2Transform; y: 0 }
             iconName: "videocam"
             iconShape: MaterialShape.Shape.Cookie7Sided
             title: root._droidcamPresent
@@ -232,7 +282,9 @@ Item {
 
         // ─── 3. Phone Microphone ────────────────────────────
         PhoneFeatureCard {
+            id: card3
             Layout.fillWidth: true
+            transform: Translate { id: card3Transform; y: 0 }
             iconName: "mic"
             iconShape: MaterialShape.Shape.Sunny
             title: root._micPresent

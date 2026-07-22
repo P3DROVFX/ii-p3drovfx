@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
@@ -48,6 +50,63 @@ Item {
             : "smartphone")
         : "smartphone"
 
+    // ─── Entrance Animations ───────────────────────────
+    property int entranceTrigger: -1
+
+    onEntranceTriggerChanged: {
+        if (entranceTrigger >= 0) {
+            // Reset values
+            deviceChip.opacity = 0
+            deviceChipTransform.x = -30
+            deviceChip.scale = 0.85
+
+            signalPill.opacity = 0
+            signalPillTransform.x = 30
+            signalPill.scale = 0.85
+
+            batteryPill.opacity = 0
+            batteryPill.scale = 0.85
+
+            Qt.callLater(function() {
+                headerEntranceAnim.stop()
+                headerEntranceAnim.start()
+            })
+        }
+    }
+
+    ParallelAnimation {
+        id: headerEntranceAnim
+
+        // Device chip animation
+        SequentialAnimation {
+            PauseAnimation { duration: 30 }
+            ParallelAnimation {
+                NumberAnimation { target: deviceChip; property: "opacity"; to: (deviceChip.enabled ? 1.0 : 0.5); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: deviceChipTransform; property: "x"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+                NumberAnimation { target: deviceChip; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
+            }
+        }
+
+        // Signal pill animation
+        SequentialAnimation {
+            PauseAnimation { duration: 70 }
+            ParallelAnimation {
+                NumberAnimation { target: signalPill; property: "opacity"; to: (KdeConnectService.activeReachable ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: signalPillTransform; property: "x"; to: 0; duration: 400; easing.type: Easing.OutExpo }
+                NumberAnimation { target: signalPill; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
+            }
+        }
+
+        // Battery pill animation
+        SequentialAnimation {
+            PauseAnimation { duration: 110 }
+            ParallelAnimation {
+                NumberAnimation { target: batteryPill; property: "opacity"; to: (root._battery >= 0 ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: batteryPill; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.5 }
+            }
+        }
+    }
+
     RowLayout {
         id: deviceSelectorRow
         anchors.left: parent.left
@@ -65,18 +124,34 @@ Item {
             Layout.minimumWidth: 140
             Layout.maximumWidth: 280
             enabled: KdeConnectService.hasDevices && pairedDevices.length > 0
-            opacity: enabled ? 1.0 : 0.5
+            opacity: 0
             buttonRadius: Appearance.rounding.full
             colBackground: Appearance.colors.colLayer3
             colBackgroundHover: Appearance.colors.colLayer3Hover
 
+            transform: Translate {
+                id: deviceChipTransform
+                x: -30
+            }
+            scale: 0.85
+
             // Subtle tactile feedback on the whole chip.
-            scale: down ? 0.97 : (hovered ? 1.015 : 1.0)
             Behavior on scale {
+                enabled: !headerEntranceAnim.running
                 NumberAnimation {
                     duration: 150
                     easing.type: Easing.OutQuad
                 }
+            }
+
+            RectangularShadow {
+                anchors.fill: parent
+                radius: parent.buttonEffectiveRadius
+                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.65)
+                opacity: deviceChip.opacity * 0.4
+                blur: 14
+                spread: 1
+                visible: opacity > 0.01
             }
 
             contentItem: RowLayout {
@@ -125,7 +200,25 @@ Item {
             Layout.preferredWidth: signalRow.implicitWidth + 24
             radius: Appearance.rounding.full
             color: Appearance.colors.colLayer3
-            opacity: KdeConnectService.activeReachable ? 1.0 : 0.4
+            opacity: 0
+
+            transform: Translate {
+                id: signalPillTransform
+                x: 30
+            }
+            scale: 0.85
+
+            RectangularShadow {
+                anchors.fill: parent
+                radius: parent.radius
+                color: KdeConnectService.activeReachable
+                    ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+                    : ColorUtils.transparentize(Appearance.colors.colSubtext, 0.8)
+                opacity: signalPill.opacity * 0.45
+                blur: 12
+                spread: 1
+                visible: opacity > 0.01
+            }
 
             RowLayout {
                 id: signalRow
@@ -166,15 +259,25 @@ Item {
             Layout.preferredWidth: batRow.implicitWidth + 28
             radius: Appearance.rounding.full
             color: Appearance.colors.colLayer3
-            opacity: root._battery >= 0 ? 1.0 : 0.4
-            scale: (batMouseArea?.containsPress ? 0.96
-                    : (batMouseArea?.containsMouse ? 1.04 : 1.0))
+            opacity: 0
+            scale: 0.85
             Behavior on scale {
+                enabled: !headerEntranceAnim.running
                 NumberAnimation {
                     duration: 180
                     easing.type: Easing.OutBack
                     easing.overshoot: 1.5
                 }
+            }
+
+            RectangularShadow {
+                anchors.fill: parent
+                radius: parent.radius
+                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.65)
+                opacity: batteryPill.opacity * 0.45
+                blur: 12
+                spread: 1
+                visible: opacity > 0.01
             }
 
             RowLayout {
