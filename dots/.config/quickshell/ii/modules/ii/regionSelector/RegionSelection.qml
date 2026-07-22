@@ -354,29 +354,95 @@ PanelWindow {
         root.editorRegionH = 0;
     }
 
-    function finalizeScreenshot(saveToFile) {
-        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
-        // Grab at the capture's native resolution (e.g. 2880×1800 on a 1.5×
-        // display) rather than logical, so the exported PNG isn't downscaled.
+    // Grab the annotated selection to a temp PNG at the capture's native
+    // resolution (e.g. 2880x1800 on a 1.5x display), hiding editor chrome for
+    // the single frame of the grab, then hand the path to cb.
+    function grabAnnotated(cb) {
         var targetW = Math.round(root.editorRegionW * root.captureScale);
         var targetH = Math.round(root.editorRegionH * root.captureScale);
-        // Drop all editor chrome for one frame so handles/outlines
-        // never get baked into the exported PNG.
         root.exporting = true;
         editorContent.grabToImage(function (result) {
             var tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
             result.saveToFile(tempPath);
-            if (saveToFile) {
-                var saveDir = Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
-                var fileName = "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
-                var fullPath = saveDir + "/" + fileName;
-                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + StringUtils.shellSingleQuoteEscape(saveDir) + "' && mv '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' '" + StringUtils.shellSingleQuoteEscape(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + StringUtils.shellSingleQuoteEscape(fullPath) + "'"]);
-            } else {
-                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && rm '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
-            }
             root.exporting = false;
-            root.dismiss();
+            cb(tempPath);
         }, Qt.size(targetW, targetH));
+    }
+
+    function defaultSaveDir() {
+        return Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
+    }
+    function timestampedName() {
+        return "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
+    }
+
+    function finalizeScreenshot(saveToFile) {
+        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            if (saveToFile) {
+                var saveDir = root.defaultSaveDir();
+                var fullPath = saveDir + "/" + root.timestampedName();
+                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + esc(saveDir) + "' && mv '" + esc(tempPath) + "' '" + esc(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + esc(fullPath) + "'"]);
+            } else {
+                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + esc(tempPath) + "' && rm '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
+            }
+            root.dismiss();
+        });
+    }
+
+    // Save As... - grab, then pick a path with a zenity dialog.
+    function finalizeScreenshotAs() {
+        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var saveDir = root.defaultSaveDir();
+            var suggested = saveDir + "/" + root.timestampedName();
+            var cmd = "mkdir -p '" + esc(saveDir) + "'; dest=$(zenity --file-selection --save --confirm-overwrite --filename='" + esc(suggested) + "' 2>/dev/null); if [ -n " + '"$dest"' + " ]; then mv '" + esc(tempPath) + "' " + '"$dest"' + " && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' " + '"Saved to: $dest"' + "; else rm -f '" + esc(tempPath) + "'; fi";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Extract Text - OCR the grab and copy the recognised text.
+    function extractText() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var cmd = "langs=$(tesseract --list-langs 2>/dev/null | sed 1d | paste -sd+ -); tesseract '" + esc(tempPath) + "' stdout -l " + '"${langs:-eng}"' + " 2>/dev/null | wl-copy && rm -f '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Text extracted' 'Copied to clipboard'";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Export - open the grab in the default image application.
+    function exportOpenWith() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            Quickshell.execDetached(["bash", "-c", "xdg-open '" + esc(tempPath) + "'"]);
+            root.dismiss();
+        });
+    }
+
+    // Export - reverse image search (upload, then open in the browser).
+    function exportSearch() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var base = ScreenshotAction.imageSearchEngineBaseUrl;
+            var cmd = "url=$(curl -sF files[]=@'" + esc(tempPath) + "' https://uguu.se/upload | jq -r '.files[0].url'); [ -n " + '"$url"' + " ] && xdg-open '" + esc(base) + "'" + '"$url"' + "; rm -f '" + esc(tempPath) + "'";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Export - save to disk and copy the file path to the clipboard.
+    function exportCopyPath() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var saveDir = root.defaultSaveDir();
+            var fullPath = saveDir + "/" + root.timestampedName();
+            Quickshell.execDetached(["bash", "-c", "mkdir -p '" + esc(saveDir) + "' && mv '" + esc(tempPath) + "' '" + esc(fullPath) + "' && printf %s '" + esc(fullPath) + "' | wl-copy && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Path copied' '" + esc(fullPath) + "'"]);
+            root.dismiss();
+        });
     }
 
     // Styles
@@ -1825,6 +1891,218 @@ PanelWindow {
                     root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
                 }
             }
+        }
+
+        // Middle action bar (Spectacle-style): selection size + terminal
+        // actions. Lives outside editorContent so grabToImage never captures
+        // it; z sits above the handles so the Export menu isn't occluded.
+        Toolbar {
+            id: actionBar
+            z: 9999
+            spacing: 2
+
+            readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
+            readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
+            property bool exportMenuOpen: false
+
+            function fmt(n) {
+                var str = String(n);
+                var out = "";
+                for (var i = 0; i < str.length; i++) {
+                    if (i > 0 && (str.length - i) % 3 === 0)
+                        out += ",";
+                    out += str[i];
+                }
+                return out;
+            }
+
+            visible: root.inlineEditorActive && !root.exporting && root.currentTool !== "recrop" && root.editingTextId === null && root.editorRegionW > 0 && root.editorRegionH > 0
+            opacity: visible ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
+            y: {
+                var below = root.editorRegionY + root.editorRegionH + 12;
+                if (below + height <= root.screen.height - 8)
+                    return below;
+                var above = root.editorRegionY - height - 12;
+                if (above >= 8)
+                    return above;
+                return root.screen.height - height - 8;
+            }
+
+            component ActionButton: RippleButton {
+                property string symbolName: ""
+                property string labelText: ""
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 36
+                implicitWidth: abRow.implicitWidth + 20
+                buttonRadius: height / 2
+
+                contentItem: Row {
+                    id: abRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconSize: 20
+                        text: symbolName
+                        color: Appearance.colors.colOnSurface
+                    }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: labelText
+                        color: Appearance.colors.colOnSurface
+                    }
+                }
+            }
+
+            StyledText {
+                Layout.leftMargin: 6
+                Layout.rightMargin: 2
+                Layout.alignment: Qt.AlignVCenter
+                text: actionBar.fmt(actionBar.physW) + " \u00d7 " + actionBar.fmt(actionBar.physH)
+                color: Appearance.colors.colSubtext
+            }
+
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: 1
+                implicitHeight: 24
+                color: Appearance.colors.colOutlineVariant
+            }
+
+            ActionButton {
+                symbolName: "check"
+                labelText: Translation.tr("Accept")
+                onClicked: root.finalizeScreenshot(false)
+            }
+            ActionButton {
+                symbolName: "block"
+                labelText: Translation.tr("Cancel")
+                onClicked: root.dismiss()
+            }
+            ActionButton {
+                symbolName: "save"
+                labelText: Translation.tr("Save")
+                onClicked: root.finalizeScreenshot(true)
+            }
+            ActionButton {
+                symbolName: "save_as"
+                labelText: Translation.tr("Save As...")
+                onClicked: root.finalizeScreenshotAs()
+            }
+            ActionButton {
+                symbolName: "content_copy"
+                labelText: Translation.tr("Copy")
+                onClicked: root.finalizeScreenshot(false)
+            }
+            ActionButton {
+                symbolName: "document_scanner"
+                labelText: Translation.tr("Extract Text")
+                onClicked: root.extractText()
+            }
+
+            Item {
+                id: exportContainer
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: exportBtn.implicitWidth
+                implicitHeight: exportBtn.implicitHeight
+
+                ActionButton {
+                    id: exportBtn
+                    anchors.fill: parent
+                    symbolName: "ios_share"
+                    labelText: Translation.tr("Export")
+                    toggled: actionBar.exportMenuOpen
+                    onClicked: actionBar.exportMenuOpen = !actionBar.exportMenuOpen
+                }
+
+                Rectangle {
+                    id: exportMenu
+                    visible: actionBar.exportMenuOpen
+                    width: exportCol.implicitWidth + 8
+                    height: exportCol.implicitHeight + 8
+                    radius: Appearance.rounding.small
+                    color: Appearance.m3colors.m3surfaceContainerHigh
+                    border.width: 1
+                    border.color: Appearance.colors.colOutlineVariant
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.top
+                    anchors.bottomMargin: 8
+
+                    component MenuItem: RippleButton {
+                        property string symbolName: ""
+                        property string labelText: ""
+                        implicitWidth: Math.max(200, miRow.implicitWidth + 24)
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.small
+
+                        contentItem: Row {
+                            id: miRow
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 10
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                iconSize: 20
+                                text: symbolName
+                                color: Appearance.colors.colOnSurface
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: labelText
+                                color: Appearance.colors.colOnSurface
+                            }
+                        }
+                    }
+
+                    Column {
+                        id: exportCol
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        MenuItem {
+                            symbolName: "open_in_new"
+                            labelText: Translation.tr("Open with default app")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportOpenWith();
+                            }
+                        }
+                        MenuItem {
+                            symbolName: "image_search"
+                            labelText: Translation.tr("Reverse image search")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportSearch();
+                            }
+                        }
+                        MenuItem {
+                            symbolName: "link"
+                            labelText: Translation.tr("Copy file path")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportCopyPath();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Click-away catcher that closes the Export menu.
+        MouseArea {
+            z: 9998
+            anchors.fill: parent
+            visible: actionBar.exportMenuOpen
+            enabled: visible
+            onPressed: actionBar.exportMenuOpen = false
         }
 
         // Rectangular region re-crop. Active only while the "recrop" tool is

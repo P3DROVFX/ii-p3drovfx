@@ -638,33 +638,6 @@ Toolbar {
 
     }
 
-    ToolbarSeparator {
-    }
-
-    // Copy — temporary; moves to the middle action bar in a later phase.
-    IconToolbarButton {
-        text: "content_copy"
-        onClicked: editor.finalizeScreenshot(false)
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Copy to clipboard")
-        }
-
-    }
-
-    // Save — temporary; moves to the middle action bar in a later phase.
-    IconToolbarButton {
-        text: "save"
-        onClicked: editor.finalizeScreenshot(true)
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Save to file")
-        }
-
-    }
-
     // Reusable vertical divider (Spectacle-style toolbar separator).
     component ToolbarSeparator: Rectangle {
         implicitWidth: 1
