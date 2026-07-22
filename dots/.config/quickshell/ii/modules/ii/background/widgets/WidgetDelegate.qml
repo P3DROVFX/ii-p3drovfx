@@ -31,6 +31,7 @@ Item {
     required property bool lockAnimationActive
     required property var widgetSizes
     required property int widgetSizesVersion
+    required property int staggerDelay
 
     // Static Component Definitions for built-in widgets
     Component {
@@ -275,6 +276,13 @@ Item {
             target: widgetLoader.item
             property: "widgetSizesVersion"
             value: delegateRoot.widgetSizesVersion
+            when: widgetLoader.status == Loader.Ready
+        }
+
+        Binding {
+            target: widgetLoader.item
+            property: "staggerDelay"
+            value: delegateRoot.staggerDelay
             when: widgetLoader.status == Loader.Ready
         }
     }

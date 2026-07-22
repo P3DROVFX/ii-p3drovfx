@@ -415,6 +415,7 @@ PanelWindow {
                 if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
                     return;
                 mediaModeLoader.active = !mediaModeLoader.active;
+                GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
                 LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
             }
         }

@@ -13,10 +13,25 @@ QtObject {
     property var widgetSizes: ({})  // instanceId → {width, height} — mutated in-place by widgets
     property int widgetSizesVersion: 0  // bumped by widgets after mutating widgetSizes
     property int syncVersion: 0
+    property bool staggerTransitionActive: false
+
+    property Timer staggerTransitionReset: Timer {
+        interval: 2000
+        repeat: false
+        onTriggered: {
+            manager.staggerTransitionActive = false;
+            for (let i = 0; i < widgetListModel.count; i++) {
+                widgetListModel.get(i).staggerDelay = 0;
+            }
+        }
+    }
 
     function syncActiveWidgets() {
         let configList = Config.options.background.activeWidgets || [];
         console.log("[Background] syncActiveWidgets called. Config activeWidgets count: " + configList.length + ", current model count: " + widgetListModel.count);
+        
+        let addCount = 0;
+        let moveCount = 0;
         
         // 1. Remove items from ListModel that are no longer in Config
         for (let i = widgetListModel.count - 1; i >= 0; i--) {
@@ -51,22 +66,39 @@ QtObject {
                     "widgetX": configItem.x,
                     "widgetY": configItem.y,
                     "placementStrategy": configItem.placementStrategy || "free",
-                    "lockBehavior": configItem.lockBehavior || "hide"
+                    "lockBehavior": configItem.lockBehavior || "hide",
+                    "staggerDelay": addCount * 60
                 });
+                addCount++;
             } else {
                 let modelItem = widgetListModel.get(modelIndex);
                 if (modelItem.widgetId !== configItem.widgetId) {
                     modelItem.widgetId = configItem.widgetId;
                 }
-                if (Math.abs(modelItem.widgetX - configItem.x) > 0.01) modelItem.widgetX = configItem.x;
-                if (Math.abs(modelItem.widgetY - configItem.y) > 0.01) modelItem.widgetY = configItem.y;
+                if (Math.abs(modelItem.widgetX - configItem.x) > 0.01) {
+                    modelItem.widgetX = configItem.x;
+                    moveCount++;
+                }
+                if (Math.abs(modelItem.widgetY - configItem.y) > 0.01) {
+                    modelItem.widgetY = configItem.y;
+                    moveCount++;
+                }
                 if (modelItem.placementStrategy !== configItem.placementStrategy) {
                     modelItem.placementStrategy = configItem.placementStrategy || "free";
                 }
                 if (modelItem.lockBehavior !== (configItem.lockBehavior || "hide")) {
                     modelItem.lockBehavior = configItem.lockBehavior || "hide";
                 }
+                if (moveCount > 0 || addCount > 0) {
+                    modelItem.staggerDelay = j * 60;
+                }
             }
+        }
+        
+        let isBulkChange = (addCount + moveCount) > 0;
+        if (isBulkChange) {
+            manager.staggerTransitionActive = true;
+            staggerTransitionReset.restart();
         }
         manager.syncVersion++;
     }

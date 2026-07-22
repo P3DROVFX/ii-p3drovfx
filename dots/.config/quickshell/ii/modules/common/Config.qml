@@ -1380,6 +1380,10 @@ Singleton {
                 property bool enable: true
                 property bool enableGenius: true
                 property bool enableLrclib: true
+                property bool enableYtmusic: false  // requires ytmusicapi in venv
+                // "auto" | "lrclib" | "ytmusic" | "genius"
+                // auto = lrclib synced → lrclib plain → ytmusic → genius
+                property string lyricsProvider: "auto"
             }
 
             property JsonObject tray: JsonObject {

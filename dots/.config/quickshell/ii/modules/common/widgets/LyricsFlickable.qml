@@ -11,7 +11,9 @@ Item {
     id: root
 
     property var player: MprisController.activePlayer
-    property string geniusLyricsString: LyricsService.geniusHasLyrics ? LyricsService.plainLyrics : ""
+    property string plainLyricsString: LyricsService.plainLyrics
+    property bool hasPlainLyrics: plainLyricsString.trim().length > 0
+    property string geniusLyricsString: plainLyricsString
 
     property bool hasSyncedLines: LyricsService.syncedLines.length > 0
     property real fontPixelSize: Appearance.font.pixelSize.hugeass * 1.2
@@ -29,7 +31,7 @@ Item {
 
     MaterialLoadingIndicator {
         anchors.centerIn: parent
-        loading: (LyricsService.loadingSynced || LyricsService.loadingPlain || !LyricsService.geniusHasLyrics) && !hasSyncedLines
+        loading: !root.hasPlainLyrics && !hasSyncedLines
         visible: loading
         implicitSize: root.loadingIndicatorSize
         color: root.indicatorColor
@@ -40,7 +42,7 @@ Item {
         id: geniusFlickable
         anchors.fill: parent
         
-        opacity: !hasSyncedLines && LyricsService.geniusHasLyrics ? 1 : 0
+        opacity: !hasSyncedLines && root.hasPlainLyrics ? 1 : 0
         Behavior on opacity {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
         }

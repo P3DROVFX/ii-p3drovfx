@@ -21,13 +21,16 @@ Singleton {
     readonly property bool lyricsEnabled: Config.options.lyricsService.enable
     readonly property bool geniusEnabled: Config.options.lyricsService.enableGenius
     readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
+    readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
+    readonly property string lyricsProvider: Config.options.lyricsService.lyricsProvider ?? "auto"
     
     property bool isInitialized: false
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string currentTrackId: root.activePlayer?.trackTitle ?? ""
 
-    readonly property bool effectiveLrclibEnabled: lyricsEnabled && lrclibEnabled && isInitialized && (root.activePlayer?.trackTitle?.length > 0) && (root.activePlayer?.trackArtist?.length > 0)
+    readonly property bool effectiveLrclibEnabled: lyricsEnabled && lrclibEnabled && isInitialized && (root.activePlayer?.trackTitle?.length > 0)
     readonly property bool effectiveGeniusEnabled: lyricsEnabled && geniusEnabled && isInitialized
+    readonly property bool effectiveYtmusicEnabled: lyricsEnabled && ytmusicEnabled && isInitialized && (root.activePlayer?.trackTitle?.length > 0)
 
     readonly property alias syncedLines: lrclib.lines
     readonly property alias currentIndex: lrclib.currentIndex
@@ -35,7 +38,23 @@ Singleton {
     readonly property bool hasSyncedLines: lrclib.lines.length > 0
 
     readonly property alias geniusHasLyrics: genius.hasString
-    readonly property string plainLyrics: genius.lyricsString
+
+    // Resolved plain lyrics based on active provider setting:
+    // "auto"   → lrclib plain → ytmusic → genius (first non-empty wins)
+    // "lrclib" → lrclib plain only
+    // "ytmusic"→ ytmusic only
+    // "genius" → genius only
+    readonly property string plainLyrics: {
+        const provider = root.lyricsProvider;
+        if (provider === "lrclib") return lrclib.plainLyricsText;
+        if (provider === "ytmusic") return ytmusic.lyricsString;
+        if (provider === "genius")  return genius.lyricsString;
+        // auto fallback chain
+        if (lrclib.plainLyricsText.length > 0)  return lrclib.plainLyricsText;
+        if (ytmusic.lyricsString.length > 0)     return ytmusic.lyricsString;
+        if (genius.lyricsString.length > 0)      return genius.lyricsString;
+        return "";
+    }
 
     property int mediaModeOpenCount: 0 // we increase this number when we enable the media mode and decrease it when we close it, we cant use a boolean because it doesnot work on multiple monitor toggle
 
@@ -46,6 +65,12 @@ Singleton {
     // Its being called in LyricsStatic, LyricsScroller and LyricsFlickable files
     function initiliazeLyrics() {
         root.isInitialized = true
+        if (root.activePlayer) {
+            if (effectiveGeniusEnabled)
+                genius.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+            if (effectiveYtmusicEnabled)
+                ytmusic.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+        }
     }
 
     function filterLyricLines(lyrics) { // for clearing the metadata in genius lyrics
@@ -84,14 +109,17 @@ Singleton {
         onTriggered: root.activePlayer.positionChanged()
     }
 
-    Component.onCompleted: geniusFirstFetchDelay.restart()
+    Component.onCompleted: firstFetchDelay.restart()
     Timer {
-        id: geniusFirstFetchDelay
+        id: firstFetchDelay
         running: false
         interval: 1000
         onTriggered: {
-            if (root.activePlayer && effectiveGeniusEnabled) {
-                genius.fetchLyrics(root.activePlayer.trackArtist, root.activePlayer.trackTitle)
+            if (root.activePlayer) {
+                if (effectiveGeniusEnabled)
+                    genius.fetchLyrics(root.activePlayer.trackArtist, root.activePlayer.trackTitle)
+                if (effectiveYtmusicEnabled)
+                    ytmusic.fetchLyrics(root.activePlayer.trackArtist, root.activePlayer.trackTitle)
             }
         }
     }
@@ -123,17 +151,46 @@ Singleton {
             genius.lyricsString = filterLyricLines(lyrics)
         }
     }
+
+    onIsInitializedChanged: {
+        if (isInitialized && root.activePlayer) {
+            if (effectiveGeniusEnabled)
+                genius.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+            if (effectiveYtmusicEnabled)
+                ytmusic.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+        }
+    }
+
+    YTMusicLyrics {
+        id: ytmusic
+        readonly property string trackTitle: root.activePlayer?.trackTitle ?? ""
+        onTrackTitleChanged: {
+            if (root.activePlayer) {
+                if (!effectiveYtmusicEnabled) return;
+                ytmusic.lyricsString = ""
+                ytmusic.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+            }
+        }
+        property string lyricsString: ""
+        onLyricsUpdated: (lyrics) => {
+            if (!effectiveYtmusicEnabled) return
+            ytmusic.lyricsString = lyrics
+        }
+    }
     
     onCurrentTrackIdChanged: {
+        shellColorChanged = false // reseting at each track change
 
-        if (!effectiveGeniusEnabled) return;
-        if (currentTrackId !== "" && root.activePlayer?.trackArtist) {
-            genius.fetchLyrics(root.activePlayer.trackArtist, root.activePlayer.trackTitle)
-        } else {
+        if (!currentTrackId) {
             genius.lyricsString = ""
+            ytmusic.lyricsString = ""
+            return;
         }
 
-        shellColorChanged = false // reseting at each track change
+        if (effectiveGeniusEnabled)
+            genius.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
+        if (effectiveYtmusicEnabled)
+            ytmusic.fetchLyrics(root.activePlayer?.trackArtist ?? "", root.activePlayer?.trackTitle ?? "")
     }
 
     // I dont know if this is the correct place for this, but we only call this from MediaMode so it should be fine

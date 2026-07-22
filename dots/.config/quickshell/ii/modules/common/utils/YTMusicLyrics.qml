@@ -14,9 +14,11 @@ Item {
     signal lyricsUpdated(string lyrics)
 
     function fetchLyrics(artist, title) {
-        if (!artist || !title) return;
-        console.log("[YTMusic Lyrics] Fetching lyrics for", artist, "-", title)
-        fetchLyricsProcess.command = [Directories.ytmusicLyricsScriptPath, artist, title]
+        if (!title && !artist) return;
+        const queryArtist = artist ?? ""
+        const queryTitle = title ?? ""
+        console.log("[YTMusic Lyrics] Fetching lyrics for", queryArtist, "-", queryTitle)
+        fetchLyricsProcess.command = [Directories.ytmusicLyricsScriptPath, queryArtist, queryTitle]
         fetchLyricsProcess.running = true
     }
 

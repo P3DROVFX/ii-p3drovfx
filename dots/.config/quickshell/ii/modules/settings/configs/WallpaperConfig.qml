@@ -332,6 +332,81 @@ ContentPage {
         icon: "music_note"
 
         ConfigSwitch {
+            buttonIcon: "lyrics"
+            text: Translation.tr("Show synchronized lyrics panel")
+            checked: Config.options.background.mediaMode.showLyrics ?? true
+            onCheckedChanged: {
+                Config.options.background.mediaMode.showLyrics = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "tune"
+            text: Translation.tr("Show top media player switcher bar")
+            checked: Config.options.background.mediaMode.showPlayerSwitcher ?? true
+            onCheckedChanged: {
+                Config.options.background.mediaMode.showPlayerSwitcher = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "graphic_eq"
+            text: Translation.tr("Show audio visualizers")
+            checked: (Config.options.background.mediaMode.visualizerMode ?? 1) > 0
+            onCheckedChanged: {
+                Config.options.background.mediaMode.visualizerMode = checked ? 1 : 0;
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Default visualizer mode")
+            icon: "equalizer"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.background.mediaMode.visualizerMode ?? 1
+                onSelected: (newValue) => {
+                    Config.options.background.mediaMode.visualizerMode = newValue;
+                }
+                options: [{
+                    "displayName": Translation.tr("Off"),
+                    "icon": "equalizer",
+                    "value": 0
+                }, {
+                    "displayName": Translation.tr("Waves"),
+                    "icon": "waves",
+                    "value": 1
+                }, {
+                    "displayName": Translation.tr("Bars"),
+                    "icon": "bar_chart",
+                    "value": 2
+                }, {
+                    "displayName": Translation.tr("Radial"),
+                    "icon": "blur_circular",
+                    "value": 3
+                }]
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "linear_scale"
+            text: Translation.tr("Show track progress seekbar")
+            checked: Config.options.background.mediaMode.showSeekBar ?? true
+            onCheckedChanged: {
+                Config.options.background.mediaMode.showSeekBar = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "volume_up"
+            text: Translation.tr("Show volume slider control")
+            checked: Config.options.background.mediaMode.showVolumeSlider ?? true
+            onCheckedChanged: {
+                Config.options.background.mediaMode.showVolumeSlider = checked;
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "animation"
             text: Translation.tr("Enable background animation")
             checked: Config.options.background.mediaMode.backgroundAnimation.enable

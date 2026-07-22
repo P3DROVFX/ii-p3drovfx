@@ -156,9 +156,23 @@ AbstractWidget {
 
     property real calculatedX: 0
     property real calculatedY: 0
+    property real staggerDelay: 0
+    property bool _pendingPosition: false
     property real targetX: isPreview ? 0 : (forceCenter ? centeringX : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.x : (configEntry ? configEntry.x : 0), scaledScreenWidth - width)) : calculatedX))
     property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), scaledScreenHeight - height)) : calculatedY))
     property bool isDraggingOrSettling: false
+
+    Timer {
+        id: staggerTimer
+        repeat: false
+        onTriggered: {
+            root._pendingPosition = false;
+            if (!root.isDragging && !root.isDraggingOrSettling && !root.isPreview) {
+                if (root.x !== root.targetX) root.x = root.targetX;
+                if (root.y !== root.targetY) root.y = root.targetY;
+            }
+        }
+    }
 
     Timer {
         id: settleTimer
@@ -219,12 +233,24 @@ AbstractWidget {
 
     onTargetXChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            root.x = targetX;
+            if (root.staggerDelay > 0) {
+                root._pendingPosition = true;
+                staggerTimer.interval = root.staggerDelay;
+                staggerTimer.restart();
+            } else {
+                root.x = targetX;
+            }
         }
     }
     onTargetYChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            root.y = targetY;
+            if (root.staggerDelay > 0) {
+                root._pendingPosition = true;
+                staggerTimer.interval = root.staggerDelay;
+                staggerTimer.restart();
+            } else {
+                root.y = targetY;
+            }
         }
     }
 

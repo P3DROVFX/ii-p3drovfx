@@ -24,7 +24,7 @@ Item {
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     Loader {
-        active: Config.options.appearance.fakeScreenRounding == 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && !GlobalStates.screenLocked
+        active: Config.options.appearance.fakeScreenRounding == 3 && !(Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) && !GlobalStates.screenLocked && !GlobalStates.mediaModeActive
         sourceComponent: Variants {
             id: wrappedFrameVariant
             property var variantModel: Quickshell.screens

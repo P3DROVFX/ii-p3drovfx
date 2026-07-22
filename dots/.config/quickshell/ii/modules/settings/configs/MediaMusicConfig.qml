@@ -106,6 +106,19 @@ ContentPage {
                 Config.options.lyricsService.enableLrclib = checked;
             }
         }
+
+        ConfigSwitch {
+            enabled: Config.options.lyricsService.enable
+            buttonIcon: "smart_display"
+            text: Translation.tr("Enable YouTube Music lyrics")
+            checked: Config.options.lyricsService.enableYtmusic
+            onCheckedChanged: {
+                Config.options.lyricsService.enableYtmusic = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Requires ytmusicapi installed in the venv (see ii-vynx setup). Fetches plain lyrics from YouTube Music.")
+            }
+        }
     }
 
     ContentSection {
