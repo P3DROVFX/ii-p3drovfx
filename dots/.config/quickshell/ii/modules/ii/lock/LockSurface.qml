@@ -169,7 +169,7 @@ MouseArea {
             id: textWrapper
             Layout.fillHeight: true
             Layout.leftMargin: 12
-            implicitWidth: Math.min(200, Math.max(120, textColumn.implicitWidth))
+            implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
             clip: true
 
             Behavior on implicitWidth {

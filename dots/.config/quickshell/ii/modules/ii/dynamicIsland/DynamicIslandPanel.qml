@@ -32,7 +32,7 @@ Scope {
     }
 
     // State bindings
-    readonly property bool searchActive: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
+    readonly property bool searchActive: GlobalStates.overviewOpen && (win.screen ? win.screen.name === GlobalStates.activeSearchMonitor : false)
     readonly property bool osdActive: GlobalStates.osdVolumeOpen
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false

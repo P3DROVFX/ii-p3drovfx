@@ -43,7 +43,7 @@ QtObject {
             return (usingWrappedFrame ? frameThickness : 0);
         }
         if (barBottom) {
-            return screenHeight - (usingWrappedFrame ? frameThickness : Math.max(0, barHeight - hBarHiddenAmount)) + barMargin - dropHeight;
+            return screenHeight - Math.max(0, barHeight - hBarHiddenAmount) + barMargin - dropHeight;
         }
         return Math.max(0, barHeight - hBarHiddenAmount - barMargin);
     }

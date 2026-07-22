@@ -15,12 +15,10 @@ QtObject {
     readonly property bool isLauncher: mode === "launcher"
 
     readonly property real targetW: {
-        if (!isLauncher) return 0
         return Math.max(0, launcherContentWidth)
     }
 
     readonly property real targetH: {
-        if (!isLauncher) return 0
         if (launcherContentHeight <= 0) return 0
         return Math.min(maxHeight, launcherContentHeight)
     }

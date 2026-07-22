@@ -26,7 +26,7 @@ Scope {
             required property ShellScreen modelData
             property int monitorIndex: barVariant.variantModel.indexOf(modelData)
 
-            active: GlobalStates.barOpen && !GlobalStates.screenLocked && !GlobalStates.connectModeActive
+            active: GlobalStates.barOpen && !GlobalStates.screenLocked && !GlobalStates.connectModeActive && !GlobalStates.mediaModeActive
             component: BarWindow {
                 screen:       barLoader.modelData
                 monitorIndex: barLoader.monitorIndex

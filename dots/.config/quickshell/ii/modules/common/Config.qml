@@ -547,6 +547,7 @@ Singleton {
                             property bool showMinuteHand: true
                             property bool enableShadows: true
                             property bool enableInnerShadow: false
+                            property bool expressiveColors: false
                         }
                         property JsonObject quote: JsonObject {
                             property bool enable: false
@@ -598,12 +599,14 @@ Singleton {
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 400
                         property real y: 100
+                        property bool expressiveColors: false
                     }
                     property JsonObject date: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"
                         property real x: 100
                         property real y: 100
+                        property bool expressiveColors: false
                     }
                     property JsonObject photo: JsonObject {
                         property bool enable: false
@@ -611,6 +614,7 @@ Singleton {
                         property real x: 200
                         property real y: 200
                         property string imagePath: ""
+                        property bool expressiveColors: false
                     }
                     property bool enableInnerShadow: true
                     property bool enableShadows: true

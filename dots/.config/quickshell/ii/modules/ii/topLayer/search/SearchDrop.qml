@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Hyprland
 import qs
 import qs.services
@@ -55,6 +56,7 @@ Item {
     property bool barBottom: false
     property bool barOnLeft: false
     property bool barOnRight: false
+    readonly property bool isBottomBar: !barVertical && barBottom
     property bool usingWrappedFrame: false
     property int frameThickness: 0
     property int barHeight: Appearance.sizes.barHeight
@@ -76,7 +78,7 @@ Item {
 
     property var searchWidgetRef: null
 
-    readonly property bool isOverviewVisible: root.isOpen && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    readonly property bool isOverviewVisible: root.isWidgetActive && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
 
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
@@ -138,12 +140,10 @@ Item {
     }
 
     // ── Shared animation spec ────────────────────────────────────────────────
-    // Open:  emphasizedDecel [0.05,0.7,0.1,1] — fast-start, slow-settle (EaseOut).
-    // Close: same curve but shorter — panel snaps shut quickly then eases out.
-    readonly property int _animDurationOpen: Math.round(450 * Appearance.animMultiplier)
-    readonly property int _animDurationClose: Math.round(280 * Appearance.animMultiplier)
-    readonly property var _openBezier: Appearance.animationCurves.emphasizedDecel
-    readonly property var _closeBezier: Appearance.animationCurves.emphasizedDecel
+    // Open: OutBack curve for a subtle physical bounce + slide + blur reveal.
+    // Close: InCubic/OutCubic fast exit with blur increasing as it closes.
+    readonly property int _animDurationOpen: Math.round(420 * Appearance.animMultiplier)
+    readonly property int _animDurationClose: Math.round(260 * Appearance.animMultiplier)
 
     // openProgress: 0 = fully closed, 1 = fully open
     property real openProgress: 0.0
@@ -178,8 +178,8 @@ Item {
                 target: root
                 property: "openProgress"
                 duration: root._animDurationOpen
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root._openBezier
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.2
             }
         },
         Transition {
@@ -189,8 +189,7 @@ Item {
                 target: root
                 property: "openProgress"
                 duration: root._animDurationClose
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root._closeBezier
+                easing.type: Easing.InCubic
             }
         }
     ]
@@ -198,10 +197,10 @@ Item {
     Item {
         id: dropContainer
         x: positioner.anchorX
-        y: root.barBottom ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
+        y: root.isBottomBar ? (positioner.anchorY + (dropState.targetH - root.animHeight)) : positioner.anchorY
         width: dropState.targetW
-        height: root.animHeight
-        visible: root.animHeight > 0.001
+        height: Math.max(0, root.animHeight)
+        visible: root.openProgress > 0.001
 
         // Publish drop bounds to GlobalStates for background blur exclusion
         onXChanged: root._updateBlurExclusion()
@@ -209,26 +208,32 @@ Item {
         onWidthChanged: root._updateBlurExclusion()
         onHeightChanged: root._updateBlurExclusion()
 
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 64.0
+            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
+        }
+
         // ── Notch background (unclipped) ─────────────────────────────────────
         Notch {
             id: dropNotch
             width: dropContainer.width
             height: dropContainer.height   // = animHeight, always matches clip edge
-            y: barBottom ? (dropContainer.height - height) : 0
+            y: isBottomBar ? (dropContainer.height - height) : 0
             disableBehaviors: true
             readonly property real _wr: Appearance.rounding.windowRounding
             // Grow topRadius from 0 immediately — no dead zone threshold.
             // animHeight * 0.8 reaches windowRounding quickly without overshoot.
-            topRadius: Math.min(_wr, root.animHeight * 0.8)
-            bottomRadius: Math.min(_wr, root.animHeight)
+            topRadius: Math.min(_wr, Math.max(0, root.animHeight * 0.8))
+            bottomRadius: Math.min(_wr, Math.max(0, root.animHeight))
             fillColor: root.themeBgColor
             transform: Scale {
                 xScale: 1
-                yScale: barBottom ? -1 : 1
+                yScale: isBottomBar ? -1 : 1
                 origin.y: dropNotch.height / 2
             }
         }
-
 
         // ── Content (clipped to growing height) ──────────────────────────────
         Item {
@@ -243,7 +248,8 @@ Item {
                 x: 200
                 width: dropContainer.width
                 height: dropState.targetH
-                y: barBottom ? parent.height - height : 0
+                y: isBottomBar ? parent.height - height : 0
+                opacity: Math.min(1.0, Math.max(0.0, root.openProgress))
 
                 Loader {
                     id: searchWidgetLoader
@@ -321,30 +327,23 @@ Item {
 
     Loader { // Classic overview
         id: overviewLoader
-        y: root.barBottom ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
+        y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
         active: root.isWidgetActive && !root.isScrollingLayout
-        visible: opacity > 0.01
+        visible: root.openProgress > 0.001
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                }
-            }
+        opacity: root.isOverviewVisible ? Math.min(1.0, Math.max(0.0, root.openProgress)) : 0.0
+
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 64.0
+            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
         }
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(60 * Appearance.animMultiplier)
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
+        transform: Translate {
+            y: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * (root.isBottomBar ? 40 : -40)
         }
 
         sourceComponent: OverviewWidget {
@@ -355,31 +354,24 @@ Item {
 
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
-        y: root.barBottom ? 0 : (dropContainer.y + dropContainer.height)
-        height: root.barBottom ? dropContainer.y : (parent.height - y)
+        y: root.isBottomBar ? 0 : (dropContainer.y + dropContainer.height)
+        height: root.isBottomBar ? dropContainer.y : (parent.height - y)
         anchors.left: parent.left
         anchors.right: parent.right
         active: root.isWidgetActive && root.isScrollingLayout
-        visible: opacity > 0.01
+        visible: root.openProgress > 0.001
 
-        opacity: root.isOverviewVisible ? 1.0 : 0.0
-        transform: Translate {
-            y: root.isOverviewVisible ? 0 : (root.barBottom ? -30 : 30)
-            Behavior on y {
-                NumberAnimation {
-                    duration: root.isOverviewVisible ? root._animDurationOpen : root._animDurationClose
-                    easing.type: Easing.BezierSpline
-                    easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-                }
-            }
+        opacity: root.isOverviewVisible ? Math.min(1.0, Math.max(0.0, root.openProgress)) : 0.0
+
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 64.0
+            blur: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * 1.0
         }
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.isOverviewVisible ? root._animDurationOpen : Math.round(120 * Appearance.animMultiplier)
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: root.isOverviewVisible ? root._openBezier : root._closeBezier
-            }
+        transform: Translate {
+            y: (1.0 - Math.min(1.0, Math.max(0.0, root.openProgress))) * (root.isBottomBar ? 40 : -40)
         }
 
         sourceComponent: ScrollingOverviewWidget {

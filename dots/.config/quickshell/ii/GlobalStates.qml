@@ -14,6 +14,8 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    property int mediaModeCount: 0
+    readonly property bool mediaModeActive: mediaModeCount > 0
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
     property bool crosshairOpen: false
@@ -57,6 +59,7 @@ Singleton {
     property bool videoEditorOpen: false
     property string videoEditorPath: ""
     property bool settingsOpen: false
+    property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
     property string activeLeftSidebarMonitor: ""
@@ -331,9 +334,20 @@ Singleton {
         }
     }
 
+    property real _lastPoliciesWidth: Appearance.sizes.sidebarWidth + 300
+
+    onPoliciesWidthChanged: {
+        if (Config.ready && !policiesExtended) {
+            _lastPoliciesWidth = policiesWidth;
+        }
+    }
+
     readonly property real policiesWidth: {
         if (policiesExtended)
             return Appearance.sizes.sidebarWidthExtended;
+
+        if (!Config.ready)
+            return _lastPoliciesWidth;
 
         const p = Config.options.policies;
         let activeCount = 0;
@@ -426,12 +440,18 @@ Singleton {
         if (leftSidebarTargetWidth > 0) {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            Qt.callLater(() => {
+                if (root.leftSidebarTargetWidth > 0) {
+                    leftSidebarAnimation.start();
+                }
+            });
         } else {
             leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            leftSidebarAnimation.start();
         }
-        leftSidebarAnimation.to = leftSidebarTargetWidth;
-        leftSidebarAnimation.start();
     }
 
     onRightSidebarTargetWidthChanged: {
@@ -439,18 +459,29 @@ Singleton {
         if (rightSidebarTargetWidth > 0) {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            Qt.callLater(() => {
+                if (root.rightSidebarTargetWidth > 0) {
+                    rightSidebarAnimation.start();
+                }
+            });
         } else {
             rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
             rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            rightSidebarAnimation.start();
         }
-        rightSidebarAnimation.to = rightSidebarTargetWidth;
-        rightSidebarAnimation.start();
     }
 
     Component.onCompleted: {
         animatedLeftSidebarWidth = leftSidebarTargetWidth;
         animatedRightSidebarWidth = rightSidebarTargetWidth;
         root.enforceSidebarStyle();
+        // Instantiate sidebars immediately on startup on the primary/focused screen to keep them warm
+        Qt.callLater(() => {
+            root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+            root.activeRightSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+        });
     }
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
@@ -529,28 +560,33 @@ Singleton {
         root.overviewOpen = true;
     }
 
-    onOverviewOpenChanged: {
-        if (root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable) && root.activeSearchMonitor === "") {
-            root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
+    Timer {
+        id: resetSearchOnlyModeTimer
+        interval: 300
+        repeat: false
+        onTriggered: {
+            if (!root.overviewOpen) {
+                root.searchOnlyMode = false;
+            }
         }
-        if (!root.overviewOpen && (root.searchConnectActive || Config.options.bar.floatingNotch.enable)) {
+    }
+
+    onOverviewOpenChanged: {
+        if (root.overviewOpen) {
+            resetSearchOnlyModeTimer.stop();
+            if (root.activeSearchMonitor === "") {
+                root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
+            }
+        } else {
             root.activeSearchMonitor = "";
-            // Overview.qml's PanelWindow (which resets searchOnlyMode) is inactive in
-            // connect mode — reset it here so the next SUPER press opens the full overview.
-            root.searchOnlyMode = false;
+            resetSearchOnlyModeTimer.start();
         }
     }
 
     onAnimatedLeftSidebarWidthChanged: {
-        if (animatedLeftSidebarWidth === 0 && !policiesPanelOpen) {
-            root.activeLeftSidebarMonitor = "";
-        }
     }
 
     onAnimatedRightSidebarWidthChanged: {
-        if (animatedRightSidebarWidth === 0 && !dashboardPanelOpen) {
-            root.activeRightSidebarMonitor = "";
-        }
     }
 
     onPoliciesPanelOpenChanged: {

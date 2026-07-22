@@ -3,7 +3,6 @@ import QtQuick.Effects
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
@@ -29,7 +28,6 @@ Item {
         return verticalParallax ? (workspaceNorm - 0.5) * -2 * workspaceParallaxStrength : 0
     }
     
-    // using normal animations feels too flat
     Behavior on parallaxX {
         NumberAnimation { duration: 600; easing.type: Easing.OutCubic }
     }
@@ -37,21 +35,19 @@ Item {
         NumberAnimation { duration: 600; easing.type: Easing.OutCubic }
     }
 
-    GaussianBlur {
-        anchors.fill: parent
-        source: img
-        radius: Config.options.background.mediaMode.backgroundBlurRadius
-        samples: radius * 2 + 1
-    }
-
     TransitionImage {
         id: img
         anchors.fill: parent
         imageSource: root.artFilePath
-        visible: false
-        sourceSize: Qt.size(width > 0 ? Math.round(width / 4) : 480, height > 0 ? Math.round(height / 4) : 270)
 
-        Rectangle { anchors.fill: parent; color: root.overlayColor }
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blurMax: 128
+            blur: Math.min(Config.options.background.mediaMode.backgroundBlurRadius / 128.0, 1.0)
+        }
+
+        sourceSize: Qt.size(width > 0 ? Math.round(width / 4) : 480, height > 0 ? Math.round(height / 4) : 270)
 
         transform: [
             Scale {
@@ -72,9 +68,14 @@ Item {
         AxisAnimation {
             speed: root.animationSpeedScale
             axis: "y"
-            frames: [20, -50,  30, -30,  20]
+            frames: [20, -50,  30, -30, 20]
             times:  [20000, 14000, 19000, 14500]
         }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: root.overlayColor
     }
 
     component AxisAnimation: SequentialAnimation {
@@ -86,7 +87,7 @@ Item {
         loops: Animation.Infinite
         running: root.animationEnabled
 
-        onSpeedChanged: { // to instantly update the speed, it waits for the full animation to end to take effect otherwise
+        onSpeedChanged: {
             running = false
             Qt.callLater (() => {
                 running = root.animationEnabled

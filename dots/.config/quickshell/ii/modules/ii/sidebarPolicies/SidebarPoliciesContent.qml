@@ -174,7 +174,22 @@ Item {
                 id: swipeView
                 anchors.fill: parent
                 spacing: 10
-                currentIndex: Persistent.states.sidebar.policies.tab
+                
+                onCountChanged: {
+                    if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
+                        currentIndex = Persistent.states.sidebar.policies.tab;
+                    }
+                }
+                
+                Connections {
+                    target: Persistent.states.sidebar.policies
+                    function onTabChanged() {
+                        if (swipeView.currentIndex !== Persistent.states.sidebar.policies.tab && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < swipeView.count) {
+                            swipeView.currentIndex = Persistent.states.sidebar.policies.tab;
+                        }
+                    }
+                }
+
                 onCurrentIndexChanged: {
                     if (currentIndex >= 0 && currentIndex < root.tabCount && Persistent.states.sidebar.policies.tab !== currentIndex) {
                         Persistent.states.sidebar.policies.tab = currentIndex;
@@ -188,22 +203,15 @@ Item {
                     if (contentItem) {
                         contentItem.highlightMoveDuration = 0;
                     }
+                    if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
+                        currentIndex = Persistent.states.sidebar.policies.tab;
+                    }
                 }
 
                 implicitWidth: Math.max.apply(null, contentChildren.map(child => child.implicitWidth || 0))
                 implicitHeight: Math.max.apply(null, contentChildren.map(child => child.implicitHeight || 0))
 
                 clip: true
-                // Cheatsheet pattern: disable expensive layer compositing while swipe is
-                // moving to keep the bounce animation at full framerate.
-                layer.enabled: !swipeView.moving
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.floor(swipeView.width)
-                        height: Math.floor(swipeView.height)
-                        radius: Appearance.rounding.small
-                    }
-                }
 
                 Repeater {
                     model: root.activeTabs

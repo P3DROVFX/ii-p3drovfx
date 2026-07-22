@@ -14,6 +14,8 @@ AbstractBackgroundWidget {
     configEntryName: "weather"
 
     readonly property string tempText: Weather.data?.temp ?? "20°C"
+    readonly property bool expressive: Config.options.background.widgets.weather.expressiveColors ?? false
+    readonly property color expressiveTempRect: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.35)
 
     readonly property color solidSurfaceHighest: {
         const c = Qt.color(Appearance.colors.colSurfaceContainerHighest);
@@ -49,7 +51,7 @@ AbstractBackgroundWidget {
                     id: bgShape
                     anchors.fill: parent
                     shapeString: parent.shapeString
-                    color: Appearance.colors.colPrimaryContainer
+                    color: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                     visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
                 }
 
@@ -67,7 +69,7 @@ AbstractBackgroundWidget {
                     anchors.centerIn: parent
                     iconSize: 120
                     text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
-                    color: Appearance.colors.colOnSurfaceVariant
+                    color: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
                     fill: 1.0
                 }
             }
@@ -77,13 +79,13 @@ AbstractBackgroundWidget {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
             Layout.alignment: Qt.AlignHCenter
-            color: root.solidSurfaceHighest
+            color: root.expressive ? root.expressiveTempRect : root.solidSurfaceHighest
             radius: Appearance.rounding.small
 
             StyledText {
                 anchors.centerIn: parent
                 text: root.tempText
-                color: Appearance.colors.colOnSurfaceVariant
+                color: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
                 font.pixelSize: 42
                 font.weight: Font.Bold
             }

@@ -66,15 +66,19 @@ PanelWindow {
 
     readonly property real leftContentWidth: {
         const pos = Config.options.sidebar.position;
-        if (pos === "inverted") return GlobalStates.dashboardWidth;
-        if (pos === "left") return GlobalStates.dashboardPanelOpen ? GlobalStates.dashboardWidth : GlobalStates.policiesWidth;
+        if (pos === "inverted")
+            return GlobalStates.dashboardWidth;
+        if (pos === "left")
+            return GlobalStates.dashboardPanelOpen ? GlobalStates.dashboardWidth : GlobalStates.policiesWidth;
         return GlobalStates.policiesWidth;
     }
 
     readonly property real rightContentWidth: {
         const pos = Config.options.sidebar.position;
-        if (pos === "inverted") return GlobalStates.policiesWidth;
-        if (pos === "right") return GlobalStates.sidebarLeftOpen ? GlobalStates.policiesWidth : GlobalStates.dashboardWidth;
+        if (pos === "inverted")
+            return GlobalStates.policiesWidth;
+        if (pos === "right")
+            return GlobalStates.sidebarLeftOpen ? GlobalStates.policiesWidth : GlobalStates.dashboardWidth;
         return GlobalStates.dashboardWidth;
     }
 
@@ -82,61 +86,49 @@ PanelWindow {
         target: GlobalStates
         ignoreUnknownSignals: true
         function onLeftSidebarTargetWidthChanged() {
-            if (GlobalStates.leftSidebarTargetWidth > 0) {
+            if (GlobalStates.leftSidebarTargetWidth > 0 && topPanel.leftSidebarWarmOnMonitor) {
                 topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
             }
         }
         function onRightSidebarTargetWidthChanged() {
-            if (GlobalStates.rightSidebarTargetWidth > 0) {
+            if (GlobalStates.rightSidebarTargetWidth > 0 && topPanel.rightSidebarWarmOnMonitor) {
                 topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
             }
         }
     }
 
     Component.onCompleted: {
-        if (GlobalStates.leftSidebarTargetWidth > 0) {
+        if (GlobalStates.leftSidebarTargetWidth > 0 && topPanel.leftSidebarWarmOnMonitor) {
             topPanel.leftSidebarMaskWidth = GlobalStates.leftSidebarTargetWidth;
         }
-        if (GlobalStates.rightSidebarTargetWidth > 0) {
+        if (GlobalStates.rightSidebarTargetWidth > 0 && topPanel.rightSidebarWarmOnMonitor) {
             topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
         }
     }
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
-    readonly property bool leftSidebarActiveOnMonitor: GlobalStates.animatedLeftSidebarWidth > 0 && screen.name === GlobalStates.effectiveLeftMonitor && !GlobalStates.policiesDetached
-    readonly property bool rightSidebarActiveOnMonitor: GlobalStates.animatedRightSidebarWidth > 0 && screen.name === GlobalStates.effectiveRightMonitor
+    readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !GlobalStates.policiesDetached
+    readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor
 
     readonly property bool leftSidebarDialogDimmed: leftSidebarContentLoader.status === Loader.Ready && leftSidebarContentLoader.item && leftSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && leftSidebarContentLoader.item.anyDialogVisible
     readonly property bool rightSidebarDialogDimmed: rightSidebarContentLoader.status === Loader.Ready && rightSidebarContentLoader.item && rightSidebarContentLoader.item.hasOwnProperty("anyDialogVisible") && rightSidebarContentLoader.item.anyDialogVisible
 
     readonly property color leftSidebarCornerColor: {
         var base = Qt.color(Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0);
-        if (!leftSidebarDialogDimmed) return base;
+        if (!leftSidebarDialogDimmed)
+            return base;
         var scrim = Qt.color(Appearance.colors.colScrim);
-        return Qt.rgba(
-            base.r * (1 - scrim.a) + scrim.r * scrim.a,
-            base.g * (1 - scrim.a) + scrim.g * scrim.a,
-            base.b * (1 - scrim.a) + scrim.b * scrim.a,
-            base.a
-        );
+        return Qt.rgba(base.r * (1 - scrim.a) + scrim.r * scrim.a, base.g * (1 - scrim.a) + scrim.g * scrim.a, base.b * (1 - scrim.a) + scrim.b * scrim.a, base.a);
     }
     readonly property color rightSidebarCornerColor: {
         var base = Qt.color(Config.options.bar.expressiveColors ? topPanel.activeTheme.barBackground : Appearance.colors.colLayer0);
-        if (!rightSidebarDialogDimmed) return base;
+        if (!rightSidebarDialogDimmed)
+            return base;
         var scrim = Qt.color(Appearance.colors.colScrim);
-        return Qt.rgba(
-            base.r * (1 - scrim.a) + scrim.r * scrim.a,
-            base.g * (1 - scrim.a) + scrim.g * scrim.a,
-            base.b * (1 - scrim.a) + scrim.b * scrim.a,
-            base.a
-        );
+        return Qt.rgba(base.r * (1 - scrim.a) + scrim.r * scrim.a, base.g * (1 - scrim.a) + scrim.g * scrim.a, base.b * (1 - scrim.a) + scrim.b * scrim.a, base.a);
     }
-    readonly property bool searchOpenOnMonitor: GlobalStates.overviewOpen
-        && GlobalStates.searchConnectActive
-        && screen.name === GlobalStates.activeSearchMonitor
-        && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable)
-        && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
+    readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
     readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && Config.options.bar.floatingNotch.enable && (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor || screen.name === Config.options.bar.floatingNotch.singleMonitorName))
 
     readonly property bool hasFullscreenWindowOnMonitor: {
@@ -156,13 +148,13 @@ PanelWindow {
         if (GlobalStates.effectiveLeftMonitor !== "") {
             return screen.name === GlobalStates.effectiveLeftMonitor;
         }
-        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+        return false;
     }
     readonly property bool rightSidebarWarmOnMonitor: {
         if (GlobalStates.effectiveRightMonitor !== "") {
             return screen.name === GlobalStates.effectiveRightMonitor;
         }
-        return Hyprland.focusedMonitor ? (screen.name === Hyprland.focusedMonitor.name) : false;
+        return false;
     }
 
     onLeftSidebarActiveOnMonitorChanged: {
@@ -580,7 +572,7 @@ PanelWindow {
 
     Loader {
         id: leftSidebarShadowLoader
-        active: !GlobalStates.connectModeActive || topPanel.isDynamicIslandTop || topPanel.isDynamicIslandBottom
+        active: topPanel.leftSidebarActiveOnMonitor && (!GlobalStates.connectModeActive || topPanel.isDynamicIslandTop || topPanel.isDynamicIslandBottom)
         anchors.fill: leftSidebar
         sourceComponent: Component {
             StyledDropShadow {
@@ -627,7 +619,7 @@ PanelWindow {
         topRightRadius: isConnectDynamicIslandBottom ? 0 : defaultRadius
         bottomLeftRadius: (isConnectDynamicIslandBottom) ? 0 : (GlobalStates.connectModeActive ? 0 : defaultRadius)
         bottomRightRadius: isConnectDynamicIslandBottom ? defaultRadius : (GlobalStates.connectModeActive ? 0 : defaultRadius)
-        visible: topPanel.leftSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
+        visible: topPanel.leftSidebarActiveOnMonitor && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -640,7 +632,7 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached && topPanel.leftSidebarWarmOnMonitor
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached && (topPanel.leftSidebarActiveOnMonitor || topPanel.leftSidebarWarmOnMonitor)
             asynchronous: true
             anchors.fill: parent
             sourceComponent: {
@@ -713,7 +705,7 @@ PanelWindow {
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
         border.width: GlobalStates.connectModeActive ? 0 : 1
         border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
-        visible: topPanel.rightSidebarWarmOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
+        visible: topPanel.rightSidebarActiveOnMonitor && (!topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarActiveOnMonitor) && !GlobalStates.connectSidebarsSeparate
 
         // GPU compositing during animation: prevents per-frame mask/Region recalc
         // which was causing Wayland surface sync stalls on every animation frame.
@@ -725,7 +717,7 @@ PanelWindow {
 
         Loader {
             id: rightSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && (topPanel.rightSidebarActiveOnMonitor || topPanel.rightSidebarWarmOnMonitor)
             asynchronous: true
             anchors.fill: parent
             sourceComponent: {
@@ -1020,7 +1012,7 @@ PanelWindow {
         id: leftSidebarMaskItem
         x: 0
         y: topPanel.sidebarTopOffset
-        width: GlobalStates.animatedLeftSidebarWidth > 0 ? topPanel.leftSidebarMaskWidth : 0
+        width: (GlobalStates.animatedLeftSidebarWidth > 0 && topPanel.leftSidebarWarmOnMonitor) ? topPanel.leftSidebarMaskWidth : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
@@ -1028,7 +1020,7 @@ PanelWindow {
         id: rightSidebarMaskItem
         x: parent.width - width
         y: topPanel.sidebarTopOffset
-        width: GlobalStates.animatedRightSidebarWidth > 0 ? topPanel.rightSidebarMaskWidth : 0
+        width: (GlobalStates.animatedRightSidebarWidth > 0 && topPanel.rightSidebarWarmOnMonitor) ? topPanel.rightSidebarMaskWidth : 0
         height: parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset
     }
 
@@ -1164,42 +1156,40 @@ PanelWindow {
             regions: frameLoader.item ? [frameLoader.item.frameMask] : []
         }
         Region {
-            // Left sidebar (disabled in Float+Connect mode)
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarMaskItem : null
         }
         Region {
-            // Right sidebar (disabled in Float+Connect mode)
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarTopCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarTopCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarOuterTopCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarOuterTopCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarBottomCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarBottomCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarTopCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarTopCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarOuterTopCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarOuterTopCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarBottomCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarBottomCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarBottomBarCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarBottomBarCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? leftSidebarOuterBottomCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarWarmOnMonitor) ? leftSidebarOuterBottomCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarBottomBarCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarBottomBarCornerMaskItem : null
         }
         Region {
-            item: !GlobalStates.connectSidebarsSeparate ? rightSidebarOuterBottomCornerMaskItem : null
+            item: (!GlobalStates.connectSidebarsSeparate && topPanel.rightSidebarWarmOnMonitor) ? rightSidebarOuterBottomCornerMaskItem : null
         }
         Region {
             // Search drop
@@ -1224,7 +1214,8 @@ PanelWindow {
         }
         function onSidebarRightOpenChanged() {
             // In Float+Connect mode, sidebars handle their own dismissal
-            if (GlobalStates.connectSidebarsSeparate) return;
+            if (GlobalStates.connectSidebarsSeparate)
+                return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalFocusGrab.addDismissable(topPanel);
             } else {
@@ -1233,7 +1224,8 @@ PanelWindow {
         }
         function onSidebarLeftOpenChanged() {
             // In Float+Connect mode, sidebars handle their own dismissal
-            if (GlobalStates.connectSidebarsSeparate) return;
+            if (GlobalStates.connectSidebarsSeparate)
+                return;
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
                 if (!GlobalStates.policiesPinned) {
                     GlobalFocusGrab.addDismissable(topPanel);
@@ -1248,7 +1240,8 @@ PanelWindow {
         target: GlobalFocusGrab
         function onDismissed() {
             // In Float+Connect mode, sidebars handle their own dismissal
-            if (GlobalStates.connectSidebarsSeparate) return;
+            if (GlobalStates.connectSidebarsSeparate)
+                return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
                 GlobalStates.sidebarRightOpen = false;
             }
