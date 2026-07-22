@@ -2148,6 +2148,13 @@ PanelWindow {
                 root.editorRegionY = recropRect.y;
                 root.editorRegionW = recropRect.width;
                 root.editorRegionH = recropRect.height;
+                // Keep the drag vars (which drive the darken overlay + dashed
+                // border) in sync with the new crop, else the old region's
+                // chrome lingers until the next resize.
+                root.dragStartX = recropRect.x;
+                root.dragStartY = recropRect.y;
+                root.draggingX = recropRect.x + recropRect.width;
+                root.draggingY = recropRect.y + recropRect.height;
                 root.currentTool = "none";
             }
 
