@@ -16,6 +16,8 @@ Shape {
     y: 0
     width: canvasWidth
     height: canvasHeight
+    // Highlighter strokes reuse this renderer with a reduced style.opacity.
+    opacity: s?.opacity ?? 1
     visible: annData !== null
 
     ShapePath {

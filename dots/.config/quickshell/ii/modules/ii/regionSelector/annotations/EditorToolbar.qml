@@ -28,6 +28,21 @@ Toolbar {
 
     }
 
+    // Straight line
+    IconToolbarButton {
+        id: lineBtn
+
+        text: "horizontal_rule"
+        toggled: editor.currentTool === "line"
+        onClicked: editor.currentTool = editor.currentTool === "line" ? "none" : "line"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Line")
+        }
+
+    }
+
     // Rectangle with shape accordion
     Item {
         id: shapeSelectorContainer
@@ -151,6 +166,21 @@ Toolbar {
 
     }
 
+    // Fill toggle for closed shapes (rectangle / circle / star)
+    IconToolbarButton {
+        id: fillBtn
+
+        text: "format_color_fill"
+        toggled: editor.fillEnabled
+        onClicked: editor.fillEnabled = !editor.fillEnabled
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Fill shapes")
+        }
+
+    }
+
     // Pencil
     IconToolbarButton {
         id: pencilBtn
@@ -166,6 +196,51 @@ Toolbar {
 
     }
 
+    // Highlighter
+    IconToolbarButton {
+        id: highlighterBtn
+
+        text: "ink_highlighter"
+        toggled: editor.currentTool === "highlighter"
+        onClicked: editor.currentTool = editor.currentTool === "highlighter" ? "none" : "highlighter"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Highlighter")
+        }
+
+    }
+
+    // Text
+    IconToolbarButton {
+        id: textBtn
+
+        text: "text_fields"
+        toggled: editor.currentTool === "text"
+        onClicked: editor.currentTool = editor.currentTool === "text" ? "none" : "text"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Text")
+        }
+
+    }
+
+    // Number badge
+    IconToolbarButton {
+        id: numberBtn
+
+        text: "counter_1"
+        toggled: editor.currentTool === "number"
+        onClicked: editor.currentTool = editor.currentTool === "number" ? "none" : "number"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Number badge")
+        }
+
+    }
+
     // Blur/Pixelate
     IconToolbarButton {
         id: blurBtn
@@ -177,6 +252,64 @@ Toolbar {
         StyledToolTip {
             z: 9999
             text: Translation.tr("Pixelate")
+        }
+
+    }
+
+    // Blur strength — independent of line thickness; only relevant while the
+    // pixelate tool is active, so it collapses away otherwise.
+    Item {
+        id: blurStrengthContainer
+
+        visible: editor.currentTool === "blur"
+        implicitWidth: visible ? blurStrengthRow.implicitWidth : 0
+        implicitHeight: 32
+
+        Row {
+            id: blurStrengthRow
+
+            spacing: 2
+            anchors.verticalCenter: parent.verticalCenter
+
+            Repeater {
+                // [divisor, dot size] — bigger divisor = chunkier pixelation
+                model: [[12, 5], [24, 9], [48, 14]]
+
+                delegate: RippleButton {
+                    required property var modelData
+
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    buttonRadius: width / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    toggled: editor.blurStrength === Number(modelData[0])
+                    onClicked: editor.blurStrength = Number(modelData[0])
+
+                    contentItem: Item {
+                        anchors.fill: parent
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Number(modelData[1])
+                            height: Number(modelData[1])
+                            radius: 2
+                            color: Appearance.colors.colOnLayer1
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        Behavior on implicitWidth {
+            NumberAnimation {
+                duration: 250
+                easing.type: Easing.InOutCubic
+            }
+
         }
 
     }

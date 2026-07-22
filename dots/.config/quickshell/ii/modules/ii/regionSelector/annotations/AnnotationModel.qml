@@ -20,7 +20,7 @@ Singleton {
             "stroke": String(color),
             "strokeWidth": lineWidth,
             "fill": null,
-            "fillOpacity": 0.25,
+            "fillOpacity": 0.4,
             "opacity": 1,
             "fontPx": 20
         };
@@ -79,7 +79,25 @@ Singleton {
                     "h": o * 2
                 };
             };
+        case "number":
+            {
+                var br = g.r ?? 16;
+                return {
+                    "x": (g.x ?? 0) - br,
+                    "y": (g.y ?? 0) - br,
+                    "w": br * 2,
+                    "h": br * 2
+                };
+            };
+        case "text":
+            return {
+                "x": g.x ?? 0,
+                "y": g.y ?? 0,
+                "w": g.w ?? 0,
+                "h": g.h ?? 0
+            };
         case "arrow":
+        case "line":
             return {
                 "x": Math.min(g.x1 ?? 0, g.x2 ?? 0),
                 "y": Math.min(g.y1 ?? 0, g.y2 ?? 0),
@@ -88,6 +106,7 @@ Singleton {
             };
         case "pencil":
         case "blur":
+        case "highlighter":
             {
                 var pts = g.points ?? [];
                 if (pts.length === 0)

@@ -16,12 +16,18 @@ Shape {
     y: cy - outerR - 5
     width: (outerR * 2) + 10
     height: (outerR * 2) + 10
+    opacity: s?.opacity ?? 1
     visible: annData !== null
 
     ShapePath {
         strokeColor: starRoot.s?.stroke ?? starRoot.s?.color ?? "transparent"
         strokeWidth: starRoot.s?.strokeWidth ?? starRoot.s?.lineWidth ?? 2
-        fillColor: "transparent"
+        fillColor: {
+            if (!starRoot.s || !starRoot.s.fill)
+                return "transparent";
+            var c = Qt.color(starRoot.s.fill);
+            return Qt.rgba(c.r, c.g, c.b, starRoot.s.fillOpacity ?? 0.25);
+        }
         capStyle: ShapePath.RoundCap
         joinStyle: ShapePath.RoundJoin
 

@@ -11,7 +11,13 @@ Rectangle {
     y: g?.y ?? 0
     width: g?.w ?? g?.width ?? 0
     height: g?.h ?? g?.height ?? 0
-    color: "transparent"
+    color: {
+        if (!s || !s.fill)
+            return "transparent";
+        var c = Qt.color(s.fill);
+        return Qt.rgba(c.r, c.g, c.b, s.fillOpacity ?? 0.25);
+    }
+    opacity: s?.opacity ?? 1
     border.color: s?.stroke ?? s?.color ?? "#ff3b30"
     border.width: s?.strokeWidth ?? s?.lineWidth ?? 2
     radius: 0

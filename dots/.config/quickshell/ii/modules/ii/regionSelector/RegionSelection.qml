@@ -59,19 +59,42 @@ PanelWindow {
     property list<var> annotations: []
     property list<var> undoStack: []
     property list<var> redoStack: []
-    // Hides all editor chrome (temp shapes, handles, magnifier, crop overlay)
+    // Hides all editor chrome (temp shapes, handles, crop overlay)
     // for one frame before grabToImage() so none of it is baked into the PNG.
     property bool exporting: false
     // Monotonic source for annotation ids and z-order; reset in clearEditor().
     property int annotationCounter: 0
-    property string currentTool: "none" // "rect", "arrow", "circle", "star", "pencil", "blur", "none"
+    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "none"
+    property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
     property int currentLineWidth: 2
+    // Pixelation coarseness for the blur tool, decoupled from line thickness.
+    property int blurStrength: Config.options.regionSelector.annotation.blurStrength
+    property bool blurStrengthPopupVisible: false
+    // Fill toggle for closed shapes (rect/circle/star); number badges & the
+    // next badge value; id of the text annotation being edited inline.
+    property bool fillEnabled: false
+    property int nextBadgeNumber: Config.options.regionSelector.annotation.badgeStartNumber
+    property var editingTextId: null
     property real editorRegionX: 0
     property real editorRegionY: 0
     property real editorRegionW: 0
     property real editorRegionH: 0
+    // Ratio between the frozen screenshot's native pixels and logical screen
+    // coords (== display scale). Derived from the actual captured file so
+    // exports stay full-resolution even if HyprlandMonitor.scale is unreliable.
+    // Falls back to monitorScale until the probe loads.
+    readonly property real captureScale: (captureProbe.implicitWidth > 0 && root.screen.width > 0) ? (captureProbe.implicitWidth / root.screen.width) : (root.monitorScale > 0 ? root.monitorScale : 1)
+    Image {
+        id: captureProbe
+        source: root.inlineEditorActive ? root.screenshotPath : ""
+        width: 0
+        height: 0
+        visible: false
+        asynchronous: true
+        cache: true
+    }
     property bool shapePopupVisible: false
     property bool colorPopupVisible: false
     property bool lineWidthPopupVisible: false
@@ -93,6 +116,9 @@ PanelWindow {
             return;
         root.pushUndo();
         root.restyleSelected("stroke", String(root.currentColor));
+        // Keep a filled shape's interior in sync with its outline colour.
+        if (sel.style && sel.style.fill)
+            root.restyleSelected("fill", String(root.currentColor));
     }
     onCurrentLineWidthChanged: {
         var sel = root.selectedAnnotation();
@@ -100,6 +126,14 @@ PanelWindow {
             return;
         root.pushUndo();
         root.restyleSelected("strokeWidth", root.currentLineWidth);
+    }
+    // Toggling fill retargets a selected closed shape (rect/circle/star).
+    onFillEnabledChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || (sel.type !== "rect" && sel.type !== "circle" && sel.type !== "star"))
+            return;
+        root.pushUndo();
+        root.restyleSelected("fill", root.fillEnabled ? String(root.currentColor) : null);
     }
 
     function pushUndo() {
@@ -169,10 +203,13 @@ PanelWindow {
             case "rect":
             case "circle":
             case "star":
+            case "text":
+            case "number":
                 g.x += dx;
                 g.y += dy;
                 break;
             case "arrow":
+            case "line":
                 g.x1 += dx;
                 g.y1 += dy;
                 g.x2 += dx;
@@ -180,6 +217,7 @@ PanelWindow {
                 break;
             case "pencil":
             case "blur":
+            case "highlighter":
                 for (var p = 0; p < g.points.length; p++) {
                     g.points[p].x += dx;
                     g.points[p].y += dy;
@@ -209,6 +247,87 @@ PanelWindow {
         root.annotations = newList;
     }
 
+    // Next badge value derived from the live scene, not a monotonic counter, so
+    // undo/redo and deletions renumber correctly (place 1,2,3 → undo 3 → next is 3).
+    function nextBadgeValue() {
+        var maxN = Config.options.regionSelector.annotation.badgeStartNumber - 1;
+        for (var i = 0; i < root.annotations.length; i++) {
+            var a = root.annotations[i];
+            if (a.type !== "number")
+                continue;
+            var n = (a.geom?.n ?? a.n ?? 0);
+            if (n > maxN)
+                maxN = n;
+        }
+        return maxN + 1;
+    }
+
+    // Resize the capture region from a start-rect + flags (which edges move) and
+    // a pointer delta. Shared by the corner/edge handles and the edge strips so
+    // the min-size + screen clamps stay in one place. Keeps the dotted outline
+    // (dragStart*/dragging*) in sync with the region.
+    function applyResize(flags, startX, startY, startW, startH, dx, dy) {
+        var x1 = startX, y1 = startY, x2 = startX + startW, y2 = startY + startH;
+        if (flags.l)
+            x1 = Math.min(startX + dx, x2 - 20);
+        if (flags.r)
+            x2 = Math.max(startX + startW + dx, x1 + 20);
+        if (flags.t)
+            y1 = Math.min(startY + dy, y2 - 20);
+        if (flags.b)
+            y2 = Math.max(startY + startH + dy, y1 + 20);
+        x1 = Math.max(0, x1);
+        y1 = Math.max(0, y1);
+        x2 = Math.min(root.screen.width, x2);
+        y2 = Math.min(root.screen.height, y2);
+        root.editorRegionX = x1;
+        root.editorRegionY = y1;
+        root.editorRegionW = x2 - x1;
+        root.editorRegionH = y2 - y1;
+        root.dragStartX = x1;
+        root.dragStartY = y1;
+        root.draggingX = x2;
+        root.draggingY = y2;
+    }
+
+    function editingAnnotation() {
+        if (root.editingTextId === null)
+            return null;
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id === root.editingTextId)
+                return root.annotations[i];
+        }
+        return null;
+    }
+
+    // Persist the inline text edit back onto its annotation. An empty string
+    // drops the annotation entirely. Undo was already pushed when it was placed.
+    function commitText(newText, measuredW, measuredH) {
+        if (root.editingTextId === null)
+            return;
+        var id = root.editingTextId;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== id)
+                continue;
+            if (String(newText).trim() === "") {
+                newList.splice(i, 1);
+                if (root.selectedId === id)
+                    root.selectedId = null;
+                break;
+            }
+            var ann = AnnotationModel.clone(newList[i]);
+            ann.geom.text = newText;
+            ann.geom.w = measuredW;
+            ann.geom.h = measuredH;
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+        root.editingTextId = null;
+        editorOverlay.forceActiveFocus();
+    }
+
     function clearEditor() {
         root.annotations = [];
         root.undoStack = [];
@@ -216,6 +335,9 @@ PanelWindow {
         root.annotationCounter = 0;
         root.selectedId = null;
         root.hoveredId = null;
+        root.editingTextId = null;
+        root.fillEnabled = false;
+        root.nextBadgeNumber = Config.options.regionSelector.annotation.badgeStartNumber;
         root.currentTool = "none";
         root.inlineEditorActive = false;
         root.phase = RegionSelection.Phase.Select;
@@ -233,9 +355,11 @@ PanelWindow {
 
     function finalizeScreenshot(saveToFile) {
         ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
-        var targetW = Math.round(root.editorRegionW * root.monitorScale);
-        var targetH = Math.round(root.editorRegionH * root.monitorScale);
-        // Drop all editor chrome for one frame so handles/outlines/magnifier
+        // Grab at the capture's native resolution (e.g. 2880×1800 on a 1.5×
+        // display) rather than logical, so the exported PNG isn't downscaled.
+        var targetW = Math.round(root.editorRegionW * root.captureScale);
+        var targetH = Math.round(root.editorRegionH * root.captureScale);
+        // Drop all editor chrome for one frame so handles/outlines
         // never get baked into the exported PNG.
         root.exporting = true;
         editorContent.grabToImage(function (result) {
@@ -852,6 +976,18 @@ PanelWindow {
                 id: pencilAnnotationComp
                 PencilAnnotationComponent {}
             }
+            Component {
+                id: lineAnnotationComp
+                LineAnnotationComponent {}
+            }
+            Component {
+                id: textAnnotationComp
+                TextAnnotationComponent {}
+            }
+            Component {
+                id: numberAnnotationComp
+                NumberBadgeAnnotationComponent {}
+            }
 
             // Existing annotations
             Repeater {
@@ -869,7 +1005,14 @@ PanelWindow {
                         case "star":
                             return starAnnotationComp;
                         case "pencil":
+                        case "highlighter":
                             return pencilAnnotationComp;
+                        case "line":
+                            return lineAnnotationComp;
+                        case "text":
+                            return textAnnotationComp;
+                        case "number":
+                            return numberAnnotationComp;
                         default:
                             return null;
                         }
@@ -878,7 +1021,7 @@ PanelWindow {
                         if (!item)
                             return;
                         item.annData = modelData;
-                        if (modelData.type === "pencil") {
+                        if (modelData.type === "pencil" || modelData.type === "highlighter") {
                             item.canvasWidth = editorContent.width;
                             item.canvasHeight = editorContent.height;
                         }
@@ -887,11 +1030,17 @@ PanelWindow {
             }
 
             // --- Pixelation / Blur Implementation ---
+            // Pixelation coarseness is driven by the dedicated blur-strength
+            // control (independent of line thickness): a bigger divisor = fewer
+            // source pixels sampled = chunkier blocks.
             Canvas {
                 id: smallCanvas
-                width: Math.max(1, Math.round(editorContent.width / 24))
-                height: Math.max(1, Math.round(editorContent.height / 24))
+                readonly property int blurDivisor: Math.max(4, root.blurStrength)
+                width: Math.max(1, Math.round(editorContent.width / blurDivisor))
+                height: Math.max(1, Math.round(editorContent.height / blurDivisor))
                 visible: false
+                onWidthChanged: blurCanvas.requestPaint()
+                onHeightChanged: blurCanvas.requestPaint()
             }
 
             Canvas {
@@ -995,8 +1144,16 @@ PanelWindow {
             MouseArea {
                 id: drawingArea
                 anchors.fill: parent
-                enabled: root.currentTool !== "none"
-                cursorShape: (root.currentTool === "pencil" || root.currentTool === "blur") ? Qt.CrossCursor : Qt.ArrowCursor
+                // Disabled while editing text so canvas clicks don't place a
+                // second text box (the commit catcher handles those clicks).
+                enabled: root.currentTool !== "none" && root.editingTextId === null
+                cursorShape: {
+                    if (root.currentTool === "text")
+                        return Qt.IBeamCursor;
+                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter")
+                        return Qt.CrossCursor;
+                    return Qt.ArrowCursor;
+                }
                 property real startX: 0
                 property real startY: 0
                 property var tempAnnotation: null
@@ -1009,6 +1166,39 @@ PanelWindow {
                     var z = root.annotationCounter;
                     root.annotationCounter += 1;
                     var style = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth);
+                    if (root.fillEnabled)
+                        style.fill = String(root.currentColor);
+                    if (root.currentTool === "text") {
+                        // Place an empty text box and enter inline edit mode.
+                        var tann = AnnotationModel.make("text", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "w": 0,
+                            "h": 0,
+                            "text": ""
+                        }, style);
+                        var tl = root.annotations.slice();
+                        tl.push(tann);
+                        root.annotations = tl;
+                        root.selectedId = id;
+                        root.editingTextId = id;
+                        tempAnnotation = null;
+                        return;
+                    } else if (root.currentTool === "number") {
+                        // Number badges are placed on click, not dragged.
+                        var badgeR = 14 + root.currentLineWidth * 2;
+                        var badge = AnnotationModel.make("number", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "r": badgeR,
+                            "n": root.nextBadgeValue()
+                        }, style);
+                        var bl = root.annotations.slice();
+                        bl.push(badge);
+                        root.annotations = bl;
+                        tempAnnotation = null;
+                        return;
+                    }
                     if (root.currentTool === "rect") {
                         tempAnnotation = AnnotationModel.make("rect", id, z, {
                             "x": startX,
@@ -1023,6 +1213,24 @@ PanelWindow {
                             "x2": startX,
                             "y2": startY
                         }, style);
+                    } else if (root.currentTool === "line") {
+                        tempAnnotation = AnnotationModel.make("line", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": startX,
+                            "y2": startY
+                        }, style);
+                    } else if (root.currentTool === "highlighter") {
+                        var hlStyle = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth * 4);
+                        hlStyle.opacity = Config.options.regionSelector.annotation.highlighterOpacity;
+                        tempAnnotation = AnnotationModel.make("highlighter", id, z, {
+                            "points": [
+                                {
+                                    "x": startX,
+                                    "y": startY
+                                }
+                            ]
+                        }, hlStyle);
                     } else if (root.currentTool === "circle") {
                         tempAnnotation = AnnotationModel.make("circle", id, z, {
                             "x": startX,
@@ -1077,6 +1285,13 @@ PanelWindow {
                             "x2": mouse.x,
                             "y2": mouse.y
                         }, style);
+                    } else if (root.currentTool === "line") {
+                        tempAnnotation = AnnotationModel.make("line", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": mouse.x,
+                            "y2": mouse.y
+                        }, style);
                     } else if (root.currentTool === "circle") {
                         var dx = mouse.x - startX;
                         var dy = mouse.y - startY;
@@ -1097,7 +1312,7 @@ PanelWindow {
                             "outerR": outerRadius,
                             "innerR": innerRadius
                         }, style);
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur") {
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter") {
                         var pts = tempAnnotation.geom.points;
                         var lastPoint = pts[pts.length - 1];
                         var dxP = mouse.x - lastPoint.x;
@@ -1123,7 +1338,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "arrow") {
+                    } else if (root.currentTool === "arrow" || root.currentTool === "line") {
                         if (Math.abs(g.x2 - g.x1) < 2 && Math.abs(g.y2 - g.y1) < 2) {
                             tempAnnotation = null;
                             return;
@@ -1138,7 +1353,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur") {
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "highlighter") {
                         if (g.points.length < 2) {
                             tempAnnotation = null;
                             return;
@@ -1147,6 +1362,9 @@ PanelWindow {
                     var newList = root.annotations.slice();
                     newList.push(AnnotationModel.clone(tempAnnotation));
                     root.annotations = newList;
+                    // Keep the just-drawn shape selected so a fill/colour/width
+                    // toggle applies to it without re-selecting it first.
+                    root.selectedId = tempAnnotation.id;
                     tempAnnotation = null;
                 }
 
@@ -1158,6 +1376,9 @@ PanelWindow {
                 ArrowAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "arrow" ? drawingArea.tempAnnotation : null
                 }
+                LineAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "line" ? drawingArea.tempAnnotation : null
+                }
                 CircleAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "circle" ? drawingArea.tempAnnotation : null
                 }
@@ -1166,6 +1387,11 @@ PanelWindow {
                 }
                 PencilAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "pencil" ? drawingArea.tempAnnotation : null
+                    canvasWidth: editorContent.width
+                    canvasHeight: editorContent.height
+                }
+                PencilAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "highlighter" ? drawingArea.tempAnnotation : null
                     canvasWidth: editorContent.width
                     canvasHeight: editorContent.height
                 }
@@ -1302,73 +1528,283 @@ PanelWindow {
                     }
                 }
             }
-        }
 
-        // Resize handle
-        Item {
-            id: resizeHandle
-            z: 9999
-            x: root.editorRegionX + root.editorRegionW
-            y: root.editorRegionY + root.editorRegionH
-
-            property int margins: 8
-            width: resizeContent.implicitWidth + margins * 2
-            height: resizeContent.implicitHeight + margins * 2
-
-            Rectangle {
-                id: resizeContent
-                anchors.centerIn: parent
-                implicitHeight: 38
-                implicitWidth: implicitHeight
-                topLeftRadius: 6
-                bottomLeftRadius: implicitHeight - topLeftRadius
-                bottomRightRadius: bottomLeftRadius
-                topRightRadius: bottomLeftRadius
-                color: Appearance.colors.colPrimary
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "open_in_full"
-                    iconSize: 22
-                    color: Appearance.colors.colOnPrimary
-                }
+            // Catches clicks outside the text box to commit the current edit.
+            MouseArea {
+                z: 7
+                anchors.fill: parent
+                enabled: root.editingTextId !== null
+                onPressed: root.commitText(textEditor.text, textEditor.contentWidth, textEditor.contentHeight)
             }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.SizeFDiagCursor
-                preventStealing: true
+            // Inline text editor. Reuses one TextInput for whichever text
+            // annotation is being edited; keeps focus so keystrokes don't leak
+            // to the editorOverlay shortcuts (Esc/Delete/Ctrl+Z).
+            TextInput {
+                id: textEditor
+                z: 8
+                readonly property var ann: root.editingAnnotation()
+                visible: root.editingTextId !== null && ann !== null
+                x: ann ? (ann.geom?.x ?? 0) : 0
+                y: ann ? (ann.geom?.y ?? 0) : 0
+                color: ann ? (ann.style?.stroke ?? "#ff3b30") : "#ff3b30"
+                font.pixelSize: ann ? (ann.style?.fontPx ?? 20) : 20
+                selectByMouse: true
+                cursorVisible: true
 
-                property real startMouseX: 0
-                property real startMouseY: 0
+                onAccepted: root.commitText(text, contentWidth, contentHeight)
+                onActiveFocusChanged: {
+                    if (!activeFocus && root.editingTextId !== null)
+                        root.commitText(text, contentWidth, contentHeight);
+                }
+                Keys.onPressed: event => {
+                    // Swallow Esc so it commits the text instead of dismissing
+                    // the whole selector.
+                    if (event.key === Qt.Key_Escape) {
+                        root.commitText(text, contentWidth, contentHeight);
+                        event.accepted = true;
+                    }
+                }
+                Connections {
+                    target: root
+                    function onEditingTextIdChanged() {
+                        if (root.editingTextId === null)
+                            return;
+                        var a = root.editingAnnotation();
+                        textEditor.text = a ? (a.geom?.text ?? "") : "";
+                        textEditor.forceActiveFocus();
+                        textEditor.selectAll();
+                    }
+                }
+            }
+        }
 
-                onPressed: mouse => {
-                    startMouseX = mouse.x;
-                    startMouseY = mouse.y;
+        // 8-handle region resize: 4 corners + 4 edge midpoints. Each grip's
+        // (ax, ay) is its normalised anchor on the region box; l/t/r/b say which
+        // edges it moves. Hidden during export and inline text editing.
+        Repeater {
+            model: [
+                {
+                    "ax": 0,
+                    "ay": 0,
+                    "cur": Qt.SizeFDiagCursor,
+                    "l": true,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "ax": 0.5,
+                    "ay": 0,
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 0,
+                    "cur": Qt.SizeBDiagCursor,
+                    "l": false,
+                    "t": true,
+                    "r": true,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 0.5,
+                    "cur": Qt.SizeHorCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 1,
+                    "cur": Qt.SizeFDiagCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": true
+                },
+                {
+                    "ax": 0.5,
+                    "ay": 1,
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "ax": 0,
+                    "ay": 1,
+                    "cur": Qt.SizeBDiagCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "ax": 0,
+                    "ay": 0.5,
+                    "cur": Qt.SizeHorCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": false
+                }
+            ]
+
+            delegate: Item {
+                required property var modelData
+
+                readonly property int hitSize: 26
+                readonly property int gripSize: 12
+                // The dashed selection border is drawn 6px outside the true
+                // region (borderWidth 1 + 5, see RectCornersSelectionDetails);
+                // centre the grips on that visible line, not the raw edge.
+                readonly property real outset: 6
+                z: 9999
+                visible: !root.exporting && root.editingTextId === null
+                width: hitSize
+                height: hitSize
+                x: (root.editorRegionX - outset) + (root.editorRegionW + outset * 2) * modelData.ax - width / 2
+                y: (root.editorRegionY - outset) + (root.editorRegionH + outset * 2) * modelData.ay - height / 2
+
+                // Small square grip (Spectacle-style) rather than a round dot.
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.gripSize
+                    height: parent.gripSize
+                    radius: 2
+                    color: Appearance.colors.colPrimary
+                    border.width: 1
+                    border.color: Appearance.colors.colOnPrimary
                 }
 
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: modelData.cur
+                    preventStealing: true
+
+                    property real startPx: 0
+                    property real startPy: 0
+                    property real startX: 0
+                    property real startY: 0
+                    property real startW: 0
+                    property real startH: 0
+
+                    onPressed: mouse => {
+                        var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                        startPx = p.x;
+                        startPy = p.y;
+                        startX = root.editorRegionX;
+                        startY = root.editorRegionY;
+                        startW = root.editorRegionW;
+                        startH = root.editorRegionH;
+                    }
+
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return;
+                        var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                        root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
+                    }
+                }
+            }
+        }
+
+        // Full-length edge grips: let you drag any whole edge, not just the
+        // midpoint handle (Spectacle behaviour). Sit just below the corner
+        // handles in z so corners win their overlap; inset from the corners so
+        // the two don't fight.
+        Repeater {
+            model: [
+                {
+                    "side": "t",
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "side": "b",
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "side": "l",
+                    "cur": Qt.SizeHorCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "side": "r",
+                    "cur": Qt.SizeHorCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": false
+                }
+            ]
+
+            delegate: MouseArea {
+                required property var modelData
+
+                readonly property real outset: 6
+                readonly property int thickness: 14
+                readonly property bool horizontal: modelData.side === "t" || modelData.side === "b"
+                z: 9998
+                visible: !root.exporting && root.editingTextId === null
+                cursorShape: modelData.cur
+                preventStealing: true
+                x: {
+                    if (modelData.side === "l")
+                        return root.editorRegionX - outset - thickness / 2;
+                    if (modelData.side === "r")
+                        return root.editorRegionX + root.editorRegionW + outset - thickness / 2;
+                    return root.editorRegionX + 16;
+                }
+                y: {
+                    if (modelData.side === "t")
+                        return root.editorRegionY - outset - thickness / 2;
+                    if (modelData.side === "b")
+                        return root.editorRegionY + root.editorRegionH + outset - thickness / 2;
+                    return root.editorRegionY + 16;
+                }
+                width: horizontal ? Math.max(1, root.editorRegionW - 32) : thickness
+                height: horizontal ? thickness : Math.max(1, root.editorRegionH - 32)
+
+                property real startPx: 0
+                property real startPy: 0
+                property real startX: 0
+                property real startY: 0
+                property real startW: 0
+                property real startH: 0
+
+                onPressed: mouse => {
+                    var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                    startPx = p.x;
+                    startPy = p.y;
+                    startX = root.editorRegionX;
+                    startY = root.editorRegionY;
+                    startW = root.editorRegionW;
+                    startH = root.editorRegionH;
+                }
                 onPositionChanged: mouse => {
                     if (!pressed)
                         return;
-                    var deltaX = mouse.x - startMouseX;
-                    var deltaY = mouse.y - startMouseY;
-
-                    var newW = root.editorRegionW + deltaX;
-                    var newH = root.editorRegionH + deltaY;
-
-                    newW = Math.max(20, newW);
-                    newH = Math.max(20, newH);
-                    newW = Math.min(newW, root.screen.width - root.editorRegionX);
-                    newH = Math.min(newH, root.screen.height - root.editorRegionY);
-
-                    root.editorRegionW = newW;
-                    root.editorRegionH = newH;
-
-                    // Sync original selection region for visual overlay (dotted lines and dark area)
-                    root.dragStartX = root.editorRegionX;
-                    root.dragStartY = root.editorRegionY;
-                    root.draggingX = root.editorRegionX + newW;
-                    root.draggingY = root.editorRegionY + newH;
+                    var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                    root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
                 }
             }
         }
@@ -1398,4 +1834,5 @@ PanelWindow {
             }
         }
     }
+
 }
