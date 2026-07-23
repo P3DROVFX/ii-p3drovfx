@@ -14,6 +14,7 @@ import qs.modules.ii.overlay.recorder
 import qs.modules.ii.overlay.resources
 import qs.modules.ii.overlay.notes
 import qs.modules.ii.overlay.media
+import qs.modules.ii.overlay.discordVoice
 
 DelegateChooser {
     id: root
@@ -27,4 +28,5 @@ DelegateChooser {
     DelegateChoice { roleValue: "notes"; Notes {} }
     DelegateChoice { roleValue: "volumeMixer"; VolumeMixer {} }
     DelegateChoice { roleValue: "media"; MediaContent {} }
+    DelegateChoice { roleValue: "discordVoice"; DiscordVoiceOverlay {} }
 }

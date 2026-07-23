@@ -1,23 +1,51 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
+import QtQuick
 import Quickshell
+import qs.modules.common
+import "../../common/plugins/bundled/discordVoice" as DiscordPackage
 
 Singleton {
     id: root
     
     signal requestCenter(string identifier)
 
-    readonly property list<var> availableWidgets: [
-        { identifier: "crosshair", materialSymbol: "point_scan" },
-        { identifier: "fpsLimiter", materialSymbol: "animation" },
-        { identifier: "floatingImage", materialSymbol: "imagesmode" },
-        { identifier: "recorder", materialSymbol: "screen_record" },
-        { identifier: "media", materialSymbol: "music_note" },
-        { identifier: "resources", materialSymbol: "browse_activity" },
-        { identifier: "notes", materialSymbol: "note_stack" },
-        { identifier: "volumeMixer", materialSymbol: "volume_up" },
-    ]
-    
+    readonly property var discordVoiceIcon: Component { DiscordPackage.TaskbarGlyph {} }
+
+    readonly property var widgetSymbols: {
+        "crosshair": "point_scan",
+        "fpsLimiter": "animation",
+        "floatingImage": "imagesmode",
+        "recorder": "screen_record",
+        "media": "music_note",
+        "resources": "browse_activity",
+        "notes": "note_stack",
+        "volumeMixer": "volume_up",
+        "discordVoice": "voice_chat"
+    }
+
+    readonly property list<var> availableWidgets: {
+        if (!Config?.ready) return []
+
+        let result = []
+        const configButtons = Config.options.overlay.buttons ?? []
+
+        for (let i = 0; i < configButtons.length; i++) {
+            const id = configButtons[i]
+            if (widgetSymbols.hasOwnProperty(id)) {
+                const entry = {
+                    identifier: id,
+                    materialSymbol: widgetSymbols[id]
+                }
+                if (id === "discordVoice") {
+                    entry.iconComponent = root.discordVoiceIcon
+                }
+                result.push(entry)
+            }
+        }
+
+        return result
+    }
     readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.length > 0
 
     property list<string> pinnedWidgetIdentifiers: []

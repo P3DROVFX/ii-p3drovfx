@@ -1276,6 +1276,17 @@ Singleton {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
+                property list<string> buttons: [
+                    "crosshair",
+                    "fpsLimiter",
+                    "floatingImage",
+                    "recorder",
+                    "media",
+                    "resources",
+                    "notes",
+                    "volumeMixer",
+                    "discordVoice"
+                ]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -1289,6 +1300,14 @@ Singleton {
                     property bool useGradientMask: true
                     property bool showSlider: true
                     property int lyricSize: Appearance.font.pixelSize.larger
+                }
+                property JsonObject discordVoice: JsonObject {
+                    property int maxAvatars: 8
+                    property int avatarSize: 52
+                    property string participantBackground: "none"
+                    property real participantBackgroundOpacity: 0.72
+                    property string layoutMode: "row"
+                    property bool blurEnabled: true
                 }
             }
 

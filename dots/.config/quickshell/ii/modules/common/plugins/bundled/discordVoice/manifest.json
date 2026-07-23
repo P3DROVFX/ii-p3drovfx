@@ -1,0 +1,30 @@
+{
+  "id": "discord_voice",
+  "name": "Discord Voice",
+  "description": "Voice-channel overlay and bar controls with speaking, mute, and deafen state",
+  "version": "1.0.0",
+  "author": "xephy; end4-pC contributors",
+  "source": "Discord RPC approach informed by dms-discord-widget",
+  "sourceUrl": "https://github.com/PandorasFox/dms-discord-widget",
+  "apiVersion": 1,
+  "blur": { "default": true },
+  "capabilities": ["bar-widget", "overlay-widget", "settings"],
+  "permissions": ["process", "network", "filesystem_read", "filesystem_write", "settings_read", "settings_write"],
+  "options": [
+    { "key": "showBarWidget", "type": "boolean", "label": "Show bar widget", "icon": "view_day", "default": true },
+    { "key": "maxBarAvatars", "type": "number", "label": "Maximum bar avatars", "icon": "group", "default": 4, "from": 1, "to": 8, "step": 1 },
+    { "key": "maxOverlayAvatars", "type": "number", "label": "Maximum overlay avatars", "icon": "groups", "default": 8, "from": 1, "to": 12, "step": 1 },
+    { "key": "overlayAvatarSize", "type": "number", "label": "Participant avatar size", "icon": "account_circle", "default": 52, "from": 32, "to": 80, "step": 2 },
+    { "key": "participantBackground", "type": "choice", "label": "Participant background", "icon": "background_dot_small", "default": "none", "choices": [
+      { "displayName": "None", "value": "none" },
+      { "displayName": "Avatar + name", "value": "card" },
+      { "displayName": "Name only", "value": "name" }
+    ] },
+    { "key": "participantBackgroundOpacity", "type": "number", "label": "Participant background opacity", "icon": "opacity", "default": 0.72, "from": 0, "to": 1, "step": 0.05 },
+    { "key": "overlayLayout", "type": "choice", "label": "Overlay layout", "icon": "view_agenda", "default": "row", "choices": [
+      { "displayName": "Row", "value": "row" },
+      { "displayName": "Column", "value": "column" }
+    ] }
+  ],
+  "barWidget": { "component": "BarWidget.qml" }
+}

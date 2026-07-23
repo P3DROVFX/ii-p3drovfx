@@ -25,6 +25,8 @@ AbstractOverlayWidget {
     property bool fancyBorders: true
     property bool showCenterButton: false
     property bool showClickabilityButton: true
+    property Component titleIconComponent: null
+    property real editorBackgroundOpacity: 1
 
     // Defaults n stuff
     required property var modelData
@@ -199,7 +201,7 @@ AbstractOverlayWidget {
             fill: parent
             margins: root.resizeMargin
         }
-        color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, (root.fancyBorders && GlobalStates.overlayOpen) ? 0 : 1)
+        color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, (root.fancyBorders && GlobalStates.overlayOpen) ? 1 - root.editorBackgroundOpacity : 1)
         radius: root.radius
         border.color: ColorUtils.transparentize(Appearance.colors.colOutlineVariant, GlobalStates.overlayOpen ? 0 : 1)
         border.width: 1
@@ -239,9 +241,18 @@ AbstractOverlayWidget {
                     spacing: 2
 
                     MaterialSymbol {
+                        visible: root.titleIconComponent === null
                         text: root.materialSymbol
                         Layout.leftMargin: 6
                         iconSize: 20
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.rightMargin: 4
+                    }
+                    Loader {
+                        visible: root.titleIconComponent !== null
+                        active: root.titleIconComponent !== null
+                        sourceComponent: root.titleIconComponent
+                        Layout.leftMargin: 6
                         Layout.alignment: Qt.AlignVCenter
                         Layout.rightMargin: 4
                     }

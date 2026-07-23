@@ -44,6 +44,7 @@ Rectangle {
                     required property var modelData
                     identifier: modelData.identifier
                     materialSymbol: modelData.materialSymbol
+                    iconComponent: modelData.iconComponent ?? null
                 }
             }
         }
@@ -115,6 +116,7 @@ Rectangle {
         id: widgetButton
         required property string identifier
         required property string materialSymbol
+        property Component iconComponent: null
 
         Layout.alignment: Qt.AlignVCenter
 
@@ -141,10 +143,25 @@ Rectangle {
             implicitHeight: 32
             MaterialSymbol {
                 id: iconWidget
+                visible: !widgetButton.iconComponent
                 anchors.centerIn: parent
                 iconSize: 24
                 text: widgetButton.materialSymbol
-                color: widgetButton.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                color: widgetButton.toggled ?
+                Appearance.colors.colOnSecondaryContainer :
+                Appearance.colors.colOnSurfaceVariant
+            }
+            Loader {
+                id: brandIcon
+                active: !!widgetButton.iconComponent
+                anchors.centerIn: parent
+                sourceComponent: widgetButton.iconComponent
+            }
+            Binding {
+                target: brandIcon.item
+                property: "toggled"
+                value: widgetButton.toggled
+                when: brandIcon.item !== null
             }
         }
     }
