@@ -650,6 +650,26 @@ Item {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 8
 
+            transform: Translate {
+                id: searchBarTrans
+                y: (root.visible && swipeView.currentIndex === index) ? 0 : 35
+            }
+            opacity: (root.visible && swipeView.currentIndex === index) ? 1.0 : 0.0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on transform {
+                NumberAnimation {
+                    duration: 350
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.3
+                }
+            }
+
             ToolbarTextField {
                 id: filterField
                 placeholderText: focus ? qsTr("Filter commands") : qsTr("Hit \"/\" to filter")

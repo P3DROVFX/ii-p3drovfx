@@ -61,6 +61,7 @@ Item {
         spacing: 24
 
         RippleButtonWithIcon {
+            id: composeBtn
             Layout.fillWidth: true
             implicitHeight: 64
             buttonRadius: Appearance.rounding.full
@@ -71,6 +72,23 @@ Item {
             colBackgroundToggled: Appearance.colors.colPrimary
             colBackgroundToggledHover: Appearance.colors.colPrimaryHover
             colRippleToggled: Appearance.colors.colPrimaryActive
+
+            transform: Translate { id: composeTrans; x: -20 }
+
+            Component.onCompleted: {
+                composeAnim.start();
+            }
+
+            ParallelAnimation {
+                id: composeAnim
+                NumberAnimation {
+                    target: composeTrans
+                    property: "x"
+                    to: 0
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             scale: down ? 0.95 : hovered ? 1.02 : 1.0
             Behavior on scale {
@@ -135,6 +153,7 @@ Item {
                     Repeater {
                         model: root._navButtons
                         delegate: EmailNavButton {
+                            id: navBtn
                             Layout.fillWidth: true
                             enabled: EmailService.authenticated
                             toggled: root.activeTab === modelData.tab
@@ -142,6 +161,40 @@ Item {
 
                             iconName: modelData.icon
                             label: modelData.label
+
+                            opacity: 0
+                            transform: Translate { id: navTrans; x: -16 }
+
+                            Component.onCompleted: {
+                                navTimer.start();
+                            }
+
+                            Timer {
+                                id: navTimer
+                                interval: index * 50
+                                repeat: false
+                                onTriggered: {
+                                    navAnim.start();
+                                }
+                            }
+
+                            ParallelAnimation {
+                                id: navAnim
+                                NumberAnimation {
+                                    target: navTrans
+                                    property: "x"
+                                    to: 0
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: navBtn
+                                    property: "opacity"
+                                    to: 1
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
 
                             badgeText: {
                                 if (!EmailService.enableUnreadBadges)

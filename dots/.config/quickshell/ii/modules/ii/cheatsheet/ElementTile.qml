@@ -6,11 +6,41 @@ import QtQuick
 RippleButton {
     id: root
     required property var element
-    opacity: element.type != "empty" ? 1 : 0
     implicitHeight: 70
     implicitWidth: 70
     colBackground: Appearance.colors.colLayer2
     buttonRadius: Appearance.rounding.small
+
+    property int tileIndex: 0
+    property bool tileAnimatedIn: false
+
+    opacity: element.type != "empty" ? (tileAnimatedIn ? 1.0 : 0.0) : 0.0
+
+    transform: Scale {
+        id: tileScale
+        origin.x: 35
+        origin.y: 35
+        xScale: root.tileAnimatedIn ? (root.isHovered ? 1.08 : 1.0) : 0.6
+        yScale: root.tileAnimatedIn ? (root.isHovered ? 1.08 : 1.0) : 0.6
+    }
+
+    Component.onCompleted: {
+        tileTimer.start();
+    }
+
+    Timer {
+        id: tileTimer
+        interval: Math.min((tileIndex % 18) * 15, 320)
+        repeat: false
+        onTriggered: root.tileAnimatedIn = true
+    }
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: 200
+            easing.type: Easing.OutCubic
+        }
+    }
 
     Rectangle {
         anchors {

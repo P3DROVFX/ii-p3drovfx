@@ -176,19 +176,19 @@ Scope {
                 id: dialogWrap
                 anchors.fill: parent
                 transformOrigin: Item.Center
-                scale: GlobalStates.cheatsheetOpen ? 1.0 : 0.95
-                opacity: GlobalStates.cheatsheetOpen ? 1.0 : 0.0
+                scale: cheatsheetBackground.animateIn && GlobalStates.cheatsheetOpen ? 1.0 : 0.94
+                opacity: cheatsheetBackground.animateIn && GlobalStates.cheatsheetOpen ? 1.0 : 0.0
                 
                 Behavior on scale {
                     NumberAnimation {
-                        duration: 180
+                        duration: 250
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasized
                     }
                 }
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: 180
+                        duration: 220
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasized
                     }
@@ -200,17 +200,26 @@ Scope {
 
                 Rectangle {
                     id: cheatsheetBackground
-                anchors.centerIn: parent
-                color: Appearance.colors.colLayer0
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
-                radius: Appearance.rounding.windowRounding
-                property real padding: 20
-                property int prevIndex: Persistent.states.cheatsheet.tabIndex
+                    anchors.centerIn: parent
+                    color: Appearance.colors.colLayer0
+                    border.width: 1
+                    border.color: Appearance.colors.colLayer0Border
+                    radius: Appearance.rounding.windowRounding
+                    property real padding: 20
+                    property int prevIndex: Persistent.states.cheatsheet.tabIndex
+                    property bool animateIn: false
 
-                property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
-                property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
-                
+                    Timer {
+                        id: animDelayTimer
+                        interval: 80
+                        repeat: false
+                        running: true
+                        onTriggered: cheatsheetBackground.animateIn = true
+                    }
+
+                    property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
+                    property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
+
                 implicitWidth: Math.min(maxBgWidth, cheatsheetColumnLayout.implicitWidth + padding * 2)
                 implicitHeight: Math.min(maxBgHeight, cheatsheetColumnLayout.implicitHeight + padding * 2)
 
@@ -252,6 +261,15 @@ Scope {
                         rightMargin: 20
                     }
 
+                    scale: cheatsheetBackground.animateIn ? 1.0 : 0.0
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 300
+                            easing.type: Easing.OutBack
+                            easing.overshoot: 1.5
+                        }
+                    }
+
                     onClicked: {
                         cheatsheetRoot.hide();
                     }
@@ -261,6 +279,14 @@ Scope {
                         horizontalAlignment: Text.AlignHCenter
                         font.pixelSize: Appearance.font.pixelSize.title
                         text: "close"
+                        rotation: closeButton.isHovered ? 90 : 0
+                        Behavior on rotation {
+                            NumberAnimation {
+                                duration: 200
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.5
+                            }
+                        }
                     }
                 }
 
@@ -272,8 +298,30 @@ Scope {
                     spacing: 10
 
                     Toolbar {
+                        id: topToolbar
                         Layout.alignment: Qt.AlignHCenter
                         enableShadow: false
+
+                        transform: Translate {
+                            id: toolbarTrans
+                            y: cheatsheetBackground.animateIn ? 0 : -20
+                        }
+                        opacity: cheatsheetBackground.animateIn ? 1.0 : 0.0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 280
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        Behavior on transform {
+                            NumberAnimation {
+                                duration: 320
+                                easing.type: Easing.OutBack
+                                easing.overshoot: 1.3
+                            }
+                        }
+
                         ToolbarTabBar {
                             id: tabBar
                             tabButtonList: root.tabButtonList

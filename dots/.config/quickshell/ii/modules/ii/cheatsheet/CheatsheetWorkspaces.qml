@@ -462,6 +462,26 @@ Item {
                 bottomMargin: 8
             }
 
+            transform: Translate {
+                id: searchBarTrans
+                y: root.isTabActive ? 0 : 35
+            }
+            opacity: root.isTabActive ? 1.0 : 0.0
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on transform {
+                NumberAnimation {
+                    duration: 350
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.3
+                }
+            }
+
             ToolbarTextField {
                 id: searchField
                 placeholderText: focus ? qsTr("Search profiles") : qsTr("Hit \"/\" to search")

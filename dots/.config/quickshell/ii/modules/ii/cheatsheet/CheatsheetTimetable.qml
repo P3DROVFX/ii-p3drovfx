@@ -297,6 +297,41 @@ Item {
                             dayBackgroundFill: root.dayBackgroundFill
                             dayBackgroundFillVariant: root.dayBackgroundFillVariant
 
+                            id: dayColDelegate
+                            opacity: 0
+                            transform: Translate { id: colTrans; y: 15 }
+
+                            Component.onCompleted: {
+                                animTimer.start();
+                            }
+
+                            Timer {
+                                id: animTimer
+                                interval: index * 70
+                                repeat: false
+                                onTriggered: {
+                                    colAnim.start();
+                                }
+                            }
+
+                            ParallelAnimation {
+                                id: colAnim
+                                NumberAnimation {
+                                    target: colTrans
+                                    property: "y"
+                                    to: 0
+                                    duration: 300
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: dayColDelegate
+                                    property: "opacity"
+                                    to: 1
+                                    duration: 300
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
                             onDragRequestInteractivity: i => styledFlickable.interactive = i
                             onDragReleased: (dIdx, sY, cY) => {
                                 let dist = Math.abs(cY - sY);

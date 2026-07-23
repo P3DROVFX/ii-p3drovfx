@@ -38,6 +38,35 @@ Rectangle {
     color: Appearance.colors.colLayer4
     radius: Appearance.rounding.large
 
+    transform: Translate {
+        id: cardFlyInTrans
+        y: 20
+    }
+
+    Component.onCompleted: {
+        entryTimer.start();
+    }
+
+    Timer {
+        id: entryTimer
+        interval: Math.min(sectionIndex * 35, 400)
+        repeat: false
+        onTriggered: {
+            entryAnim.start();
+        }
+    }
+
+    ParallelAnimation {
+        id: entryAnim
+        NumberAnimation {
+            target: cardFlyInTrans
+            property: "y"
+            to: 0
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+    }
+
     Behavior on opacity {
         NumberAnimation {
             duration: 180

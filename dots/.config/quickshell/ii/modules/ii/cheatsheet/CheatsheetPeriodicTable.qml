@@ -21,12 +21,16 @@ Item {
                 id: tableRow
                 spacing: root.spacing
                 required property var modelData
+                required property int index
+                readonly property int rowIndex: index
 
                 Repeater {
                     model: tableRow.modelData
                     delegate: ElementTile {
                         required property var modelData
+                        required property int index
                         element: modelData
+                        tileIndex: (tableRow.rowIndex * 18) + index
                     }
                 }
             }
@@ -44,12 +48,16 @@ Item {
                 id: seriesTableRow
                 spacing: root.spacing
                 required property var modelData
+                required property int index
+                readonly property int rowIndex: index + 7
 
                 Repeater {
                     model: seriesTableRow.modelData
                     delegate: ElementTile {
                         required property var modelData
+                        required property int index
                         element: modelData
+                        tileIndex: (seriesTableRow.rowIndex * 18) + index
                     }
                 }
             }
