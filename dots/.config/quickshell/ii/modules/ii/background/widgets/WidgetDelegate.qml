@@ -164,6 +164,17 @@ Item {
     }
 
     Component {
+        id: component_weather_forecast
+        WeatherForecast2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_date_default
         DateWidget {
             screenWidth: delegateRoot.screenWidth
@@ -197,6 +208,7 @@ Item {
         "media_android": component_media_android,
         "weather_default": component_weather_default,
         "weather_expressive": component_weather_expressive,
+        "weather_forecast": component_weather_forecast,
         "date_default": component_date_default,
         "photo_default": component_photo_default
     })

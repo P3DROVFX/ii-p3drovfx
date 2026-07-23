@@ -115,6 +115,15 @@ Singleton {
             "configPage": "widgets/DesktopWeatherWidgetConfig.qml"
         },
         {
+            "widgetId": "weather_forecast",
+            "name": Translation.tr("Forecast Weather 2x1"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherForecast2x1Widget.qml"),
+            "icon": "partly_cloudy_day",
+            "description": Translation.tr("2x1 layout weather card with hero current weather and 3-day pill forecast."),
+            "configPage": "widgets/DesktopWeatherForecastConfig.qml"
+        },
+        {
             "widgetId": "date_default",
             "name": Translation.tr("Date Card"),
             "category": "Date",
