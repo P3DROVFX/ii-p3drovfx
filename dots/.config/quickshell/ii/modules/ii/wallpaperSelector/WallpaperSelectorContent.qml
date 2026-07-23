@@ -7,6 +7,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
@@ -95,7 +96,6 @@ MouseArea {
     Connections {
         target: Wallpapers
         function onDirectoryChanged() {
-            // we need a better way instead of these 'mode' properties
             wallpaperSelectorContent.favMode = false;
             wallpaperSelectorContent.browserMode = false;
             wallpaperSelectorContent.updateThumbnails();
@@ -228,7 +228,7 @@ MouseArea {
             Wallpapers.setDirectory(FileUtils.trimFileProtocol(decodeURIComponent(url)));
             event.accepted = true;
         } else {
-            event.accepted = false; // No image, let text pasting proceed
+            event.accepted = false;
         }
     }
 
@@ -281,7 +281,7 @@ MouseArea {
         if (event.key === Qt.Key_Escape) {
             GlobalStates.wallpaperSelectorOpen = false;
             event.accepted = true;
-        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) { // Intercept Ctrl+V to handle "paste to go to" in pickers
+        } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
             wallpaperSelectorContent.handleFilePasting(event);
         } else if (event.modifiers & Qt.AltModifier && event.key === Qt.Key_Up) {
             Wallpapers.navigateUp();
@@ -346,6 +346,44 @@ MouseArea {
         border.color: Appearance.colors.colLayer0Border
         color: Appearance.colors.colLayer0
         radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+
+        property bool animateIn: false
+
+        Connections {
+            target: GlobalStates
+            function onWallpaperSelectorOpenChanged() {
+                if (GlobalStates.wallpaperSelectorOpen) {
+                    wallpaperGridBackground.animateIn = false;
+                    wpContentDelayTimer.restart();
+                } else {
+                    wallpaperGridBackground.animateIn = false;
+                }
+            }
+        }
+
+        Timer {
+            id: wpContentDelayTimer
+            interval: 70
+            repeat: false
+            running: true
+            onTriggered: wallpaperGridBackground.animateIn = true
+        }
+
+        scale: wallpaperGridBackground.animateIn && GlobalStates.wallpaperSelectorOpen ? 1.0 : 0.95
+        opacity: wallpaperGridBackground.animateIn && GlobalStates.wallpaperSelectorOpen ? 1.0 : 0.0
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: 260
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.OutCubic
+            }
+        }
 
         property int calculatedRows: Math.ceil(grid.count / grid.columns)
 
@@ -437,6 +475,51 @@ MouseArea {
                                         toggled: sideBarRail.currentIndex === index
                                         showToggledHighlight: false
                                         
+                                        opacity: 0
+                                        transform: Translate { id: navRailTrans; x: -16 }
+
+                                        Connections {
+                                            target: wallpaperGridBackground
+                                            function onAnimateInChanged() {
+                                                if (wallpaperGridBackground.animateIn) {
+                                                    quickDirButton.opacity = 0;
+                                                    navRailTrans.x = -16;
+                                                    navRailTimer.restart();
+                                                }
+                                            }
+                                        }
+
+                                        Component.onCompleted: {
+                                            if (wallpaperGridBackground.animateIn) {
+                                                navRailTimer.start();
+                                            }
+                                        }
+
+                                        Timer {
+                                            id: navRailTimer
+                                            interval: 80 + index * 35
+                                            repeat: false
+                                            onTriggered: navRailAnim.start()
+                                        }
+
+                                        ParallelAnimation {
+                                            id: navRailAnim
+                                            NumberAnimation {
+                                                target: navRailTrans
+                                                property: "x"
+                                                to: 0
+                                                duration: 250
+                                                easing.type: Easing.OutCubic
+                                            }
+                                            NumberAnimation {
+                                                target: quickDirButton
+                                                property: "opacity"
+                                                to: 1
+                                                duration: 250
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+                                        
                                         onClicked: {
                                             if (quickDirButton.modelData.path === "FAVOURITES_MODE") {
                                                 wallpaperSelectorContent.favMode = true;
@@ -472,6 +555,18 @@ MouseArea {
                     Layout.fillHeight: false
                     spacing: 8
                     visible: !wallpaperSelectorContent.favMode && !wallpaperSelectorContent.browserMode
+
+                    opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                    transform: Translate {
+                        y: wallpaperGridBackground.animateIn ? 0 : -15
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on transform {
+                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                    }
 
                     AddressBar {
                         id: addressBar
@@ -536,6 +631,18 @@ MouseArea {
                     color: Appearance.colors.colLayer2
                     radius: wallpaperGridBackground.radius - Layout.margins
 
+                    opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                    transform: Translate {
+                        y: wallpaperGridBackground.animateIn ? 0 : -15
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on transform {
+                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+                    }
+
                     RowLayout {
                         spacing: 12
                         anchors.left: parent.left
@@ -566,13 +673,52 @@ MouseArea {
                             }
                         }
                     }
-                    
                 }
 
                 Item {
                     id: gridDisplayRegion
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
+
+                    // Top Scroll Fade Gradient Overlay
+                    Rectangle {
+                        z: 10
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 42
+                        opacity: (grid.atYBeginning || !grid.visible) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                        }
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: Appearance.colors.colLayer0 }
+                            GradientStop { position: 0.45; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.15) }
+                            GradientStop { position: 0.75; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.60) }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+
+                    // Bottom Scroll Fade Gradient Overlay
+                    Rectangle {
+                        z: 10
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 48
+                        bottomRightRadius: wallpaperGridBackground.radius - 4
+                        opacity: (grid.atYEnd || !grid.visible) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                        }
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.25; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.60) }
+                            GradientStop { position: 0.55; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.15) }
+                            GradientStop { position: 1.0; color: Appearance.colors.colLayer0 }
+                        }
+                    }
 
                     StyledIndeterminateProgressBar {
                         id: indeterminateProgressBar
@@ -719,14 +865,79 @@ MouseArea {
                             }
                         }
                         delegate: WallpaperDirectoryItem {
+                            id: wpItemDelegate
                             required property var modelData
                             required property int index
                             fileModelData: modelData
                             width: grid.cellWidth
                             height: grid.cellHeight
+
+                            readonly property int cols: grid.columns
+                            readonly property int itemRow: Math.floor(index / Math.max(1, cols))
+                            readonly property int itemCol: index % Math.max(1, cols)
+                            readonly property int cascadeDelay: (itemRow * 50) + (itemCol * 35)
+
                             colBackground: (index === grid?.currentIndex || containsMouse) ? Appearance.colors.colPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)
                             colText: (index === grid.currentIndex || containsMouse) ? Appearance.colors.colOnPrimary : (fileModelData.filePath === Config.options.background.wallpaperPath) ? Appearance.colors.colOnSecondaryContainer : (fileModelData.filePath === wallpaperSelectorContent.moreOptionsModelData?.filePath) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0
                             shouldLoad: index < grid.loadedCount
+
+                            scale: 0.72
+                            opacity: 0
+                            transform: Translate {
+                                id: wpTrans
+                                x: (wpItemDelegate.itemCol % 2 === 0 ? -24 : -12)
+                            }
+
+                            Timer {
+                                id: wpEntryTimer
+                                interval: wpItemDelegate.cascadeDelay
+                                repeat: false
+                                onTriggered: wpEntryAnim.start()
+                            }
+
+                            Connections {
+                                target: wallpaperGridBackground
+                                function onAnimateInChanged() {
+                                    if (wallpaperGridBackground.animateIn) {
+                                        wpItemDelegate.opacity = 0;
+                                        wpItemDelegate.scale = 0.72;
+                                        wpTrans.x = (wpItemDelegate.itemCol % 2 === 0 ? -24 : -12);
+                                        wpEntryTimer.restart();
+                                    }
+                                }
+                            }
+
+                            Component.onCompleted: {
+                                if (wallpaperGridBackground.animateIn) {
+                                    wpEntryTimer.start();
+                                }
+                            }
+
+                            ParallelAnimation {
+                                id: wpEntryAnim
+                                NumberAnimation {
+                                    target: wpTrans
+                                    property: "x"
+                                    to: 0
+                                    duration: 320
+                                    easing.type: Easing.OutCubic
+                                }
+                                NumberAnimation {
+                                    target: wpItemDelegate
+                                    property: "scale"
+                                    to: 1.0
+                                    duration: 350
+                                    easing.type: Easing.OutBack
+                                    easing.overshoot: 1.15
+                                }
+                                NumberAnimation {
+                                    target: wpItemDelegate
+                                    property: "opacity"
+                                    to: 1.0
+                                    duration: 260
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
 
                             onEntered: {
                                 grid.currentIndex = index;
@@ -740,7 +951,6 @@ MouseArea {
                                 wallpaperSelectorContent.searchForSimilarImages(id)
                             }
                             onMoreOptionsRequested: (modelData) => {
-                                //console.log("[Wallpaper Selector] More options requested:")
                                 wallpaperSelectorContent.moreOptionsModelData = modelData
                             }
                         }
@@ -757,6 +967,7 @@ MouseArea {
 
                     ColorFilterToolbar {
                         id: colorFilterToolbar
+                        z: 20
                         colBackground: Appearance.m3colors.m3surfaceContainerLow
                         anchors {
                             bottom: parent.bottom
@@ -764,20 +975,43 @@ MouseArea {
                             leftMargin: 16
                             bottomMargin: 8
                         }
+
+                        opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                        transform: Translate {
+                            y: wallpaperGridBackground.animateIn ? 0 : 25
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on transform {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
                     }
 
                     ExtraOptionsToolbar {
                         id: extraOptions
+                        z: 20
                         colBackground: Appearance.m3colors.m3surfaceContainerLow
                         anchors {
                             bottom: parent.bottom
                             horizontalCenter: parent.horizontalCenter
                             bottomMargin: 8
                         }
+
+                        opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                        transform: Translate {
+                            y: wallpaperGridBackground.animateIn ? 0 : 25
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on transform {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
                     }
 
                     ImageOptionsToolbar {
-                        z: 1
+                        z: 20
                         colBackground: Appearance.colors.colPrimary
                         anchors {
                             bottom: parent.bottom
@@ -785,9 +1019,18 @@ MouseArea {
                             right: parent.right
                             rightMargin: 16
                         }
-                    }
 
-                    
+                        opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
+                        transform: Translate {
+                            y: wallpaperGridBackground.animateIn ? 0 : 25
+                        }
+                        Behavior on opacity {
+                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                        }
+                        Behavior on transform {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                    }
                 }
             }
         }

@@ -36,6 +36,16 @@ MouseArea {
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+    scale: containsMouse ? 1.04 : 1.0
+    Behavior on scale {
+        NumberAnimation {
+            duration: 180
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.4
+        }
+    }
+
     onClicked: (event) => {
         if (event.button === Qt.LeftButton) {
             root.activated()

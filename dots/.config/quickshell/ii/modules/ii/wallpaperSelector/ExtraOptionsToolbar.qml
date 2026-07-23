@@ -7,7 +7,7 @@ import QtQuick.Layouts
 
 Toolbar {
     id: extraOptions
-    z: 1
+    z: 20
 
     property string text: filterField.text
 
@@ -49,6 +49,17 @@ Toolbar {
         text: "ifl"
         StyledToolTip {
             text: Translation.tr("Pick random from this folder")
+        }
+    }
+
+    IconToolbarButton {
+        implicitWidth: height
+        onClicked: {
+            wallpaperSelectorContent.updateThumbnails();
+        }
+        text: "refresh"
+        StyledToolTip {
+            text: Translation.tr("Reload thumbnails (for high resolution displays)")
         }
     }
 

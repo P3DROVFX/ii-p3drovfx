@@ -6,6 +6,7 @@ import Quickshell
 
 Toolbar {
     id: imageToolbar
+    z: 20
     visible: modelData !== null
     
     property var modelData: wallpaperSelectorContent.moreOptionsModelData ?? null

@@ -7,7 +7,7 @@ import QtQuick.Layouts
 
 Toolbar {
     id: extraOptions
-    z: 1
+    z: 20
     implicitWidth: 196 // magic numbers are needed to make the toolbar make 2 rows
     implicitHeight: 90
     radius: Appearance.rounding.large
