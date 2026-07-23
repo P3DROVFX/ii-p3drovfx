@@ -608,6 +608,13 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: true
                     }
+                    property JsonObject weather_card: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
                     property JsonObject date: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"

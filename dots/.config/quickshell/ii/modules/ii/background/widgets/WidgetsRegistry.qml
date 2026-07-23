@@ -124,6 +124,15 @@ Singleton {
             "configPage": "widgets/DesktopWeatherForecastConfig.qml"
         },
         {
+            "widgetId": "weather_card",
+            "name": Translation.tr("Weather Card 1x1"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherCard1x1Widget.qml"),
+            "icon": "cloud",
+            "description": Translation.tr("1x1 layout compact weather card with 3-day list forecast."),
+            "configPage": "widgets/DesktopWeatherCardConfig.qml"
+        },
+        {
             "widgetId": "date_default",
             "name": Translation.tr("Date Card"),
             "category": "Date",
