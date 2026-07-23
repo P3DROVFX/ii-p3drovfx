@@ -637,6 +637,8 @@ Singleton {
                 property bool overviewZoomOut: true
                 property bool workspaceBlur: false
                 property string wallpaperPath: ""
+                property string lockscreenWallpaperPath: ""
+                property bool useSeparateLockscreenWallpaper: false
                 property string thumbnailPath: ""
                 property bool hideWhenFullscreen: true
                 property bool useWallpaperEngine: false

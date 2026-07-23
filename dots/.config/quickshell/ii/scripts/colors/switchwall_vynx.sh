@@ -183,7 +183,11 @@ EOF
 set_wallpaper_path() {
     local path="$1"
     if [ -f "$SHELL_CONFIG_FILE" ]; then
-        jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        if [[ "$lockscreen_flag" == "1" ]]; then
+            jq --indent 4 --arg path "$path" '.background.lockscreenWallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        else
+            jq --indent 4 --arg path "$path" '.background.wallpaperPath = $path' "$SHELL_CONFIG_FILE" > "$SHELL_CONFIG_FILE.tmp" && mv "$SHELL_CONFIG_FILE.tmp" "$SHELL_CONFIG_FILE"
+        fi
     fi
 }
 
@@ -479,7 +483,9 @@ done"
             fi
 
             # Set wallpaper path
-            set_wallpaper_path "$imgpath"
+            if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+            fi
 
             # Set video wallpaper
             local video_path="$imgpath"
@@ -509,7 +515,9 @@ done"
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
-            set_wallpaper_path "$imgpath"
+            if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+                set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
+            fi
             remove_restore
         fi
     fi
@@ -539,6 +547,7 @@ done"
     elif [[ -n "$type_flag" ]]; then
         matugen_args+=(--type "$type_flag")
     fi
+    matugen_args+=(--source-color-index 0)
     generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
     generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
@@ -617,6 +626,9 @@ main() {
         deactivate
     }
 
+    lockscreen_flag=""
+    colors_only_flag=""
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --mode)
@@ -626,6 +638,14 @@ main() {
             --type)
                 type_flag="$2"
                 shift 2
+                ;;
+            --lockscreen)
+                lockscreen_flag="1"
+                shift
+                ;;
+            --colors-only)
+                colors_only_flag="1"
+                shift
                 ;;
             --color)
                 if [[ "$2" =~ ^#?[A-Fa-f0-9]{6}$ ]]; then
@@ -645,11 +665,13 @@ main() {
                 ;;
             --noswitch)
                 noswitch_flag="1"
-                use_wpe=$(jq -r '.background.useWallpaperEngine' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
-                if [[ "$use_wpe" == "true" ]]; then
-                    imgpath=$(jq -r '.background.wallpaperEngineId' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
-                else
-                    imgpath=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                if [[ -z "$imgpath" ]]; then
+                    use_wpe=$(jq -r '.background.useWallpaperEngine' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "false")
+                    if [[ "$use_wpe" == "true" ]]; then
+                        imgpath=$(jq -r '.background.wallpaperEngineId' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                    else
+                        imgpath=$(jq -r '.background.wallpaperPath' "$SHELL_CONFIG_FILE" 2>/dev/null || echo "")
+                    fi
                 fi
                 shift
                 ;;
@@ -705,6 +727,28 @@ main() {
     if [[ -z "$imgpath" && -z "$color_flag" && -z "$noswitch_flag" ]]; then
         cd "$(xdg-user-dir PICTURES)/Wallpapers/showcase" 2>/dev/null || cd "$(xdg-user-dir PICTURES)/Wallpapers" 2>/dev/null || cd "$(xdg-user-dir PICTURES)" || return 1
         imgpath="$(kdialog --getopenfilename . --title 'Choose wallpaper')"
+    fi
+
+    # Fallback to default wallpaper if empty
+    if [[ -z "$imgpath" || "$imgpath" == "null" ]]; then
+        imgpath="$CONFIG_DIR/assets/images/default_wallpaper.png"
+    fi
+
+    # If --lockscreen is passed and --noswitch is passed (or selecting lockscreen wall):
+    # Only save to config without running matugen or changing theme colors
+    if [[ -n "$lockscreen_flag" && -n "$noswitch_flag" ]]; then
+        set_wallpaper_path "$imgpath" "lockscreen"
+        echo "[switchwall_vynx.sh] Saved lockscreen wallpaper path."
+        exit 0
+    fi
+
+    # Update config wallpaper path unless colors_only_flag or noswitch_flag is set
+    if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
+        if [[ -n "$lockscreen_flag" ]]; then
+            set_wallpaper_path "$imgpath" "lockscreen"
+        else
+            set_wallpaper_path "$imgpath" "desktop"
+        fi
     fi
 
     if [[ -n "$imgpath" && -z "$noswitch_flag" ]]; then

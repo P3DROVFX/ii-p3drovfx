@@ -171,6 +171,13 @@ PanelWindow {
             return rawPath;
         return `${Directories.assetsPath}/images/default_wallpaper.png`;
     }
+    property bool useSeparateLockscreenWallpaper: Config.options && Config.options.background ? (Config.options.background.useSeparateLockscreenWallpaper ?? false) : false
+    property string lockscreenWallpaperPath: {
+        const rawPath = Config.options && Config.options.background && Config.options.background.lockscreenWallpaperPath ? Config.options.background.lockscreenWallpaperPath : "";
+        if (rawPath !== "")
+            return rawPath;
+        return wallpaperPath;
+    }
     property bool wallpaperSafetyTriggered: {
         const enabled = Config.options.workSafety.enable.wallpaper;
         const sensitiveWallpaper = (CF.StringUtils.stringListContainsSubstring(wallpaperPath.toLowerCase(), Config.options.workSafety.triggerCondition.fileKeywords));
@@ -311,6 +318,8 @@ PanelWindow {
             id: wallpaperImage
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath
+            lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
+            useSeparateLockscreenWallpaper: bgRoot.useSeparateLockscreenWallpaper
             wallpaperIsVideo: bgRoot.wallpaperIsVideo
             wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
             preferredWallpaperScale: bgRoot.preferredWallpaperScale

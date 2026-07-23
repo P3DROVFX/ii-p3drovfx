@@ -55,6 +55,10 @@ Singleton {
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
     property string lyricsPath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/lyrics.json`)
     property string generatedMaterialThemePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/colors.json`)
+    property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
+    property string desktopColorsBackupPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/desktop_colors.json`)
+    property string generateLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate-lockscreen-colors.sh`)
+    property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)
     property string generatedWallpaperCategoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper/category.txt`)
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
     property string screenshotTemp: `/tmp/quickshell-${SystemInfo.username}/media/screenshot`

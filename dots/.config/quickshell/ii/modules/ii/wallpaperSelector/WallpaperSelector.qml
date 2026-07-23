@@ -19,6 +19,7 @@ Scope {
 
         sourceComponent: PanelWindow {
             id: panelWindow
+            screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0]
             readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
             property bool monitorIsFocused: (Hyprland.focusedMonitor?.id == monitor?.id)
 
@@ -41,7 +42,11 @@ Scope {
             implicitWidth: Appearance.sizes.wallpaperSelectorWidth
 
             Component.onCompleted: {
-                GlobalFocusGrab.addDismissable(panelWindow);
+                Qt.callLater(() => {
+                    if (wallpaperSelectorLoader.active) {
+                        GlobalFocusGrab.addDismissable(panelWindow);
+                    }
+                });
             }
             Component.onDestruction: {
                 GlobalFocusGrab.removeDismissable(panelWindow);
@@ -62,10 +67,13 @@ Scope {
         }
     }
 
-    function toggleWallpaperSelector() {
+    function toggleWallpaperSelector(target = "desktop") {
         if (Config.options.wallpaperSelector.useSystemFileDialog) {
-            Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode);
+            Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode, target === "lockscreen");
             return;
+        }
+        if (!GlobalStates.wallpaperSelectorOpen) {
+            GlobalStates.wallpaperSelectorTarget = target;
         }
         GlobalStates.wallpaperSelectorOpen = !GlobalStates.wallpaperSelectorOpen;
     }
@@ -74,7 +82,11 @@ Scope {
         target: "wallpaperSelector"
 
         function toggle(): void {
-            root.toggleWallpaperSelector();
+            root.toggleWallpaperSelector("desktop");
+        }
+
+        function toggleLockscreen(): void {
+            root.toggleWallpaperSelector("lockscreen");
         }
 
         function random(): void {

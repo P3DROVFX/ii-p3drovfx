@@ -305,6 +305,63 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "lock"
+            text: Translation.tr("Separate Lockscreen Wallpaper")
+            checked: Config.options.background.useSeparateLockscreenWallpaper
+            onCheckedChanged: {
+                Config.options.background.useSeparateLockscreenWallpaper = checked;
+                if (checked && !Config.options.background.lockscreenWallpaperPath) {
+                    Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLockscreen"]);
+                }
+            }
+            StyledToolTip {
+                text: Translation.tr("Use a different wallpaper on the lockscreen with custom Matugen color scheme transition")
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: Config.options.background.useSeparateLockscreenWallpaper
+
+            ConfigWallpaperSelector {
+                targetMode: "lockscreen"
+                text: Translation.tr("Lockscreen Wallpaper Selector")
+            }
+
+            ColumnLayout {
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                spacing: 8
+
+                RippleButtonWithIcon {
+                    useDynamicRadius: true
+                    Layout.fillWidth: true
+                    materialIcon: "wallpaper"
+                    mainText: Translation.tr("Select Lockscreen Wallpaper")
+                    onClicked: {
+                        Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggleLockscreen"]);
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    useDynamicRadius: true
+                    Layout.fillWidth: true
+                    materialIcon: "swap_horiz"
+                    mainText: Translation.tr("Swap Desktop & Lockscreen Wallpapers")
+                    onClicked: {
+                        const desktopWall = Config.options.background.wallpaperPath;
+                        const lockWall = Config.options.background.lockscreenWallpaperPath;
+                        if (desktopWall && lockWall) {
+                            Config.options.background.wallpaperPath = lockWall;
+                            Wallpapers.applyLockscreen(desktopWall);
+                            Wallpapers.apply(lockWall);
+                        }
+                    }
+                }
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "palette"
             text: Translation.tr("OpenRGB integration")
             checked: Config.options.appearance.openrgb.enable

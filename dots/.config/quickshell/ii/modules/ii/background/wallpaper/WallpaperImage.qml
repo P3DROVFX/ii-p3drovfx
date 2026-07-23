@@ -17,6 +17,8 @@ Item {
     // Required inputs
     required property var screen
     required property string wallpaperPath
+    property string lockscreenWallpaperPath: ""
+    property bool useSeparateLockscreenWallpaper: false
     required property bool wallpaperIsVideo
     required property bool wallpaperSafetyTriggered
     required property real preferredWallpaperScale
@@ -254,22 +256,53 @@ Item {
                     }
                 ]
 
-                TransitionImage {
-                    id: wallpaper
+                Item {
+                    id: wallpaperVisualContainer
                     anchors.fill: parent
 
-                    visible: opacity > 0 && !wallpaperIsVideo
-                    opacity: (wallpaper.status === Image.Ready && !wallpaperIsVideo) ? 1 : 0
-                    sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                    TransitionImage {
+                        id: wallpaper
+                        anchors.fill: parent
 
-                    imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
-                    animated: Config.options.background.animateWallpaperChanges
-                    transitionShader: Config.options.background.wallpaperAnimation
-                    shadersPath: Qt.resolvedUrl("../shaders")
-                    fillMode: Image.PreserveAspectCrop
-                    mipmap: true
-                    antialiasing: false
-                    lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                        visible: opacity > 0 && !wallpaperIsVideo
+                        opacity: (wallpaper.status === Image.Ready && !wallpaperIsVideo) ? 1 : 0
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+
+                        imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
+                        animated: Config.options.background.animateWallpaperChanges
+                        transitionShader: Config.options.background.wallpaperAnimation
+                        shadersPath: Qt.resolvedUrl("../shaders")
+                        fillMode: Image.PreserveAspectCrop
+                        mipmap: true
+                        antialiasing: false
+                        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    }
+
+                    TransitionImage {
+                        id: lockscreenWallpaper
+                        anchors.fill: parent
+
+                        readonly property bool isActive: wallpaperImageRoot.useSeparateLockscreenWallpaper && wallpaperImageRoot.lockscreenWallpaperPath !== "" && wallpaperImageRoot.lockscreenWallpaperPath !== wallpaperImageRoot.wallpaperPath
+                        visible: isActive && opacity > 0
+                        opacity: (isActive && GlobalStates.screenLocked) ? 1.0 : 0.0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Math.round(750 * Appearance.animMultiplier)
+                                easing.type: Easing.InOutCubic
+                            }
+                        }
+
+                        sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
+                        imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
+                        animated: Config.options.background.animateWallpaperChanges
+                        transitionShader: Config.options.background.wallpaperAnimation
+                        shadersPath: Qt.resolvedUrl("../shaders")
+                        fillMode: Image.PreserveAspectCrop
+                        mipmap: true
+                        antialiasing: false
+                        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    }
                 }
 
                 Rectangle {
@@ -290,40 +323,40 @@ Item {
                 LockBlur {
                     id: lockBlur
                     anchors.fill: parent
-                    sourceItem: wallpaper
+                    sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
 
                 LockDesaturate {
                     anchors.fill: parent
-                    sourceItem: Config.options.lock.blur.enable ? lockBlur : wallpaper
+                    sourceItem: Config.options.lock.blur.enable ? lockBlur : wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
 
                 LockColorWash {
                     anchors.fill: parent
-                    sourceItem: wallpaper
+                    sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
 
                 LockVignette {
                     anchors.fill: parent
-                    sourceItem: wallpaper
+                    sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                 }
 
                 GradientBlur {
                     anchors.fill: parent
-                    wallpaperPath: wallpaperImageRoot.wallpaperPath
+                    wallpaperPath: GlobalStates.screenLocked && wallpaperImageRoot.useSeparateLockscreenWallpaper && wallpaperImageRoot.lockscreenWallpaperPath !== "" ? wallpaperImageRoot.lockscreenWallpaperPath : wallpaperImageRoot.wallpaperPath
                 }
 
                 WindowBlur {
                     anchors.fill: parent
-                    sourceItem: wallpaper
+                    sourceItem: wallpaperVisualContainer
                     hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
                     overviewOpen: wallpaperImageRoot.overviewOpen
                 }

@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.functions
@@ -65,11 +66,23 @@ Singleton {
             } else if (root.isVideoFile(Config.options.background.wallpaperPath.toLowerCase())) {
                 root.apply(Config.options.background.wallpaperPath, Appearance.m3colors.darkmode);
             }
+            // Pre-generate lockscreen colors if configured but missing
+            if (Config.options.background.useSeparateLockscreenWallpaper) {
+                const lockPath = Config.options.background.lockscreenWallpaperPath;
+                const deskPath = Config.options.background.wallpaperPath;
+                if (lockPath && lockPath !== "" && lockPath !== deskPath) {
+                    lockscreenColorsCheckProc.exec(["test", "-f", Directories.lockscreenColorsPath]);
+                }
+            }
         }
     }
     
-    function openFallbackPicker(darkMode = Appearance.m3colors.darkmode) {
-        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light"]);
+    function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
+        if (lockscreen) {
+            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--lockscreen"]);
+        } else {
+            Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light"]);
+        }
     }
 
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
@@ -78,13 +91,49 @@ Singleton {
         root.changed()
     }
 
+    function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
+        if (!path || path.length === 0) return;
+        // Save path to config (noswitch = don't change wallpaper/colors now)
+        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", path, "--lockscreen", "--noswitch"]);
+        // Pre-generate lockscreen color palette in background (no icons/SDDM/applycolor)
+        Quickshell.execDetached(["bash", Directories.generateLockscreenColorsScriptPath, "--image", path, "--mode", darkMode ? "dark" : "light"]);
+        root.changed()
+    }
+
+    Connections {
+        target: GlobalStates
+        ignoreUnknownSignals: true
+        function onScreenLockedChanged() {
+            console.log("[Wallpapers] onScreenLockedChanged fired, screenLocked=", GlobalStates.screenLocked);
+            if (!Config.options || !Config.options.background) return;
+            const useSeparate = Config.options.background.useSeparateLockscreenWallpaper;
+            console.log("[Wallpapers] useSeparate=", useSeparate);
+            if (!useSeparate) return;
+            const lockPath = Config.options.background.lockscreenWallpaperPath;
+            const deskPath = Config.options.background.wallpaperPath;
+            console.log("[Wallpapers] lockPath=", lockPath, "deskPath=", deskPath);
+            if (!lockPath || lockPath === "" || lockPath === deskPath) return;
+
+            // Atomic swap: just copy pre-generated JSON, no matugen runtime cost
+            if (GlobalStates.screenLocked) {
+                console.log("[Wallpapers] Calling swap lock");
+                Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "lock"]);
+            } else {
+                console.log("[Wallpapers] Calling swap unlock");
+                Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "unlock"]);
+            }
+        }
+    }
+
     Process {
         id: selectProc
         property string filePath: ""
         property bool darkMode: Appearance.m3colors.darkmode
-        function select(filePath, darkMode = Appearance.m3colors.darkmode) {
+        property bool isLockscreen: false
+        function select(filePath, darkMode = Appearance.m3colors.darkmode, targetLockscreen = false) {
             selectProc.filePath = filePath
             selectProc.darkMode = darkMode
+            selectProc.isLockscreen = targetLockscreen
             selectProc.exec(["test", "-d", FileUtils.trimFileProtocol(filePath)])
         }
         onExited: (exitCode, exitStatus) => {
@@ -92,12 +141,20 @@ Singleton {
                 setDirectory(selectProc.filePath);
                 return;
             }
-            root.apply(selectProc.filePath, selectProc.darkMode);
+            if (selectProc.isLockscreen) {
+                root.applyLockscreen(selectProc.filePath, selectProc.darkMode);
+            } else {
+                root.apply(selectProc.filePath, selectProc.darkMode);
+            }
         }
     }
 
     function select(filePath, darkMode = Appearance.m3colors.darkmode) {
-        selectProc.select(filePath, darkMode);
+        selectProc.select(filePath, darkMode, false);
+    }
+
+    function selectLockscreen(filePath, darkMode = Appearance.m3colors.darkmode) {
+        selectProc.select(filePath, darkMode, true);
     }
 
     function randomFromCurrentFolder(darkMode = Appearance.m3colors.darkmode) {
@@ -227,11 +284,28 @@ Singleton {
         root.loadColorCache();
     }
 
+    // Checks if lockscreen_colors.json exists; if not, generates it in background
+    Process {
+        id: lockscreenColorsCheckProc
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                // File doesn't exist: generate lockscreen colors in background
+                const lockPath = Config.options.background.lockscreenWallpaperPath;
+                const mode = Appearance.m3colors.darkmode ? "dark" : "light";
+                Quickshell.execDetached(["bash", Directories.generateLockscreenColorsScriptPath, "--image", lockPath, "--mode", mode]);
+            }
+        }
+    }
+
     IpcHandler {
         target: "wallpapers"
 
         function apply(path: string): void {
             root.apply(path);
+        }
+
+        function applyLockscreen(path: string): void {
+            root.applyLockscreen(path);
         }
     }
 }

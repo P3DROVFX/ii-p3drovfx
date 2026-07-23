@@ -53,6 +53,7 @@ Singleton {
     property bool superDown: false
     property bool superReleaseMightTrigger: true
     property bool wallpaperSelectorOpen: false
+    property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
     property bool videoEditorPopupOpen: false

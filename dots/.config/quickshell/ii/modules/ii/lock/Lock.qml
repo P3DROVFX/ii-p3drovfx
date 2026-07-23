@@ -51,6 +51,9 @@ LockScreen {
         target: GlobalStates
         function onScreenLockedChanged() {
             if (GlobalStates.screenLocked) {
+                if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
+                    Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "lock"]);
+                }
                 GlobalStates.workspaceRestoreInProgress = false;
                 // Lock: save workspace per monitor and move all to temp workspace in one batch
                 var next = {}
@@ -77,6 +80,9 @@ LockScreen {
                     Quickshell.execDetached(["hyprctl", "--batch", batch])
                 }
             } else {
+                if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
+                    Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "unlock"]);
+                }
                 GlobalStates.workspaceRestoreInProgress = true;
                 restoreTimer.start()
             }

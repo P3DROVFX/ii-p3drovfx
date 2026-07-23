@@ -10,19 +10,28 @@ import qs.modules.common.functions
 Item {
     id: wallpaperSelectorRoot
     property string text: ""
+    property string targetMode: "desktop" // "desktop" or "lockscreen"
 
     implicitWidth: 360
     implicitHeight: 220
+
+    readonly property string effectivePath: {
+        if (targetMode === "lockscreen") {
+            const lockPath = Config.options.background.lockscreenWallpaperPath;
+            return (lockPath && lockPath !== "") ? lockPath : Config.options.background.wallpaperPath;
+        }
+        return Config.options.background.wallpaperPath;
+    }
 
     StyledImage {
         id: wallpaperPreview
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
         source: {
-            if (Config.options.background.useWallpaperEngine) {
+            if (targetMode === "desktop" && Config.options.background.useWallpaperEngine) {
                 return "file:///tmp/wpe_screenshot.png?t=" + Config.options.background.wallpaperEngineId;
             }
-            return Config.options.background.wallpaperPath !== "" ? Config.options.background.wallpaperPath : `${Directories.assetsPath}/images/default_wallpaper.png`
+            return wallpaperSelectorRoot.effectivePath !== "" ? wallpaperSelectorRoot.effectivePath : `${Directories.assetsPath}/images/default_wallpaper.png`
         }
         cache: false
         layer.enabled: true
@@ -42,9 +51,10 @@ Item {
         colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
         onClicked: {
             if (Config.options.wallpaperSelector.useSystemFileDialog) {
-                Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode);
+                Wallpapers.openFallbackPicker(Appearance.m3colors.darkmode, wallpaperSelectorRoot.targetMode === "lockscreen");
             } else {
-                Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", "toggle"]);
+                const action = wallpaperSelectorRoot.targetMode === "lockscreen" ? "toggleLockscreen" : "toggle";
+                Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "wallpaperSelector", action]);
             }
         }
     }
@@ -73,16 +83,17 @@ Item {
             id: fileNameLabel
             anchors.centerIn: parent
             property string fileName: {
-                if (Config.options.background.useWallpaperEngine) {
+                if (wallpaperSelectorRoot.targetMode === "desktop" && Config.options.background.useWallpaperEngine) {
                     const id = Config.options.background.wallpaperEngineId;
                     const parts = id.split("/");
                     return "Wallpaper Engine: " + parts[parts.length - 1];
                 }
-                const path = Config.options.background.wallpaperPath;
+                const path = wallpaperSelectorRoot.effectivePath;
                 if (path === "")
-                    return "Click to select wallpaper";
+                    return wallpaperSelectorRoot.targetMode === "lockscreen" ? "Select lockscreen wallpaper" : "Click to select wallpaper";
                 const parts = path.split("/");
-                return parts[parts.length - 1];
+                const prefix = wallpaperSelectorRoot.targetMode === "lockscreen" ? "Lockscreen: " : "";
+                return prefix + parts[parts.length - 1];
             }
             text: fileName.length > 30 ? fileName.slice(0, 27) + "..." : fileName
             color: Appearance.colors.colOnPrimary

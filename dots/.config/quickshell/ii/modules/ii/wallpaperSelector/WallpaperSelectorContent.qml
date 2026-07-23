@@ -234,7 +234,11 @@ MouseArea {
 
     function selectWallpaperPath(filePath) {
         if (filePath && filePath.length > 0) {
-            Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
+            if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
+                Wallpapers.selectLockscreen(filePath, wallpaperSelectorContent.useDarkMode);
+            } else {
+                Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
+            }
             filterText = "";
             wallpaperSelectorContent.browserMode = false;
         }
@@ -349,6 +353,13 @@ MouseArea {
 
         property bool animateIn: false
 
+        Component.onCompleted: {
+            if (GlobalStates.wallpaperSelectorOpen) {
+                wallpaperGridBackground.animateIn = false;
+                wpContentDelayTimer.restart();
+            }
+        }
+
         Connections {
             target: GlobalStates
             function onWallpaperSelectorOpenChanged() {
@@ -408,13 +419,23 @@ MouseArea {
                     anchors.fill: parent
                     spacing: 0
 
-                    StyledText {
+                    RowLayout {
                         Layout.margins: 12
-                        font {
-                            pixelSize: Appearance.font.pixelSize.normal
-                            weight: Font.Medium
+                        spacing: 6
+                        MaterialSymbol {
+                            visible: GlobalStates.wallpaperSelectorTarget === "lockscreen"
+                            text: "lock"
+                            color: Appearance.colors.colPrimary
+                            iconSize: 18
                         }
-                        text: Translation.tr("Pick a wallpaper")
+                        StyledText {
+                            font {
+                                pixelSize: Appearance.font.pixelSize.normal
+                                weight: Font.Medium
+                            }
+                            text: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? Translation.tr("Lockscreen Wallpaper") : Translation.tr("Pick a wallpaper")
+                            color: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        }
                     }
                     Item {
                         id: quickDirsContainer
