@@ -615,6 +615,42 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: true
                     }
+                    property JsonObject weather_icon: JsonObject {
+                        property bool enable: false
+                        property string backgroundShape: "Cookie12Sided"
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_pill: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_circle: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_typography: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
+                    property JsonObject weather_hourly: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: true
+                    }
                     property JsonObject date: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free" // "free", "leastBusy", "mostBusy"

@@ -1,0 +1,61 @@
+import QtQuick
+import QtQuick.Layouts
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.functions
+import qs.modules.common.widgets
+import qs.modules.ii.background.widgets
+
+AbstractBackgroundWidget {
+    id: root
+
+    configEntryName: "weather_pill"
+
+    readonly property bool expressive: Config.options.background.widgets.weather_pill.expressiveColors ?? false
+
+    implicitWidth: 240
+    implicitHeight: 120
+
+    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
+    readonly property color textColorOnBg: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+
+    StyledDropShadow {
+        id: shadowEffect
+        target: mainContainer
+        visible: Config.options.background.widgets.enableShadows ?? true
+    }
+
+    Rectangle {
+        id: mainContainer
+        anchors.fill: parent
+        anchors.margins: 10
+        radius: Appearance.rounding.full
+        color: root.cardBgColor
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 18
+            anchors.rightMargin: 36
+            spacing: 8
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignVCenter
+                iconSize: 78
+                text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
+                color: Appearance.colors.colPrimary
+                fill: 1.0
+            }
+
+            Item { Layout.fillWidth: true }
+
+            StyledText {
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                text: Weather.data?.temp ? Weather.data.temp.replace("°C", "°").replace("°F", "°") : ""
+                color: root.textColorOnBg
+                font.pixelSize: Appearance.font.pixelSize.huge * 1.9
+                font.weight: Font.Bold
+            }
+        }
+    }
+}

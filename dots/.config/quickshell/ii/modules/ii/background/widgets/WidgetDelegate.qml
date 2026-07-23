@@ -186,6 +186,61 @@ Item {
     }
 
     Component {
+        id: component_weather_icon
+        WeatherIconWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_weather_pill
+        WeatherPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_weather_circle
+        WeatherCircleWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_weather_typography
+        WeatherTypographyWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_weather_hourly
+        WeatherHourly2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_date_default
         DateWidget {
             screenWidth: delegateRoot.screenWidth
@@ -221,6 +276,11 @@ Item {
         "weather_expressive": component_weather_expressive,
         "weather_forecast": component_weather_forecast,
         "weather_card": component_weather_card,
+        "weather_icon": component_weather_icon,
+        "weather_pill": component_weather_pill,
+        "weather_circle": component_weather_circle,
+        "weather_typography": component_weather_typography,
+        "weather_hourly": component_weather_hourly,
         "date_default": component_date_default,
         "photo_default": component_photo_default
     })

@@ -11,9 +11,10 @@ import qs.modules.ii.background.widgets
 AbstractBackgroundWidget {
     id: root
 
-    configEntryName: "weather"
+    configEntryName: "weather_icon"
 
-    readonly property bool expressive: Config.options.background.widgets.weather.expressiveColors ?? false
+    readonly property bool expressive: Config.options.background.widgets.weather_icon.expressiveColors ?? false
+    readonly property string shapeString: Config.options.background.widgets.weather_icon.backgroundShape ?? "Cookie12Sided"
 
     implicitWidth: 240
     implicitHeight: 240
@@ -23,21 +24,21 @@ AbstractBackgroundWidget {
 
     StyledDropShadow {
         id: shadowEffect
-        target: mainShape
+        target: weatherShape
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
     MaterialShape {
-        id: mainShape
+        id: weatherShape
         anchors.centerIn: parent
         implicitSize: Math.min(root.width, root.height)
-        shape: MaterialShape.Shape.Pill
+        shapeString: root.shapeString
         color: "transparent"
 
         MaterialShape {
             id: bgShape
             anchors.fill: parent
-            shape: parent.shape
+            shapeString: parent.shapeString
             color: root.cardBgColor
             visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
         }
@@ -52,33 +53,12 @@ AbstractBackgroundWidget {
             visible: Config.options.background.widgets.enableInnerShadow ?? true
         }
 
-        Item {
-            anchors.fill: parent
-
-            StyledText {
-                font.pixelSize: 88
-                font.family: Appearance.font.family.main
-                font.weight: Font.Black
-                color: Appearance.colors.colPrimary
-                text: Weather.data?.temp ? Weather.data.temp.replace("°C", "°").replace("°F", "°") : ""
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.rightMargin: 28
-                anchors.topMargin: 36
-                z: 1
-            }
-
-            MaterialSymbol {
-                iconSize: 130
-                color: root.iconColor
-                text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
-                fill: 1.0
-                anchors.left: parent.left
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 18
-                anchors.bottomMargin: 18
-                z: 2
-            }
+        MaterialSymbol {
+            anchors.centerIn: parent
+            iconSize: 110
+            text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "cloud"
+            color: root.iconColor
+            fill: 1.0
         }
     }
 }

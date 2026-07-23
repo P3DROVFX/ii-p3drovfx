@@ -133,6 +133,51 @@ Singleton {
             "configPage": "widgets/DesktopWeatherCardConfig.qml"
         },
         {
+            "widgetId": "weather_icon",
+            "name": Translation.tr("Weather Icon Shape"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherIconWidget.qml"),
+            "icon": "sunny",
+            "description": Translation.tr("1x1 Material Shape cookie weather icon widget."),
+            "configPage": "widgets/DesktopWeatherIconConfig.qml"
+        },
+        {
+            "widgetId": "weather_pill",
+            "name": Translation.tr("Weather Pill 1x0.5"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherPillWidget.qml"),
+            "icon": "cloud",
+            "description": Translation.tr("Compact 1x0.5 weather pill widget."),
+            "configPage": "widgets/DesktopWeatherPillConfig.qml"
+        },
+        {
+            "widgetId": "weather_circle",
+            "name": Translation.tr("Weather Circle Cookie"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherCircleWidget.qml"),
+            "icon": "sunny",
+            "description": Translation.tr("Circular weather widget with inner Cookie12Sided shape."),
+            "configPage": "widgets/DesktopWeatherCircleConfig.qml"
+        },
+        {
+            "widgetId": "weather_typography",
+            "name": Translation.tr("Weather Typography"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherTypographyWidget.qml"),
+            "icon": "cloud",
+            "description": Translation.tr("Apple-style typography weather card widget."),
+            "configPage": "widgets/DesktopWeatherTypographyConfig.qml"
+        },
+        {
+            "widgetId": "weather_hourly",
+            "name": Translation.tr("Weather Hourly 2x1"),
+            "category": "Weather",
+            "qmlPath": Qt.resolvedUrl("weather/WeatherHourly2x1Widget.qml"),
+            "icon": "sunny",
+            "description": Translation.tr("2x1 weather card with hourly forecast and multi-day list."),
+            "configPage": "widgets/DesktopWeatherHourlyConfig.qml"
+        },
+        {
             "widgetId": "date_default",
             "name": Translation.tr("Date Card"),
             "category": "Date",
