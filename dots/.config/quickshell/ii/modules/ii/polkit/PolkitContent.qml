@@ -66,9 +66,8 @@ Item {
         border.width: 1
 
         opacity: root.animateIn ? 1 : 0
-        scale: root.animateIn ? 1 : 0.85
-        transform: Translate { y: root.animateIn ? 0 : Appearance.font.pixelSize.huge * 2 }
-
+        scale: root.animateIn ? 1 : 0.82
+        transform: Translate { y: root.animateIn ? 0 : 35 }
 
         Behavior on opacity { NumberAnimation { duration: root.animateIn ? 280 : 180; easing.type: Easing.OutCubic } }
         Behavior on scale {
@@ -76,8 +75,14 @@ Item {
                 duration: root.animateIn ? 450 : 200
                 easing {
                     type: Easing.OutBack
-                    overshoot: 1.45
+                    overshoot: 1.6
                 }
+            }
+        }
+        Behavior on transform {
+            NumberAnimation {
+                duration: root.animateIn ? 400 : 200
+                easing.type: Easing.OutCubic
             }
         }
         Behavior on transform {
