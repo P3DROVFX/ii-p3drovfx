@@ -13,6 +13,26 @@ Singleton {
     property QtObject rounding
     property QtObject font
     property QtObject sizes
+    property QtObject spacing: QtObject {
+        property int space0: 0
+        property int space25: 2
+        property int space50: 4
+        property int space75: 6
+        property int space100: 8
+        property int space125: 10
+        property int space150: 12
+        property int space175: 14
+        property int space200: 16
+        property int space250: 20
+        property int space300: 24
+        property int space400: 32
+        property int space450: 36
+        property int space500: 40
+        property int space600: 48
+        property int space700: 56
+        property int space800: 64
+        property int space900: 72
+    }
     property string syntaxHighlightingTheme
 
     readonly property int windowRounding: {

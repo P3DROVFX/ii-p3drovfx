@@ -229,6 +229,14 @@ Singleton {
                     property real height: 330
                     property int tabIndex: 0
                 }
+                property JsonObject discordVoice: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 80
+                    property real y: 600
+                    property real width: 344
+                    property real height: 200
+                }
             }
 
             property JsonObject phoneMic: JsonObject {

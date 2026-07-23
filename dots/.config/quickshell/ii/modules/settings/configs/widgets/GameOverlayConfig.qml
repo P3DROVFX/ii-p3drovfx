@@ -171,4 +171,88 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        title: Translation.tr("Discord Voice")
+        icon: "record_voice_over"
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            ConfigSpinBox {
+                icon: "groups"
+                text: Translation.tr("Maximum avatars")
+                value: Config.options.overlay.discordVoice.maxAvatars
+                from: 1
+                to: 12
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.overlay.discordVoice.maxAvatars = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "account_circle"
+                text: Translation.tr("Avatar size")
+                value: Config.options.overlay.discordVoice.avatarSize
+                from: 32
+                to: 80
+                stepSize: 2
+                onValueChanged: {
+                    Config.options.overlay.discordVoice.avatarSize = value;
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Layout")
+                icon: "view_agenda"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.overlay.discordVoice.layoutMode
+                    onSelected: newValue => { Config.options.overlay.discordVoice.layoutMode = newValue; }
+                    options: [
+                        { displayName: Translation.tr("Row"),    icon: "view_week", value: "row" },
+                        { displayName: Translation.tr("Column"), icon: "view_agenda", value: "column" }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Participant background")
+                icon: "background_dot_small"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.overlay.discordVoice.participantBackground
+                    onSelected: newValue => { Config.options.overlay.discordVoice.participantBackground = newValue; }
+                    options: [
+                        { displayName: Translation.tr("None"),         icon: "block",          value: "none" },
+                        { displayName: Translation.tr("Avatar + name"), icon: "badge",          value: "card" },
+                        { displayName: Translation.tr("Name only"),     icon: "text_fields",    value: "name" }
+                    ]
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "opacity"
+                text: Translation.tr("Background opacity %")
+                value: Math.round(Config.options.overlay.discordVoice.participantBackgroundOpacity * 100)
+                from: 0
+                to: 100
+                stepSize: 5
+                onValueChanged: {
+                    Config.options.overlay.discordVoice.participantBackgroundOpacity = value / 100;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Blur background")
+                checked: Config.options.overlay.discordVoice.blurEnabled
+                onCheckedChanged: {
+                    Config.options.overlay.discordVoice.blurEnabled = checked;
+                }
+            }
+        }
+    }
 }
