@@ -14,10 +14,37 @@ import Quickshell.Hyprland
 Scope {
     id: root
     property var focusedScreen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+    property bool activeState: false
+    property bool sessionShown: false
+
+    Timer {
+        id: closeTimer
+        interval: 280
+        repeat: false
+        onTriggered: {
+            root.activeState = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSessionOpenChanged() {
+            if (GlobalStates.sessionOpen) {
+                closeTimer.stop();
+                root.activeState = true;
+                Qt.callLater(() => {
+                    root.sessionShown = true;
+                });
+            } else {
+                root.sessionShown = false;
+                closeTimer.restart();
+            }
+        }
+    }
 
     Loader {
         id: sessionLoader
-        active: GlobalStates.sessionOpen
+        active: root.activeState
         onActiveChanged: {
             if (sessionLoader.active)
                 SessionWarnings.refresh();
@@ -35,32 +62,87 @@ Scope {
         sourceComponent: PanelWindow { // Session menu
             id: sessionRoot
             visible: sessionLoader.active
-            property string subtitle
+            property string subtitle: sessionLock.buttonText
 
             function hide() {
                 GlobalStates.sessionOpen = false;
+            }
+
+            function triggerCascadeIn() {
+                sessionLock.animateIn();
+                sessionSleep.animateIn();
+                sessionLogout.animateIn();
+                sessionTaskManager.animateIn();
+                sessionHibernate.animateIn();
+                sessionShutdown.animateIn();
+                sessionReboot.animateIn();
+                sessionFirmwareReboot.animateIn();
+                sessionLock.forceActiveFocus();
+            }
+
+            function triggerCascadeOut() {
+                sessionLock.animateOut();
+                sessionSleep.animateOut();
+                sessionLogout.animateOut();
+                sessionTaskManager.animateOut();
+                sessionHibernate.animateOut();
+                sessionShutdown.animateOut();
+                sessionReboot.animateOut();
+                sessionFirmwareReboot.animateOut();
+            }
+
+            Component.onCompleted: {
+                if (root.sessionShown) {
+                    triggerCascadeIn();
+                }
+            }
+
+            Connections {
+                target: root
+                function onSessionShownChanged() {
+                    if (root.sessionShown) {
+                        sessionRoot.triggerCascadeIn();
+                    } else {
+                        sessionRoot.triggerCascadeOut();
+                    }
+                }
             }
 
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:session"
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-            color: ColorUtils.transparentize(Appearance.m3colors.m3background, Appearance.m3colors.darkmode ? 0.05 : 0.12)
+            color: "transparent"
 
             anchors {
                 top: true
                 left: true
                 right: true
+                bottom: true
             }
 
             implicitWidth: root.focusedScreen?.width ?? 0
             implicitHeight: root.focusedScreen?.height ?? 0
 
-            MouseArea {
-                id: sessionMouseArea
+            Rectangle {
+                id: dimBackground
                 anchors.fill: parent
-                onClicked: {
-                    sessionRoot.hide();
+                color: ColorUtils.transparentize(Appearance.m3colors.m3background, Appearance.m3colors.darkmode ? 0.05 : 0.12)
+                opacity: root.sessionShown ? 1.0 : 0.0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                MouseArea {
+                    id: sessionMouseArea
+                    anchors.fill: parent
+                    onClicked: {
+                        sessionRoot.hide();
+                    }
                 }
             }
 
@@ -68,6 +150,21 @@ Scope {
                 id: contentColumn
                 anchors.centerIn: parent
                 spacing: 15
+                scale: root.sessionShown ? 1.0 : 0.92
+                opacity: root.sessionShown ? 1.0 : 0.0
+
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Escape) {
@@ -106,7 +203,8 @@ Scope {
 
                     SessionActionButton {
                         id: sessionLock
-                        focus: sessionRoot.visible
+                        animIndex: 0
+                        focus: root.sessionShown
                         buttonIcon: "lock"
                         buttonText: Translation.tr("Lock")
                         onClicked: {
@@ -122,6 +220,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionSleep
+                        animIndex: 1
                         buttonIcon: "dark_mode"
                         buttonText: Translation.tr("Sleep")
                         onClicked: {
@@ -138,6 +237,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionLogout
+                        animIndex: 2
                         buttonIcon: "logout"
                         buttonText: Translation.tr("Logout")
                         onClicked: {
@@ -154,6 +254,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionTaskManager
+                        animIndex: 3
                         buttonIcon: "browse_activity"
                         buttonText: Translation.tr("Task Manager")
                         onClicked: {
@@ -170,6 +271,7 @@ Scope {
 
                     SessionActionButton {
                         id: sessionHibernate
+                        animIndex: 4
                         buttonIcon: "downloading"
                         buttonText: Translation.tr("Hibernate")
                         onClicked: {
@@ -185,6 +287,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionShutdown
+                        animIndex: 5
                         buttonIcon: "power_settings_new"
                         buttonText: Translation.tr("Shutdown")
                         onClicked: {
@@ -201,6 +304,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionReboot
+                        animIndex: 6
                         buttonIcon: "restart_alt"
                         buttonText: Translation.tr("Reboot")
                         onClicked: {
@@ -217,6 +321,7 @@ Scope {
                     }
                     SessionActionButton {
                         id: sessionFirmwareReboot
+                        animIndex: 7
                         buttonIcon: "settings_applications"
                         buttonText: Translation.tr("Reboot to firmware settings")
                         onClicked: {
