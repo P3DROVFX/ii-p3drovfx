@@ -1,103 +1,97 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
-import Qt5Compat.GraphicalEffects
 
 AbstractBackgroundWidget {
     id: root
 
-    configEntryName: "date"
+    configEntryName: "calendar_pill"
 
     implicitWidth: 240
-    implicitHeight: 240
+    implicitHeight: 120
 
-    readonly property color expressiveMonthRect: WidgetColorScheme.innerShapeColor
-    readonly property color expressiveDayNumber: WidgetColorScheme.accentColor
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
+    readonly property color circleBgColor: WidgetColorScheme.accentColor
+    readonly property color circleTextColor: WidgetColorScheme.onAccentColor
 
     StyledRectangularShadow {
-        id: bgShadow
-        target: bgRect
+        id: shadowEffect
+        target: mainContainer
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
     Rectangle {
-        id: bgRect
+        id: mainContainer
         anchors.fill: parent
         anchors.margins: 10
-        color: WidgetColorScheme.cardBgColor
-        radius: Appearance.rounding.windowRounding
+        radius: Appearance.rounding.full
+        color: root.cardBgColor
 
-        // Recorte da camada ativado apenas se a sombra interna estiver ligada
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? true
         layer.smooth: true
         layer.effect: OpacityMask {
             maskSource: Rectangle {
-                width: bgRect.width
-                height: bgRect.height
-                radius: bgRect.radius
+                width: mainContainer.width
+                height: mainContainer.height
+                radius: mainContainer.radius
                 antialiasing: true
             }
         }
 
-        ColumnLayout {
+        RowLayout {
             anchors.fill: parent
-            anchors.margins: 10
-            spacing: 0
+            anchors.leftMargin: 20
+            anchors.rightMargin: 12
+            spacing: 8
 
-            Rectangle {
-                id: monthRect
-                Layout.fillWidth: true
-                Layout.preferredHeight: 70
-                color: root.expressive ? root.expressiveMonthRect : Appearance.colors.colSurfaceContainerLow
-                radius: Appearance.rounding.normal
-
-                StyledText {
-                    anchors.centerIn: parent
-                    text: {
-                        let monthStr = Qt.locale().toString(DateTime.clock.date, "MMM");
-                        monthStr = monthStr.replace(".", "");
-                        return monthStr.substring(0, 3).toUpperCase();
-                    }
-                    font {
-                        pixelSize: 42
-                        bold: true
-                        family: Appearance.font.family.main
-                    }
-                    color: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+            StyledText {
+                Layout.alignment: Qt.AlignVCenter
+                text: Qt.locale().toString(DateTime.clock.date, "dddd")
+                color: root.textColorOnBg
+                font {
+                    pixelSize: 22
+                    weight: Font.DemiBold
+                    family: Appearance.font.family.main
                 }
             }
 
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+            Item { Layout.fillWidth: true }
+
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: mainContainer.height - 16
+                implicitHeight: implicitWidth
+                radius: implicitWidth / 2
+                color: root.circleBgColor
 
                 StyledText {
                     anchors.centerIn: parent
                     text: DateTime.clock.date.getDate().toString()
+                    color: root.circleTextColor
                     font {
-                        pixelSize: 98
+                        pixelSize: 28
                         weight: Font.Black
                         bold: true
                         family: "Google Sans Flex"
-                        variableAxes: ({ "ROND": 100, "wght": 800 })
+                        variableAxes: ({ "wght": 800 })
                     }
-                    color: root.expressive ? root.expressiveDayNumber : Appearance.colors.colPrimary
                 }
             }
         }
 
-        // Moldura do Canvas com recorte (furo) para projetar a sombra para dentro
         Canvas {
             id: shadowMaskCanvas
             x: -80
             y: -80
-            width: bgRect.width + 160
-            height: bgRect.height + 160
+            width: mainContainer.width + 160
+            height: mainContainer.height + 160
             visible: false
 
             onPaint: {
@@ -106,14 +100,13 @@ AbstractBackgroundWidget {
                 ctx.fillStyle = "black";
                 ctx.beginPath();
                 ctx.rect(0, 0, width, height);
-                
+
                 var rx = 80;
                 var ry = 80;
-                var rw = bgRect.width;
-                var rh = bgRect.height;
-                // Reduzimos o raio do cutout na moldura para compensar a sobreposição da sombra nos cantos
-                var r = Math.max(0, bgRect.radius - 8);
-                
+                var rw = mainContainer.width;
+                var rh = mainContainer.height;
+                var r = mainContainer.radius;
+
                 ctx.moveTo(rx + r, ry);
                 ctx.arcTo(rx, ry, rx, ry + r, r);
                 ctx.lineTo(rx, ry + rh - r);
@@ -123,7 +116,7 @@ AbstractBackgroundWidget {
                 ctx.lineTo(rx + rw, ry + r);
                 ctx.arcTo(rx + rw, ry, rx + rw - r, ry, r);
                 ctx.lineTo(rx + r, ry);
-                
+
                 ctx.closePath();
                 ctx.fill("evenodd");
             }
@@ -139,7 +132,7 @@ AbstractBackgroundWidget {
             width: shadowMaskCanvas.width
             height: shadowMaskCanvas.height
             source: shadowMaskCanvas
-            radius: 24 // Soft blur equilibrado para o tamanho do widget
+            radius: 24
             samples: 49
             color: Qt.rgba(0, 0, 0, 0.35)
             horizontalOffset: 0
