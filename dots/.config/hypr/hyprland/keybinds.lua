@@ -193,6 +193,10 @@ for i = 1, 6 do
     hl.bind(keycombos[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" })) -- # [hidden]
 end
 
+--#/# bind = CTRL+SUPER, C,, -- Compact workspaces into 1..N (remove empty gaps)
+hl.bind("CTRL + SUPER + C", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_compactor"),
+    { description = "Workspaces: Compact into 1..N (remove empty gaps)" })
+
 hl.bind("SUPER + ALT + S", function()
     local ok, err = pcall(function()
         local w = hl.get_active_window()

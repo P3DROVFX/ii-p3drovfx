@@ -30,3 +30,6 @@ __pycache__/
 /dots/.config/quickshell/ii/.active-fork
 /dots/.config/quickshell/ii/.cortexkit
 /dots/.config/quickshell/ii/user_widgets
+
+# Compiled binary — build it from workspace_compactor_src/ instead (see scripts/hyprland/README.md)
+/dots/.config/quickshell/ii/scripts/hyprland/workspace_compactor
