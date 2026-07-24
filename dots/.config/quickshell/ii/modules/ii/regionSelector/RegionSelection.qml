@@ -1900,7 +1900,7 @@ PanelWindow {
         Toolbar {
             id: actionBar
             z: 9999
-            spacing: 2
+            spacing: 6
 
             readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
             readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
@@ -1939,8 +1939,16 @@ PanelWindow {
                 property string labelText: ""
                 Layout.alignment: Qt.AlignVCenter
                 implicitHeight: 36
-                implicitWidth: abRow.implicitWidth + 20
+                implicitWidth: abRow.implicitWidth + 24
                 buttonRadius: height / 2
+
+                colBackground: Appearance.colors.colSurfaceContainerHigh
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                colRippleToggled: Appearance.colors.colSecondaryContainerActive
+
+                property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
 
                 contentItem: Row {
                     id: abRow
@@ -1951,12 +1959,14 @@ PanelWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         iconSize: 20
                         text: symbolName
-                        color: Appearance.colors.colOnSurface
+                        fill: parent.parent.toggled ? 1 : 0
+                        color: parent.parent.colText
+                        animateChange: true
                     }
                     StyledText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: labelText
-                        color: Appearance.colors.colOnSurface
+                        color: parent.parent.colText
                     }
                 }
             }
@@ -1977,14 +1987,9 @@ PanelWindow {
             }
 
             ActionButton {
-                symbolName: "check"
-                labelText: Translation.tr("Accept")
+                symbolName: "content_copy"
+                labelText: Translation.tr("Copy")
                 onClicked: root.finalizeScreenshot(false)
-            }
-            ActionButton {
-                symbolName: "block"
-                labelText: Translation.tr("Cancel")
-                onClicked: root.dismiss()
             }
             ActionButton {
                 symbolName: "save"
@@ -1997,15 +2002,16 @@ PanelWindow {
                 onClicked: root.finalizeScreenshotAs()
             }
             ActionButton {
-                symbolName: "content_copy"
-                labelText: Translation.tr("Copy")
-                onClicked: root.finalizeScreenshot(false)
-            }
-            ActionButton {
                 symbolName: "document_scanner"
                 labelText: Translation.tr("Extract Text")
                 onClicked: root.extractText()
             }
+            ActionButton {
+                symbolName: "block"
+                labelText: Translation.tr("Cancel")
+                onClicked: root.dismiss()
+            }
+
 
             Item {
                 id: exportContainer

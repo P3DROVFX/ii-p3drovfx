@@ -182,6 +182,20 @@ Toolbar {
                     scale: editor.shapePopupVisible ? 1 : 0.9
 
                     IconToolbarButton {
+                        id: circleBtn
+
+                        text: "circle"
+                        toggled: editor.currentTool === "circle"
+                        onClicked: editor.currentTool = editor.currentTool === "circle" ? "none" : "circle"
+
+                        StyledToolTip {
+                            z: 9999
+                            text: Translation.tr("Circle")
+                        }
+
+                    }
+
+                    IconToolbarButton {
                         id: starBtn
 
                         text: "star"
@@ -194,6 +208,7 @@ Toolbar {
                         }
 
                     }
+
 
                     Behavior on scale {
                         NumberAnimation {
@@ -247,20 +262,6 @@ Toolbar {
 
     }
 
-    // Ellipse / circle (top-level, next to the rectangle)
-    IconToolbarButton {
-        id: circleBtn
-
-        text: "circle"
-        toggled: editor.currentTool === "circle"
-        onClicked: editor.currentTool = editor.currentTool === "circle" ? "none" : "circle"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Circle")
-        }
-
-    }
 
     // Fill toggle for closed shapes (rectangle / circle / star)
     IconToolbarButton {
