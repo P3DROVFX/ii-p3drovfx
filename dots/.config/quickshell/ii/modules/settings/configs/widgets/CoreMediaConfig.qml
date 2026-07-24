@@ -71,14 +71,6 @@ ContentPage {
         }
 
         ConfigSwitch {
-            buttonIcon: "palette"
-            text: Translation.tr("Dynamic album art colors")
-            checked: Config.options.media.dynamicAlbumColors
-            onCheckedChanged: {
-                Config.options.media.dynamicAlbumColors = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("Extract dominant colors from album art to theme media controls (buttons, text, progress bar)")
             }
         }
 

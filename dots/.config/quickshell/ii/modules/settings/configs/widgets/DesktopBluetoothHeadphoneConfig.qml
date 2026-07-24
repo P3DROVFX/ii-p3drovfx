@@ -35,7 +35,7 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Date Widget Options")
+            text: Translation.tr("Bluetooth Headphone Options")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -43,30 +43,39 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Date Settings")
-        icon: "calendar_today"
+        title: Translation.tr("Bluetooth Headphone Settings")
+        icon: "headphones"
 
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("date_default")
+            visible: !Config.isWidgetActive("bluetooth_headphone")
 
             PagePlaceholder {
                 anchors.fill: parent
-                icon: "calendar_today"
+                icon: "headphones"
                 shape: MaterialShape.Shape.Circle
-                title: Translation.tr("Date widget disabled")
-                description: Translation.tr("Enable the desktop date widget in Desktop Widgets settings to use this page.")
+                title: Translation.tr("Bluetooth Headphone widget disabled")
+                description: Translation.tr("Enable the Bluetooth Headphone 1x2 widget in Desktop Widgets settings to use this page.")
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("date_default")
+            visible: Config.isWidgetActive("bluetooth_headphone")
 
             ContentSubsectionLabel {
                 text: Translation.tr("Visual Options")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Half-Size Mode (0.5x1)")
+                checked: Config.options.background.widgets.bluetooth_headphone.halfSize ?? true
+                onCheckedChanged: {
+                    Config.options.background.widgets.bluetooth_headphone.halfSize = checked;
+                }
             }
 
             ConfigSwitch {

@@ -13,14 +13,12 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_typography"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_typography.expressiveColors ?? false
-
     implicitWidth: 240
     implicitHeight: 240
 
-    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color boldTextColor: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
-    readonly property color mutedTextColor: expressive ? ColorUtils.applyAlpha(Appearance.colors.colOnPrimaryContainer, 0.55) : Appearance.colors.colOnSurfaceVariant
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color boldTextColor: WidgetColorScheme.textColorOnBg
+    readonly property color mutedTextColor: WidgetColorScheme.subtextColorOnBg
 
     readonly property var currentData: Weather.data
 

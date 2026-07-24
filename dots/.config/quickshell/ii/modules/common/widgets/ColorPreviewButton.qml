@@ -36,15 +36,22 @@ RippleButton {
     readonly property string resolvedScheme: root.colorScheme === "scheme-auto" ? "scheme-tonal-spot" : root.colorScheme
     property string fullCommand: root.activeWallpaperPath !== "" ? `${root.scriptPath} --path ${root.activeWallpaperPath} --scheme ${root.resolvedScheme} --preview` : ""
 
-    // these are not actually primary, secondary and tertiary, they are just the three colors we get from the script
-    property color primaryColor: "transparent"
-    property color secondaryColor: "transparent"
-    property color tertiaryColor: "transparent"
+    // Primary/secondary/tertiary colors
+    property color previewPrimary: "transparent"
+    property color previewSecondary: "transparent"
+    property color previewTertiary: "transparent"
+    property bool usePreviewColors: false
 
-    property bool loaded: false
+    property color primaryColor: usePreviewColors ? previewPrimary : "transparent"
+    property color secondaryColor: usePreviewColors ? previewSecondary : "transparent"
+    property color tertiaryColor: usePreviewColors ? previewTertiary : "transparent"
+
+    property bool loaded: usePreviewColors
     property bool shouldLoad: false
 
-    readonly property bool toggled: Config.options.appearance.palette.type === root.colorScheme
+    property bool isWidgetScheme: false
+    property bool widgetSchemeToggled: false
+    readonly property bool toggled: isWidgetScheme ? widgetSchemeToggled : (Config.options.appearance.palette.type === root.colorScheme)
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
     colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
@@ -57,6 +64,9 @@ RippleButton {
     implicitHeight: 64
 
     onClicked: {
+        if (isWidgetScheme) {
+            return;
+        }
         if (customTheme) {
             Config.options.appearance.palette.type = root.colorScheme;
             const themePath = FileUtils.trimFileProtocol(root.customThemeFilePath);

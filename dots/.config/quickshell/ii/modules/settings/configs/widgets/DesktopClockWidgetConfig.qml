@@ -136,15 +136,6 @@ ContentPage {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "palette"
-                    text: Translation.tr("Colorful digits")
-                    checked: Config.options.background.widgets.clock.digital.colorful
-                    onCheckedChanged: {
-                        Config.options.background.widgets.clock.digital.colorful = checked;
-                    }
-                }
-
-                ConfigSwitch {
                     buttonIcon: "more_vert"
                     text: Translation.tr("Show colon")
                     checked: Config.options.background.widgets.clock.digital.showColon

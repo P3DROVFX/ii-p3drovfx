@@ -13,14 +13,12 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_circle"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_circle.expressiveColors ?? false
-
     implicitWidth: 240
     implicitHeight: 240
 
-    readonly property color outerCircleColor: Appearance.colors.colPrimary
-    readonly property color cookieBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color textColorOnCookie: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+    readonly property color outerCircleColor: WidgetColorScheme.accentColor
+    readonly property color cookieBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnCookie: WidgetColorScheme.textColorOnBg
 
     StyledDropShadow {
         id: shadowEffect
@@ -67,7 +65,7 @@ AbstractBackgroundWidget {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignHCenter
-                    iconSize: 76
+                    iconSize: 96
                     text: Icons.getWeatherIcon(Weather.data?.wCode) ?? "partly_cloudy_day"
                     color: Appearance.colors.colPrimary
                     fill: 1.0

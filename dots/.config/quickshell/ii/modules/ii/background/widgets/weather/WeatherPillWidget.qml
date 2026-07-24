@@ -12,13 +12,11 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_pill"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_pill.expressiveColors ?? false
-
     implicitWidth: 240
     implicitHeight: 120
 
-    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color textColorOnBg: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
 
     StyledDropShadow {
         id: shadowEffect

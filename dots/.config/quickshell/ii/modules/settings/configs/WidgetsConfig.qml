@@ -31,6 +31,12 @@ Item {
     property var photoWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
         return w.category === "Photo";
     })
+    property var bluetoothWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
+        return w.category === "Devices" || w.category === "Bluetooth";
+    })
+    property var utilityWidgets: (WidgetsRegistry.allWidgets || []).filter(function (w) {
+        return w.category === "Utility";
+    })
 
     property var _previewQueue: []
     property bool _previewStaggerActive: false
@@ -123,6 +129,50 @@ Item {
                         Config.options.background.widgets.lockWidgetPositions = checked;
                     }
                 }
+
+                ContentSubsection {
+                    title: Translation.tr("Widget Color Scheme")
+                    icon: "palette"
+                    Layout.fillWidth: true
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: schemeGrid.implicitHeight + 24
+                        color: Appearance.colors.colLayer1
+                        radius: Appearance.rounding.normal
+                        border.color: Appearance.colors.colLayer0Border
+                        border.width: 1
+
+                        GridLayout {
+                            id: schemeGrid
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            columns: 3
+                            rowSpacing: 8
+                            columnSpacing: 8
+
+                            Repeater {
+                                model: WidgetColorScheme.availableSchemes
+
+                                delegate: ColorPreviewButton {
+                                    Layout.fillWidth: true
+                                    isWidgetScheme: true
+                                    colorScheme: modelData
+                                    colorSchemeDisplayName: WidgetColorScheme.schemes[modelData] ? WidgetColorScheme.schemes[modelData].name : modelData
+                                    widgetSchemeToggled: WidgetColorScheme.currentScheme === modelData
+                                    usePreviewColors: true
+                                    previewPrimary: WidgetColorScheme.getCardBgColor(modelData)
+                                    previewSecondary: WidgetColorScheme.getTextColorOnBg(modelData)
+                                    previewTertiary: WidgetColorScheme.getAccentColor(modelData)
+
+                                    onClicked: {
+                                        Config.options.background.widgets.colorScheme = modelData;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             ContentSubsection {
@@ -195,6 +245,36 @@ Item {
                     spacing: 12
                     Repeater {
                         model: widgetsConfigRoot.photoWidgets
+                        delegate: widgetCardComponent
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Devices & Bluetooth")
+                icon: "earbuds"
+                Layout.fillWidth: true
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Repeater {
+                        model: widgetsConfigRoot.bluetoothWidgets
+                        delegate: widgetCardComponent
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Utility")
+                icon: "build"
+                Layout.fillWidth: true
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    Repeater {
+                        model: widgetsConfigRoot.utilityWidgets
                         delegate: widgetCardComponent
                     }
                 }
@@ -347,9 +427,12 @@ Item {
                                         Layout.fillWidth: true
                                         text: {
                                             var parts = [];
-                                            if (modelData.author)  parts.push("@" + modelData.author);
-                                            if (modelData.version) parts.push("v" + modelData.version);
-                                            if (modelData.isLocal) parts.push(Translation.tr("local"));
+                                            if (modelData.author)
+                                                parts.push("@" + modelData.author);
+                                            if (modelData.version)
+                                                parts.push("v" + modelData.version);
+                                            if (modelData.isLocal)
+                                                parts.push(Translation.tr("local"));
                                             return parts.join(" · ");
                                         }
                                         font.pixelSize: Appearance.font.pixelSize.smaller
@@ -387,13 +470,15 @@ Item {
                                     height: 28
                                     implicitWidth: toggleRow.implicitWidth + 16
                                     radius: Appearance.rounding.full
-                                    color: extCard.isWidgetActive
-                                        ? (toggleBtnMouse.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer)
-                                        : (toggleBtnMouse.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer)
+                                    color: extCard.isWidgetActive ? (toggleBtnMouse.containsMouse ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer) : (toggleBtnMouse.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer)
                                     opacity: extCard.isEnabled ? 1.0 : 0.4
                                     enabled: extCard.isEnabled
 
-                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 100
+                                        }
+                                    }
 
                                     Row {
                                         id: toggleRow
@@ -595,10 +680,26 @@ Item {
 
                                     Repeater {
                                         model: [
-                                            { value: "hide", icon: "visibility_off", tooltip: "Hidden on lock" },
-                                            { value: "keep", icon: "visibility", tooltip: "Show fixed on lock" },
-                                            { value: "center", icon: "center_focus_strong", tooltip: "Center on lock" },
-                                            { value: "lockOnly", icon: "lock", tooltip: "Lock only" }
+                                            {
+                                                value: "hide",
+                                                icon: "visibility_off",
+                                                tooltip: "Hidden on lock"
+                                            },
+                                            {
+                                                value: "keep",
+                                                icon: "visibility",
+                                                tooltip: "Show fixed on lock"
+                                            },
+                                            {
+                                                value: "center",
+                                                icon: "center_focus_strong",
+                                                tooltip: "Center on lock"
+                                            },
+                                            {
+                                                value: "lockOnly",
+                                                icon: "lock",
+                                                tooltip: "Lock only"
+                                            }
                                         ]
 
                                         delegate: Rectangle {
@@ -607,7 +708,11 @@ Item {
                                             radius: Appearance.rounding.small
                                             color: parent.currentBehavior === modelData.value ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerLow
 
-                                            Behavior on color { ColorAnimation { duration: 150 } }
+                                            Behavior on color {
+                                                ColorAnimation {
+                                                    duration: 150
+                                                }
+                                            }
 
                                             MaterialSymbol {
                                                 anchors.centerIn: parent
@@ -664,8 +769,7 @@ Item {
 
             // Auto-fetch on first show
             Component.onCompleted: {
-                if (WidgetExtensionManager.communityWidgets.length === 0
-                        && !WidgetExtensionManager.discoverLoading) {
+                if (WidgetExtensionManager.communityWidgets.length === 0 && !WidgetExtensionManager.discoverLoading) {
                     WidgetExtensionManager.discoverWidgets();
                 }
             }
@@ -677,14 +781,8 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: WidgetExtensionManager.discoverLoading
-                        ? Translation.tr("Fetching community widgets from GitHub…")
-                        : WidgetExtensionManager.discoverError !== ""
-                            ? WidgetExtensionManager.discoverError
-                            : Translation.tr("%1 widget(s) found on GitHub").arg(WidgetExtensionManager.communityWidgets.length)
-                    color: WidgetExtensionManager.discoverError !== ""
-                        ? Appearance.colors.colError
-                        : Appearance.colors.colOnSurfaceVariant
+                    text: WidgetExtensionManager.discoverLoading ? Translation.tr("Fetching community widgets from GitHub…") : WidgetExtensionManager.discoverError !== "" ? WidgetExtensionManager.discoverError : Translation.tr("%1 widget(s) found on GitHub").arg(WidgetExtensionManager.communityWidgets.length)
+                    color: WidgetExtensionManager.discoverError !== "" ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                     font.pixelSize: Appearance.font.pixelSize.small
                     elide: Text.ElideRight
                 }
@@ -750,7 +848,11 @@ Item {
                         color: Appearance.colors.colLayer2Base
                         radius: Appearance.rounding.large
 
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 150
+                            }
+                        }
 
                         ColumnLayout {
                             id: communityCardCol
@@ -823,12 +925,8 @@ Item {
                                 topRightRadius: Appearance.rounding.full
                                 bottomLeftRadius: Appearance.rounding.full
                                 bottomRightRadius: Appearance.rounding.full
-                                colBackground: communityCard.alreadyInstalled
-                                    ? Appearance.colors.colSurfaceContainerLow
-                                    : Appearance.colors.colPrimaryContainer
-                                colBackgroundHover: communityCard.alreadyInstalled
-                                    ? Appearance.colors.colSurfaceContainerLow
-                                    : Appearance.colors.colPrimaryContainerHover
+                                colBackground: communityCard.alreadyInstalled ? Appearance.colors.colSurfaceContainerLow : Appearance.colors.colPrimaryContainer
+                                colBackgroundHover: communityCard.alreadyInstalled ? Appearance.colors.colSurfaceContainerLow : Appearance.colors.colPrimaryContainerHover
                                 colRipple: Appearance.colors.colPrimaryContainerActive
                                 enabled: !communityCard.alreadyInstalled && !WidgetExtensionManager.loading
                                 onClicked: {
@@ -843,23 +941,15 @@ Item {
                                     MaterialSymbol {
                                         text: communityCard.alreadyInstalled ? "check_circle" : "download"
                                         iconSize: 13
-                                        color: communityCard.alreadyInstalled
-                                            ? Appearance.colors.colOnSurfaceVariant
-                                            : Appearance.colors.colOnPrimaryContainer
+                                        color: communityCard.alreadyInstalled ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnPrimaryContainer
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
 
                                     StyledText {
-                                        text: communityCard.alreadyInstalled
-                                            ? Translation.tr("Installed")
-                                            : WidgetExtensionManager.loading
-                                                ? Translation.tr("Installing…")
-                                                : Translation.tr("Install")
+                                        text: communityCard.alreadyInstalled ? Translation.tr("Installed") : WidgetExtensionManager.loading ? Translation.tr("Installing…") : Translation.tr("Install")
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.bold: true
-                                        color: communityCard.alreadyInstalled
-                                            ? Appearance.colors.colOnSurfaceVariant
-                                            : Appearance.colors.colOnPrimaryContainer
+                                        color: communityCard.alreadyInstalled ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnPrimaryContainer
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -876,11 +966,7 @@ Item {
 
                     StyledText {
                         anchors.centerIn: parent
-                        text: WidgetExtensionManager.discoverLoading
-                            ? Translation.tr("Loading…")
-                            : WidgetExtensionManager.discoverError !== ""
-                                ? Translation.tr("Could not load community widgets. Check network and retry.")
-                                : Translation.tr("No community widgets found.")
+                        text: WidgetExtensionManager.discoverLoading ? Translation.tr("Loading…") : WidgetExtensionManager.discoverError !== "" ? Translation.tr("Could not load community widgets. Check network and retry.") : Translation.tr("No community widgets found.")
                         color: Appearance.colors.colOnSurfaceVariant
                         font.pixelSize: Appearance.font.pixelSize.small
                         horizontalAlignment: Text.AlignHCenter
@@ -1351,7 +1437,9 @@ Item {
                     }
                 }
 
-                Item { implicitHeight: 16 }
+                Item {
+                    implicitHeight: 16
+                }
 
                 // Schema-driven controls via ExtensionWidgetSettingsRenderer
                 Flickable {

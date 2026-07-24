@@ -13,8 +13,6 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_forecast"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_forecast.expressiveColors ?? false
-
     implicitWidth: 492
     implicitHeight: 240
 
@@ -22,18 +20,12 @@ AbstractBackgroundWidget {
     readonly property var forecastList: Weather.forecastData
     readonly property string cityLocation: currentData?.city ? currentData.city : ""
 
-    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color textColorOnBg: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
 
-    readonly property color leftPanelBgColor: expressive 
-        ? ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.35)
-        : Appearance.colors.colSurfaceContainerHighest
-
-    readonly property color pillBgColor: expressive
-        ? ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.25)
-        : Appearance.colors.colSurfaceContainerHighest
-
-    readonly property color heroTextColor: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+    readonly property color leftPanelBgColor: WidgetColorScheme.innerShapeColor
+    readonly property color pillBgColor: WidgetColorScheme.pillBgColor
+    readonly property color heroTextColor: WidgetColorScheme.textColorOnBg
 
     StyledDropShadow {
         id: shadowEffect

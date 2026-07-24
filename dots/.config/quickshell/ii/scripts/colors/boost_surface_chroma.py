@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import argparse
 from materialyoucolor.hct import Hct
 from materialyoucolor.utils.color_utils import rgba_from_argb, argb_from_rgb
 
@@ -43,21 +44,26 @@ ACCENT_TOKENS = [
 ]
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: boost_surface_chroma.py <colors.json path> [chroma_factor]", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Boost surface chroma in colors.json')
+    parser.add_argument('json_path', help='Path to colors.json')
+    parser.add_argument('--mode', choices=['dark', 'light'], default='dark', help='Color mode')
+    args = parser.parse_args()
 
-    json_path = sys.argv[1]
-    chroma_factor = float(sys.argv[2]) if len(sys.argv) > 2 else 7.0
+    if args.mode == 'light':
+        surface_factor = 10.0
+        accent_factor = 3.0
+    else:
+        surface_factor = 7.0
+        accent_factor = 2.5
 
-    with open(json_path, 'r') as f:
+    with open(args.json_path, 'r') as f:
         colors = json.load(f)
 
     for token in SURFACE_TOKENS:
         if token in colors:
             try:
                 argb = hex_to_argb(colors[token])
-                boosted = boost_chroma(argb, chroma_factor)
+                boosted = boost_chroma(argb, surface_factor)
                 colors[token] = argb_to_hex(boosted)
             except Exception:
                 pass
@@ -66,12 +72,12 @@ def main():
         if token in colors:
             try:
                 argb = hex_to_argb(colors[token])
-                boosted = boost_chroma(argb, 2.5)
+                boosted = boost_chroma(argb, accent_factor)
                 colors[token] = argb_to_hex(boosted)
             except Exception:
                 pass
 
-    with open(json_path, 'w') as f:
+    with open(args.json_path, 'w') as f:
         json.dump(colors, f, indent=2)
 
 if __name__ == '__main__':

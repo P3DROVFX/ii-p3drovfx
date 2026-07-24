@@ -13,8 +13,6 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_hourly"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_hourly.expressiveColors ?? false
-
     implicitWidth: 492
     implicitHeight: 240
 
@@ -22,11 +20,9 @@ AbstractBackgroundWidget {
     readonly property var forecastList: Weather.forecastData
     readonly property var hourlyList: Weather.hourlyData
 
-    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color textColorOnBg: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
-    readonly property color containerBgColor: expressive 
-        ? ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.20)
-        : Appearance.colors.colSurfaceContainerHighest
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
+    readonly property color containerBgColor: WidgetColorScheme.innerShapeColor
 
     readonly property var filteredHourly: {
         if (!hourlyList || hourlyList.length === 0) return [];

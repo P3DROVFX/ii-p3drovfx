@@ -54,6 +54,17 @@ Scope {
         return list;
     }
 
+    Connections {
+        target: GlobalStates
+        function onCheatsheetOpenChanged() {
+            if (GlobalStates.cheatsheetOpen && !root.activeState) {
+                root.requestOpen();
+            } else if (!GlobalStates.cheatsheetOpen && root.activeState) {
+                root.requestClose();
+            }
+        }
+    }
+
     property bool activeState: false
 
     Timer {

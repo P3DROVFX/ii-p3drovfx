@@ -104,14 +104,6 @@ ContentPage {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "palette"
-                    text: Translation.tr("Expressive Colors")
-                    visible: Config.isWidgetActive("weather_expressive")
-                    checked: Config.options.background.widgets.weather.expressiveColors ?? false
-                    onCheckedChanged: {
-                        Config.options.background.widgets.weather.expressiveColors = checked;
-                    }
-                }
 
                 ConfigSwitch {
                     buttonIcon: "wb_sunny"

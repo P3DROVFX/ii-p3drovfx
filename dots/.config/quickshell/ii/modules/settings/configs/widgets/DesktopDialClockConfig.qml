@@ -75,15 +75,6 @@ ContentPage {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "palette"
-                    text: Translation.tr("Expressive Colors")
-                    checked: Config.options.background.widgets.clock.dial.expressiveColors ?? false
-                    onCheckedChanged: {
-                        Config.options.background.widgets.clock.dial.expressiveColors = checked;
-                    }
-                }
-
-                ConfigSwitch {
                     buttonIcon: "wb_sunny"
                     text: Translation.tr("Enable Shadows")
                     checked: Config.options.background.widgets.clock.dial.enableShadows ?? true

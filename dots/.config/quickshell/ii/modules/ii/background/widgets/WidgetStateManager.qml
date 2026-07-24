@@ -179,6 +179,18 @@ QtObject {
             });
         }
         
+        // Calendar Minimal widget
+        if (Config.options.background.widgets.calendar_minimal && Config.options.background.widgets.calendar_minimal.enable) {
+            migrated.push({
+                "id": "widget_calendar_minimal_migrated",
+                "widgetId": "calendar_minimal",
+                "x": Config.options.background.widgets.calendar_minimal.x ?? 200,
+                "y": Config.options.background.widgets.calendar_minimal.y ?? 200,
+                "placementStrategy": Config.options.background.widgets.calendar_minimal.placementStrategy || "free",
+                "lockBehavior": "hide"
+            });
+        }
+        
         Config.options.background.activeWidgets = migrated;
         Persistent.states.background.widgetsMigrated = true;
         console.log("[Background] Widget migration complete. Migrated widgets count: " + migrated.length);

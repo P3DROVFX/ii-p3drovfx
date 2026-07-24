@@ -541,24 +541,52 @@ AbstractBackgroundWidget {
                             elide: Text.ElideRight
                         }
 
-                        Item {
+                        RowLayout {
                             visible: !root.hasTrack
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            spacing: 16
 
                             MaterialShape {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: height
+                                Layout.preferredWidth: 80
+                                Layout.preferredHeight: 80
+                                Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                                 shapeString: "Cookie9Sided"
-                                color: Appearance.m3colors.m3primaryContainer
+                                color: Appearance.colors.colPrimaryContainer
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
-                                    text: "music_off"
-                                    iconSize: 36
+                                    text: "graphic_eq"
+                                    iconSize: 42
                                     color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 4
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 22
+                                    font.weight: Font.Bold
+                                    font.styleName: "Rounded"
+                                    color: Appearance.colors.colOnSurface
+                                    text: Translation.tr("No media playing")
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    font.family: Appearance.font.family.main
+                                    font.pixelSize: 14
+                                    font.weight: Font.Normal
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    text: Translation.tr("Play music or video to start")
+                                    elide: Text.ElideRight
+                                    opacity: 0.85
                                 }
                             }
                         }
@@ -566,6 +594,7 @@ AbstractBackgroundWidget {
 
                     RippleButton {
                         id: playBtn
+                        visible: root.hasTrack
                         implicitWidth: 64
                         implicitHeight: 64
                         buttonRadius: 22

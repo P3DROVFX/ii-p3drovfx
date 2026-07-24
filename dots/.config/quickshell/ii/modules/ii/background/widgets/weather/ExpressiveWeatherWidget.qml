@@ -14,8 +14,7 @@ AbstractBackgroundWidget {
     configEntryName: "weather"
 
     readonly property string tempText: Weather.data?.temp ?? "20°C"
-    readonly property bool expressive: Config.options.background.widgets.weather.expressiveColors ?? false
-    readonly property color expressiveTempRect: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.35)
+    readonly property color expressiveTempRect: WidgetColorScheme.innerShapeColor
 
     readonly property color solidSurfaceHighest: {
         const c = Qt.color(Appearance.colors.colSurfaceContainerHighest);

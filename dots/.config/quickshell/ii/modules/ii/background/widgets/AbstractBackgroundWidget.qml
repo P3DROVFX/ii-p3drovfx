@@ -162,6 +162,29 @@ AbstractWidget {
     property real targetY: isPreview ? 0 : (forceCenter ? centeringY : ((placementStrategy === "free" || placementStrategy === "draggable") ? Math.max(0, Math.min(widgetInstance !== null ? widgetInstance.y : (configEntry ? configEntry.y : 0), scaledScreenHeight - height)) : calculatedY))
     property bool isDraggingOrSettling: false
 
+    onIsPreviewChanged: {
+        if (isPreview) {
+            root.x = 0;
+            root.y = 0;
+        }
+    }
+
+    Component.onCompleted: {
+        root.animateXPos = false;
+        root.animateYPos = false;
+        if (root.isPreview) {
+            root.x = 0;
+            root.y = 0;
+        } else {
+            root.x = root.targetX;
+            root.y = root.targetY;
+        }
+        Qt.callLater(() => {
+            root.animateXPos = !root.drag.active;
+            root.animateYPos = !root.drag.active;
+        });
+    }
+
     Timer {
         id: staggerTimer
         repeat: false
@@ -254,18 +277,7 @@ AbstractWidget {
         }
     }
 
-    Component.onCompleted: {
-        root.animateXPos = false;
-        root.animateYPos = false;
-        if (!root.isPreview) {
-            root.x = root.targetX;
-            root.y = root.targetY;
-        }
-        Qt.callLater(() => {
-            root.animateXPos = !root.drag.active;
-            root.animateYPos = !root.drag.active;
-        });
-    }
+
 
     visible: opacity > 0
     opacity: {

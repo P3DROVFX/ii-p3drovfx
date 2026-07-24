@@ -129,19 +129,21 @@ if args.scheme == 'scheme-intense':
         'surfaceContainerLow', 'surfaceContainerLowest', 'surfaceDim',
         'surfaceVariant',
     ]
+    _surface_factor = 10.0 if not darkmode else 7.0
     for token in _intense_surface_tokens:
         if token in material_colors:
             argb = hex_to_argb(material_colors[token])
-            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=7.0))
+            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=_surface_factor))
     _intense_accent_tokens = [
         'primary', 'primaryContainer', 'primaryFixed', 'primaryFixedDim',
         'secondary', 'secondaryContainer', 'secondaryFixed', 'secondaryFixedDim',
         'tertiary', 'tertiaryContainer', 'tertiaryFixed', 'tertiaryFixedDim',
     ]
+    _accent_factor = 3.0 if not darkmode else 2.5
     for token in _intense_accent_tokens:
         if token in material_colors:
             argb = hex_to_argb(material_colors[token])
-            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=2.5))
+            material_colors[token] = argb_to_hex(boost_chroma_tone(argb, chroma=_accent_factor))
 
 # Extended material
 if darkmode == True:

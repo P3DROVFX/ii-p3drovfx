@@ -13,15 +13,13 @@ Item {
 
     property real implicitSize: 240
 
-    readonly property bool expressive: Config.ready ? (Config.options.background.widgets.clock.dial.expressiveColors ?? false) : false
-
-    property color colBackground: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.m3colors.m3surfaceContainerHigh
-    property color colBorder: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOutlineVariant
-    property color colTicks: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOutlineVariant
-    property color colNumbers: root.expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
-    property color colHandFill: root.expressive ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
-    property color colHandBorder: root.expressive ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
-    property color colMinuteHandFill: root.expressive ? Appearance.colors.colTertiary : Appearance.colors.colTertiaryContainer
+    property color colBackground: WidgetColorScheme.cardBgColor
+    property color colBorder: WidgetColorScheme.textColorOnBg
+    property color colTicks: WidgetColorScheme.textColorOnBg
+    property color colNumbers: WidgetColorScheme.textColorOnBg
+    property color colHandFill: WidgetColorScheme.accentColor
+    property color colHandBorder: WidgetColorScheme.accentColor
+    property color colMinuteHandFill: WidgetColorScheme.onAccentColor
 
     readonly property list<string> clockNumbers: DateTime.time.split(/[: ]/)
     readonly property int clockHour: parseInt(clockNumbers[0]) % 12

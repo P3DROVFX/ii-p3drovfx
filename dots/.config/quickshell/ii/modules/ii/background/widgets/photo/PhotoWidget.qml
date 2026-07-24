@@ -15,8 +15,7 @@ AbstractBackgroundWidget {
     implicitWidth: 260
     implicitHeight: 260
 
-    readonly property bool expressive: Config.options.background.widgets.photo.expressiveColors ?? false
-    readonly property color expressiveInnerShape: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colPrimaryContainer, 0.25)
+    readonly property color expressiveInnerShape: WidgetColorScheme.innerShapeColor
 
     StyledDropShadow {
         target: outerCircle
@@ -27,7 +26,7 @@ AbstractBackgroundWidget {
         id: outerCircle
         anchors.fill: parent
         anchors.margins: 10
-        color: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
+        color: WidgetColorScheme.cardBgColor
         radius: width / 2
     }
 

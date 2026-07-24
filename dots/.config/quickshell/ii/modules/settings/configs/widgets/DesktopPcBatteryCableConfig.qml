@@ -8,7 +8,7 @@ ContentPage {
     id: root
     forceWidth: false
 
-    signal goBack()
+    signal goBack
 
     RowLayout {
         spacing: 12
@@ -35,7 +35,7 @@ ContentPage {
         }
 
         StyledText {
-            text: Translation.tr("Weather Hourly 2x1 Options")
+            text: Translation.tr("PC Battery Cable Options")
             font.pixelSize: Appearance.font.pixelSize.large
             font.family: Appearance.font.family.title
             color: Appearance.colors.colOnLayer0
@@ -43,52 +43,38 @@ ContentPage {
     }
 
     ContentSection {
-        title: Translation.tr("Weather Settings")
-        icon: "cloud"
+        title: Translation.tr("PC Battery Cable Settings")
+        icon: "power"
 
         Item {
             Layout.fillWidth: true
             implicitHeight: 250
-            visible: !Config.isWidgetActive("weather_hourly")
+            visible: !Config.isWidgetActive("pc_battery_cable")
 
             PagePlaceholder {
                 anchors.fill: parent
-                icon: "cloud_off"
+                icon: "power"
                 shape: MaterialShape.Shape.Circle
-                title: Translation.tr("Weather Hourly widget disabled")
-                description: Translation.tr("Enable the Weather Hourly 2x1 widget in Desktop Widgets settings to use this page.")
+                title: Translation.tr("PC Battery Cable widget disabled")
+                description: Translation.tr("Enable the PC Battery Cable widget in Desktop Widgets settings to use this page.")
             }
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Config.isWidgetActive("weather_hourly")
+            visible: Config.isWidgetActive("pc_battery_cable")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
+            ContentSubsectionLabel {
+                text: Translation.tr("Visual Options")
+            }
 
-                ContentSubsectionLabel {
-                    text: Translation.tr("Visual Options")
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "wb_sunny"
-                    text: Translation.tr("Enable Shadows")
-                    checked: Config.options.background.widgets.enableShadows ?? true
-                    onCheckedChanged: {
-                        Config.options.background.widgets.enableShadows = checked;
-                    }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "blur_on"
-                    text: Translation.tr("Enable Inner Shadows")
-                    checked: Config.options.background.widgets.enableInnerShadow ?? true
-                    onCheckedChanged: {
-                        Config.options.background.widgets.enableInnerShadow = checked;
-                    }
+            ConfigSwitch {
+                buttonIcon: "wb_sunny"
+                text: Translation.tr("Enable Shadows")
+                checked: Config.options.background.widgets.enableShadows ?? true
+                onCheckedChanged: {
+                    Config.options.background.widgets.enableShadows = checked;
                 }
             }
         }

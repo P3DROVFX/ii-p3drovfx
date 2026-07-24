@@ -163,13 +163,15 @@ MouseArea {
             }
         }
 
-        spacing: 12
+        padding: 6
+        spacing: 8
 
         Item {
             id: textWrapper
-            Layout.fillHeight: true
-            Layout.leftMargin: 12
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 8
             implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
+            implicitHeight: textColumn.implicitHeight
             clip: true
 
             Behavior on implicitWidth {
@@ -179,15 +181,15 @@ MouseArea {
                 }
             }
 
-            Column {
+            ColumnLayout {
                 id: textColumn
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 0
+                spacing: 2
                 
                 StyledText {
-                    width: parent.width
+                    Layout.fillWidth: true
                     text: MprisController.activeTrack ? MprisController.activeTrack.title : Translation.tr("Unknown Title")
                     font.weight: Font.Bold
                     font.pixelSize: Appearance.font.pixelSize.small
@@ -196,7 +198,7 @@ MouseArea {
                 }
                 
                 StyledText {
-                    width: parent.width
+                    Layout.fillWidth: true
                     text: MprisController.activeTrack ? MprisController.activeTrack.artist : Translation.tr("Unknown Artist")
                     font.weight: Font.Light
                     font.pixelSize: Appearance.font.pixelSize.smallest
@@ -208,8 +210,8 @@ MouseArea {
         }
 
         Item {
-            implicitWidth: 48
-            implicitHeight: 48
+            implicitWidth: 40
+            implicitHeight: 40
             Layout.alignment: Qt.AlignVCenter
             
             Image {
@@ -240,7 +242,7 @@ MouseArea {
                     anchors.centerIn: parent
                     text: "music_note"
                     color: Appearance.colors.colOnPrimary
-                    iconSize: 22
+                    iconSize: 20
                 }
             }
         }

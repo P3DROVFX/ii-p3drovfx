@@ -582,8 +582,8 @@ done"
     else
         matugen "${matugen_args[@]}"
         if [[ "$type_flag" == "scheme-intense" ]]; then
-            echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json" >&2
-            python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json"
+            echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
+            python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
         fi
         python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"

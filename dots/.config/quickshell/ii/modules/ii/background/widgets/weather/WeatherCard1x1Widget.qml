@@ -12,16 +12,14 @@ AbstractBackgroundWidget {
 
     configEntryName: "weather_card"
 
-    readonly property bool expressive: Config.options.background.widgets.weather_card.expressiveColors ?? false
-
     implicitWidth: 240
     implicitHeight: 240
 
     readonly property var currentData: Weather.data
     readonly property var forecastList: Weather.forecastData
 
-    readonly property color cardBgColor: expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-    readonly property color textColorOnBg: expressive ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+    readonly property color cardBgColor: WidgetColorScheme.cardBgColor
+    readonly property color textColorOnBg: WidgetColorScheme.textColorOnBg
 
     StyledDropShadow {
         id: shadowEffect

@@ -9,6 +9,8 @@ import qs.modules.ii.background.widgets.weather
 import qs.modules.ii.background.widgets.media
 import qs.modules.ii.background.widgets.DateWidget
 import qs.modules.ii.background.widgets.photo
+import qs.modules.ii.background.widgets.bluetooth
+import qs.modules.ii.background.widgets.utility
 
 Item {
     id: delegateRoot
@@ -142,6 +144,17 @@ Item {
     }
 
     Component {
+        id: component_media_cd
+        CdMediaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_weather_default
         WeatherWidget {
             screenWidth: delegateRoot.screenWidth
@@ -252,6 +265,72 @@ Item {
     }
 
     Component {
+        id: component_calendar_minimal
+        CalendarMinimalWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_calendar_grid
+        CalendarGrid2x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_calendar_agenda
+        CalendarAgendaWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_calendar_next_event
+        CalendarNextEventWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_calendar_pill
+        CalendarPillWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_calendar_upcoming_3days
+        CalendarUpcoming3DaysWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
         id: component_photo_default
         PhotoWidget {
             screenWidth: delegateRoot.screenWidth
@@ -262,51 +341,196 @@ Item {
         }
     }
 
+    Component {
+        id: component_bluetooth_battery
+        BluetoothBatteryWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_bluetooth_headphone
+        BluetoothHeadphoneWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_mobile_battery
+        MobileBatteryWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_bluetooth_headphone_cookie
+        BluetoothHeadphoneCookieWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_bluetooth_fill_cards
+        BluetoothFillCardsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_pc_battery_bars
+        PcBatteryBarsWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_pc_battery_cable
+        PcBatteryCableWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_devices_battery_list
+        DevicesBatteryListWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_devices_battery_list_1x1
+        DevicesBatteryList1x1Widget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_bluetooth_earbuds_stem
+        BluetoothEarbudsStemWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_email_inbox
+        EmailWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
+    Component {
+        id: component_email_inbox_2x1
+        EmailWidget2x1 {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+    }
+
     readonly property var widgetComponentMap: ({
-        "clock_cookie": component_clock_cookie,
-        "clock_digital": component_clock_digital,
-        "clock_nagasaki": component_clock_nagasaki,
-        "clock_dial": component_clock_dial,
-        "clock_wearos": component_clock_wearos,
-        "circular_media": component_circular_media,
-        "media_circular": component_media_circular,
-        "media_expressive": component_media_expressive,
-        "media_android": component_media_android,
-        "weather_default": component_weather_default,
-        "weather_expressive": component_weather_expressive,
-        "weather_forecast": component_weather_forecast,
-        "weather_card": component_weather_card,
-        "weather_icon": component_weather_icon,
-        "weather_pill": component_weather_pill,
-        "weather_circle": component_weather_circle,
-        "weather_typography": component_weather_typography,
-        "weather_hourly": component_weather_hourly,
-        "date_default": component_date_default,
-        "photo_default": component_photo_default
-    })
+            "clock_cookie": component_clock_cookie,
+            "clock_digital": component_clock_digital,
+            "clock_nagasaki": component_clock_nagasaki,
+            "clock_dial": component_clock_dial,
+            "clock_wearos": component_clock_wearos,
+            "circular_media": component_circular_media,
+            "media_circular": component_media_circular,
+            "media_expressive": component_media_expressive,
+            "media_android": component_media_android,
+            "media_cd": component_media_cd,
+            "weather_default": component_weather_default,
+            "weather_expressive": component_weather_expressive,
+            "weather_forecast": component_weather_forecast,
+            "weather_card": component_weather_card,
+            "weather_icon": component_weather_icon,
+            "weather_pill": component_weather_pill,
+            "weather_circle": component_weather_circle,
+            "weather_typography": component_weather_typography,
+            "weather_hourly": component_weather_hourly,
+            "date_default": component_date_default,
+            "calendar_minimal": component_calendar_minimal,
+            "calendar_grid": component_calendar_grid,
+            "calendar_agenda": component_calendar_agenda,
+            "calendar_next_event": component_calendar_next_event,
+            "calendar_pill": component_calendar_pill,
+            "calendar_upcoming_3days": component_calendar_upcoming_3days,
+            "photo_default": component_photo_default,
+            "bluetooth_battery": component_bluetooth_battery,
+            "bluetooth_headphone": component_bluetooth_headphone,
+            "mobile_battery": component_mobile_battery,
+            "bluetooth_headphone_cookie": component_bluetooth_headphone_cookie,
+            "bluetooth_fill_cards": component_bluetooth_fill_cards,
+            "pc_battery_bars": component_pc_battery_bars,
+            "pc_battery_cable": component_pc_battery_cable,
+            "devices_battery_list": component_devices_battery_list,
+            "devices_battery_list_1x1": component_devices_battery_list_1x1,
+            "bluetooth_earbuds_stem": component_bluetooth_earbuds_stem,
+            "email_inbox": component_email_inbox,
+            "email_inbox_2x1": component_email_inbox_2x1
+        })
 
     function getExtUrl(extId) {
         let entry = WidgetExtensionManager.installedWidgets[extId];
-        if (!entry) return "";
+        if (!entry)
+            return "";
         let wj = entry.widgetJson || {};
-        let qmlFile = wj.component ||
-            (wj.widget && wj.widget.component ? wj.widget.component : "main.qml");
+        let qmlFile = wj.component || (wj.widget && wj.widget.component ? wj.widget.component : "main.qml");
         return "file://" + entry.installedPath + "/" + qmlFile;
     }
 
     FadeLoader {
         id: widgetLoader
-        shown: !delegateRoot.lockAnimationActive 
-            ? (delegateRoot.lockBehavior !== "lockOnly")
-            : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "lockOnly")
-        
-        source: delegateRoot.widgetId.startsWith("ext:")
-            ? delegateRoot.getExtUrl(delegateRoot.widgetId.substring(4))
-            : ""
+        shown: !delegateRoot.lockAnimationActive ? (delegateRoot.lockBehavior !== "lockOnly") : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "lockOnly")
 
-        sourceComponent: delegateRoot.widgetId.startsWith("ext:")
-            ? null
-            : (delegateRoot.widgetComponentMap[delegateRoot.widgetId] || null)
+        source: delegateRoot.widgetId.startsWith("ext:") ? delegateRoot.getExtUrl(delegateRoot.widgetId.substring(4)) : ""
+
+        sourceComponent: delegateRoot.widgetId.startsWith("ext:") ? null : (delegateRoot.widgetComponentMap[delegateRoot.widgetId] || null)
 
         Binding {
             target: widgetLoader.item
@@ -335,7 +559,8 @@ Item {
             target: widgetLoader.item
             property: "widgetConfig"
             value: {
-                if (!delegateRoot.widgetId.startsWith("ext:")) return null;
+                if (!delegateRoot.widgetId.startsWith("ext:"))
+                    return null;
                 let extId = delegateRoot.widgetId.substring(4);
                 return WidgetExtensionManager.widgetConfigs[extId] || ({});
             }

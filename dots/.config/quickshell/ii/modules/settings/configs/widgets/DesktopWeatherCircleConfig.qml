@@ -74,15 +74,6 @@ ContentPage {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "palette"
-                    text: Translation.tr("Expressive Colors")
-                    checked: Config.options.background.widgets.weather_circle.expressiveColors ?? false
-                    onCheckedChanged: {
-                        Config.options.background.widgets.weather_circle.expressiveColors = checked;
-                    }
-                }
-
-                ConfigSwitch {
                     buttonIcon: "wb_sunny"
                     text: Translation.tr("Enable Shadows")
                     checked: Config.options.background.widgets.enableShadows ?? true
