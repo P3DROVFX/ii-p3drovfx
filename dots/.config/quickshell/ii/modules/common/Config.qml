@@ -1567,7 +1567,13 @@ Singleton {
                 }
                 property JsonObject annotation: JsonObject {
                     property bool useSatty: false
-                    property bool enableInlineEditor: false
+                    property bool enableInlineEditor: true
+                    property real fillOpacity: 0.25
+                    property real highlighterOpacity: 0.4
+                    property int badgeStartNumber: 1
+                    // Pixelation coarseness for the blur tool (source-px divisor):
+                    // bigger = chunkier blocks. Independent of line thickness.
+                    property int blurStrength: 24
                 }
             }
 

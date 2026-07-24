@@ -5,6 +5,7 @@ import qs.modules.common.utils
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
+import qs.modules.ii.regionSelector.annotations
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -57,36 +58,287 @@ PanelWindow {
     property bool inlineEditorActive: false
     property list<var> annotations: []
     property list<var> undoStack: []
-    property string currentTool: "none" // "rect", "arrow", "circle", "star", "pencil", "blur", "none"
+    property list<var> redoStack: []
+    // Hides all editor chrome (temp shapes, handles, crop overlay)
+    // for one frame before grabToImage() so none of it is baked into the PNG.
+    property bool exporting: false
+    // Monotonic source for annotation ids and z-order; reset in clearEditor().
+    property int annotationCounter: 0
+    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
+    property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
     property int currentLineWidth: 2
+    // Pixelation coarseness for the blur tool, decoupled from line thickness.
+    property int blurStrength: Config.options.regionSelector.annotation.blurStrength
+    property bool blurStrengthPopupVisible: false
+    // Fill toggle for closed shapes (rect/circle/star); number badges & the
+    // next badge value; id of the text annotation being edited inline.
+    property bool fillEnabled: false
+    property int nextBadgeNumber: Config.options.regionSelector.annotation.badgeStartNumber
+    property var editingTextId: null
     property real editorRegionX: 0
     property real editorRegionY: 0
     property real editorRegionW: 0
     property real editorRegionH: 0
+    // Ratio between the frozen screenshot's native pixels and logical screen
+    // coords (== display scale). Derived from the actual captured file so
+    // exports stay full-resolution even if HyprlandMonitor.scale is unreliable.
+    // Falls back to monitorScale until the probe loads.
+    readonly property real captureScale: (captureProbe.implicitWidth > 0 && root.screen.width > 0) ? (captureProbe.implicitWidth / root.screen.width) : (root.monitorScale > 0 ? root.monitorScale : 1)
+    Image {
+        id: captureProbe
+        source: root.inlineEditorActive ? root.screenshotPath : ""
+        width: 0
+        height: 0
+        visible: false
+        asynchronous: true
+        cache: true
+    }
     property bool shapePopupVisible: false
     property bool colorPopupVisible: false
     property bool lineWidthPopupVisible: false
+    // Id of the annotation currently selected for editing (move/delete/restyle),
+    // and the one under the cursor while hovering in select mode.
+    property var selectedId: null
+    property var hoveredId: null
+
+    // Picking a drawing tool cancels any active selection.
+    onCurrentToolChanged: {
+        if (root.currentTool !== "none")
+            root.selectedId = null;
+    }
+    // Toolbar color/width edits retarget the selected annotation (blur keeps its
+    // fixed masking style). Each edit is one undo step.
+    onCurrentColorChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+            return;
+        root.pushUndo();
+        root.restyleSelected("stroke", String(root.currentColor));
+        // Keep a filled shape's interior in sync with its outline colour.
+        if (sel.style && sel.style.fill)
+            root.restyleSelected("fill", String(root.currentColor));
+    }
+    onCurrentLineWidthChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+            return;
+        root.pushUndo();
+        root.restyleSelected("strokeWidth", root.currentLineWidth);
+    }
+    // Toggling fill retargets a selected closed shape (rect/circle/star).
+    onFillEnabledChanged: {
+        var sel = root.selectedAnnotation();
+        if (!sel || (sel.type !== "rect" && sel.type !== "circle" && sel.type !== "star"))
+            return;
+        root.pushUndo();
+        root.restyleSelected("fill", root.fillEnabled ? String(root.currentColor) : null);
+    }
 
     function pushUndo() {
-        var clone = root.annotations.slice();
         var newStack = root.undoStack.slice();
-        newStack.push(clone);
+        newStack.push(AnnotationModel.snapshot(root.annotations));
         root.undoStack = newStack;
+        root.redoStack = [];
     }
 
     function undo() {
         if (root.undoStack.length === 0)
             return;
+        var newRedo = root.redoStack.slice();
+        newRedo.push(AnnotationModel.snapshot(root.annotations));
+        root.redoStack = newRedo;
         var newStack = root.undoStack.slice();
         root.annotations = newStack.pop();
         root.undoStack = newStack;
     }
 
+    function redo() {
+        if (root.redoStack.length === 0)
+            return;
+        var newUndo = root.undoStack.slice();
+        newUndo.push(AnnotationModel.snapshot(root.annotations));
+        root.undoStack = newUndo;
+        var newRedo = root.redoStack.slice();
+        root.annotations = newRedo.pop();
+        root.redoStack = newRedo;
+    }
+
+    function selectedAnnotation() {
+        if (root.selectedId === null)
+            return null;
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id === root.selectedId)
+                return root.annotations[i];
+        }
+        return null;
+    }
+
+    function deleteSelected() {
+        if (root.selectedId === null)
+            return;
+        root.pushUndo();
+        var newList = [];
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id !== root.selectedId)
+                newList.push(root.annotations[i]);
+        }
+        root.annotations = newList;
+        root.selectedId = null;
+    }
+
+    // Shift the selected annotation's geometry by (dx, dy) in editor-local space.
+    // Caller owns the undo bookkeeping (one push per drag, not per motion event).
+    function translateSelected(dx, dy) {
+        if (root.selectedId === null)
+            return;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== root.selectedId)
+                continue;
+            var ann = AnnotationModel.clone(newList[i]);
+            var g = ann.geom;
+            switch (ann.type) {
+            case "rect":
+            case "circle":
+            case "star":
+            case "text":
+            case "number":
+                g.x += dx;
+                g.y += dy;
+                break;
+            case "arrow":
+            case "line":
+                g.x1 += dx;
+                g.y1 += dy;
+                g.x2 += dx;
+                g.y2 += dy;
+                break;
+            case "pencil":
+            case "blur":
+            case "gaussblur":
+            case "highlighter":
+                for (var p = 0; p < g.points.length; p++) {
+                    g.points[p].x += dx;
+                    g.points[p].y += dy;
+                }
+                break;
+            }
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+    }
+
+    function restyleSelected(key, value) {
+        if (root.selectedId === null)
+            return;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== root.selectedId)
+                continue;
+            if (newList[i].type === "blur" || newList[i].type === "gaussblur")
+                return;
+            var ann = AnnotationModel.clone(newList[i]);
+            ann.style[key] = value;
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+    }
+
+    // Next badge value derived from the live scene, not a monotonic counter, so
+    // undo/redo and deletions renumber correctly (place 1,2,3 → undo 3 → next is 3).
+    function nextBadgeValue() {
+        var maxN = Config.options.regionSelector.annotation.badgeStartNumber - 1;
+        for (var i = 0; i < root.annotations.length; i++) {
+            var a = root.annotations[i];
+            if (a.type !== "number")
+                continue;
+            var n = (a.geom?.n ?? a.n ?? 0);
+            if (n > maxN)
+                maxN = n;
+        }
+        return maxN + 1;
+    }
+
+    // Resize the capture region from a start-rect + flags (which edges move) and
+    // a pointer delta. Shared by the corner/edge handles and the edge strips so
+    // the min-size + screen clamps stay in one place. Keeps the dotted outline
+    // (dragStart*/dragging*) in sync with the region.
+    function applyResize(flags, startX, startY, startW, startH, dx, dy) {
+        var x1 = startX, y1 = startY, x2 = startX + startW, y2 = startY + startH;
+        if (flags.l)
+            x1 = Math.min(startX + dx, x2 - 20);
+        if (flags.r)
+            x2 = Math.max(startX + startW + dx, x1 + 20);
+        if (flags.t)
+            y1 = Math.min(startY + dy, y2 - 20);
+        if (flags.b)
+            y2 = Math.max(startY + startH + dy, y1 + 20);
+        x1 = Math.max(0, x1);
+        y1 = Math.max(0, y1);
+        x2 = Math.min(root.screen.width, x2);
+        y2 = Math.min(root.screen.height, y2);
+        root.editorRegionX = x1;
+        root.editorRegionY = y1;
+        root.editorRegionW = x2 - x1;
+        root.editorRegionH = y2 - y1;
+        root.dragStartX = x1;
+        root.dragStartY = y1;
+        root.draggingX = x2;
+        root.draggingY = y2;
+    }
+
+    function editingAnnotation() {
+        if (root.editingTextId === null)
+            return null;
+        for (var i = 0; i < root.annotations.length; i++) {
+            if (root.annotations[i].id === root.editingTextId)
+                return root.annotations[i];
+        }
+        return null;
+    }
+
+    // Persist the inline text edit back onto its annotation. An empty string
+    // drops the annotation entirely. Undo was already pushed when it was placed.
+    function commitText(newText, measuredW, measuredH) {
+        if (root.editingTextId === null)
+            return;
+        var id = root.editingTextId;
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id !== id)
+                continue;
+            if (String(newText).trim() === "") {
+                newList.splice(i, 1);
+                if (root.selectedId === id)
+                    root.selectedId = null;
+                break;
+            }
+            var ann = AnnotationModel.clone(newList[i]);
+            ann.geom.text = newText;
+            ann.geom.w = measuredW;
+            ann.geom.h = measuredH;
+            newList[i] = ann;
+            break;
+        }
+        root.annotations = newList;
+        root.editingTextId = null;
+        editorOverlay.forceActiveFocus();
+    }
+
     function clearEditor() {
         root.annotations = [];
         root.undoStack = [];
+        root.redoStack = [];
+        root.annotationCounter = 0;
+        root.selectedId = null;
+        root.hoveredId = null;
+        root.editingTextId = null;
+        root.fillEnabled = false;
+        root.nextBadgeNumber = Config.options.regionSelector.annotation.badgeStartNumber;
         root.currentTool = "none";
         root.inlineEditorActive = false;
         root.phase = RegionSelection.Phase.Select;
@@ -102,23 +354,95 @@ PanelWindow {
         root.editorRegionH = 0;
     }
 
-    function finalizeScreenshot(saveToFile) {
-        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
-        var targetW = Math.round(root.editorRegionW * root.monitorScale);
-        var targetH = Math.round(root.editorRegionH * root.monitorScale);
+    // Grab the annotated selection to a temp PNG at the capture's native
+    // resolution (e.g. 2880x1800 on a 1.5x display), hiding editor chrome for
+    // the single frame of the grab, then hand the path to cb.
+    function grabAnnotated(cb) {
+        var targetW = Math.round(root.editorRegionW * root.captureScale);
+        var targetH = Math.round(root.editorRegionH * root.captureScale);
+        root.exporting = true;
         editorContent.grabToImage(function (result) {
             var tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
             result.saveToFile(tempPath);
+            root.exporting = false;
+            cb(tempPath);
+        }, Qt.size(targetW, targetH));
+    }
+
+    function defaultSaveDir() {
+        return Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
+    }
+    function timestampedName() {
+        return "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
+    }
+
+    function finalizeScreenshot(saveToFile) {
+        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
             if (saveToFile) {
-                var saveDir = Config.options.screenSnip.savePath !== "" ? Config.options.screenSnip.savePath : (Directories.home + "/Pictures/Screenshots");
-                var fileName = "screenshot-" + Qt.formatDateTime(new Date(), "yyyy-MM-dd_hh.mm.ss") + ".png";
-                var fullPath = saveDir + "/" + fileName;
-                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + StringUtils.shellSingleQuoteEscape(saveDir) + "' && mv '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' '" + StringUtils.shellSingleQuoteEscape(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + StringUtils.shellSingleQuoteEscape(fullPath) + "'"]);
+                var saveDir = root.defaultSaveDir();
+                var fullPath = saveDir + "/" + root.timestampedName();
+                Quickshell.execDetached(["bash", "-c", "mkdir -p '" + esc(saveDir) + "' && mv '" + esc(tempPath) + "' '" + esc(fullPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' 'Saved to: " + esc(fullPath) + "'"]);
             } else {
-                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && rm '" + StringUtils.shellSingleQuoteEscape(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
+                Quickshell.execDetached(["bash", "-c", "wl-copy < '" + esc(tempPath) + "' && rm '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot copied' 'Copied to clipboard'"]);
             }
             root.dismiss();
-        }, Qt.size(targetW, targetH));
+        });
+    }
+
+    // Save As... - grab, then pick a path with a zenity dialog.
+    function finalizeScreenshotAs() {
+        ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var saveDir = root.defaultSaveDir();
+            var suggested = saveDir + "/" + root.timestampedName();
+            var cmd = "mkdir -p '" + esc(saveDir) + "'; dest=$(zenity --file-selection --save --confirm-overwrite --filename='" + esc(suggested) + "' 2>/dev/null); if [ -n " + '"$dest"' + " ]; then mv '" + esc(tempPath) + "' " + '"$dest"' + " && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Screenshot saved' " + '"Saved to: $dest"' + "; else rm -f '" + esc(tempPath) + "'; fi";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Extract Text - OCR the grab and copy the recognised text.
+    function extractText() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var cmd = "langs=$(tesseract --list-langs 2>/dev/null | sed 1d | paste -sd+ -); tesseract '" + esc(tempPath) + "' stdout -l " + '"${langs:-eng}"' + " 2>/dev/null | wl-copy && rm -f '" + esc(tempPath) + "' && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Text extracted' 'Copied to clipboard'";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Export - open the grab in the default image application.
+    function exportOpenWith() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            Quickshell.execDetached(["bash", "-c", "xdg-open '" + esc(tempPath) + "'"]);
+            root.dismiss();
+        });
+    }
+
+    // Export - reverse image search (upload, then open in the browser).
+    function exportSearch() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var base = ScreenshotAction.imageSearchEngineBaseUrl;
+            var cmd = "url=$(curl -sF files[]=@'" + esc(tempPath) + "' https://uguu.se/upload | jq -r '.files[0].url'); [ -n " + '"$url"' + " ] && xdg-open '" + esc(base) + "'" + '"$url"' + "; rm -f '" + esc(tempPath) + "'";
+            Quickshell.execDetached(["bash", "-c", cmd]);
+            root.dismiss();
+        });
+    }
+
+    // Export - save to disk and copy the file path to the clipboard.
+    function exportCopyPath() {
+        root.grabAnnotated(function (tempPath) {
+            var esc = StringUtils.shellSingleQuoteEscape;
+            var saveDir = root.defaultSaveDir();
+            var fullPath = saveDir + "/" + root.timestampedName();
+            Quickshell.execDetached(["bash", "-c", "mkdir -p '" + esc(saveDir) + "' && mv '" + esc(tempPath) + "' '" + esc(fullPath) + "' && printf %s '" + esc(fullPath) + "' | wl-copy && notify-send -i camera-photo -t 4000 --hint=boolean:suppress-sound:true 'Path copied' '" + esc(fullPath) + "'"]);
+            root.dismiss();
+        });
     }
 
     // Styles
@@ -493,6 +817,7 @@ PanelWindow {
                 color: root.selectionBorderColor
                 overlayColor: root.overlayColor
                 breathingBorderOnly: root.phase === RegionSelection.Phase.Post
+                showDimensions: !root.inlineEditorActive
             }
         }
 
@@ -600,7 +925,7 @@ PanelWindow {
         Row {
             id: regionSelectionControls
             z: 10
-            visible: root.phase === RegionSelection.Phase.Select
+            visible: root.phase === RegionSelection.Phase.Select && !root.inlineEditorActive
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 bottom: parent.bottom
@@ -654,11 +979,20 @@ PanelWindow {
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 root.dismiss();
+            } else if ((event.modifiers & Qt.ControlModifier) && (event.modifiers & Qt.ShiftModifier) && event.key === Qt.Key_Z) {
+                root.redo();
+                event.accepted = true;
+            } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Y) {
+                root.redo();
+                event.accepted = true;
             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
                 root.undo();
                 event.accepted = true;
             } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_C) {
                 root.finalizeScreenshot(false);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+                root.deleteSelected();
                 event.accepted = true;
             }
         }
@@ -710,6 +1044,18 @@ PanelWindow {
                 id: pencilAnnotationComp
                 PencilAnnotationComponent {}
             }
+            Component {
+                id: lineAnnotationComp
+                LineAnnotationComponent {}
+            }
+            Component {
+                id: textAnnotationComp
+                TextAnnotationComponent {}
+            }
+            Component {
+                id: numberAnnotationComp
+                NumberBadgeAnnotationComponent {}
+            }
 
             // Existing annotations
             Repeater {
@@ -727,22 +1073,50 @@ PanelWindow {
                         case "star":
                             return starAnnotationComp;
                         case "pencil":
+                        case "highlighter":
                             return pencilAnnotationComp;
+                        case "line":
+                            return lineAnnotationComp;
+                        case "text":
+                            return textAnnotationComp;
+                        case "number":
+                            return numberAnnotationComp;
                         default:
                             return null;
                         }
                     }
                     onLoaded: {
-                        if (item) item.annData = modelData;
+                        if (!item)
+                            return;
+                        item.annData = modelData;
+                        if (modelData.type === "pencil" || modelData.type === "highlighter") {
+                            item.canvasWidth = editorContent.width;
+                            item.canvasHeight = editorContent.height;
+                        }
                     }
                 }
             }
 
             // --- Pixelation / Blur Implementation ---
+            // Pixelation coarseness is driven by the dedicated blur-strength
+            // control (independent of line thickness): a bigger divisor = fewer
+            // source pixels sampled = chunkier blocks.
             Canvas {
                 id: smallCanvas
-                width: Math.max(1, Math.round(editorContent.width / 24))
-                height: Math.max(1, Math.round(editorContent.height / 24))
+                readonly property int blurDivisor: Math.max(4, root.blurStrength)
+                width: Math.max(1, Math.round(editorContent.width / blurDivisor))
+                height: Math.max(1, Math.round(editorContent.height / blurDivisor))
+                visible: false
+                onWidthChanged: blurCanvas.requestPaint()
+                onHeightChanged: blurCanvas.requestPaint()
+            }
+
+            // Isolated scratch buffer. source-in clobbers whatever is already
+            // on a canvas, so the pixelate and blur groups are each rendered
+            // here in turn and then drawn back over the visible blur canvas.
+            Canvas {
+                id: blurGroupCanvas
+                anchors.fill: parent
                 visible: false
             }
 
@@ -752,74 +1126,82 @@ PanelWindow {
                 z: 1
                 visible: root.inlineEditorActive
 
+                // Rasterise one group's masking strokes, keep the processed
+                // image only under them (source-in), then composite the result
+                // over the visible canvas. smooth=false -> blocky pixelation;
+                // smooth=true -> soft blur (bilinear upscale of the same
+                // downscaled screenshot).
+                function paintMaskedGroup(anns, smooth) {
+                    if (!anns || anns.length === 0)
+                        return;
+                    var gctx = blurGroupCanvas.getContext("2d");
+                    gctx.clearRect(0, 0, width, height);
+                    gctx.save();
+                    gctx.lineCap = "round";
+                    gctx.lineJoin = "round";
+                    for (var j = 0; j < anns.length; j++) {
+                        var ann = anns[j];
+                        var pts = (ann.geom ?? ann).points;
+                        if (!pts || pts.length === 0)
+                            continue;
+                        gctx.lineWidth = (ann.style ?? ann).strokeWidth ?? ann.lineWidth;
+                        gctx.strokeStyle = "rgba(0,0,0,1.0)";
+                        gctx.fillStyle = "rgba(0,0,0,1.0)";
+                        gctx.beginPath();
+                        gctx.moveTo(pts[0].x, pts[0].y);
+                        for (var k = 1; k < pts.length - 2; k++) {
+                            var xc = (pts[k].x + pts[k + 1].x) / 2;
+                            var yc = (pts[k].y + pts[k + 1].y) / 2;
+                            gctx.quadraticCurveTo(pts[k].x, pts[k].y, xc, yc);
+                        }
+                        if (pts.length > 2) {
+                            gctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, pts[pts.length - 1].x, pts[pts.length - 1].y);
+                        } else if (pts.length === 2) {
+                            gctx.lineTo(pts[1].x, pts[1].y);
+                        } else if (pts.length === 1) {
+                            gctx.arc(pts[0].x, pts[0].y, ((ann.style ?? ann).strokeWidth ?? ann.lineWidth) / 2, 0, 2 * Math.PI);
+                            gctx.fill();
+                            continue;
+                        }
+                        gctx.stroke();
+                    }
+                    gctx.globalCompositeOperation = "source-in";
+                    gctx.imageSmoothingEnabled = smooth;
+                    gctx.drawImage(smallCanvas, 0, 0, smallCanvas.width, smallCanvas.height, 0, 0, width, height);
+                    gctx.restore();
+                    getContext("2d").drawImage(blurGroupCanvas, 0, 0);
+                }
+
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.clearRect(0, 0, width, height);
 
-                    var blurAnns = [];
+                    var pixelateAnns = [];
+                    var gaussAnns = [];
                     for (var i = 0; i < root.annotations.length; i++) {
-                        if (root.annotations[i].type === "blur") {
-                            blurAnns.push(root.annotations[i]);
-                        }
+                        var t = root.annotations[i].type;
+                        if (t === "blur")
+                            pixelateAnns.push(root.annotations[i]);
+                        else if (t === "gaussblur")
+                            gaussAnns.push(root.annotations[i]);
                     }
-                    if (drawingArea.tempAnnotation && drawingArea.tempAnnotation.type === "blur") {
-                        blurAnns.push(drawingArea.tempAnnotation);
-                    }
+                    var temp = drawingArea.tempAnnotation;
+                    if (temp && temp.type === "blur")
+                        pixelateAnns.push(temp);
+                    else if (temp && temp.type === "gaussblur")
+                        gaussAnns.push(temp);
 
-                    if (blurAnns.length === 0)
+                    if (pixelateAnns.length === 0 && gaussAnns.length === 0)
                         return;
 
-                    ctx.save();
-
-                    // 1. Draw all masking strokes as standard solid drawings first
-                    ctx.lineCap = "round";
-                    ctx.lineJoin = "round";
-
-                    for (var j = 0; j < blurAnns.length; j++) {
-                        var ann = blurAnns[j];
-                        var pts = ann.points;
-                        if (!pts || pts.length === 0)
-                            continue;
-
-                        ctx.lineWidth = ann.lineWidth;
-                        ctx.strokeStyle = "rgba(0,0,0,1.0)";
-                        ctx.fillStyle = "rgba(0,0,0,1.0)";
-
-                        ctx.beginPath();
-                        ctx.moveTo(pts[0].x, pts[0].y);
-                        for (var k = 1; k < pts.length - 2; k++) {
-                            var xc = (pts[k].x + pts[k + 1].x) / 2;
-                            var yc = (pts[k].y + pts[k + 1].y) / 2;
-                            ctx.quadraticCurveTo(pts[k].x, pts[k].y, xc, yc);
-                        }
-                        if (pts.length > 2) {
-                            ctx.quadraticCurveTo(pts[pts.length - 2].x, pts[pts.length - 2].y, pts[pts.length - 1].x, pts[pts.length - 1].y);
-                        } else if (pts.length === 2) {
-                            ctx.lineTo(pts[1].x, pts[1].y);
-                        } else if (pts.length === 1) {
-                            // Support single dot on single click
-                            ctx.arc(pts[0].x, pts[0].y, ann.lineWidth / 2, 0, 2 * Math.PI);
-                            ctx.fill();
-                            continue;
-                        }
-                        ctx.stroke();
-                    }
-
-                    // 2. Switch composite operation to source-in (draw image only where strokes exist)
-                    ctx.globalCompositeOperation = "source-in";
-
-                    // 3. Draw the screenshot portion downscaled onto the small canvas
+                    // Downscaled screenshot region, shared by both groups.
                     var smallCtx = smallCanvas.getContext("2d");
                     smallCtx.clearRect(0, 0, smallCanvas.width, smallCanvas.height);
                     smallCtx.drawImage(editorImage, root.editorRegionX, root.editorRegionY, width, height, 0, 0, smallCanvas.width, smallCanvas.height);
 
-                    // 4. Draw the pixelated, upscaled image to fill the main canvas (smoothing disabled)
-                    ctx.imageSmoothingEnabled = false;
-                    ctx.drawImage(smallCanvas, 0, 0, smallCanvas.width, smallCanvas.height, 0, 0, width, height);
-
-                    ctx.restore();
+                    paintMaskedGroup(pixelateAnns, false);
+                    paintMaskedGroup(gaussAnns, true);
                 }
-
                 Connections {
                     target: root
                     function onAnnotationsChanged() {
@@ -847,8 +1229,16 @@ PanelWindow {
             MouseArea {
                 id: drawingArea
                 anchors.fill: parent
-                enabled: root.currentTool !== "none"
-                cursorShape: (root.currentTool === "pencil" || root.currentTool === "blur") ? Qt.CrossCursor : Qt.ArrowCursor
+                // Disabled while editing text so canvas clicks don't place a
+                // second text box (the commit catcher handles those clicks).
+                enabled: root.currentTool !== "none" && root.currentTool !== "recrop" && root.editingTextId === null
+                cursorShape: {
+                    if (root.currentTool === "text")
+                        return Qt.IBeamCursor;
+                    if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter")
+                        return Qt.CrossCursor;
+                    return Qt.ArrowCursor;
+                }
                 property real startX: 0
                 property real startY: 0
                 property var tempAnnotation: null
@@ -857,210 +1247,222 @@ PanelWindow {
                     startX = mouse.x;
                     startY = mouse.y;
                     root.pushUndo();
+                    var id = "a" + root.annotationCounter;
+                    var z = root.annotationCounter;
+                    root.annotationCounter += 1;
+                    var style = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth);
+                    if (root.fillEnabled)
+                        style.fill = String(root.currentColor);
+                    if (root.currentTool === "text") {
+                        // Place an empty text box and enter inline edit mode.
+                        var tann = AnnotationModel.make("text", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "w": 0,
+                            "h": 0,
+                            "text": ""
+                        }, style);
+                        var tl = root.annotations.slice();
+                        tl.push(tann);
+                        root.annotations = tl;
+                        root.selectedId = id;
+                        root.editingTextId = id;
+                        tempAnnotation = null;
+                        return;
+                    } else if (root.currentTool === "number") {
+                        // Number badges are placed on click, not dragged.
+                        var badgeR = 14 + root.currentLineWidth * 2;
+                        var badge = AnnotationModel.make("number", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "r": badgeR,
+                            "n": root.nextBadgeValue()
+                        }, style);
+                        var bl = root.annotations.slice();
+                        bl.push(badge);
+                        root.annotations = bl;
+                        tempAnnotation = null;
+                        return;
+                    }
                     if (root.currentTool === "rect") {
-                        tempAnnotation = {
-                            type: "rect",
-                            x: startX,
-                            y: startY,
-                            width: 0,
-                            height: 0,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make("rect", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "w": 0,
+                            "h": 0
+                        }, style);
                     } else if (root.currentTool === "arrow") {
-                        tempAnnotation = {
-                            type: "arrow",
-                            x1: startX,
-                            y1: startY,
-                            x2: startX,
-                            y2: startY,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make("arrow", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": startX,
+                            "y2": startY
+                        }, style);
+                    } else if (root.currentTool === "line") {
+                        tempAnnotation = AnnotationModel.make("line", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": startX,
+                            "y2": startY
+                        }, style);
+                    } else if (root.currentTool === "highlighter") {
+                        var hlStyle = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth * 4);
+                        hlStyle.opacity = Config.options.regionSelector.annotation.highlighterOpacity;
+                        tempAnnotation = AnnotationModel.make("highlighter", id, z, {
+                            "points": [
+                                {
+                                    "x": startX,
+                                    "y": startY
+                                }
+                            ]
+                        }, hlStyle);
                     } else if (root.currentTool === "circle") {
-                        tempAnnotation = {
-                            type: "circle",
-                            x: startX,
-                            y: startY,
-                            radius: 0,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make("circle", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "r": 0
+                        }, style);
                     } else if (root.currentTool === "star") {
-                        tempAnnotation = {
-                            type: "star",
-                            x: startX,
-                            y: startY,
-                            outerRadius: 0,
-                            innerRadius: 0,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make("star", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "outerR": 0,
+                            "innerR": 0
+                        }, style);
                     } else if (root.currentTool === "pencil") {
-                        tempAnnotation = {
-                            type: "pencil",
-                            points: [
+                        tempAnnotation = AnnotationModel.make("pencil", id, z, {
+                            "points": [
                                 {
-                                    x: startX,
-                                    y: startY
+                                    "x": startX,
+                                    "y": startY
                                 }
-                            ],
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
-                    } else if (root.currentTool === "blur") {
-                        tempAnnotation = {
-                            type: "blur",
-                            points: [
+                            ]
+                        }, style);
+                    } else if (root.currentTool === "blur" || root.currentTool === "gaussblur") {
+                        var blurStyle = AnnotationModel.defaultStyle("#ffffff", root.currentLineWidth * 10);
+                        tempAnnotation = AnnotationModel.make(root.currentTool, id, z, {
+                            "points": [
                                 {
-                                    x: startX,
-                                    y: startY
+                                    "x": startX,
+                                    "y": startY
                                 }
-                            ],
-                            color: "#ffffff", // solid mask color
-                            lineWidth: root.currentLineWidth * 10 // large stroke
-                        };
+                            ]
+                        }, blurStyle);
                     }
                 }
                 onPositionChanged: mouse => {
                     if (!tempAnnotation)
                         return;
+                    var id = tempAnnotation.id;
+                    var z = tempAnnotation.z;
+                    var style = tempAnnotation.style;
                     if (root.currentTool === "rect") {
-                        var newRect = {
-                            type: "rect",
-                            x: Math.min(startX, mouse.x),
-                            y: Math.min(startY, mouse.y),
-                            width: Math.abs(mouse.x - startX),
-                            height: Math.abs(mouse.y - startY),
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
-                        tempAnnotation = newRect;
+                        tempAnnotation = AnnotationModel.make("rect", id, z, {
+                            "x": Math.min(startX, mouse.x),
+                            "y": Math.min(startY, mouse.y),
+                            "w": Math.abs(mouse.x - startX),
+                            "h": Math.abs(mouse.y - startY)
+                        }, style);
                     } else if (root.currentTool === "arrow") {
-                        var newArrow = {
-                            type: "arrow",
-                            x1: startX,
-                            y1: startY,
-                            x2: mouse.x,
-                            y2: mouse.y,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
-                        tempAnnotation = newArrow;
+                        tempAnnotation = AnnotationModel.make("arrow", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": mouse.x,
+                            "y2": mouse.y
+                        }, style);
+                    } else if (root.currentTool === "line") {
+                        tempAnnotation = AnnotationModel.make("line", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": mouse.x,
+                            "y2": mouse.y
+                        }, style);
                     } else if (root.currentTool === "circle") {
                         var dx = mouse.x - startX;
                         var dy = mouse.y - startY;
                         var radius = Math.sqrt(dx * dx + dy * dy);
-                        tempAnnotation = {
-                            type: "circle",
-                            x: startX,
-                            y: startY,
-                            radius: radius,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make("circle", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "r": radius
+                        }, style);
                     } else if (root.currentTool === "star") {
-                        var dx = mouse.x - startX;
-                        var dy = mouse.y - startY;
-                        var outerRadius = Math.sqrt(dx * dx + dy * dy);
+                        var dxs = mouse.x - startX;
+                        var dys = mouse.y - startY;
+                        var outerRadius = Math.sqrt(dxs * dxs + dys * dys);
                         var innerRadius = outerRadius * 0.4;
-                        tempAnnotation = {
-                            type: "star",
-                            x: startX,
-                            y: startY,
-                            outerRadius: outerRadius,
-                            innerRadius: innerRadius,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
-                    } else if (root.currentTool === "pencil") {
-                        var lastPoint = tempAnnotation.points[tempAnnotation.points.length - 1];
+                        tempAnnotation = AnnotationModel.make("star", id, z, {
+                            "x": startX,
+                            "y": startY,
+                            "outerR": outerRadius,
+                            "innerR": innerRadius
+                        }, style);
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                        var pts = tempAnnotation.geom.points;
+                        var lastPoint = pts[pts.length - 1];
                         var dxP = mouse.x - lastPoint.x;
                         var dyP = mouse.y - lastPoint.y;
                         if (dxP * dxP + dyP * dyP < 16)
                             return;
-                        var newPoints = tempAnnotation.points.slice();
+                        var newPoints = pts.slice();
                         newPoints.push({
-                            x: mouse.x,
-                            y: mouse.y
+                            "x": mouse.x,
+                            "y": mouse.y
                         });
-                        tempAnnotation = {
-                            type: "pencil",
-                            points: newPoints,
-                            color: root.currentColor,
-                            lineWidth: root.currentLineWidth
-                        };
-                    } else if (root.currentTool === "blur") {
-                        var lastPointBlur = tempAnnotation.points[tempAnnotation.points.length - 1];
-                        var dxB = mouse.x - lastPointBlur.x;
-                        var dyB = mouse.y - lastPointBlur.y;
-                        if (dxB * dxB + dyB * dyB < 16)
-                            return;
-                        var newPointsBlur = tempAnnotation.points.slice();
-                        newPointsBlur.push({
-                            x: mouse.x,
-                            y: mouse.y
-                        });
-                        tempAnnotation = {
-                            type: "blur",
-                            points: newPointsBlur,
-                            color: "#ffffff",
-                            lineWidth: tempAnnotation.lineWidth
-                        };
+                        tempAnnotation = AnnotationModel.make(tempAnnotation.type, id, z, {
+                            "points": newPoints
+                        }, style);
                     }
                 }
                 onReleased: mouse => {
                     if (!tempAnnotation)
                         return;
+                    var g = tempAnnotation.geom;
                     if (root.currentTool === "rect") {
-                        if (tempAnnotation.width < 2 || tempAnnotation.height < 2) {
+                        if (g.w < 2 || g.h < 2) {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "arrow") {
-                        if (Math.abs(tempAnnotation.x2 - tempAnnotation.x1) < 2 && Math.abs(tempAnnotation.y2 - tempAnnotation.y1) < 2) {
+                    } else if (root.currentTool === "arrow" || root.currentTool === "line") {
+                        if (Math.abs(g.x2 - g.x1) < 2 && Math.abs(g.y2 - g.y1) < 2) {
                             tempAnnotation = null;
                             return;
                         }
                     } else if (root.currentTool === "circle") {
-                        if (tempAnnotation.radius < 2) {
+                        if (g.r < 2) {
                             tempAnnotation = null;
                             return;
                         }
                     } else if (root.currentTool === "star") {
-                        if (tempAnnotation.outerRadius < 5) {
+                        if (g.outerR < 5) {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "pencil" || root.currentTool === "blur") {
-                        if (tempAnnotation.points.length < 2) {
+                    } else if (root.currentTool === "pencil" || root.currentTool === "blur" || root.currentTool === "gaussblur" || root.currentTool === "highlighter") {
+                        if (g.points.length < 2) {
                             tempAnnotation = null;
                             return;
                         }
                     }
                     var newList = root.annotations.slice();
-                    var clone = Object.assign({}, tempAnnotation);
-                    newList.push(clone);
+                    newList.push(AnnotationModel.clone(tempAnnotation));
                     root.annotations = newList;
+                    // Don't auto-select the freshly drawn shape; the user picks
+                    // the Select tool explicitly to edit it.
+                    root.selectedId = null;
                     tempAnnotation = null;
                 }
 
                 // Temp annotation while drawing
-                Rectangle {
-                    id: tempRect
-                    visible: drawingArea.tempAnnotation !== null && drawingArea.tempAnnotation?.type === "rect"
-                    x: drawingArea.tempAnnotation?.x ?? 0
-                    y: drawingArea.tempAnnotation?.y ?? 0
-                    width: drawingArea.tempAnnotation?.width ?? 0
-                    height: drawingArea.tempAnnotation?.height ?? 0
-                    color: "transparent"
-                    border.color: drawingArea.tempAnnotation?.color ?? "#ff3b30"
-                    border.width: drawingArea.tempAnnotation?.lineWidth ?? 2
-                    radius: 0
+                RectAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "rect" ? drawingArea.tempAnnotation : null
                 }
 
                 ArrowAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "arrow" ? drawingArea.tempAnnotation : null
+                }
+                LineAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "line" ? drawingArea.tempAnnotation : null
                 }
                 CircleAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "circle" ? drawingArea.tempAnnotation : null
@@ -1070,25 +1472,80 @@ PanelWindow {
                 }
                 PencilAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "pencil" ? drawingArea.tempAnnotation : null
+                    canvasWidth: editorContent.width
+                    canvasHeight: editorContent.height
+                }
+                PencilAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "highlighter" ? drawingArea.tempAnnotation : null
+                    canvasWidth: editorContent.width
+                    canvasHeight: editorContent.height
                 }
             }
 
+            // Select / move mode (active when no drawing tool is chosen).
+            // Pressing on an annotation selects and drags it; pressing empty
+            // canvas deselects and moves the whole capture region instead.
             MouseArea {
                 id: moveArea
                 anchors.fill: parent
                 enabled: root.currentTool === "none"
-                cursorShape: enabled ? Qt.SizeAllCursor : Qt.ArrowCursor
+                hoverEnabled: true
+                cursorShape: {
+                    if (!enabled)
+                        return Qt.ArrowCursor;
+                    if (movingAnnotation)
+                        return Qt.ClosedHandCursor;
+                    if (root.hoveredId !== null)
+                        return Qt.OpenHandCursor;
+                    return Qt.SizeAllCursor;
+                }
                 property real startMouseX: 0
                 property real startMouseY: 0
+                property real lastX: 0
+                property real lastY: 0
+                property bool movingAnnotation: false
+                property bool movedThisDrag: false
 
                 onPressed: mouse => {
+                    var hit = AnnotationModel.annotationAt(root.annotations, mouse.x, mouse.y, 6);
+                    if (hit) {
+                        root.selectedId = hit.id;
+                        movingAnnotation = true;
+                        movedThisDrag = false;
+                        lastX = mouse.x;
+                        lastY = mouse.y;
+                        return;
+                    }
+                    root.selectedId = null;
+                    movingAnnotation = false;
                     startMouseX = mouse.x;
                     startMouseY = mouse.y;
                 }
 
+                onReleased: {
+                    movingAnnotation = false;
+                }
+
                 onPositionChanged: mouse => {
-                    if (!pressed)
+                    if (!pressed) {
+                        var h = AnnotationModel.annotationAt(root.annotations, mouse.x, mouse.y, 6);
+                        root.hoveredId = h ? h.id : null;
                         return;
+                    }
+
+                    // Moving the selected annotation
+                    if (movingAnnotation) {
+                        if (!movedThisDrag) {
+                            root.pushUndo();
+                            movedThisDrag = true;
+                        }
+                        root.translateSelected(mouse.x - lastX, mouse.y - lastY);
+                        lastX = mouse.x;
+                        lastY = mouse.y;
+                        return;
+                    }
+
+                    // Moving the whole capture region
                     var deltaX = mouse.x - startMouseX;
                     var deltaY = mouse.y - startMouseY;
 
@@ -1107,74 +1564,612 @@ PanelWindow {
                     root.draggingY = newY + root.editorRegionH;
                 }
             }
-        }
 
-        // Resize handle
-        Item {
-            id: resizeHandle
-            z: 9999
-            x: root.editorRegionX + root.editorRegionW
-            y: root.editorRegionY + root.editorRegionH
+            // Selection outline + delete affordance for the selected annotation.
+            // Sits above the move area so its chip wins the click; hidden during
+            // export so it never bakes into the PNG.
+            Item {
+                id: selectionOverlay
+                z: 6
+                readonly property var sel: root.selectedAnnotation()
+                readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
+                readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
+                visible: sel !== null && !root.exporting
+                x: bb ? bb.x - pad : 0
+                y: bb ? bb.y - pad : 0
+                width: bb ? bb.w + pad * 2 : 0
+                height: bb ? bb.h + pad * 2 : 0
 
-            property int margins: 8
-            width: resizeContent.implicitWidth + margins * 2
-            height: resizeContent.implicitHeight + margins * 2
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    radius: 4
+                    border.width: 1.5
+                    border.color: Appearance.colors.colPrimary
+                }
 
-            Rectangle {
-                id: resizeContent
-                anchors.centerIn: parent
-                implicitHeight: 38
-                implicitWidth: implicitHeight
-                topLeftRadius: 6
-                bottomLeftRadius: implicitHeight - topLeftRadius
-                bottomRightRadius: bottomLeftRadius
-                topRightRadius: bottomLeftRadius
-                color: Appearance.colors.colPrimary
+                Rectangle {
+                    id: deleteChip
+                    width: 22
+                    height: 22
+                    radius: width / 2
+                    color: Appearance.colors.colPrimary
+                    anchors.left: parent.right
+                    anchors.bottom: parent.top
+                    anchors.leftMargin: -width / 2
+                    anchors.bottomMargin: -height / 2
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "open_in_full"
-                    iconSize: 22
-                    color: Appearance.colors.colOnPrimary
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: 16
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.deleteSelected()
+                    }
                 }
             }
 
+            // Catches clicks outside the text box to commit the current edit.
             MouseArea {
+                z: 7
                 anchors.fill: parent
-                cursorShape: Qt.SizeFDiagCursor
-                preventStealing: true
+                enabled: root.editingTextId !== null
+                onPressed: root.commitText(textEditor.text, textEditor.contentWidth, textEditor.contentHeight)
+            }
 
-                property real startMouseX: 0
-                property real startMouseY: 0
+            // Inline text editor. Reuses one TextInput for whichever text
+            // annotation is being edited; keeps focus so keystrokes don't leak
+            // to the editorOverlay shortcuts (Esc/Delete/Ctrl+Z).
+            TextInput {
+                id: textEditor
+                z: 8
+                readonly property var ann: root.editingAnnotation()
+                visible: root.editingTextId !== null && ann !== null
+                x: ann ? (ann.geom?.x ?? 0) : 0
+                y: ann ? (ann.geom?.y ?? 0) : 0
+                color: ann ? (ann.style?.stroke ?? "#ff3b30") : "#ff3b30"
+                font.pixelSize: ann ? (ann.style?.fontPx ?? 20) : 20
+                selectByMouse: true
+                cursorVisible: true
 
-                onPressed: mouse => {
-                    startMouseX = mouse.x;
-                    startMouseY = mouse.y;
+                onAccepted: root.commitText(text, contentWidth, contentHeight)
+                onActiveFocusChanged: {
+                    if (!activeFocus && root.editingTextId !== null)
+                        root.commitText(text, contentWidth, contentHeight);
+                }
+                Keys.onPressed: event => {
+                    // Swallow Esc so it commits the text instead of dismissing
+                    // the whole selector.
+                    if (event.key === Qt.Key_Escape) {
+                        root.commitText(text, contentWidth, contentHeight);
+                        event.accepted = true;
+                    }
+                }
+                Connections {
+                    target: root
+                    function onEditingTextIdChanged() {
+                        if (root.editingTextId === null)
+                            return;
+                        var a = root.editingAnnotation();
+                        textEditor.text = a ? (a.geom?.text ?? "") : "";
+                        textEditor.forceActiveFocus();
+                        textEditor.selectAll();
+                    }
+                }
+            }
+        }
+
+        // 8-handle region resize: 4 corners + 4 edge midpoints. Each grip's
+        // (ax, ay) is its normalised anchor on the region box; l/t/r/b say which
+        // edges it moves. Hidden during export and inline text editing.
+        Repeater {
+            model: [
+                {
+                    "ax": 0,
+                    "ay": 0,
+                    "cur": Qt.SizeFDiagCursor,
+                    "l": true,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "ax": 0.5,
+                    "ay": 0,
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 0,
+                    "cur": Qt.SizeBDiagCursor,
+                    "l": false,
+                    "t": true,
+                    "r": true,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 0.5,
+                    "cur": Qt.SizeHorCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": false
+                },
+                {
+                    "ax": 1,
+                    "ay": 1,
+                    "cur": Qt.SizeFDiagCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": true
+                },
+                {
+                    "ax": 0.5,
+                    "ay": 1,
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "ax": 0,
+                    "ay": 1,
+                    "cur": Qt.SizeBDiagCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "ax": 0,
+                    "ay": 0.5,
+                    "cur": Qt.SizeHorCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": false
+                }
+            ]
+
+            delegate: Item {
+                required property var modelData
+
+                readonly property int hitSize: 26
+                readonly property int gripSize: 12
+                // The dashed selection border is drawn 6px outside the true
+                // region (borderWidth 1 + 5, see RectCornersSelectionDetails);
+                // centre the grips on that visible line, not the raw edge.
+                readonly property real outset: 6
+                z: 9999
+                visible: !root.exporting && root.editingTextId === null && root.currentTool !== "recrop"
+                width: hitSize
+                height: hitSize
+                x: (root.editorRegionX - outset) + (root.editorRegionW + outset * 2) * modelData.ax - width / 2
+                y: (root.editorRegionY - outset) + (root.editorRegionH + outset * 2) * modelData.ay - height / 2
+
+                // Small square grip (Spectacle-style) rather than a round dot.
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.gripSize
+                    height: parent.gripSize
+                    radius: 2
+                    color: Appearance.colors.colPrimary
+                    border.width: 1
+                    border.color: Appearance.colors.colOnPrimary
                 }
 
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: modelData.cur
+                    preventStealing: true
+
+                    property real startPx: 0
+                    property real startPy: 0
+                    property real startX: 0
+                    property real startY: 0
+                    property real startW: 0
+                    property real startH: 0
+
+                    onPressed: mouse => {
+                        var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                        startPx = p.x;
+                        startPy = p.y;
+                        startX = root.editorRegionX;
+                        startY = root.editorRegionY;
+                        startW = root.editorRegionW;
+                        startH = root.editorRegionH;
+                    }
+
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return;
+                        var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                        root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
+                    }
+                }
+            }
+        }
+
+        // Full-length edge grips: let you drag any whole edge, not just the
+        // midpoint handle (Spectacle behaviour). Sit just below the corner
+        // handles in z so corners win their overlap; inset from the corners so
+        // the two don't fight.
+        Repeater {
+            model: [
+                {
+                    "side": "t",
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": true,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "side": "b",
+                    "cur": Qt.SizeVerCursor,
+                    "l": false,
+                    "t": false,
+                    "r": false,
+                    "b": true
+                },
+                {
+                    "side": "l",
+                    "cur": Qt.SizeHorCursor,
+                    "l": true,
+                    "t": false,
+                    "r": false,
+                    "b": false
+                },
+                {
+                    "side": "r",
+                    "cur": Qt.SizeHorCursor,
+                    "l": false,
+                    "t": false,
+                    "r": true,
+                    "b": false
+                }
+            ]
+
+            delegate: MouseArea {
+                required property var modelData
+
+                readonly property real outset: 6
+                readonly property int thickness: 14
+                readonly property bool horizontal: modelData.side === "t" || modelData.side === "b"
+                z: 9998
+                visible: !root.exporting && root.editingTextId === null && root.currentTool !== "recrop"
+                cursorShape: modelData.cur
+                preventStealing: true
+                x: {
+                    if (modelData.side === "l")
+                        return root.editorRegionX - outset - thickness / 2;
+                    if (modelData.side === "r")
+                        return root.editorRegionX + root.editorRegionW + outset - thickness / 2;
+                    return root.editorRegionX + 16;
+                }
+                y: {
+                    if (modelData.side === "t")
+                        return root.editorRegionY - outset - thickness / 2;
+                    if (modelData.side === "b")
+                        return root.editorRegionY + root.editorRegionH + outset - thickness / 2;
+                    return root.editorRegionY + 16;
+                }
+                width: horizontal ? Math.max(1, root.editorRegionW - 32) : thickness
+                height: horizontal ? thickness : Math.max(1, root.editorRegionH - 32)
+
+                property real startPx: 0
+                property real startPy: 0
+                property real startX: 0
+                property real startY: 0
+                property real startW: 0
+                property real startH: 0
+
+                onPressed: mouse => {
+                    var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                    startPx = p.x;
+                    startPy = p.y;
+                    startX = root.editorRegionX;
+                    startY = root.editorRegionY;
+                    startW = root.editorRegionW;
+                    startH = root.editorRegionH;
+                }
                 onPositionChanged: mouse => {
                     if (!pressed)
                         return;
-                    var deltaX = mouse.x - startMouseX;
-                    var deltaY = mouse.y - startMouseY;
-
-                    var newW = root.editorRegionW + deltaX;
-                    var newH = root.editorRegionH + deltaY;
-
-                    newW = Math.max(20, newW);
-                    newH = Math.max(20, newH);
-                    newW = Math.min(newW, root.screen.width - root.editorRegionX);
-                    newH = Math.min(newH, root.screen.height - root.editorRegionY);
-
-                    root.editorRegionW = newW;
-                    root.editorRegionH = newH;
-
-                    // Sync original selection region for visual overlay (dotted lines and dark area)
-                    root.dragStartX = root.editorRegionX;
-                    root.dragStartY = root.editorRegionY;
-                    root.draggingX = root.editorRegionX + newW;
-                    root.draggingY = root.editorRegionY + newH;
+                    var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                    root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
                 }
+            }
+        }
+
+        // Middle action bar (Spectacle-style): selection size + terminal
+        // actions. Lives outside editorContent so grabToImage never captures
+        // it; z sits above the handles so the Export menu isn't occluded.
+        Toolbar {
+            id: actionBar
+            z: 9999
+            spacing: 6
+
+            readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
+            readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
+            property bool exportMenuOpen: false
+
+            function fmt(n) {
+                var str = String(n);
+                var out = "";
+                for (var i = 0; i < str.length; i++) {
+                    if (i > 0 && (str.length - i) % 3 === 0)
+                        out += ",";
+                    out += str[i];
+                }
+                return out;
+            }
+
+            visible: root.inlineEditorActive && !root.exporting && root.currentTool !== "recrop" && root.editingTextId === null && root.editorRegionW > 0 && root.editorRegionH > 0
+            opacity: visible ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
+            y: {
+                var gap = 12;
+                var below = root.editorRegionY + root.editorRegionH + gap;
+                if (below + height <= root.screen.height - 8)
+                    return below;
+                // No room below the selection: tuck the bar just inside its
+                // bottom edge instead of flinging it to the top of the screen.
+                return Math.max(8, root.editorRegionY + root.editorRegionH - height - gap);
+            }
+
+            component ActionButton: RippleButton {
+                property string symbolName: ""
+                property string labelText: ""
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 36
+                implicitWidth: abRow.implicitWidth + 24
+                buttonRadius: height / 2
+
+                colBackground: Appearance.colors.colSurfaceContainerHigh
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                colRippleToggled: Appearance.colors.colSecondaryContainerActive
+
+                property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+
+                contentItem: Row {
+                    id: abRow
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconSize: 20
+                        text: symbolName
+                        fill: parent.parent.toggled ? 1 : 0
+                        color: parent.parent.colText
+                        animateChange: true
+                    }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: labelText
+                        color: parent.parent.colText
+                    }
+                }
+            }
+
+            StyledText {
+                Layout.leftMargin: 6
+                Layout.rightMargin: 2
+                Layout.alignment: Qt.AlignVCenter
+                text: actionBar.fmt(actionBar.physW) + " \u00d7 " + actionBar.fmt(actionBar.physH)
+                color: Appearance.colors.colSubtext
+            }
+
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: 1
+                implicitHeight: 24
+                color: Appearance.colors.colOutlineVariant
+            }
+
+            ActionButton {
+                symbolName: "content_copy"
+                labelText: Translation.tr("Copy")
+                onClicked: root.finalizeScreenshot(false)
+            }
+            ActionButton {
+                symbolName: "save"
+                labelText: Translation.tr("Save")
+                onClicked: root.finalizeScreenshot(true)
+            }
+            ActionButton {
+                symbolName: "save_as"
+                labelText: Translation.tr("Save As...")
+                onClicked: root.finalizeScreenshotAs()
+            }
+            ActionButton {
+                symbolName: "document_scanner"
+                labelText: Translation.tr("Extract Text")
+                onClicked: root.extractText()
+            }
+            ActionButton {
+                symbolName: "block"
+                labelText: Translation.tr("Cancel")
+                onClicked: root.dismiss()
+            }
+
+
+            Item {
+                id: exportContainer
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: exportBtn.implicitWidth
+                implicitHeight: exportBtn.implicitHeight
+
+                ActionButton {
+                    id: exportBtn
+                    anchors.fill: parent
+                    symbolName: "ios_share"
+                    labelText: Translation.tr("Export")
+                    toggled: actionBar.exportMenuOpen
+                    onClicked: actionBar.exportMenuOpen = !actionBar.exportMenuOpen
+                }
+
+                Rectangle {
+                    id: exportMenu
+                    visible: actionBar.exportMenuOpen
+                    width: exportCol.implicitWidth + 8
+                    height: exportCol.implicitHeight + 8
+                    radius: Appearance.rounding.small
+                    color: Appearance.m3colors.m3surfaceContainerHigh
+                    border.width: 1
+                    border.color: Appearance.colors.colOutlineVariant
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.top
+                    anchors.bottomMargin: 8
+
+                    component MenuItem: RippleButton {
+                        property string symbolName: ""
+                        property string labelText: ""
+                        implicitWidth: Math.max(200, miRow.implicitWidth + 24)
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.small
+
+                        contentItem: Row {
+                            id: miRow
+                            anchors.left: parent.left
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 10
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                iconSize: 20
+                                text: symbolName
+                                color: Appearance.colors.colOnSurface
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: labelText
+                                color: Appearance.colors.colOnSurface
+                            }
+                        }
+                    }
+
+                    Column {
+                        id: exportCol
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        MenuItem {
+                            symbolName: "open_in_new"
+                            labelText: Translation.tr("Open with default app")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportOpenWith();
+                            }
+                        }
+                        MenuItem {
+                            symbolName: "image_search"
+                            labelText: Translation.tr("Reverse image search")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportSearch();
+                            }
+                        }
+                        MenuItem {
+                            symbolName: "link"
+                            labelText: Translation.tr("Copy file path")
+                            onClicked: {
+                                actionBar.exportMenuOpen = false;
+                                root.exportCopyPath();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Click-away catcher that closes the Export menu.
+        MouseArea {
+            z: 9998
+            anchors.fill: parent
+            visible: actionBar.exportMenuOpen
+            enabled: visible
+            onPressed: actionBar.exportMenuOpen = false
+        }
+
+        // Rectangular region re-crop. Active only while the "recrop" tool is
+        // selected; drag anywhere over the frozen screen to pick a new crop.
+        MouseArea {
+            id: recropArea
+            anchors.fill: parent
+            z: 9997
+            visible: root.inlineEditorActive && root.currentTool === "recrop"
+            enabled: visible
+            cursorShape: Qt.CrossCursor
+            preventStealing: true
+
+            property real sx: 0
+            property real sy: 0
+            property bool active: false
+
+            onPressed: mouse => {
+                sx = mouse.x;
+                sy = mouse.y;
+                active = true;
+                recropRect.x = sx;
+                recropRect.y = sy;
+                recropRect.width = 0;
+                recropRect.height = 0;
+            }
+            onPositionChanged: mouse => {
+                if (!active)
+                    return;
+                recropRect.x = Math.min(sx, mouse.x);
+                recropRect.y = Math.min(sy, mouse.y);
+                recropRect.width = Math.abs(mouse.x - sx);
+                recropRect.height = Math.abs(mouse.y - sy);
+            }
+            onReleased: mouse => {
+                active = false;
+                if (recropRect.width < 8 || recropRect.height < 8) {
+                    root.currentTool = "none";
+                    return;
+                }
+                root.editorRegionX = recropRect.x;
+                root.editorRegionY = recropRect.y;
+                root.editorRegionW = recropRect.width;
+                root.editorRegionH = recropRect.height;
+                // Keep the drag vars (which drive the darken overlay + dashed
+                // border) in sync with the new crop, else the old region's
+                // chrome lingers until the next resize.
+                root.dragStartX = recropRect.x;
+                root.dragStartY = recropRect.y;
+                root.draggingX = recropRect.x + recropRect.width;
+                root.draggingY = recropRect.y + recropRect.height;
+                root.currentTool = "none";
+            }
+
+            Rectangle {
+                id: recropRect
+                visible: recropArea.active
+                color: "#33ffffff"
+                border.width: 1
+                border.color: root.selectionBorderColor
             }
         }
 
@@ -1199,528 +2194,7 @@ PanelWindow {
 
             EditorToolbar {
                 id: editorToolbarInstance
-            }
-        }
-    }
-
-    component RectAnnotationComponent: Rectangle {
-        property var annData: null
-        x: annData?.x ?? 0
-        y: annData?.y ?? 0
-        width: annData?.width ?? 0
-        height: annData?.height ?? 0
-        color: "transparent"
-        border.color: annData?.color ?? "#ff3b30"
-        border.width: annData?.lineWidth ?? 2
-        radius: 0
-    }
-
-    component ArrowAnnotationComponent: Shape {
-        id: arrowRoot
-        property var annData: null
-        x: Math.min(annData?.x1 ?? 0, annData?.x2 ?? 0) - 20
-        y: Math.min(annData?.y1 ?? 0, annData?.y2 ?? 0) - 20
-        width: Math.abs((annData?.x2 ?? 0) - (annData?.x1 ?? 0)) + 40
-        height: Math.abs((annData?.y2 ?? 0) - (annData?.y1 ?? 0)) + 40
-        visible: annData !== null
-
-        ShapePath {
-            strokeColor: annData?.color ?? "transparent"
-            strokeWidth: annData?.lineWidth ?? 2
-            fillColor: "transparent"
-            capStyle: ShapePath.RoundCap
-
-            startX: (annData?.x1 ?? 0) - arrowRoot.x
-            startY: (annData?.y1 ?? 0) - arrowRoot.y
-
-            PathLine {
-                x: (annData?.x2 ?? 0) - arrowRoot.x
-                y: (annData?.y2 ?? 0) - arrowRoot.y
-            }
-        }
-        ShapePath {
-            strokeColor: "transparent"
-            fillColor: annData?.color ?? "transparent"
-
-            startX: (annData?.x2 ?? 0) - arrowRoot.x
-            startY: (annData?.y2 ?? 0) - arrowRoot.y
-
-            PathLine {
-                x: ((annData?.x2 ?? 0) - arrowRoot.x) - Math.max(15, (annData?.lineWidth ?? 2) * 3) * Math.cos(Math.atan2((annData?.y2 ?? 0) - (annData?.y1 ?? 0), (annData?.x2 ?? 0) - (annData?.x1 ?? 0)) - Math.PI / 6)
-                y: ((annData?.y2 ?? 0) - arrowRoot.y) - Math.max(15, (annData?.lineWidth ?? 2) * 3) * Math.sin(Math.atan2((annData?.y2 ?? 0) - (annData?.y1 ?? 0), (annData?.x2 ?? 0) - (annData?.x1 ?? 0)) - Math.PI / 6)
-            }
-            PathLine {
-                x: ((annData?.x2 ?? 0) - arrowRoot.x) - Math.max(15, (annData?.lineWidth ?? 2) * 3) * Math.cos(Math.atan2((annData?.y2 ?? 0) - (annData?.y1 ?? 0), (annData?.x2 ?? 0) - (annData?.x1 ?? 0)) + Math.PI / 6)
-                y: ((annData?.y2 ?? 0) - arrowRoot.y) - Math.max(15, (annData?.lineWidth ?? 2) * 3) * Math.sin(Math.atan2((annData?.y2 ?? 0) - (annData?.y1 ?? 0), (annData?.x2 ?? 0) - (annData?.x1 ?? 0)) + Math.PI / 6)
-            }
-            PathLine {
-                x: (annData?.x2 ?? 0) - arrowRoot.x
-                y: (annData?.y2 ?? 0) - arrowRoot.y
-            }
-        }
-    }
-
-    component CircleAnnotationComponent: Rectangle {
-        property var annData: null
-        x: (annData?.x ?? 0) - (annData?.radius ?? 0)
-        y: (annData?.y ?? 0) - (annData?.radius ?? 0)
-        width: (annData?.radius ?? 0) * 2
-        height: (annData?.radius ?? 0) * 2
-        color: "transparent"
-        border.color: annData?.color ?? "transparent"
-        border.width: annData?.lineWidth ?? 2
-        radius: width / 2
-        visible: annData !== null
-    }
-
-    component StarAnnotationComponent: Shape {
-        id: starRoot
-        property var annData: null
-        x: (annData?.x ?? 0) - (annData?.outerRadius ?? 0) - 5
-        y: (annData?.y ?? 0) - (annData?.outerRadius ?? 0) - 5
-        width: ((annData?.outerRadius ?? 0) * 2) + 10
-        height: ((annData?.outerRadius ?? 0) * 2) + 10
-        visible: annData !== null
-
-        ShapePath {
-            strokeColor: annData?.color ?? "transparent"
-            strokeWidth: annData?.lineWidth ?? 2
-            fillColor: "transparent"
-            capStyle: ShapePath.RoundCap
-            joinStyle: ShapePath.RoundJoin
-
-            PathSvg {
-                path: {
-                    if (!annData)
-                        return "";
-                    var cx = annData.x - starRoot.x;
-                    var cy = annData.y - starRoot.y;
-                    var outerR = annData.outerRadius;
-                    var innerR = annData.innerRadius;
-                    var spikes = 5;
-                    var rot = Math.PI / 2 * 3;
-                    var step = Math.PI / spikes;
-
-                    var d = "";
-                    for (var i = 0; i < spikes; i++) {
-                        var outerX = cx + Math.cos(rot) * outerR;
-                        var outerY = cy + Math.sin(rot) * outerR;
-                        d += (i === 0 ? "M " : " L ") + outerX + " " + outerY;
-                        rot += step;
-                        var innerX = cx + Math.cos(rot) * innerR;
-                        var innerY = cy + Math.sin(rot) * innerR;
-                        d += " L " + innerX + " " + innerY;
-                        rot += step;
-                    }
-                    d += " Z";
-                    return d;
-                }
-            }
-        }
-    }
-
-    component PencilAnnotationComponent: Shape {
-        id: pencilRoot
-        property var annData: null
-        x: 0
-        y: 0
-        width: typeof editorContent !== "undefined" && editorContent ? editorContent.width : 4000
-        height: typeof editorContent !== "undefined" && editorContent ? editorContent.height : 4000
-        visible: annData !== null
-
-        ShapePath {
-            strokeColor: annData?.color ?? "transparent"
-            strokeWidth: annData?.lineWidth ?? 2
-            fillColor: "transparent"
-            capStyle: ShapePath.RoundCap
-            joinStyle: ShapePath.RoundJoin
-
-            PathSvg {
-                path: {
-                    var pts = annData?.points;
-                    if (!pts || pts.length === 0)
-                        return "";
-                    var d = "M " + pts[0].x + " " + pts[0].y;
-                    for (var i = 1; i < pts.length - 2; i++) {
-                        var xc = (pts[i].x + pts[i + 1].x) / 2;
-                        var yc = (pts[i].y + pts[i + 1].y) / 2;
-                        d += " Q " + pts[i].x + " " + pts[i].y + ", " + xc + " " + yc;
-                    }
-                    if (pts.length > 2) {
-                        d += " Q " + pts[pts.length - 2].x + " " + pts[pts.length - 2].y + ", " + pts[pts.length - 1].x + " " + pts[pts.length - 1].y;
-                    } else if (pts.length === 2) {
-                        d += " L " + pts[1].x + " " + pts[1].y;
-                    }
-                    return d;
-                }
-            }
-        }
-    }
-
-    component EditorToolbar: Toolbar {
-        spacing: 8
-
-        // Arrow
-        IconToolbarButton {
-            id: arrowBtn
-            text: "north_east"
-            toggled: root.currentTool === "arrow"
-            onClicked: root.currentTool = root.currentTool === "arrow" ? "none" : "arrow"
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Arrow")
-            }
-        }
-
-        // Rectangle with shape accordion
-        Item {
-            id: shapeSelectorContainer
-            implicitWidth: shapeRow.implicitWidth
-            implicitHeight: Math.max(shapeBtn.implicitHeight, dropdownBtn.implicitHeight)
-
-            Row {
-                id: shapeRow
-                spacing: 2
-
-                IconToolbarButton {
-                    id: shapeBtn
-                    text: "crop_square"
-                    toggled: root.currentTool === "rect"
-                    onClicked: {
-                        root.currentTool = root.currentTool === "rect" ? "none" : "rect";
-                        root.shapePopupVisible = false;
-                    }
-                    StyledToolTip {
-                        z: 9999
-                        text: Translation.tr("Rectangle")
-                    }
-                }
-
-                Item {
-                    id: shapeCollapsible
-                    implicitHeight: shapeBtn.implicitHeight
-                    clip: true
-                    implicitWidth: root.shapePopupVisible ? shapesExpandedRow.implicitWidth : 0
-                    opacity: root.shapePopupVisible ? 1 : 0
-
-                    Behavior on implicitWidth {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-
-                    Row {
-                        id: shapesExpandedRow
-                        spacing: 2
-                        scale: root.shapePopupVisible ? 1 : 0.9
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 350
-                                easing.type: Easing.InOutCubic
-                            }
-                        }
-
-                        IconToolbarButton {
-                            id: circleBtn
-                            text: "circle"
-                            toggled: root.currentTool === "circle"
-                            onClicked: root.currentTool = root.currentTool === "circle" ? "none" : "circle"
-                            StyledToolTip {
-                                z: 9999
-                                text: Translation.tr("Circle")
-                            }
-                        }
-
-                        IconToolbarButton {
-                            id: starBtn
-                            text: "star"
-                            toggled: root.currentTool === "star"
-                            onClicked: root.currentTool = root.currentTool === "star" ? "none" : "star"
-                            StyledToolTip {
-                                z: 9999
-                                text: Translation.tr("Star")
-                            }
-                        }
-                    }
-                }
-
-                IconToolbarButton {
-                    id: dropdownBtn
-                    text: root.shapePopupVisible ? "chevron_left" : "chevron_right"
-                    toggled: root.shapePopupVisible
-                    onClicked: {
-                        root.shapePopupVisible = !root.shapePopupVisible;
-                        if (root.shapePopupVisible) {
-                            root.colorPopupVisible = false;
-                            root.lineWidthPopupVisible = false;
-                        }
-                    }
-                    StyledToolTip {
-                        z: 9999
-                        text: root.shapePopupVisible ? Translation.tr("Less shapes") : Translation.tr("More shapes")
-                    }
-                }
-            }
-        }
-
-        // Pencil
-        IconToolbarButton {
-            id: pencilBtn
-            text: "edit"
-            toggled: root.currentTool === "pencil"
-            onClicked: root.currentTool = root.currentTool === "pencil" ? "none" : "pencil"
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Pencil")
-            }
-        }
-
-        // Blur/Pixelate
-        IconToolbarButton {
-            id: blurBtn
-            text: "blur_on"
-            toggled: root.currentTool === "blur"
-            onClicked: root.currentTool = root.currentTool === "blur" ? "none" : "blur"
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Pixelate")
-            }
-        }
-
-        // Line Width Accordion
-        Item {
-            id: lineWidthSelectorContainer
-            implicitWidth: lineWidthRow.implicitWidth
-            implicitHeight: 32
-
-            Row {
-                id: lineWidthRow
-                spacing: 2
-                anchors.verticalCenter: parent.verticalCenter
-
-                IconToolbarButton {
-                    id: lineWidthBtn
-                    toggled: root.lineWidthPopupVisible
-                    onClicked: {
-                        root.lineWidthPopupVisible = !root.lineWidthPopupVisible;
-                        if (root.lineWidthPopupVisible) {
-                            root.colorPopupVisible = false;
-                            root.shapePopupVisible = false;
-                        }
-                    }
-                    contentItem: Item {
-                        anchors.fill: parent
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 20
-                            height: Math.max(1, root.currentLineWidth)
-                            color: lineWidthBtn.colText
-                            radius: height / 2
-                        }
-                    }
-                    StyledToolTip {
-                        z: 9999
-                        text: Translation.tr("Line Thickness")
-                    }
-                }
-
-                Item {
-                    id: lineWidthCollapsible
-                    implicitHeight: 32
-                    clip: true
-                    implicitWidth: root.lineWidthPopupVisible ? lineWidthExpandedRow.implicitWidth : 0
-                    opacity: root.lineWidthPopupVisible ? 1 : 0
-
-                    Behavior on implicitWidth {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-
-                    Row {
-                        id: lineWidthExpandedRow
-                        spacing: 2
-                        anchors.verticalCenter: parent.verticalCenter
-                        scale: root.lineWidthPopupVisible ? 1 : 0.9
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 350
-                                easing.type: Easing.InOutCubic
-                            }
-                        }
-
-                        Repeater {
-                            model: [2, 4, 8]
-                            delegate: RippleButton {
-                                required property var modelData
-                                implicitWidth: 28
-                                implicitHeight: 28
-                                buttonRadius: width / 2
-                                anchors.verticalCenter: parent.verticalCenter
-                                onClicked: {
-                                    root.currentLineWidth = Number(modelData);
-                                    root.lineWidthPopupVisible = false;
-                                }
-                                contentItem: Item {
-                                    anchors.fill: parent
-                                    Rectangle {
-                                        anchors.centerIn: parent
-                                        width: 16
-                                        height: Number(modelData)
-                                        color: Appearance.colors.colOnLayer1
-                                        radius: Number(modelData) / 2
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Color Picker Accordion
-        Item {
-            id: colorSelectorContainer
-            implicitWidth: colorRow.implicitWidth
-            implicitHeight: 32
-
-            Row {
-                id: colorRow
-                spacing: 2
-                anchors.verticalCenter: parent.verticalCenter
-
-                RippleButton {
-                    id: colorPickerBtn
-                    implicitWidth: 36
-                    implicitHeight: 32
-                    buttonRadius: Appearance.rounding.normal
-                    toggled: root.colorPopupVisible
-                    onClicked: {
-                        root.colorPopupVisible = !root.colorPopupVisible;
-                        if (root.colorPopupVisible) {
-                            root.lineWidthPopupVisible = false;
-                            root.shapePopupVisible = false;
-                        }
-                    }
-                    contentItem: Rectangle {
-                        anchors.centerIn: parent
-                        width: 18
-                        height: 18
-                        radius: width / 2
-                        color: root.currentColor
-                        border.width: 1
-                        border.color: Appearance.colors.colOutline
-                    }
-
-                    StyledToolTip {
-                        z: 9999
-                        text: Translation.tr("Color")
-                    }
-                }
-
-                Item {
-                    id: colorCollapsible
-                    implicitHeight: 32
-                    clip: true
-                    implicitWidth: root.colorPopupVisible ? colorExpandedRow.implicitWidth : 0
-                    opacity: root.colorPopupVisible ? 1 : 0
-
-                    Behavior on implicitWidth {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 300
-                            easing.type: Easing.InOutCubic
-                        }
-                    }
-
-                    Row {
-                        id: colorExpandedRow
-                        spacing: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        scale: root.colorPopupVisible ? 1 : 0.9
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 350
-                                easing.type: Easing.InOutCubic
-                            }
-                        }
-
-                        Repeater {
-                            model: root.presetColors
-                            delegate: RippleButton {
-                                required property color modelData
-                                implicitWidth: 24
-                                implicitHeight: 24
-                                buttonRadius: width / 2
-                                anchors.verticalCenter: parent.verticalCenter
-                                onClicked: {
-                                    root.currentColor = modelData;
-                                    root.colorPopupVisible = false;
-                                }
-                                contentItem: Rectangle {
-                                    anchors.fill: parent
-                                    radius: parent.buttonRadius
-                                    color: modelData
-                                    border.width: 1
-                                    border.color: Appearance.colors.colOutline
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Undo
-        IconToolbarButton {
-            text: "undo"
-            enabled: root.undoStack.length > 0
-            onClicked: root.undo()
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Undo")
-            }
-        }
-
-        // Copy
-        IconToolbarButton {
-            text: "content_copy"
-            onClicked: root.finalizeScreenshot(false)
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Copy to clipboard")
-            }
-        }
-
-        // Save
-        IconToolbarButton {
-            text: "save"
-            onClicked: root.finalizeScreenshot(true)
-            StyledToolTip {
-                z: 9999
-                text: Translation.tr("Save to file")
+                editor: root
             }
         }
     }

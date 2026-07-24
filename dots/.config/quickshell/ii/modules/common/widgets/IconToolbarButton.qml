@@ -10,7 +10,7 @@ ToolbarButton {
     colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
     colRippleToggled: Appearance.colors.colSecondaryContainerActive
     property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
-    property bool iconFill: false 
+    property bool iconFill: toggled
 
     contentItem: MaterialSymbol {
         anchors.centerIn: parent
@@ -22,4 +22,5 @@ ToolbarButton {
         color: iconBtn.colText
         animateChange: true
     }
+
 }
