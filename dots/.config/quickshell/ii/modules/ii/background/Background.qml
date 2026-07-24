@@ -25,6 +25,15 @@ Scope {
     }
 
     Variants {
+        id: widgetsVariant
+        model: Quickshell.screens
+
+        BackgroundWidgetsWindow {
+            widgetStateManager: widgetState
+        }
+    }
+
+    Variants {
         id: blurOverlayVariant
         model: Quickshell.screens
 

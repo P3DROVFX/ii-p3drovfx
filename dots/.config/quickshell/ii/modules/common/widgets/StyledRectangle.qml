@@ -7,6 +7,8 @@ import qs.modules.common as C
 // - 3d
 // i hope i actually get to this and not shrimply forget
 Rectangle {
+    antialiasing: true
+    smooth: true
     enum ContentLayer { Background, Pane, Group, Subgroup, Control }
     property var contentLayer: StyledRectangle.ContentLayer.Pane // To appropriately add effects like shadows/3d-ization
 

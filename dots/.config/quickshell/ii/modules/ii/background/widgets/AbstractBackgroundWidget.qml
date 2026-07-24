@@ -10,6 +10,9 @@ import qs.modules.ii.background.widgets
 AbstractWidget {
     id: root
 
+    antialiasing: true
+    smooth: true
+
     property string configEntryName: ""
     property var widgetInstance: null
     property bool isPreview: false

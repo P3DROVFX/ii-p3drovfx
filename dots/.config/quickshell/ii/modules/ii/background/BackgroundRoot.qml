@@ -24,7 +24,7 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
-    property bool anyWidgetIsDragging: widgetCanvas.draggingActive
+    property bool anyWidgetIsDragging: widgetStateManager ? widgetStateManager.draggingActive : false
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -333,6 +333,8 @@ PanelWindow {
             minSafeScale: bgRoot.minSafeScale
             parallaxX: parallax.parallaxX
             parallaxY: parallax.parallaxY
+            effectiveValueX: parallax.effectiveValueX
+            effectiveValueY: parallax.effectiveValueY
             scaleValue: ovZoom.scaleValue
             scaleOriginX: ovZoom.scaleOriginX
             scaleOriginY: ovZoom.scaleOriginY
@@ -341,79 +343,13 @@ PanelWindow {
             mediaModeOpen: bgRoot.mediaModeOpen
             lockAnimationActive: bgRoot.lockAnimationActive
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
+            widgetStateManager: bgRoot.widgetStateManager
         }
 
         BarGradientOverlay {
             sourceItem: wallpaperImage.clipRectItem
             screenWidth: bgRoot.screen.width
             screenHeight: bgRoot.screen.height
-        }
-
-        WidgetCanvas {
-            id: widgetCanvas
-            scale: 1 - (bgRoot.defaultRatio - 1)
-            layer.enabled: false
-
-            anchors {
-                left: parent.left
-                right: parent.right
-                top: parent.top
-                bottom: parent.bottom
-                horizontalCenter: undefined
-                verticalCenter: undefined
-                readonly property real parallaxFactor: Config.options.background.parallax.widgetsFactor
-                leftMargin: {
-                    const xOnWallpaper = bgRoot.movableXSpace;
-                    const extraMove = (parallax.effectiveValueX * 2 * bgRoot.movableXSpace) * (parallaxFactor - 1);
-                    return xOnWallpaper - extraMove;
-                }
-                topMargin: {
-                    const yOnWallpaper = bgRoot.movableYSpace;
-                    const extraMove = (parallax.effectiveValueY * 2 * bgRoot.movableYSpace) * (parallaxFactor - 1);
-                    return yOnWallpaper - extraMove;
-                }
-                Behavior on leftMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                }
-                Behavior on topMargin {
-                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                }
-            }
-            width: parent.width
-            height: parent.height
-            states: State {
-                name: "centered"
-                when: GlobalStates.lockScreenCentered || GlobalStates.workspaceRestoreInProgress || bgRoot.wallpaperSafetyTriggered
-                PropertyChanges {
-                    target: widgetCanvas
-                    anchors.leftMargin: 0
-                    anchors.rightMargin: 0
-                    anchors.topMargin: 0
-                    anchors.bottomMargin: 0
-                }
-            }
-
-            transitions: Transition {
-                PropertyAnimation {
-                    properties: "anchors.leftMargin,anchors.rightMargin,anchors.topMargin,anchors.bottomMargin"
-                    duration: 600
-                    easing.type: Easing.OutCubic
-                }
-            }
-
-            Repeater {
-                model: widgetStateManager.model
-                delegate: WidgetDelegate {
-                    widgetListModel: widgetStateManager.model
-                    widgetSizes: widgetStateManager.widgetSizes
-                    widgetSizesVersion: widgetStateManager.widgetSizesVersion
-                    screenWidth: bgRoot.screen.width
-                    screenHeight: bgRoot.screen.height
-                    wallpaperScale: bgRoot.effectiveWallpaperScale
-                    wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
-                    lockAnimationActive: bgRoot.lockAnimationActive
-                }
-            }
         }
 
         GlobalShortcut {

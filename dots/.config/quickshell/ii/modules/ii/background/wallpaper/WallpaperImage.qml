@@ -9,6 +9,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions as CF
 import qs.modules.ii.background.blur
+import qs.modules.common.widgets.widgetCanvas
+import qs.modules.ii.background.widgets
 
 Item {
     id: wallpaperImageRoot
@@ -33,6 +35,8 @@ Item {
 
     required property real parallaxX
     required property real parallaxY
+    property real effectiveValueX: 0.5
+    property real effectiveValueY: 0.5
     required property real scaleValue
     required property real scaleOriginX
     required property real scaleOriginY
@@ -42,6 +46,7 @@ Item {
     required property bool mediaModeOpen
     property bool lockAnimationActive: false
     required property bool hasWindowsInActiveWorkspace
+    required property var widgetStateManager
 
     // Output aliases
     property alias wallpaperItem: wallpaper

@@ -29,10 +29,10 @@ QtObject {
     function syncActiveWidgets() {
         let configList = Config.options.background.activeWidgets || [];
         console.log("[Background] syncActiveWidgets called. Config activeWidgets count: " + configList.length + ", current model count: " + widgetListModel.count);
-        
+
         let addCount = 0;
         let moveCount = 0;
-        
+
         // 1. Remove items from ListModel that are no longer in Config
         for (let i = widgetListModel.count - 1; i >= 0; i--) {
             let modelId = widgetListModel.get(i).instanceId;
@@ -47,7 +47,7 @@ QtObject {
                 widgetListModel.remove(i);
             }
         }
-        
+
         // 2. Add or update items in ListModel
         for (let j = 0; j < configList.length; j++) {
             let configItem = configList[j];
@@ -58,7 +58,7 @@ QtObject {
                     break;
                 }
             }
-            
+
             if (modelIndex === -1) {
                 widgetListModel.append({
                     "instanceId": configItem.id,
@@ -94,7 +94,7 @@ QtObject {
                 }
             }
         }
-        
+
         let isBulkChange = (addCount + moveCount) > 0;
         if (isBulkChange) {
             manager.staggerTransitionActive = true;
@@ -104,12 +104,13 @@ QtObject {
     }
 
     function maybeMigrateWidgets() {
-        if (Persistent.states.background.widgetsMigrated) return;
-        
+        if (Persistent.states.background.widgetsMigrated)
+            return;
+
         console.log("[Background] Migrating legacy desktop widgets configuration...");
         let migrated = [];
         let centerWidget = "none";
-        
+
         // Clock widget
         if (Config.options.background.widgets.clock.enable) {
             let style = Config.options.background.widgets.clock.style || "cookie";
@@ -124,7 +125,7 @@ QtObject {
                 "lockBehavior": lockBehavior
             });
         }
-        
+
         // Media widget
         if (Config.options.background.widgets.media.enable) {
             let style = Config.options.background.widgets.media.style || "circular";
@@ -152,7 +153,7 @@ QtObject {
                 "lockBehavior": lockBehavior
             });
         }
-        
+
         // Weather widget
         if (Config.options.background.widgets.weather.enable) {
             let style = Config.options.background.widgets.weather.style || "default";
@@ -166,7 +167,7 @@ QtObject {
                 "lockBehavior": "hide"
             });
         }
-        
+
         // Date widget
         if (Config.options.background.widgets.date.enable) {
             migrated.push({
@@ -178,7 +179,7 @@ QtObject {
                 "lockBehavior": "hide"
             });
         }
-        
+
         // Calendar Minimal widget
         if (Config.options.background.widgets.calendar_minimal && Config.options.background.widgets.calendar_minimal.enable) {
             migrated.push({
@@ -190,7 +191,7 @@ QtObject {
                 "lockBehavior": "hide"
             });
         }
-        
+
         Config.options.background.activeWidgets = migrated;
         Persistent.states.background.widgetsMigrated = true;
         console.log("[Background] Widget migration complete. Migrated widgets count: " + migrated.length);
