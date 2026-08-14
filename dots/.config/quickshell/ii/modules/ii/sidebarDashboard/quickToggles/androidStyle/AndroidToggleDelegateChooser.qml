@@ -7,8 +7,9 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
-DelegateChooser {
+Item {
     id: root
+
     property bool editMode: false
     required property real baseCellWidth
     required property real baseCellHeight
@@ -19,6 +20,10 @@ DelegateChooser {
     property var panel: null
     property var gridRef: null
     property int entranceTrigger: -1
+
+    required property int index
+    required property var modelData
+
     signal openAudioOutputDialog
     signal openAudioInputDialog
     signal openBluetoothDialog
@@ -32,117 +37,161 @@ DelegateChooser {
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
 
-    role: "type"
+    readonly property string toggleType: (root.modelData && root.modelData.type) ? root.modelData.type : ""
 
-    DelegateChoice {
-        roleValue: "screenShader"
+    // Layout properties for GridLayout
+    Layout.row: (root.modelData && root.modelData.gridRow !== undefined) ? root.modelData.gridRow : -1
+    Layout.column: (root.modelData && root.modelData.gridCol !== undefined) ? root.modelData.gridCol : -1
+    Layout.columnSpan: toggleLoader.item ? (toggleLoader.item.effectiveSizeW ?? 1) : (root.modelData?.sizeW ?? root.modelData?.size ?? 1)
+    Layout.rowSpan: toggleLoader.item ? (toggleLoader.item.effectiveSizeH ?? 1) : (root.modelData?.sizeH ?? 1)
+    Layout.preferredWidth: toggleLoader.item ? toggleLoader.item.implicitWidth : (root.baseCellWidth * (root.modelData?.sizeW ?? 1) + root.spacing * ((root.modelData?.sizeW ?? 1) - 1))
+    Layout.preferredHeight: toggleLoader.item ? toggleLoader.item.implicitHeight : (root.baseCellHeight * (root.modelData?.sizeH ?? 1) + root.spacing * ((root.modelData?.sizeH ?? 1) - 1))
+    Layout.fillWidth: false
+    Layout.fillHeight: false
+
+    implicitWidth: Layout.preferredWidth
+    implicitHeight: Layout.preferredHeight
+
+    Behavior on x {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    Behavior on y {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+
+    Loader {
+        id: toggleLoader
+        anchors.fill: parent
+        sourceComponent: {
+            switch (root.toggleType) {
+                case "screenShader": return screenShaderComp;
+                case "antiFlashbang": return antiFlashbangComp;
+                case "audio": return audioComp;
+                case "bluetooth": return bluetoothComp;
+                case "cloudflareWarp": return cloudflareWarpComp;
+                case "colorPicker": return colorPickerComp;
+                case "videoEditor": return videoEditorComp;
+                case "darkMode": return darkModeComp;
+                case "easyEffects": return easyEffectsComp;
+                case "gameMode": return gameModeComp;
+                case "idleInhibitor": return idleInhibitorComp;
+                case "mic": return micComp;
+                case "musicRecognition": return musicRecognitionComp;
+                case "network": return networkComp;
+                case "nightLight": return nightLightComp;
+                case "notifications": return notificationComp;
+                case "autoDnd": return autoDndComp;
+                case "onScreenKeyboard": return onScreenKeyboardComp;
+                case "powerProfile": return powerProfileComp;
+                case "screenRecord": return screenRecordComp;
+                case "screenSnip": return screenSnipComp;
+                case "systemSounds": return systemSoundsComp;
+                case "soundcoreAnc": return soundcoreAncComp;
+                case "localSend": return localSendComp;
+                case "mediaWidget": return mediaWidgetComp;
+                case "volumeSlider": return volumeSliderComp;
+                case "micSlider": return micSliderComp;
+                case "brightnessSlider": return brightnessSliderComp;
+                case "gammaSlider": return gammaSliderComp;
+                case "vpn": return vpnComp;
+                case "tailscale": return tailscaleComp;
+                case "dnsOverTls": return dnsOverTlsComp;
+                default: return null;
+            }
+        }
+    }
+
+    Component {
+        id: screenShaderComp
         AndroidScreenShaderToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openScreenShaderDialog();
-            }
+            onOpenMenu: root.openScreenShaderDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "antiFlashbang"
+    Component {
+        id: antiFlashbangComp
         AndroidAntiFlashbangToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openNightLightDialog();
-            }
+            onOpenMenu: root.openNightLightDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "audio"
+    Component {
+        id: audioComp
         AndroidAudioToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openAudioOutputDialog();
-            }
+            onOpenMenu: root.openAudioOutputDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "bluetooth"
+    Component {
+        id: bluetoothComp
         AndroidBluetoothToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openBluetoothDialog();
-            }
+            onOpenMenu: root.openBluetoothDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "cloudflareWarp"
+    Component {
+        id: cloudflareWarpComp
         AndroidCloudflareWarpToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -151,19 +200,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "colorPicker"
+    Component {
+        id: colorPickerComp
         AndroidColorPickerToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -172,19 +219,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "videoEditor"
+    Component {
+        id: videoEditorComp
         AndroidVideoEditorToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -193,43 +238,37 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "darkMode"
+    Component {
+        id: darkModeComp
         AndroidDarkModeToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openDarkModeDialog();
-            }
+            onOpenMenu: root.openDarkModeDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "easyEffects"
+    Component {
+        id: easyEffectsComp
         AndroidEasyEffectsToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -238,19 +277,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "gameMode"
+    Component {
+        id: gameModeComp
         AndroidGameModeToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -259,67 +296,57 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "idleInhibitor"
+    Component {
+        id: idleInhibitorComp
         AndroidIdleInhibitorToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openIdleInhibitorDialog();
-            }
+            onOpenMenu: root.openIdleInhibitorDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "mic"
+    Component {
+        id: micComp
         AndroidMicToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openAudioInputDialog();
-            }
+            onOpenMenu: root.openAudioInputDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "musicRecognition"
+    Component {
+        id: musicRecognitionComp
         AndroidMusicRecognition {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -328,67 +355,57 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "network"
+    Component {
+        id: networkComp
         AndroidNetworkToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openWifiDialog();
-            }
+            onOpenMenu: root.openWifiDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "nightLight"
+    Component {
+        id: nightLightComp
         AndroidNightLightToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openNightLightDialog();
-            }
+            onOpenMenu: root.openNightLightDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "notifications"
+    Component {
+        id: notificationComp
         AndroidNotificationToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -397,19 +414,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "autoDnd"
+    Component {
+        id: autoDndComp
         AndroidAutoDndToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -418,19 +433,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "onScreenKeyboard"
+    Component {
+        id: onScreenKeyboardComp
         AndroidOnScreenKeyboardToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -439,19 +452,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "powerProfile"
+    Component {
+        id: powerProfileComp
         AndroidPowerProfileToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -460,19 +471,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "screenRecord"
+    Component {
+        id: screenRecordComp
         AndroidScreenRecordToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -481,19 +490,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "screenSnip"
+    Component {
+        id: screenSnipComp
         AndroidScreenSnipToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -502,19 +509,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "systemSounds"
+    Component {
+        id: systemSoundsComp
         AndroidSystemSoundsToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -522,19 +527,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "soundcoreAnc"
+    Component {
+        id: soundcoreAncComp
         AndroidSoundcoreAncToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -543,43 +546,37 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "localSend"
+    Component {
+        id: localSendComp
         AndroidLocalSendToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openLocalSendDialog();
-            }
+            onOpenMenu: root.openLocalSendDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "mediaWidget"
+    Component {
+        id: mediaWidgetComp
         AndroidMediaWidgetToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -587,67 +584,58 @@ DelegateChooser {
             entranceTrigger: root.entranceTrigger
         }
     }
-    DelegateChoice {
-        roleValue: "volumeSlider"
+
+    Component {
+        id: volumeSliderComp
         AndroidVolumeSliderToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openAudioOutputDialog();
-            }
+            onOpenMenu: root.openAudioOutputDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "micSlider"
+    Component {
+        id: micSliderComp
         AndroidMicSliderToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openAudioInputDialog();
-            }
+            onOpenMenu: root.openAudioInputDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "brightnessSlider"
+    Component {
+        id: brightnessSliderComp
         AndroidBrightnessSliderToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -656,19 +644,17 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "gammaSlider"
+    Component {
+        id: gammaSliderComp
         AndroidGammaSliderToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
@@ -677,75 +663,63 @@ DelegateChooser {
         }
     }
 
-    DelegateChoice {
-        roleValue: "vpn"
+    Component {
+        id: vpnComp
         AndroidVpnToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openVpnDialog();
-            }
+            onOpenMenu: root.openVpnDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "tailscale"
+    Component {
+        id: tailscaleComp
         AndroidTailscaleToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openTailscaleDialog();
-            }
+            onOpenMenu: root.openTailscaleDialog()
         }
     }
 
-    DelegateChoice {
-        roleValue: "dnsOverTls"
+    Component {
+        id: dnsOverTlsComp
         AndroidDnsOverTlsToggle {
-            required property int index
-            required property var modelData
-            buttonIndex: index
+            buttonIndex: root.index
             isUnused: root.isUnused
-            buttonData: modelData
+            buttonData: root.modelData
             editMode: root.editMode
             baseCellWidth: root.baseCellWidth
             baseCellHeight: root.baseCellHeight
             cellSpacing: root.spacing
-            cellSize: modelData.size
+            cellSize: root.modelData?.size ?? 1
             pageIndex: root.pageIndex
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
-            onOpenMenu: {
-                root.openDnsOverTlsDialog();
-            }
+            onOpenMenu: root.openDnsOverTlsDialog()
         }
     }
 }

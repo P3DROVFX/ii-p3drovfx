@@ -84,10 +84,12 @@ AbstractQuickPanel {
                     continue;
 
                 var t = Object.assign({}, toggle);
-                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-                t.sizeW = root.normalizedSpan(t.sizeW ?? t.size, defaultW, Math.max(1, root.columns));
-                t.sizeH = root.normalizedSpan(t.sizeH, defaultH, 8);
+                var isSlider = t.type.endsWith("Slider");
+                var isMedia = (t.type === "mediaWidget");
+                var defaultH = isMedia ? 2 : 1;
+                var defaultW = isMedia ? 2 : (isSlider ? Math.max(1, root.columns) : 1);
+                t.sizeW = root.normalizedSpan(t.sizeW ?? t.size ?? defaultW, defaultW, Math.max(1, root.columns));
+                t.sizeH = root.normalizedSpan(t.sizeH ?? defaultH, defaultH, 8);
                 t.size = t.sizeW;
                 seenTypes[t.type] = true;
                 page.push(t);
@@ -130,17 +132,17 @@ AbstractQuickPanel {
         return types;
     }
 
-    // The catalog owns stable JS objects. Recreating every object whenever a toggle is
-    // added/removed makes ScriptModel emit dataChanged for every surviving row even
-    // though objectProp is "type". DelegateChooser can then keep a stale concrete
-    // delegate while rows are shifted, which is why the visually removed tray item can
-    // differ from the type that was actually added to the page.
+    // The catalog owns stable JS objects.
     readonly property var toggleCatalog: availableToggleTypes.map(type => {
+        var isSlider = type.endsWith("Slider");
+        var isMedia = (type === "mediaWidget");
+        var defaultW = isSlider ? Math.max(1, root.columns) : (isMedia ? 2 : 1);
+        var defaultH = isMedia ? 2 : 1;
         return {
             type: type,
-            size: (type === "mediaWidget") ? 2 : 1,
-            sizeW: (type === "mediaWidget") ? 2 : 1,
-            sizeH: (type === "mediaWidget") ? 2 : 1
+            size: defaultW,
+            sizeW: defaultW,
+            sizeH: defaultH
         };
     })
 
@@ -148,14 +150,122 @@ AbstractQuickPanel {
         root.isToggleVisible(toggle.type) && !allUsedTypes.includes(toggle.type)
     )
 
-    function getGridRowsNeeded(togglesList) {
+    // Live drag preview state
+    property string activeDragType: ""
+    property string activeDropTargetType: ""
+    property int activeDragPage: -1
+
+    function getReorderedList(list, draggedType, targetType) {
+        if (!list || list.length === 0) return [];
+        if (!draggedType || !targetType || draggedType === targetType) return list;
+        
+        var fromIdx = -1;
+        var toIdx = -1;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].type === draggedType) fromIdx = i;
+            if (list[i] && list[i].type === targetType) toIdx = i;
+        }
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return list;
+        
+        var copy = list.slice();
+        var item = copy.splice(fromIdx, 1)[0];
+        copy.splice(toIdx, 0, item);
+        return copy;
+    }
+
+    function setDragPreview(draggedType, targetType, pageIndex) {
+        if (activeDragType === draggedType && activeDropTargetType === targetType && activeDragPage === pageIndex)
+            return;
+        activeDragType = draggedType;
+        activeDropTargetType = targetType;
+        activeDragPage = pageIndex;
+    }
+
+    function commitDrag(draggedType, pageIndex) {
+        var dragType = activeDragType || draggedType;
+        var targetType = activeDropTargetType;
+        var pi = activeDragPage >= 0 ? activeDragPage : pageIndex;
+        
+        activeDragType = "";
+        activeDropTargetType = "";
+        activeDragPage = -1;
+        
+        if (dragType && targetType && dragType !== targetType) {
+            reorderToggle(dragType, targetType, pi);
+        }
+    }
+
+    function cancelDrag() {
+        activeDragType = "";
+        activeDropTargetType = "";
+        activeDragPage = -1;
+    }
+
+    function findTargetToggleAtGridPos(gridX, gridY, pageIndex, draggedType) {
+        if (pageIndex < 0 || pageIndex >= pages.length) return null;
+        var pageToggles = pages[pageIndex] || [];
+        if (pageToggles.length === 0) return null;
+
+        // Compute stable resting placement (without active preview distortions)
+        var resting = calculateMatrixPlacement(pageToggles, columns, "", "").items;
+        if (!resting || resting.length === 0) return null;
+
+        var colWidth = root.baseCellWidth;
+        var rowHeight = root.baseCellHeight;
+        var sp = root.spacing;
+
+        var bestType = null;
+        var minDistance = Infinity;
+
+        for (var i = 0; i < resting.length; i++) {
+            var item = resting[i];
+            if (!item || !item.type) continue;
+            if (item.type === draggedType) continue;
+
+            var r = item.gridRow ?? 0;
+            var c = item.gridCol ?? 0;
+            var w = item.sizeW ?? item.size ?? 1;
+            var h = item.sizeH ?? 1;
+
+            var left = c * (colWidth + sp);
+            var top = r * (rowHeight + sp);
+            var width = w * colWidth + (w - 1) * sp;
+            var height = h * rowHeight + (h - 1) * sp;
+
+            // Direct bounding box containment
+            if (gridX >= left && gridX <= left + width && gridY >= top && gridY <= top + height) {
+                return item.type;
+            }
+
+            var centerX = left + width / 2;
+            var centerY = top + height / 2;
+            var dist = Math.hypot(gridX - centerX, gridY - centerY);
+            if (dist < minDistance) {
+                minDistance = dist;
+                bestType = item.type;
+            }
+        }
+
+        return bestType;
+    }
+
+    // 2D Matrix bin-packing layout algorithm:
+    // Computes the first collision-free (gridRow, gridCol) for each item,
+    // backfilling holes and empty slots across earlier rows.
+    function calculateMatrixPlacement(togglesList, cols, dragType, dropTargetType) {
         if (!togglesList || togglesList.length === 0)
-            return 0;
-        var cols = Math.max(1, columns);
+            return { items: [], maxRows: 0 };
+
+        var effectiveList = togglesList;
+        if (dragType && dropTargetType && dragType !== dropTargetType) {
+            effectiveList = getReorderedList(togglesList, dragType, dropTargetType);
+        }
+
+        var numCols = Math.max(1, cols);
         var grid = [];
 
         function isFree(r, c, w, h) {
-            if (c + w > cols) return false;
+            if (c + w > numCols) return false;
             for (var dr = 0; dr < h; dr++) {
                 var rowArr = grid[r + dr];
                 if (rowArr) {
@@ -171,7 +281,7 @@ AbstractQuickPanel {
             for (var dr = 0; dr < h; dr++) {
                 var rowIdx = r + dr;
                 while (grid.length <= rowIdx) {
-                    grid.push(new Array(cols).fill(false));
+                    grid.push(new Array(numCols).fill(false));
                 }
                 for (var dc = 0; dc < w; dc++) {
                     grid[rowIdx][c + dc] = true;
@@ -179,55 +289,64 @@ AbstractQuickPanel {
             }
         }
 
-        // GridLayout auto-placement advances through the grid in model order. Starting
-        // every item again at row 0 backfills old holes differently from GridLayout and
-        // can make the simulated row count diverge by one after a resize. Keep a cursor
-        // and only search forward, while still honoring vertical spans with the matrix.
-        var cursorRow = 0;
-        var cursorColumn = 0;
+        var placementMap = {};
         var maxRow = 0;
-        for (var i = 0; i < togglesList.length; i++) {
-            if (!togglesList[i])
+        for (var i = 0; i < effectiveList.length; i++) {
+            var t = effectiveList[i];
+            if (!t || !t.type)
                 continue;
-            var t = togglesList[i];
-            var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-            var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-            var w = root.normalizedSpan(t.sizeW ?? t.size, defaultW, cols);
-            var h = root.normalizedSpan(t.sizeH, defaultH, 8);
+            var isSlider = t.type.endsWith("Slider");
+            var isMedia = (t.type === "mediaWidget");
+            var defaultH = isMedia ? 2 : 1;
+            var defaultW = isMedia ? 2 : (isSlider ? numCols : 1);
+            var w = root.normalizedSpan(t.sizeW ?? t.size ?? defaultW, defaultW, numCols);
+            var h = root.normalizedSpan(t.sizeH ?? defaultH, defaultH, 8);
 
-            var r = cursorRow;
-            var c = cursorColumn;
+            var r = 0;
+            var c = 0;
             var placed = false;
             while (!placed) {
-                if (c + w > cols) {
+                if (c + w > numCols) {
                     r++;
                     c = 0;
                     continue;
                 }
-
                 if (isFree(r, c, w, h)) {
                     markOccupied(r, c, w, h);
                     maxRow = Math.max(maxRow, r + h);
-                    cursorRow = r;
-                    cursorColumn = c + w;
-                    if (cursorColumn >= cols) {
-                        cursorRow++;
-                        cursorColumn = 0;
-                    }
+                    placementMap[t.type] = {
+                        gridRow: r,
+                        gridCol: c,
+                        sizeW: w,
+                        sizeH: h,
+                        size: w
+                    };
                     placed = true;
                 } else {
                     c++;
-                    if (c >= cols) {
+                    if (c >= numCols) {
                         r++;
                         c = 0;
                     }
                 }
             }
         }
-        return maxRow;
+
+        // Return items in stable togglesList order so ScriptModel delegates never mutate types during drag
+        var result = [];
+        for (var j = 0; j < togglesList.length; j++) {
+            var orig = togglesList[j];
+            if (!orig || !orig.type) continue;
+            var placement = placementMap[orig.type] || { gridRow: 0, gridCol: 0, sizeW: 1, sizeH: 1, size: 1 };
+            result.push(Object.assign({}, orig, placement));
+        }
+
+        return { items: result, maxRows: maxRow };
     }
 
-
+    function getGridRowsNeeded(togglesList) {
+        return calculateMatrixPlacement(togglesList, columns).maxRows;
+    }
 
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
@@ -248,8 +367,6 @@ AbstractQuickPanel {
     }
 
     // Helper: deep-clone the canonical pages, run mutator, sanitize and reassign.
-    // Cloning Config's raw list preserved stale/duplicate entries forever and let the
-    // rendered model drift away from the persisted one.
     function mutatePages(mutatorFn) {
         if (!Config.ready)
             return;
@@ -259,23 +376,88 @@ AbstractQuickPanel {
     }
 
     function resolveLayoutConflicts(pageIndex, gridColumns) {
-        var cols = Math.max(1, gridColumns);
+        // Handled dynamically by calculateMatrixPlacement
+    }
+
+    function reorderToggle(draggedType, targetType, pageIndex) {
+        if (!draggedType || !targetType || draggedType === targetType)
+            return;
         mutatePages(function (pages) {
-            if (pageIndex < 0 || pageIndex >= pages.length)
+            var pi = (pageIndex >= 0 && pageIndex < pages.length) ? pageIndex : root.currentPage;
+            if (pi < 0 || pi >= pages.length)
                 return;
-            var page = pages[pageIndex];
-            if (!page || page.length === 0)
+            var page = pages[pi];
+            if (!page)
+                return;
+
+            var fromIdx = -1;
+            var toIdx = -1;
+            for (var i = 0; i < page.length; i++) {
+                if (page[i].type === draggedType) fromIdx = i;
+                if (page[i].type === targetType) toIdx = i;
+            }
+
+            if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
+                var item = page.splice(fromIdx, 1)[0];
+                page.splice(toIdx, 0, item);
+            }
+        });
+    }
+
+    function toggleToggle(buttonType, pageIndex) {
+        if (!buttonType)
+            return;
+        mutatePages(function (pages) {
+            var pi = (pageIndex >= 0 && pageIndex < pages.length) ? pageIndex : root.currentPage;
+            if (pi < 0 || pi >= pages.length)
+                return;
+            var page = pages[pi];
+            if (!page)
+                return;
+
+            var existingIdx = -1;
+            for (var i = 0; i < page.length; i++) {
+                if (page[i].type === buttonType) {
+                    existingIdx = i;
+                    break;
+                }
+            }
+
+            if (existingIdx === -1) {
+                var isSlider = buttonType.endsWith("Slider");
+                var isMedia = (buttonType === "mediaWidget");
+                var defW = isSlider ? Math.max(1, root.columns) : (isMedia ? 2 : 1);
+                var defH = isMedia ? 2 : 1;
+                page.push({
+                    type: buttonType,
+                    sizeW: defW,
+                    sizeH: defH,
+                    size: defW
+                });
+            } else {
+                page.splice(existingIdx, 1);
+            }
+        });
+    }
+
+    function setToggleSize(buttonType, pageIndex, newW, newH) {
+        if (!buttonType)
+            return;
+        mutatePages(function (pages) {
+            var pi = (pageIndex >= 0 && pageIndex < pages.length) ? pageIndex : root.currentPage;
+            if (pi < 0 || pi >= pages.length)
+                return;
+            var page = pages[pi];
+            if (!page)
                 return;
 
             for (var i = 0; i < page.length; i++) {
-                if (!page[i]) continue;
-                var w = page[i].sizeW ?? page[i].size ?? 1;
-                var h = page[i].sizeH ?? 1;
-                w = Math.max(1, Math.min(w, cols));
-                h = Math.max(1, h);
-                page[i].sizeW = w;
-                page[i].sizeH = h;
-                page[i].size = w;
+                if (page[i].type === buttonType) {
+                    page[i].sizeW = Math.max(1, Math.min(newW, root.columns));
+                    page[i].sizeH = Math.max(1, Math.min(newH, 8));
+                    page[i].size = page[i].sizeW;
+                    return;
+                }
             }
         });
     }
@@ -311,8 +493,6 @@ AbstractQuickPanel {
     }
 
     // Drag-scroll: called by toggle buttons during drag to auto-scroll pages
-    // absX: x coordinate mapped to panel root
-    // dragButton: the toggle button being dragged
     property real dragScrollEdgeThreshold: 40
     property int dragScrollPendingPage: -1
 
@@ -323,7 +503,6 @@ AbstractQuickPanel {
         onTriggered: {
             if (root.dragScrollPendingPage >= 0 && root.dragScrollPendingPage < root.pages.length) {
                 root.currentPage = root.dragScrollPendingPage;
-                // Notify all dragging buttons about the new target page
                 root.dragScrollPageChanged(root.dragScrollPendingPage);
             }
             root.dragScrollPendingPage = -1;
@@ -348,12 +527,10 @@ AbstractQuickPanel {
         if (newPage >= 0 && newPage !== dragScrollPendingPage) {
             dragScrollPendingPage = newPage;
             dragScrollTimer.restart();
-            // Update dragTargetPage on the button immediately for visual feedback
             if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
                 dragButton.dragTargetPage = newPage;
             }
         } else if (newPage < 0) {
-            // Back in safe zone — reset pending
             dragScrollPendingPage = -1;
             dragScrollTimer.stop();
             if (dragButton && dragButton.hasOwnProperty("dragTargetPage")) {
@@ -363,7 +540,9 @@ AbstractQuickPanel {
     }
 
     // Move a toggle from one page to another at the drop position
-    function moveToggleToPage(buttonType, fromPage, toPage, dropAbsX, dropAbsY) {
+    function moveToggleToPage(buttonType, fromPage, toPage, targetType) {
+        if (!buttonType)
+            return;
         if (fromPage === toPage)
             return;
         if (toPage < 0 || toPage >= pages.length)
@@ -388,10 +567,20 @@ AbstractQuickPanel {
             if (!toggleData)
                 return;
 
-            // Append to the target page (position at end, layout engine will sort)
             var targetPage = pages[toPage];
-            if (!targetPage) pages[toPage] = [];
-            pages[toPage].push(toggleData);
+            if (!targetPage) {
+                targetPage = [];
+                pages[toPage] = targetPage;
+            }
+
+            if (targetType) {
+                var toIdx = targetPage.findIndex(t => t.type === targetType);
+                if (toIdx !== -1) {
+                    targetPage.splice(toIdx, 0, toggleData);
+                    return;
+                }
+            }
+            targetPage.push(toggleData);
         });
     }
 
@@ -557,6 +746,11 @@ AbstractQuickPanel {
                             // Show only current page content as visible when current
                             property bool isCurrent: root.currentPage === index
                             property list<var> pageToggles: root.pages[index] || []
+                            readonly property list<var> placedPageToggles: {
+                                var dType = (root.activeDragPage === pageContainer.index) ? root.activeDragType : "";
+                                var targetType = (root.activeDragPage === pageContainer.index) ? root.activeDropTargetType : "";
+                                return root.calculateMatrixPlacement(pageToggles, root.columns, dType, targetType).items;
+                            }
 
                             Loader {
                                 id: pageContentLoader
@@ -597,7 +791,7 @@ AbstractQuickPanel {
                                     Repeater {
                                         id: gridRepeater
                                         model: ScriptModel {
-                                            values: pageContainer.pageToggles
+                                            values: pageContainer.placedPageToggles
                                             objectProp: "type"
                                         }
                                         delegate: AndroidToggleDelegateChooser {
@@ -837,7 +1031,7 @@ AbstractQuickPanel {
 
                 Repeater {
                     model: ScriptModel {
-                        values: root.unusedToggles
+                        values: root.calculateMatrixPlacement(root.unusedToggles, root.columns).items
                         objectProp: "type"
                     }
                     delegate: AndroidToggleDelegateChooser {

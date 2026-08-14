@@ -125,10 +125,10 @@ Item {
     readonly property int effectiveSizeW: {
         if (root.editMode && visualButton.editingRight) {
             var delta = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
-            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? 4) + delta;
+            var w = (root.buttonData.sizeW ?? root.buttonData.size ?? root.gridColumns) + delta;
             return Math.max(1, Math.min(8, w));
         }
-        return root.buttonData.sizeW ?? root.buttonData.size ?? 4;
+        return root.buttonData.sizeW ?? root.buttonData.size ?? root.gridColumns;
     }
     readonly property int effectiveSizeH: {
         if (root.editMode && visualButton.editingBottom) {
@@ -145,6 +145,8 @@ Item {
         id: hoverHandler
     }
 
+    Layout.row: (root.buttonData && root.buttonData.gridRow !== undefined) ? root.buttonData.gridRow : -1
+    Layout.column: (root.buttonData && root.buttonData.gridCol !== undefined) ? root.buttonData.gridCol : -1
     Layout.columnSpan: root.effectiveSizeW
     Layout.rowSpan: root.effectiveSizeH
     Layout.preferredWidth: root.implicitWidth
@@ -172,10 +174,10 @@ Item {
     Item {
         id: visualButton
         
-        parent: root.pageIndex === -1 ? root : (root.parent ? root.parent.parent : root)
+        parent: root.isDragging ? (root.panel ? root.panel : root) : root
         
-        x: root.isDragging ? dragAbsX : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.x + root.x : root.x))
-        y: root.isDragging ? dragAbsY : (root.pageIndex === -1 ? 0 : (root.parent ? root.parent.y + root.y : root.y))
+        x: root.isDragging ? dragAbsX : 0
+        y: root.isDragging ? dragAbsY : 0
         
         Behavior on x {
             enabled: !root.isDragging
@@ -323,108 +325,61 @@ Item {
             property real pressAbsY: 0
             property real initialVisualX: 0
             property real initialVisualY: 0
+            property string dragTargetType: ""
 
-            function mutatePages(mutatorFn) {
-                if (root.panel && root.panel.mutatePages) {
-                    root.panel.mutatePages(mutatorFn);
-                } else {
-                    var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
-                    mutatorFn(cloned);
-                    Config.options.sidebar.quickToggles.android.pages = cloned;
-                }
-            }
+            function findTargetTypeAt(gridX, gridY) {
+                var layout = root.gridRef ? root.gridRef : (root.parent ? root.parent : null);
+                if (!layout) return null;
+                var bestType = null;
+                var minDistance = Infinity;
 
-            function toggleEnabled() {
-                const buttonType = root.buttonData.type;
-                const pi = root.pageIndex;
-
-                mutatePages(function(pages) {
-                    if (pi < 0 || pi >= pages.length) return;
-                    var page = pages[pi];
-                    var existingIdx = -1;
-                    for (var i = 0; i < page.length; i++) {
-                        if (page[i].type === buttonType) { existingIdx = i; break; }
-                    }
-                    if (existingIdx === -1) {
-                        page.push({ type: buttonType, sizeW: 4, sizeH: 1, size: 4 });
-                    } else {
-                        page.splice(existingIdx, 1);
-                    }
-                });
-            }
-
-            function setSize(newW, newH) {
-                const buttonType = root.buttonData.type;
-                const pi = root.pageIndex;
-                mutatePages(function(pages) {
-                    if (pi < 0 || pi >= pages.length) return;
-                    var page = pages[pi];
-                    for (var i = 0; i < page.length; i++) {
-                        if (page[i].type === buttonType) {
-                            page[i].sizeW = newW;
-                            page[i].sizeH = newH;
-                            page[i].size = newW;
-                            return;
-                        }
-                    }
-                });
-            }
-            
-            function resolveLayoutConflicts() {
-                if (root.panel && root.panel.resolveLayoutConflicts) {
-                    root.panel.resolveLayoutConflicts(root.pageIndex, root.gridColumns);
-                }
-            }
-            
-            function checkForSwap(gridX, gridY) {
-                if (!root.parent) return;
-                var layout = root.parent;
                 for (var i = 0; i < layout.children.length; i++) {
                     var sibling = layout.children[i];
-                    if (sibling === root || !sibling.visible) continue;
+                    if (!sibling || !sibling.visible) continue;
                     
-                    if (gridX >= sibling.x && gridX < sibling.x + sibling.width &&
-                        gridY >= sibling.y && gridY < sibling.y + sibling.height) {
-                        
-                        if (sibling.buttonData && sibling.buttonData.type) {
-                            var targetType = sibling.buttonData.type;
-                            var myType = root.buttonData.type;
-                            
-                            mutatePages(function(pages) {
-                                var page = pages[root.pageIndex];
-                                if (!page) return;
-                                
-                                var myIdx = -1;
-                                var targetIdx = -1;
-                                for (var j = 0; j < page.length; j++) {
-                                    if (page[j].type === myType) myIdx = j;
-                                    if (page[j].type === targetType) targetIdx = j;
-                                }
-                                
-                                if (myIdx !== -1 && targetIdx !== -1 && myIdx !== targetIdx) {
-                                    var temp = page[myIdx];
-                                    page[myIdx] = page[targetIdx];
-                                    page[targetIdx] = temp;
-                                }
-                            });
-                            break;
-                        }
+                    var bData = sibling.modelData || sibling.buttonData;
+                    if (!bData || !bData.type) continue;
+                    if (bData.type === root.buttonData.type) continue;
+
+                    var sX = sibling.x;
+                    var sY = sibling.y;
+                    var sW = sibling.width;
+                    var sH = sibling.height;
+
+                    if (gridX >= sX && gridX <= sX + sW && gridY >= sY && gridY <= sY + sH) {
+                        return bData.type;
+                    }
+
+                    var sCenterX = sX + sW / 2;
+                    var sCenterY = sY + sH / 2;
+                    var dist = Math.hypot(gridX - sCenterX, gridY - sCenterY);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        bestType = bData.type;
                     }
                 }
+                return bestType;
             }
 
             onPressed: event => {
-                var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
+                dragTargetType = (root.buttonData && root.buttonData.type) ? root.buttonData.type : "";
+                var panelItem = root.panel ? root.panel : root;
+                var absPos = panelItem.mapFromItem(editModeInteraction, event.x, event.y);
                 pressAbsX = absPos.x;
                 pressAbsY = absPos.y;
-                initialVisualX = visualButton.x;
-                initialVisualY = visualButton.y;
+                var originPos = panelItem.mapFromItem(root, 0, 0);
+                initialVisualX = originPos.x;
+                initialVisualY = originPos.y;
+                root.dragAbsX = initialVisualX;
+                root.dragAbsY = initialVisualY;
                 root.isDragging = false;
             }
             
             onPositionChanged: event => {
                 if (pressed) {
-                    var absPos = visualButton.parent.mapFromItem(editModeInteraction, event.x, event.y);
+                    var myType = dragTargetType || (root.buttonData ? root.buttonData.type : "");
+                    var panelItem = root.panel ? root.panel : root;
+                    var absPos = panelItem.mapFromItem(editModeInteraction, event.x, event.y);
                     var dx = absPos.x - pressAbsX;
                     var dy = absPos.y - pressAbsY;
                     
@@ -439,19 +394,64 @@ Item {
                         var centerX = root.dragAbsX + visualButton.width / 2;
                         var centerY = root.dragAbsY + visualButton.height / 2;
                         
-                        var gridPos = root.parent.mapFromItem(visualButton.parent, centerX, centerY);
-                        checkForSwap(gridPos.x, gridPos.y);
+                        // Cross-page drag: ask panel to scroll if near horizontal edges
+                        if (root.panel && root.panel.handleDragScrollRequest) {
+                            var panelPos = (panelItem === root.panel) ? { x: centerX, y: centerY } : root.panel.mapFromItem(panelItem, centerX, centerY);
+                            root.panel.handleDragScrollRequest(panelPos.x, root);
+                        }
+
+                        // Live visual reorder preview
+                        if (!root.isUnused && (root.dragTargetPage === root.pageIndex || root.dragTargetPage === -1)) {
+                            var gridPos = root.gridRef ? root.gridRef.mapFromItem(panelItem, centerX, centerY) : { x: centerX, y: centerY };
+                            var targetType = (root.panel && root.panel.findTargetToggleAtGridPos)
+                                             ? root.panel.findTargetToggleAtGridPos(gridPos.x, gridPos.y, root.pageIndex, myType)
+                                             : findTargetTypeAt(gridPos.x, gridPos.y);
+                            if (root.panel && root.panel.setDragPreview) {
+                                root.panel.setDragPreview(myType, targetType || myType, root.pageIndex);
+                            }
+                        }
                     }
                 }
             }
 
             onReleased: event => {
+                var myType = dragTargetType || (root.buttonData ? root.buttonData.type : "");
                 if (root.isDragging) {
+                    var targetPage = (root.panel && root.panel.currentPage !== undefined)
+                                     ? root.panel.currentPage : root.pageIndex;
+                    if (root.panel && targetPage !== root.pageIndex) {
+                        if (root.panel.cancelDrag)
+                            root.panel.cancelDrag();
+                        root.panel.moveToggleToPage(
+                            myType,
+                            root.pageIndex,
+                            targetPage
+                        );
+                    } else if (root.panel && !root.isUnused) {
+                        if (root.panel.commitDrag) {
+                            root.panel.commitDrag(myType, root.pageIndex);
+                        }
+                    }
+                    if (root.panel && root.panel.cancelDragScroll)
+                        root.panel.cancelDragScroll();
                     root.isDragging = false;
                 } else {
-                    if (!visualButton.editingRight && !visualButton.editingBottom)
-                        toggleEnabled();
+                    if (root.panel && root.panel.cancelDrag)
+                        root.panel.cancelDrag();
+                    if (!visualButton.editingRight && !visualButton.editingBottom) {
+                        if (root.panel && root.panel.toggleToggle) {
+                            root.panel.toggleToggle(myType, root.pageIndex);
+                        }
+                    }
                 }
+            }
+
+            onCanceled: {
+                if (root.panel && root.panel.cancelDrag)
+                    root.panel.cancelDrag();
+                if (root.panel && root.panel.cancelDragScroll)
+                    root.panel.cancelDragScroll();
+                root.isDragging = false;
             }
         }
 
@@ -508,12 +508,12 @@ Item {
                     onPositionChanged: event => {
                         var absPos = visualButton.mapFromItem(rightDragHandle, event.x, event.y);
                         var dx = absPos.x - pressAbsX;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.buttonData.sizeW ?? root.gridColumns;
                         visualButton.editDragX = Math.max(-root.baseCellWidth * (currentW - 1), Math.min(dx, root.baseCellWidth * (8 - currentW)));
                     }
                     onReleased: event => {
                         visualButton.editingRight = false;
-                        var currentW = root.buttonData.sizeW ?? 4;
+                        var currentW = root.buttonData.sizeW ?? root.gridColumns;
                         var deltaColumns = root.baseCellWidth > 0 ? Math.round(visualButton.editDragX / root.baseCellWidth) : 0;
                         var newSizeW = currentW + deltaColumns;
                         if (isNaN(newSizeW)) newSizeW = currentW;
@@ -521,15 +521,13 @@ Item {
                         
                         visualButton.editDragX = 0;
                         if (newSizeW !== currentW) {
-                            var currentH = root.buttonData.sizeH ?? 1;
-                            editModeInteraction.setSize(newSizeW, currentH);
-                            editModeInteraction.resolveLayoutConflicts();
+                            if (root.panel && root.panel.setToggleSize) {
+                                root.panel.setToggleSize(root.buttonData.type, root.pageIndex, newSizeW, root.buttonData.sizeH ?? 1);
+                            }
                         }
                     }
                 }
             }
-            
-            // Sliders typically only support height 1, so no bottomDragHandle for now
         }
     }
 
