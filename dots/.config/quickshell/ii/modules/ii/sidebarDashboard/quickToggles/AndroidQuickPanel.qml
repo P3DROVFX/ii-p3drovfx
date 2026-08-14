@@ -49,6 +49,55 @@ AbstractQuickPanel {
     }
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
 
+    function normalizedSpan(value, fallback, maximum) {
+        var numericValue = Number(value);
+        if (!isFinite(numericValue))
+            numericValue = fallback;
+        numericValue = Math.round(numericValue);
+        return Math.max(1, Math.min(numericValue, maximum));
+    }
+
+    // Keep one canonical representation of the layout. Old/stale config entries can
+    // otherwise be counted by the height calculator even when no delegate exists for
+    // them, and duplicate toggle types break ScriptModel's type-based identity.
+    function normalizePages(rawPages) {
+        if (!rawPages || rawPages.length === 0)
+            return [[]];
+
+        var inputPages = rawPages;
+        var first = inputPages[0];
+        if (first && typeof first === "object" && first.type !== undefined)
+            inputPages = [rawPages];
+
+        var seenTypes = {};
+        var normalized = [];
+        for (var p = 0; p < inputPages.length; p++) {
+            var sourcePage = inputPages[p] || [];
+            var page = [];
+            for (var i = 0; i < sourcePage.length; i++) {
+                var toggle = sourcePage[i];
+                if (!toggle || !toggle.type)
+                    continue;
+                if (!root.availableToggleTypes.includes(toggle.type) || !root.isToggleVisible(toggle.type))
+                    continue;
+                if (seenTypes[toggle.type])
+                    continue;
+
+                var t = Object.assign({}, toggle);
+                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
+                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
+                t.sizeW = root.normalizedSpan(t.sizeW ?? t.size, defaultW, Math.max(1, root.columns));
+                t.sizeH = root.normalizedSpan(t.sizeH, defaultH, 8);
+                t.size = t.sizeW;
+                seenTypes[t.type] = true;
+                page.push(t);
+            }
+            normalized.push(page);
+        }
+
+        return normalized.length > 0 ? normalized : [[]];
+    }
+
     // Pages data — reads from Config.
     // The stored format is: pages = [[toggle, toggle, ...], [toggle, ...], ...]
     // Each inner array is one page. Each toggle is {type: string, size: int}.
@@ -56,32 +105,7 @@ AbstractQuickPanel {
         const cfg = Config.options.sidebar.quickToggles.android;
         if (!Config.ready)
             return [[]];
-        if (!cfg.pages || cfg.pages.length === 0)
-            return [[]];
-
-        var rawPages = cfg.pages;
-        const first = rawPages[0];
-        // Detect format: if first element has a `type` property, it's the old flat
-        // toggle list (legacy `toggles` renamed to `pages`). Wrap in a single page.
-        // Otherwise it's the new pages-of-arrays format.
-        if (first && typeof first === "object" && first.type !== undefined) {
-            // Old flat format — wrap in single page
-            rawPages = [cfg.pages];
-        }
-
-        return rawPages.map(page => (page || [])
-            .filter(toggle => toggle && root.isToggleVisible(toggle.type))
-            .map(toggle => {
-                var t = Object.assign({}, toggle);
-                var defaultH = (t.type === "mediaWidget") ? 2 : 1;
-                var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-                var w = t.sizeW ?? t.size ?? defaultW;
-                t.sizeW = Math.max(1, Math.min(w, root.columns));
-                t.sizeH = Math.max(1, t.sizeH ?? defaultH);
-                t.size = t.sizeW;
-                return t;
-            })
-        );
+        return root.normalizePages(cfg.pages);
     }
 
     // Current page toggles
@@ -106,17 +130,23 @@ AbstractQuickPanel {
         return types;
     }
 
-    readonly property list<var> unusedToggles: {
-        const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
-        return types.map(type => {
-            return {
-                type: type,
-                size: (type === "mediaWidget") ? 2 : 1,
-                sizeW: (type === "mediaWidget") ? 2 : 1,
-                sizeH: (type === "mediaWidget") ? 2 : 1
-            };
-        });
-    }
+    // The catalog owns stable JS objects. Recreating every object whenever a toggle is
+    // added/removed makes ScriptModel emit dataChanged for every surviving row even
+    // though objectProp is "type". DelegateChooser can then keep a stale concrete
+    // delegate while rows are shifted, which is why the visually removed tray item can
+    // differ from the type that was actually added to the page.
+    readonly property var toggleCatalog: availableToggleTypes.map(type => {
+        return {
+            type: type,
+            size: (type === "mediaWidget") ? 2 : 1,
+            sizeW: (type === "mediaWidget") ? 2 : 1,
+            sizeH: (type === "mediaWidget") ? 2 : 1
+        };
+    })
+
+    readonly property var unusedToggles: toggleCatalog.filter(toggle =>
+        root.isToggleVisible(toggle.type) && !allUsedTypes.includes(toggle.type)
+    )
 
     function getGridRowsNeeded(togglesList) {
         if (!togglesList || togglesList.length === 0)
@@ -149,6 +179,12 @@ AbstractQuickPanel {
             }
         }
 
+        // GridLayout auto-placement advances through the grid in model order. Starting
+        // every item again at row 0 backfills old holes differently from GridLayout and
+        // can make the simulated row count diverge by one after a resize. Keep a cursor
+        // and only search forward, while still honoring vertical spans with the matrix.
+        var cursorRow = 0;
+        var cursorColumn = 0;
         var maxRow = 0;
         for (var i = 0; i < togglesList.length; i++) {
             if (!togglesList[i])
@@ -156,21 +192,36 @@ AbstractQuickPanel {
             var t = togglesList[i];
             var defaultH = (t.type === "mediaWidget") ? 2 : 1;
             var defaultW = (t.type === "mediaWidget") ? 2 : 1;
-            var w = Math.max(1, Math.min(t.sizeW ?? t.size ?? defaultW, cols));
-            var h = Math.max(1, t.sizeH ?? defaultH);
+            var w = root.normalizedSpan(t.sizeW ?? t.size, defaultW, cols);
+            var h = root.normalizedSpan(t.sizeH, defaultH, 8);
 
-            var r = 0;
+            var r = cursorRow;
+            var c = cursorColumn;
             var placed = false;
             while (!placed) {
-                for (var c = 0; c <= cols - w; c++) {
-                    if (isFree(r, c, w, h)) {
-                        markOccupied(r, c, w, h);
-                        maxRow = Math.max(maxRow, r + h);
-                        placed = true;
-                        break;
+                if (c + w > cols) {
+                    r++;
+                    c = 0;
+                    continue;
+                }
+
+                if (isFree(r, c, w, h)) {
+                    markOccupied(r, c, w, h);
+                    maxRow = Math.max(maxRow, r + h);
+                    cursorRow = r;
+                    cursorColumn = c + w;
+                    if (cursorColumn >= cols) {
+                        cursorRow++;
+                        cursorColumn = 0;
+                    }
+                    placed = true;
+                } else {
+                    c++;
+                    if (c >= cols) {
+                        r++;
+                        c = 0;
                     }
                 }
-                if (!placed) r++;
             }
         }
         return maxRow;
@@ -196,12 +247,15 @@ AbstractQuickPanel {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
     }
 
-    // Helper: deep-clone pages, run mutator, reassign to Config
-    // This is REQUIRED because list<var> returns a copy, not a reference.
+    // Helper: deep-clone the canonical pages, run mutator, sanitize and reassign.
+    // Cloning Config's raw list preserved stale/duplicate entries forever and let the
+    // rendered model drift away from the persisted one.
     function mutatePages(mutatorFn) {
-        var cloned = JSON.parse(JSON.stringify(Config.options.sidebar.quickToggles.android.pages));
+        if (!Config.ready)
+            return;
+        var cloned = JSON.parse(JSON.stringify(root.pages));
         mutatorFn(cloned);
-        Config.options.sidebar.quickToggles.android.pages = cloned;
+        Config.options.sidebar.quickToggles.android.pages = root.normalizePages(cloned);
     }
 
     function resolveLayoutConflicts(pageIndex, gridColumns) {
@@ -336,8 +390,7 @@ AbstractQuickPanel {
 
             // Append to the target page (position at end, layout engine will sort)
             var targetPage = pages[toPage];
-            if (!targetPage)
-                pages[toPage] = [];
+            if (!targetPage) pages[toPage] = [];
             pages[toPage].push(toggleData);
         });
     }
@@ -543,38 +596,38 @@ AbstractQuickPanel {
 
                                     Repeater {
                                         id: gridRepeater
-                                    model: ScriptModel {
-                                        values: pageContainer.pageToggles
-                                        objectProp: "type"
-                                    }
-                                    delegate: AndroidToggleDelegateChooser {
+                                        model: ScriptModel {
+                                            values: pageContainer.pageToggles
+                                            objectProp: "type"
+                                        }
+                                        delegate: AndroidToggleDelegateChooser {
 
-                                        editMode: root.editMode
-                                        baseCellWidth: root.baseCellWidth
-                                        baseCellHeight: root.baseCellHeight
-                                        spacing: root.spacing
-                                        isUnused: false
-                                        pageIndex: pageContainer.index
-                                        gridColumns: root.columns
-                                        panel: root
-                                        gridRef: pageContentGrid
-                                        entranceTrigger: root.entranceTrigger
+                                            editMode: root.editMode
+                                            baseCellWidth: root.baseCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            spacing: root.spacing
+                                            isUnused: false
+                                            pageIndex: pageContainer.index
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: pageContentGrid
+                                            entranceTrigger: root.entranceTrigger
 
-                                        onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                        onOpenAudioInputDialog: root.openAudioInputDialog()
-                                        onOpenBluetoothDialog: root.openBluetoothDialog()
-                                        onOpenNightLightDialog: root.openNightLightDialog()
-                                        onOpenWifiDialog: root.openWifiDialog()
-                                        onOpenDarkModeDialog: root.openDarkModeDialog()
-                                        onOpenLocalSendDialog: root.openLocalSendDialog()
-                                        onOpenVpnDialog: root.openVpnDialog()
-                                        onOpenTailscaleDialog: root.openTailscaleDialog()
-                                        onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                        onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                        onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                            onOpenAudioOutputDialog: root.openAudioOutputDialog()
+                                            onOpenAudioInputDialog: root.openAudioInputDialog()
+                                            onOpenBluetoothDialog: root.openBluetoothDialog()
+                                            onOpenNightLightDialog: root.openNightLightDialog()
+                                            onOpenWifiDialog: root.openWifiDialog()
+                                            onOpenDarkModeDialog: root.openDarkModeDialog()
+                                            onOpenLocalSendDialog: root.openLocalSendDialog()
+                                            onOpenVpnDialog: root.openVpnDialog()
+                                            onOpenTailscaleDialog: root.openTailscaleDialog()
+                                            onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
+                                            onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
+                                            onOpenScreenShaderDialog: root.openScreenShaderDialog()
+                                        }
                                     }
                                 }
-                            }
                             }
                         }
                     }
