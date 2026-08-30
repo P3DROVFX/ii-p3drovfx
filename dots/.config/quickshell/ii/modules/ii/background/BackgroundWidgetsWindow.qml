@@ -438,6 +438,15 @@ PanelWindow {
             antialiasing: true
             smooth: true
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
+            // In the mode the lattice is drawn on a card, not on a screen: the
+            // card is this window's own rect (the canvas sits off it by the
+            // parallax offset), and its corner is the one the wallpaper's card
+            // draws, divided back out of the shrink so both curves match.
+            gridCardRect: bgWidgetsWindow.editProgress > 0
+                ? Qt.rect(Math.round(-widgetCanvas.x), Math.round(-widgetCanvas.y), bgWidgetsWindow.width, bgWidgetsWindow.height)
+                : Qt.rect(0, 0, widgetCanvas.width, widgetCanvas.height)
+            gridCardRadius: bgWidgetsWindow.editTransform.scale > 0
+                ? Appearance.rounding.verylarge * bgWidgetsWindow.editProgress / bgWidgetsWindow.editTransform.scale : 0
             // The desktop is the one canvas that opts into marquee selection;
             // the mode is handed in so this canvas, and not the overlay's,
             // follows it.

@@ -14,6 +14,14 @@ MouseArea {
     property int alignmentGridStep: 10
     onAlignmentGridStepChanged: dotGrid.requestPaint()
 
+    // The area the lattice belongs to, and the corner it is cut to, in canvas
+    // coordinates. Edit Mode shrinks the desktop into a rounded card, and a
+    // square lattice would spill out past its corners; the host hands the card
+    // in so the dots stop where the card does. Left alone it is the whole
+    // canvas with no corner, which paints exactly as it always did.
+    property rect gridCardRect: Qt.rect(0, 0, root.width, root.height)
+    property real gridCardRadius: 0
+
     // Handed in by the surface that owns this canvas - the desktop's, and only
     // the desktop's. The overlay reuses this component and has its own
     // dismissal, so it must not follow the mode.
@@ -505,6 +513,14 @@ MouseArea {
         // and fillStyle switches per frame — the grid could not keep up and
         // read as simply missing. Painted once per size/step change, it costs
         // nothing while you drag.
+
+        // The card, and how far into a row the corner has eaten. Solved per row
+        // rather than per dot: one square root a row instead of ~200 distance
+        // tests, so the corner costs nothing on top of the loop that was
+        // already here.
+        readonly property rect card: root.gridCardRect
+        readonly property real cardRadius: Math.max(0, Math.min(root.gridCardRadius, Math.min(card.width, card.height) / 2))
+
         onPaint: {
             const ctx = getContext("2d");
             ctx.reset();
@@ -512,8 +528,26 @@ MouseArea {
 
             const offset = dotGrid.dotSize / 2;
             const step = Math.max(1, root.alignmentGridStep);
+            const left = dotGrid.card.x;
+            const top = dotGrid.card.y;
+            const right = left + dotGrid.card.width;
+            const bottom = top + dotGrid.card.height;
+            const radius = dotGrid.cardRadius;
+
             for (let y = 0; y <= height; y += step) {
+                if (y < top || y > bottom)
+                    continue;
+                // How deep this row sits inside the corner's band, and so how
+                // far the arc has pulled the row's ends in.
+                const depth = Math.max(0, Math.max(top + radius - y, y - (bottom - radius)));
+                if (depth > radius)
+                    continue;
+                const inset = depth > 0 ? radius - Math.sqrt(Math.max(0, radius * radius - depth * depth)) : 0;
+                const rowLeft = left + inset;
+                const rowRight = right - inset;
                 for (let x = 0; x <= width; x += step) {
+                    if (x < rowLeft || x > rowRight)
+                        continue;
                     ctx.fillRect(x - offset, y - offset, dotGrid.dotSize, dotGrid.dotSize);
                 }
             }
@@ -522,6 +556,12 @@ MouseArea {
         onWidthChanged: requestPaint()
         onHeightChanged: requestPaint()
         onDotColorChanged: requestPaint()
+        onCardChanged: requestPaint()
+        // Whole pixels only: the corner grows with the shrink, and repainting a
+        // full-screen lattice on every sub-pixel step of that animation is a
+        // hitch nobody asked for.
+        property int roundedRadius: Math.round(cardRadius)
+        onRoundedRadiusChanged: requestPaint()
         onVisibleChanged: {
             if (visible)
                 requestPaint();
