@@ -52,7 +52,6 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: String(dial.value).padStart(2, '0')
             font.pixelSize: dial.numberSize
-            font.family: Appearance.font.family.monospace
             color: Appearance.m3colors.m3onSurface
         }
         StyledText {

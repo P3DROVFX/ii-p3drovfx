@@ -257,8 +257,7 @@ Item {
                         }
                         StyledText {
                             text: countdownItem.done ? Translation.tr("Done") : TimerService.formatCountdownDuration(countdownItem.secondsLeft)
-                            font.family: Appearance.font.family.monospace
-                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.pixelSize: Appearance.font.pixelSize.normal
                             color: countdownItem.done ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
                         }
 
@@ -277,6 +276,9 @@ Item {
                             buttonIcon: "close"
                             tooltipText: Translation.tr("Cancel")
                             iconColour: countdownItem.done ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                            hoverIconColour: Appearance.colors.colOnErrorContainer
+                            colBackgroundHover: countdownItem.done ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
+                            colRipple: Appearance.colors.colErrorContainerActive
                             onClicked: TimerService.removeCountdown(countdownItem.modelData.id)
                         }
                     }
@@ -309,6 +311,7 @@ Item {
         property string buttonIcon: ""
         property string tooltipText: ""
         property color iconColour: Appearance.colors.colOnLayer2
+        property color hoverIconColour: actionButton.iconColour
 
         implicitHeight: 30
         implicitWidth: 30
@@ -321,7 +324,11 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: actionButton.buttonIcon
             iconSize: Appearance.font.pixelSize.large
-            color: actionButton.iconColour
+            color: actionButton.hovered ? actionButton.hoverIconColour : actionButton.iconColour
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
         }
 
         StyledToolTip {
