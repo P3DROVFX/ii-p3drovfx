@@ -54,6 +54,30 @@ Scope {
                     onPressed: GlobalStates.closeDesktopMenu()
                 }
 
+                // The menu opens with its corner under the pointer, so the row it
+                // opened on is already beneath the cursor. Until the pointer has
+                // actually gone somewhere, a second click - either button - is the
+                // user waving the menu away, not choosing that row; this sheet takes
+                // it and dismisses. It stops mattering the moment the pointer moves,
+                // and every following click reaches the card as usual.
+                MouseArea {
+                    id: dismissGuard
+                    anchors.fill: parent
+                    z: 100
+                    readonly property real moveThreshold: 6
+                    property bool armed: true
+                    enabled: dismissGuard.armed
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                    onPositionChanged: mouse => {
+                        if (Math.abs(mouse.x - GlobalStates.desktopMenuX) <= dismissGuard.moveThreshold
+                            && Math.abs(mouse.y - GlobalStates.desktopMenuY) <= dismissGuard.moveThreshold)
+                            return;
+                        dismissGuard.armed = false;
+                    }
+                    onPressed: GlobalStates.closeDesktopMenu()
+                }
+
                 Item {
                     anchors.fill: parent
                     focus: true
