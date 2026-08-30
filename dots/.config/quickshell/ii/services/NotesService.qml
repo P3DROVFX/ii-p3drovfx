@@ -67,10 +67,14 @@ Singleton {
     function loadFromDisk(): void {
         if (!noteFile)
             return;
-        root.publish(root.parseText(noteFile.text()));
         root.ready = true;
-        if (root.pendingData !== null)
-            writeDebounce.restart();
+        // A reload triggered by our own write must not clobber newer in-memory edits.
+        if (root.writing || root.pendingData !== null) {
+            if (root.pendingData !== null)
+                writeDebounce.restart();
+            return;
+        }
+        root.publish(root.parseText(noteFile.text()));
     }
 
     function scheduleWrite(value): bool {
@@ -88,12 +92,22 @@ Singleton {
     }
 
     function flush(): bool {
-        if (!root.ready || root.pendingData === null || root.writing)
+        if (!root.ready || root.pendingData === null)
             return false;
-        root.writing = true;
         root.publish(root.pendingData);
-        noteFile.setText(JSON.stringify(root.tabsData, null, 2));
         root.pendingData = null;
+        const payload = JSON.stringify(root.tabsData, null, 2);
+        // FileView silently drops a setText that matches what it already holds, and
+        // emits no signal for it — so treat it as done instead of waiting forever.
+        if (payload === noteFile.text()) {
+            root.writing = false;
+            writeWatchdog.stop();
+            root.writeFinished(true, "");
+            return true;
+        }
+        root.writing = true;
+        writeWatchdog.restart();
+        noteFile.setText(payload);
         return true;
     }
 
@@ -187,6 +201,17 @@ Singleton {
     }
 
     Timer {
+        id: writeWatchdog
+        interval: 2000
+        repeat: false
+        onTriggered: {
+            root.writing = false;
+            if (root.pendingData !== null)
+                writeDebounce.restart();
+        }
+    }
+
+    Timer {
         id: missingFileRetryTimer
         interval: root.missingFileRetryInterval
         repeat: false
@@ -199,11 +224,18 @@ Singleton {
         watchChanges: true
         atomicWrites: true
         onLoaded: root.loadFromDisk()
-        onAdapterUpdated: {
-            if (!root.writing)
-                root.loadFromDisk();
+        onSaved: {
+            writeWatchdog.stop();
             root.writing = false;
             root.writeFinished(true, "");
+            if (root.pendingData !== null)
+                writeDebounce.restart();
+        }
+        onSaveFailed: error => {
+            writeWatchdog.stop();
+            root.writing = false;
+            root.lastError = `notes.json save failed: ${error}`;
+            root.writeFinished(false, root.lastError);
         }
         onLoadFailed: error => {
             root.writing = false;
