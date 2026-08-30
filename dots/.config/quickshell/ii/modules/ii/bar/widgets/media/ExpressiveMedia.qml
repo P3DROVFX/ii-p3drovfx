@@ -185,7 +185,7 @@ Item {
         sourceComponent: ClippedFilledCircularProgress {
             implicitSize: 20
             lineWidth: Appearance.rounding.unsharpen
-            value: root.activePlayer?.position / root.activePlayer?.length
+            value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
             colPrimary: Appearance.colors.colOnSecondaryContainer
             enableAnimation: false
             Item {
@@ -327,7 +327,7 @@ Item {
                 Layout.leftMargin: 3
                 implicitSize: 20
                 lineWidth: Appearance.rounding.unsharpen
-                value: root.activePlayer?.position / root.activePlayer?.length
+                value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
                 colPrimary: Appearance.colors.colOnSecondaryContainer
                 enableAnimation: false
                 Item {

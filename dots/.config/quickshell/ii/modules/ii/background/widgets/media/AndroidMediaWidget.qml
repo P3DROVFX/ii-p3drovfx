@@ -701,7 +701,7 @@ AbstractBackgroundWidget {
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
-                                value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                 onMoved: if (root.player)
                                     root.player.position = value * root.player.length
                             }
@@ -720,7 +720,7 @@ AbstractBackgroundWidget {
                                 animateWave: root.playing && root.visible && !root.hasActiveWindows
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
-                                value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                             }
                         }
                     }

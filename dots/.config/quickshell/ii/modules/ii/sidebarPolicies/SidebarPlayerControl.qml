@@ -495,7 +495,7 @@ Item {
                     color: root.activeSubtextColor
                     font.letterSpacing: -0.4
                     font.features: { "tnum": 1 }
-                    text: StringUtils.friendlyTimeForSeconds(root.player ? root.player.position : 0)
+                    text: StringUtils.friendlyTimeForSeconds(root.player ? Math.min(root.player.position, root.player.length > 0 ? root.player.length : Infinity) : 0)
                 }
 
                 Item {
@@ -511,7 +511,7 @@ Item {
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
                             handleColor: root.activeColor
-                            value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                             onMoved: if (root.player) root.player.position = value * root.player.length
                         }
                     }
@@ -528,7 +528,7 @@ Item {
                             wavy: root.player ? root.player.isPlaying : false
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
-                            value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                         }
                     }
                 }
