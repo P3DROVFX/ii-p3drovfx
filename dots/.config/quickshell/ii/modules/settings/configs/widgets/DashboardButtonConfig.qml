@@ -136,6 +136,16 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "hourglass_top"
+            text: Translation.tr("Show Countdown Timers")
+            checked: Config.options.bar.dashboardButton.showCountdowns
+            onCheckedChanged: {
+                Config.options.bar.dashboardButton.showCountdowns = checked;
+            }
+            StyledToolTip { text: Translation.tr("Show the hourglass while at least one countdown timer exists") }
+        }
+
+        ConfigSwitch {
             buttonIcon: "alarm"
             text: Translation.tr("Show System Alarms")
             checked: Config.options.bar.dashboardButton.showAlarms
@@ -261,6 +271,8 @@ ContentPage {
                                         return timerPreview;
                                     case "stopwatch":
                                         return stopwatchPreview;
+                                    case "countdown":
+                                        return countdownPreview;
                                     case "easyeffects":
                                         return equalizerPreview;
                                     case "dns":
@@ -389,6 +401,13 @@ ContentPage {
     Component {
         id: stopwatchPreview
         StopwatchIcon {
+            iconSize: 26
+            color: Appearance.colors.colOnSurface
+        }
+    }
+    Component {
+        id: countdownPreview
+        HourglassIcon {
             iconSize: 26
             color: Appearance.colors.colOnSurface
         }

@@ -33,6 +33,7 @@ ICON_FILES = {
     "gamemode": ICONS / "GamepadIcon.qml",
     "songrec": ICONS / "MusicRecognitionIcon.qml",
     "alarm": ICONS / "AlarmIcon.qml",
+    "countdown": ICONS / "HourglassIcon.qml",
 }
 DRIVER = ICONS / "DashboardIconDriver.qml"
 DEFAULT_BUTTONS = [
@@ -54,7 +55,7 @@ class IconStructureTests(unittest.TestCase):
                          "caffeine": 4, "vpn": 2, "tailscale": 1,
                          "pomodoro": 3, "stopwatch": 4, "easyeffects": 1,
                          "dns": 3, "warp": 2, "gamemode": 1, "songrec": 3,
-                         "alarm": 4}
+                         "alarm": 4, "countdown": 6}
         for channel, path in ICON_FILES.items():
             body = path.read_text()
             parts = len(re.findall(r"^\s{4}(?:Shape|\w+) \{\s*$", body, re.M))
@@ -91,6 +92,7 @@ class IconStructureTests(unittest.TestCase):
             "gamemode": ["push"],
             "songrec": ["waveTravel", "noteBob"],
             "alarm": ["bodyRock", "bellSwing", "handJolt", "legDrop"],
+            "countdown": ["topSandAmount", "bottomSandAmount", "grainY", "bodyTurn"],
         }
         for channel, properties in moved.items():
             body = ICON_FILES[channel].read_text()
@@ -143,6 +145,9 @@ class RestStateTests(unittest.TestCase):
             "songrec": [("property bool listening", "root.listening")],
             "alarm": [("property bool scheduled", "root.scheduled"),
                       ("property bool ringing", "root.ringing")],
+            "countdown": [("property bool running", "root.running"),
+                          ("property bool paused", "root.paused"),
+                          ("property bool finished", "root.finished")],
             "mic": [("property bool muted", "root.muted")],
             "notification": [("property bool silent", "root.silent")],
             "wifi": [("property int bars", "root.restOpacity")],
@@ -341,6 +346,24 @@ class GlyphFidelityTests(unittest.TestCase):
         self.assertIn('strokeColor: "transparent"', foot)
         self.assertNotIn("strokeWidth:", foot)
 
+    def test_countdown_hourglass_has_separate_filled_frame_and_sand(self):
+        body = ICON_FILES["countdown"].read_text()
+        for part in ("id: topCap", "id: bottomCap", "id: leftRail", "id: rightRail",
+                     "id: topSand", "id: bottomSand", "id: fallingGrain"):
+            self.assertIn(part, body)
+        self.assertGreaterEqual(body.count("fillColor: root.color"), 7)
+        self.assertNotIn("strokeColor: root.color", body)
+
+    def test_countdown_one_shots_resume_flow_when_another_timer_is_running(self):
+        body = ICON_FILES["countdown"].read_text()
+        for animation, next_animation in (("pauseAnim", "resumeAnim"),
+                                          ("completeAnim", "removedAnim"),
+                                          ("removedAnim", None)):
+            section = body.split(f"id: {animation}")[1]
+            if next_animation is not None:
+                section = section.split(f"id: {next_animation}")[0]
+            self.assertIn("root.beginFlow()", section, animation)
+
     def test_warp_shackle_motion_reaches_the_drawn_shackle(self):
         body = ICON_FILES["warp"].read_text()
         self.assertRegex(
@@ -394,7 +417,8 @@ class WiringTests(unittest.TestCase):
         """Otherwise every binding's first evaluation plays an animation at boot."""
         body = DRIVER.read_text()
         self.assertIn("property bool driverReady: false", body)
-        self.assertIn("onTriggered: root.driverReady = true", body)
+        self.assertIn("root.driverReady = true", body)
+        self.assertIn("root.refreshCountdownState(false)", body)
         for handler in ("onWifiCueChanged", "onBluetoothCueChanged", "onSinkMutedChanged",
                         "onSinkVolumeChanged", "onSourceMutedChanged",
                         "onNotificationsSilentChanged", "onUnreadCountChanged"):
@@ -414,7 +438,8 @@ class WiringTests(unittest.TestCase):
             # (pomodoro, stopwatch, EasyEffects, DNS, game mode, SongRec) are
             # expressive-only, so they are not asserted here.
             for component in ("WifiIcon {", "BluetoothIcon {", "VolumeIcon {",
-                              "MicIcon {", "CoffeeIcon {", "VpnKeyIcon {", "TailscaleIcon {"):
+                              "MicIcon {", "CoffeeIcon {", "VpnKeyIcon {", "TailscaleIcon {",
+                              "HourglassIcon {"):
                 self.assertIn(component, body, f"{path.name}: {component}")
 
     def test_quick_toggle_indicators_reach_the_expressive_button(self):
@@ -444,6 +469,24 @@ class WiringTests(unittest.TestCase):
             self.assertIn("AlarmIcon {", body, path.name)
             self.assertIn("alarmIcon: alarmIcon", body, path.name)
             self.assertIn("iconDriver.alarmVisible", body, path.name)
+
+    def test_countdown_state_reaches_all_dashboard_buttons(self):
+        driver = DRIVER.read_text()
+        self.assertIn("TimerService.countdowns", driver)
+        self.assertIn("id: countdownHideTimer", driver)
+        for cue in ('play("start")', 'play("pause")', 'play("resume")',
+                    'play("complete")', 'play("removed")'):
+            self.assertIn(cue, driver)
+        for path in DEFAULT_BUTTONS + [BUTTON]:
+            body = path.read_text()
+            self.assertIn("HourglassIcon {", body, path.name)
+            self.assertIn("countdownIcon: countdownIcon", body, path.name)
+            self.assertIn("iconDriver.countdownVisible", body, path.name)
+            self.assertIn("Config.options.bar.dashboardButton.showCountdowns", body, path.name)
+
+        settings = CONFIG.read_text()
+        self.assertIn("Config.options.bar.dashboardButton.showCountdowns", settings)
+        self.assertIn("return countdownPreview", settings)
 
     def test_no_dashboard_button_reimplements_the_driver(self):
         """One mapping from state to cue, shared by all three buttons."""

@@ -57,6 +57,7 @@ RippleButton { // Right sidebar button
         vpnIcon: vpnIcon
         tailscaleIcon: tailscaleIcon
         alarmIcon: alarmIcon
+        countdownIcon: countdownIcon
     }
 
     RowLayout {
@@ -104,6 +105,23 @@ RippleButton { // Right sidebar button
                 iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
                 muted: Audio.source?.audio?.muted ?? false
+            }
+        }
+
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
+            Layout.fillHeight: true
+            Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
+            Behavior on Layout.rightMargin {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            HourglassIcon {
+                id: countdownIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                running: iconDriver.countdownRunning
+                paused: iconDriver.countdownPaused
+                finished: iconDriver.countdownFinished
             }
         }
 

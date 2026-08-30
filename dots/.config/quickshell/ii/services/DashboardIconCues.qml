@@ -112,6 +112,18 @@ Singleton {
             ]
         },
         {
+            channel: "countdown",
+            title: "Countdown timer",
+            icon: "hourglass_top",
+            cues: [
+                { name: "start", label: "Timer added" },
+                { name: "pause", label: "Paused" },
+                { name: "resume", label: "Resumed" },
+                { name: "complete", label: "Finished" },
+                { name: "removed", label: "Timer removed" }
+            ]
+        },
+        {
             channel: "easyeffects",
             title: "EasyEffects",
             icon: "graphic_eq",

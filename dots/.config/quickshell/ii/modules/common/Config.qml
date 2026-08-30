@@ -3169,6 +3169,7 @@ Singleton {
                     property bool showNotifications: true
                     property bool showPomodoro: true
                     property bool showStopwatch: true
+                    property bool showCountdowns: true
                     property bool showEasyEffects: true
                     property bool showDns: true
                     property bool showGameMode: true

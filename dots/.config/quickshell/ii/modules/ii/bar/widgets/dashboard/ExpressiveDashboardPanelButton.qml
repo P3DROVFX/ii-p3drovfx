@@ -165,6 +165,7 @@ Item {
         gameModeIcon: gameModeIcon
         songRecIcon: songRecIcon
         alarmIcon: alarmIcon
+        countdownIcon: countdownIcon
     }
 
     Grid {
@@ -329,6 +330,23 @@ Item {
                     iconSize: root.iconPixelSize
                     color: stopwatchWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                     running: TimerService.stopwatchRunning
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: countdownWrapper
+                vertical: root.vertical
+                HourglassIcon {
+                    id: countdownIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: countdownWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    running: iconDriver.countdownRunning
+                    paused: iconDriver.countdownPaused
+                    finished: iconDriver.countdownFinished
                 }
             }
         }

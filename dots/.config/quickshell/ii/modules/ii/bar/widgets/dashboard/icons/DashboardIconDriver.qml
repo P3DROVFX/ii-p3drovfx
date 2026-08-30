@@ -35,6 +35,7 @@ Item {
     property Item gameModeIcon: null
     property Item songRecIcon: null
     property Item alarmIcon: null
+    property Item countdownIcon: null
 
     visible: false
 
@@ -47,7 +48,10 @@ Item {
         running: true
         interval: 1400
         repeat: false
-        onTriggered: root.driverReady = true
+        onTriggered: {
+            root.refreshCountdownState(false);
+            root.driverReady = true;
+        }
     }
 
     // ── Wi-Fi ───────────────────────────────────────────────────────────────
@@ -232,6 +236,76 @@ Item {
             return;
         root.stopwatchIcon.play(root.stopwatchLapCount > previous ? "lap" : "reset");
     }
+
+    // ── Countdown timers ───────────────────────────────────────────────────
+    // TimerService replaces the persisted list for every transition. Comparing
+    // aggregate counts lets one handler distinguish create, pause, resume,
+    // complete and remove without polling the individual timer objects.
+    readonly property var countdownItems: Array.from(TimerService.countdowns ?? [])
+    readonly property int countdownCount: root.countdownItems.length
+    readonly property int countdownRunningCount: root.countdownItems.filter(item => !item?.paused && !item?.notified).length
+    readonly property int countdownPausedCount: root.countdownItems.filter(item => item?.paused && !item?.notified).length
+    readonly property int countdownFinishedCount: root.countdownItems.filter(item => item?.notified).length
+    readonly property bool countdownRunning: root.countdownRunningCount > 0
+    readonly property bool countdownPaused: !root.countdownRunning && root.countdownPausedCount > 0
+    readonly property bool countdownFinished: !root.countdownRunning && !root.countdownPaused && root.countdownFinishedCount > 0
+
+    property int previousCountdownCount: 0
+    property int previousCountdownRunningCount: 0
+    property int previousCountdownPausedCount: 0
+    property int previousCountdownFinishedCount: 0
+    property bool countdownVisible: root.countdownCount > 0
+
+    Timer {
+        id: countdownHideTimer
+        interval: 720
+        repeat: false
+        onTriggered: root.countdownVisible = root.countdownCount > 0
+    }
+
+    function refreshCountdownState(allowCue = true): void {
+        const count = root.countdownCount;
+        const running = root.countdownRunningCount;
+        const paused = root.countdownPausedCount;
+        const finished = root.countdownFinishedCount;
+        const previousCount = root.previousCountdownCount;
+        const previousRunning = root.previousCountdownRunningCount;
+        const previousPaused = root.previousCountdownPausedCount;
+        const previousFinished = root.previousCountdownFinishedCount;
+
+        root.previousCountdownCount = count;
+        root.previousCountdownRunningCount = running;
+        root.previousCountdownPausedCount = paused;
+        root.previousCountdownFinishedCount = finished;
+
+        if (count > 0) {
+            countdownHideTimer.stop();
+            root.countdownVisible = true;
+        } else if (previousCount > 0) {
+            // removedAnim closes the hourglass before the Revealer takes its
+            // space away; hiding immediately would cut that gesture in half.
+            root.countdownVisible = true;
+            countdownHideTimer.restart();
+        } else {
+            root.countdownVisible = false;
+        }
+
+        if (!allowCue || !root.driverReady || !root.countdownIcon)
+            return;
+
+        if (count > previousCount)
+            root.countdownIcon.play("start");
+        else if (count < previousCount)
+            root.countdownIcon.play("removed");
+        else if (finished > previousFinished)
+            root.countdownIcon.play("complete");
+        else if (paused > previousPaused)
+            root.countdownIcon.play("pause");
+        else if (running > previousRunning)
+            root.countdownIcon.play("resume");
+    }
+
+    onCountdownItemsChanged: root.refreshCountdownState()
 
     // ── EasyEffects ─────────────────────────────────────────────────────────
     readonly property bool easyEffectsActive: EasyEffects.active
