@@ -437,7 +437,12 @@ MouseArea {
     }
 
     // Called by the leader after it has landed and before it commits itself.
-    function widgetDragEnded(widget) {
+    // The landing point is passed in rather than read back off the leader: the
+    // leader is told where it lands and may still be drawing its way there, and
+    // a follower placed from a position that is still moving keeps whatever of
+    // the gesture had not been drawn yet as a permanent offset - the cluster
+    // lands out of shape.
+    function widgetDragEnded(widget, finalX, finalY) {
         const group = root.groupDrag;
         if (group && group.leader === widget)
             root.groupDrag = null;
@@ -454,10 +459,18 @@ MouseArea {
         // on top and the first Ctrl+Z would move the leader alone.
         GlobalStates.editHistoryBeginBatch();
         Qt.callLater(() => GlobalStates.editHistoryEndBatch());
+        const deltaX = (finalX === undefined ? group.leader.x : finalX) - group.startX;
+        const deltaY = (finalY === undefined ? group.leader.y : finalY) - group.startY;
         for (const entry of group.followers) {
-            entry.widget.groupDragging = false;
+            const landedX = entry.startX + deltaX;
+            const landedY = entry.startY + deltaY;
+            entry.widget.x = landedX;
+            entry.widget.y = landedY;
             if (entry.widget.commitPlacement)
-                entry.widget.commitPlacement(entry.widget.x, entry.widget.y);
+                entry.widget.commitPlacement(landedX, landedY);
+            // Last: the flag is what holds the follower's own position
+            // animation off, and the placement above is not a move to animate.
+            entry.widget.groupDragging = false;
         }
     }
 

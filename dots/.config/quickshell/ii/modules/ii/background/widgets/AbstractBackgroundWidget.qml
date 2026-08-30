@@ -327,9 +327,15 @@ AbstractWidget {
         }
     }
 
+    // The first placement is not a move: the widget lands on its spot with the
+    // position Behaviors still shut, and they are armed a turn later. Armed
+    // through a flag the binding below reads, never by assigning that binding's
+    // property here - an assignment destroys a binding for the life of the
+    // object, and this one used to, which left the Behaviors on through every
+    // drag: a widget chased the pointer instead of following it, and a member
+    // of a dragged selection was committed wherever its animation had got to.
+    property bool _positionAnimReady: false
     Component.onCompleted: {
-        root.animateXPos = false;
-        root.animateYPos = false;
         if (root.isPreview) {
             root.x = 0;
             root.y = 0;
@@ -337,10 +343,7 @@ AbstractWidget {
             root.x = root.targetX;
             root.y = root.targetY;
         }
-        Qt.callLater(() => {
-            root.animateXPos = !root.isDragging;
-            root.animateYPos = !root.isDragging;
-        });
+        Qt.callLater(() => root._positionAnimReady = true);
     }
 
     Timer {
@@ -1124,8 +1127,10 @@ AbstractWidget {
         if (mouse.button === Qt.RightButton)
             requestContextMenu(mouse.x, mouse.y);
     }
-    animateXPos: entryDone && !isDragging && !isDraggingOrSettling && !groupDragging && (visibleWhenLocked || !GlobalStates.screenLocked)
-    animateYPos: entryDone && !isDragging && !isDraggingOrSettling && !groupDragging && (visibleWhenLocked || !GlobalStates.screenLocked)
+    animateXPos: _positionAnimReady && entryDone && !isDragging && !isDraggingOrSettling && !groupDragging
+        && (visibleWhenLocked || !GlobalStates.screenLocked)
+    animateYPos: _positionAnimReady && entryDone && !isDragging && !isDraggingOrSettling && !groupDragging
+        && (visibleWhenLocked || !GlobalStates.screenLocked)
 
     onReleased: mouse => {
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
@@ -1157,7 +1162,7 @@ AbstractWidget {
             // Followers are committed by the canvas from here, inside one
             // history batch with this widget's own commit below.
             if (canvas.widgetDragEnded)
-                canvas.widgetDragEnded(root);
+                canvas.widgetDragEnded(root, finalX, finalY);
         }
         commitPlacement(finalX, finalY);
 
