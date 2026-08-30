@@ -1257,7 +1257,16 @@ Item {
     FadeLoader {
         id: widgetLoader
 
-        shown: !delegateRoot.lockAnimationActive ? (delegateRoot.lockBehavior !== "lockOnly") : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "lockOnly")
+        // Which widgets are built at all. Off the lock that is everything but
+        // the lock-only ones; on it - a real lock, or Edit Mode's Lockscreen
+        // tab, which draws the same layout with no lock session behind it -
+        // it is the ones the lock shows. Without the tab named here a
+        // lock-only widget added from it is written to the config and never
+        // built, so the tab looks like it ignored the click.
+        readonly property bool lockLayout: delegateRoot.lockAnimationActive || GlobalStates.editLockPreview
+        shown: !widgetLoader.lockLayout ? (delegateRoot.lockBehavior !== "lockOnly")
+            : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep"
+                || delegateRoot.lockBehavior === "lockOnly")
         source: delegateRoot.widgetId.startsWith("ext:") ? delegateRoot.getExtUrl(delegateRoot.widgetId.substring(4)) : ""
         sourceComponent: delegateRoot.widgetId.startsWith("ext:") ? null : (delegateRoot.widgetComponentMap[delegateRoot.widgetId] || null)
 
