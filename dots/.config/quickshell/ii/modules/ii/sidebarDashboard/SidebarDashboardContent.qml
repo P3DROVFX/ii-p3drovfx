@@ -169,6 +169,7 @@ Item {
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
+                pomodoroTimePicker.close();
             }
         }
     }
@@ -507,6 +508,22 @@ Item {
     ToggleDialog {
         shownPropertyString: "showModesDialog"
         dialog: ModesDialog {}
+    }
+
+    TimePickerPopup {
+        id: pomodoroTimePicker
+        anchors.fill: parent
+        z: 999
+        onAccepted: (pickedHour, pickedMinute) => {
+            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        }
+    }
+
+    Connections {
+        target: TimerService
+        function onCustomTimeRequested(currentHour, currentMinute, title) {
+            pomodoroTimePicker.open(currentHour, currentMinute, title);
+        }
     }
 
     component SidebarBanner: Item {

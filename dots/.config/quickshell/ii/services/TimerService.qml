@@ -265,6 +265,32 @@ Singleton {
         refreshPomodoro();
     }
 
+    signal customTimeRequested(int currentHour, int currentMinute, string title)
+
+    function requestCustomTime(hour, minute, title) {
+        let currentSeconds = (hour !== undefined && minute !== undefined)
+            ? (hour * 3600 + minute * 60)
+            : (root.pomodoroSecondsLeft > 0 ? root.pomodoroSecondsLeft : root.pomodoroLapDuration);
+        let h = Math.floor(currentSeconds / 3600);
+        let m = Math.floor((currentSeconds % 3600) / 60);
+        let t = title || (root.pomodoroLongBreak ? Translation.tr("Long break time") : root.pomodoroBreak ? Translation.tr("Break time") : Translation.tr("Focus time"));
+        root.customTimeRequested(h, m, t);
+    }
+
+    function setPomodoroTime(hours, minutes) {
+        const totalSeconds = Math.max(60, (hours * 3600) + (minutes * 60));
+        if (pomodoroLongBreak) {
+            Config.options.time.pomodoro.longBreak = totalSeconds;
+        } else if (pomodoroBreak) {
+            Config.options.time.pomodoro.breakTime = totalSeconds;
+        } else {
+            Config.options.time.pomodoro.focus = totalSeconds;
+        }
+        Persistent.states.timer.pomodoro.running = false;
+        Persistent.states.timer.pomodoro.start = getCurrentTimeInSeconds();
+        refreshPomodoro();
+    }
+
     // Stopwatch
     function refreshStopwatch() {  // Stopwatch stores time in 10ms
         stopwatchTime = getCurrentTimeIn10ms() - stopwatchStart;
