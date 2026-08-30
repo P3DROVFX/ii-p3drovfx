@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -76,9 +77,48 @@ Item {
         root.showLanguageSelector = true;
     }
 
+    function swapLanguages() {
+        console.log("[TranslatorTest] swapLanguages triggered");
+        swapRotateAnim.stop()
+        swapRotateAnim.start()
+        let temp = root.sourceLanguage;
+        root.sourceLanguage = root.targetLanguage;
+        root.targetLanguage = temp;
+        // Trigger translation
+        if (root.inputField.text.trim().length > 0) {
+            translateTimer.restart();
+        }
+    }
+
     onFocusChanged: focus => {
+        console.log("[TranslatorTest] root focus =", focus);
         if (focus) {
             root.inputField.forceActiveFocus();
+        }
+    }
+
+    onShowLanguageSelectorChanged: {
+        if (showLanguageSelector) return;
+        // The dialog's search field held focus while open and is destroyed with
+        // it; give focus back to the input so typing and the shortcuts survive
+        // a language selection.
+        if (GlobalStates.sidebarLeftOpen) Qt.callLater(() => root.inputField.forceActiveFocus());
+    }
+
+    Keys.priority: Keys.AfterItem
+    Keys.onPressed: event => {
+        // "Type / to translate": jump straight back into the input from
+        // anywhere in the tab, so the whole flow is keyboard-only.
+        if (event.key === Qt.Key_Slash && event.modifiers === Qt.NoModifier
+                && !root.showLanguageSelector && !root.inputField.activeFocus) {
+            root.inputField.forceActiveFocus();
+            event.accepted = true;
+            return;
+        }
+        if ((event.modifiers & Qt.ControlModifier) !== 0
+                && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+            root.swapLanguages();
+            event.accepted = true;
         }
     }
     onTargetLanguageChanged: {
@@ -390,17 +430,7 @@ Item {
                         iconSize: Appearance.font.pixelSize.larger
                     }
                 }
-                onClicked: {
-                    swapRotateAnim.stop()
-                    swapRotateAnim.start()
-                    let temp = root.sourceLanguage;
-                    root.sourceLanguage = root.targetLanguage;
-                    root.targetLanguage = temp;
-                    // Trigger translation
-                    if (root.inputField.text.trim().length > 0) {
-                        translateTimer.restart();
-                    }
-                }
+                onClicked: root.swapLanguages()
             }
 
             RippleButton {
@@ -481,12 +511,24 @@ Item {
                     StyledTextArea {
                         id: inputTextArea
                         width: parent.width
-                        placeholderText: Translation.tr("Translate text")
+                        placeholderText: activeFocus ? Translation.tr("Translate text") : Translation.tr("Type / to translate")
                         wrapMode: TextEdit.Wrap
                         font.pixelSize: Appearance.font.pixelSize.huge // Material 3 Expressive
                         color: colInputText
                         background: null
                         onTextChanged: translateTimer.restart()
+
+                        // The TextEdit consumes Enter (inserting a newline) before
+                        // the event can bubble to the tab, so the swap shortcut has
+                        // to be intercepted here, before the item's own handling.
+                        Keys.priority: Keys.BeforeItem
+                        Keys.onPressed: event => {
+                            if ((event.modifiers & Qt.ControlModifier) !== 0
+                                    && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                                root.swapLanguages();
+                                event.accepted = true;
+                            }
+                        }
                     }
                 }
 
