@@ -1072,9 +1072,14 @@ Singleton {
             ? 2
             : Math.max(2, Config.options.search.fileSearch?.minimumQueryLength ?? 3);
         if (fileExpression.length >= fileMinimum) {
+            // Assigning `[]` over `[]` is still a new reference, so it emits a
+            // change and buys a second full recomputation of the result set
+            // for a list that did not change.
             if (root._fileQuery !== fileExpression) {
-                root.fileResults = [];
-                root.allFileResults = [];
+                if (root.fileResults.length > 0)
+                    root.fileResults = [];
+                if (root.allFileResults.length > 0)
+                    root.allFileResults = [];
             }
             root._fileQuery = fileExpression;
             fileSearchDebounce.restart();
@@ -1359,7 +1364,12 @@ Singleton {
                 const limit = root._fileQueryPrefixed
                     ? root.allFileResults.length
                     : Math.max(1, settings?.maxResults ?? 8);
-                root.fileResults = root.allFileResults.slice(0, limit);
+                const next = root.allFileResults.slice(0, limit);
+                // A walk that returned the same paths as the last one is not a
+                // reason to rebuild every result row.
+                if (next.length !== root.fileResults.length
+                        || next.some((path, index) => path !== root.fileResults[index]))
+                    root.fileResults = next;
             }
         }
     }
@@ -1481,6 +1491,47 @@ Singleton {
         });
     }
 
+    // Continuation rows. Built at the point of use: all three used to be
+    // allocated on every keystroke and then thrown away on the common path,
+    // where the query carries no prefix and continuations are turned off.
+    function createCommandResultObject(): var {
+        return resultComp.createObject(null, {
+            key: "cmd:shell",
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
+            verb: Translation.tr("Run"),
+            type: Translation.tr("Command"),
+            fontType: LauncherSearchResult.FontType.Monospace,
+            iconName: 'terminal',
+            iconType: LauncherSearchResult.IconType.Material,
+            execute: () => root.runCommandQuery(root.query)
+        });
+    }
+
+    function createWebSearchResultObject(): var {
+        return resultComp.createObject(null, {
+            key: "web:search",
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch),
+            verb: Translation.tr("Search"),
+            type: Translation.tr("Web search"),
+            iconName: 'travel_explore',
+            iconType: LauncherSearchResult.IconType.Material,
+            execute: () => root.openWebSearch(root.query)
+        });
+    }
+
+    function createAiAskResultObject(): var {
+        return resultComp.createObject(null, {
+            key: "ai:ask",
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
+            verb: Translation.tr("Ask"),
+            type: Translation.tr("AI chat"),
+            iconName: 'auto_awesome',
+            iconType: LauncherSearchResult.IconType.Material,
+            keepOverviewOpen: true,
+            execute: () => root.askAiQuery(root.query)
+        });
+    }
+
     function createAppResultObject(entry) {
         const cached = root.appResultCache[entry.id];
         if (cached)
@@ -1521,11 +1572,134 @@ Singleton {
         });
     }
 
+    /**
+     * Prefix-mode shortcuts, matched by name when the query has no prefix.
+     *
+     * A plain literal in the middle of the result builder meant eleven objects
+     * and eleven closures allocated per keystroke to answer a `startsWith`.
+     */
+    readonly property var moduleShortcutDefinitions: [
+        {
+            names: ["clipboard", "clip", "paste", "copiar"],
+            prefix: Config.options.search.prefix.clipboard,
+            label: Translation.tr("Clipboard"),
+            icon: "content_paste",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.clipboard
+        },
+        {
+            names: ["emoji", "emojis", "emoticon"],
+            prefix: Config.options.search.prefix.emojis,
+            label: Translation.tr("Emojis"),
+            icon: "mood",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.emojis.enable
+        },
+        {
+            names: ["window", "windows", "janela"],
+            prefix: Config.options.search.prefix.windowSearch,
+            label: Translation.tr("Window Search"),
+            icon: "select_window",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.windowSearch
+        },
+        {
+            names: ["file", "files", "arquivo", "browse"],
+            prefix: Config.options.search.prefix.fileBrowser,
+            label: Translation.tr("File Browser"),
+            icon: "folder_open",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.fileBrowser
+        },
+        {
+            names: ["math", "calc", "calculator", "calcular"],
+            prefix: Config.options.search.prefix.math,
+            label: Translation.tr("Calculator"),
+            icon: "calculate",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.math
+        },
+        {
+            names: ["command", "commands", "terminal", "shell"],
+            prefix: Config.options.search.prefix.shellCommand,
+            label: Translation.tr("Shell Command"),
+            icon: "terminal",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.shellCommand
+        },
+        {
+            names: ["bluetooth"],
+            prefix: Config.options.search.prefix.bluetooth,
+            label: Translation.tr("Bluetooth Manager"),
+            icon: "bluetooth",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.bluetooth
+        },
+        {
+            names: ["translator", "translate", "tradutor", "traduzir"],
+            prefix: Config.options.search.prefix.translator,
+            label: Translation.tr("Translator"),
+            icon: "translate",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.translator
+        },
+        {
+            names: ["material symbols", "icons", "material", "symbols"],
+            prefix: Config.options.search.prefix.materialSymbols,
+            label: Translation.tr("Material Symbols"),
+            icon: "font_download",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.materialSymbols
+        },
+        {
+            names: ["download", "media downloader", "video download"],
+            prefix: Config.options.search.prefix.mediaDownloader,
+            label: Translation.tr("Media Downloader"),
+            icon: "download",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.mediaDownloader && Config.options.mediaDownloader.enabled
+        },
+        {
+            names: ["web", "web search", "internet search"],
+            prefix: Config.options.search.prefix.webSearch,
+            label: Translation.tr("Web Search"),
+            icon: "travel_explore",
+            isBuiltin: true,
+            enabled: () => Config.options.search.modules.webSearch
+        }
+    ]
+
+    // Panels registered with their own prefix already offer these rows; the
+    // built-in shortcut would be a duplicate of the registry's entry.
+    readonly property var registryOwnedPrefixes: new Set(SearchPanelRegistry.enabledPanels
+        .map(panel => SearchPanelRegistry.prefixOf(panel))
+        .filter(prefix => String(prefix).length > 0))
+
     // Results are rebuilt once per event-loop turn. The previous scheduler
     // computed immediately and then armed a second 16ms recomputation, which
     // made every normal keystroke do the expensive fuzzy search twice.
-    property list<var> results: []
+    // A plain `var`, deliberately, not `list<var>`: a QML list property hands
+    // back a fresh wrapper on every element read, so `results[i] !== results[i]`
+    // and no consumer downstream can tell an unchanged row from a new one. That
+    // silently defeated both the application row cache here and the list diff's
+    // "unchanged rows cost nothing" check in SearchWidget.
+    property var results: []
     property bool _resultsUpdateQueued: false
+    /**
+     * Whether anything is actually going to read the next result set.
+     *
+     * Background sources — a Bluetooth state change, the ten-minute browser
+     * index refresh, a keybind reload, the bar opening — all schedule a full
+     * recomputation, and they keep doing it when no launcher is on screen.
+     *
+     * The II Search is the `overviewOpen` case. The Waffle start menu has no
+     * flag of its own but drives `query` directly, and shows its start page
+     * rather than results while that query is empty — so a typed query is the
+     * signal that it, too, is watching.
+     */
+    readonly property bool hasResultConsumer: GlobalStates.overviewOpen
+        || root.query.length > 0
+        || root.alwaysListAppsEnabled
 
     function _scheduleResultsUpdate() {
         if (root._resultsUpdateQueued)
@@ -1534,8 +1708,78 @@ Singleton {
         root._resultsUpdateQueued = true;
         Qt.callLater(function () {
             root._resultsUpdateQueued = false;
-            root.results = root._computeResults();
+            if (root.hasResultConsumer)
+                root.results = root._reuseUnchangedResults(root._computeResults());
         });
+    }
+
+    // The last published set, by key, so the next one can be compared to it.
+    property var _publishedByKey: ({})
+
+    /**
+     * Fields a row is drawn from, or acts on.
+     *
+     * Deliberately not `keywords`/`matchTerms`/`keyHints`: nothing renders them
+     * and nothing reads them off a published row, so a change there is not a
+     * reason to redraw. `settingRef` is compared by its key rather than by
+     * identity, since it is rebuilt with the row.
+     */
+    readonly property var comparedResultFields: ["type", "name", "comment", "verb", "iconName",
+        "iconType", "fallbackIconName", "fontType", "category", "rawValue", "filePath", "panelId",
+        "siteSource", "feedbackText", "controlKind", "controlValue", "id", "isMath", "isBuiltin",
+        "isAlias", "isFallback", "keepOverviewOpen", "pinned", "pinnable", "blurImage", "shown",
+        "runInTerminal", "genericName", "isPlaying", "canGoPrevious", "canGoNext",
+        "canTogglePlaying", "trackTitle", "trackArtist", "trackAlbum", "trackArtUrl",
+        "playerIdentity"]
+
+    function _resultsEquivalent(left, right): bool {
+        const fields = root.comparedResultFields;
+        for (let i = 0; i < fields.length; i++) {
+            if (left[fields[i]] !== right[fields[i]])
+                return false;
+        }
+        if (String(left.settingRef?.key ?? "") !== String(right.settingRef?.key ?? ""))
+            return false;
+        const leftActions = left.actions ?? [];
+        const rightActions = right.actions ?? [];
+        if (leftActions.length !== rightActions.length)
+            return false;
+        for (let i = 0; i < leftActions.length; i++) {
+            if (leftActions[i]?.name !== rightActions[i]?.name
+                    || leftActions[i]?.iconName !== rightActions[i]?.iconName)
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Keep the previous object for every row that did not actually change.
+     *
+     * Only application rows were shared between passes; every other producer
+     * built a new object per keystroke. The list diff compares identities, so
+     * a query that changed nothing about a row still rewrote its `modelRef`,
+     * rebound the delegate and re-laid out the list — around thirty rewrites
+     * and 10-40ms on a list that was already correct.
+     */
+    function _reuseUnchangedResults(next): var {
+        const previous = root._publishedByKey;
+        const byKey = ({});
+        for (let i = 0; i < next.length; i++) {
+            const candidate = next[i];
+            if (!candidate)
+                continue;
+            const key = String(candidate.key ?? "");
+            if (key.length === 0)
+                continue;
+            const existing = previous[key];
+            // Application rows are already shared out of `appResultCache`, so
+            // the previous pass can hand back the very object being offered.
+            if (existing && existing !== candidate && root._resultsEquivalent(existing, candidate))
+                next[i] = existing;
+            byKey[key] = next[i];
+        }
+        root._publishedByKey = byKey;
+        return next;
     }
 
     // Re-schedule when reactive sources (other than query) change
@@ -1871,6 +2115,14 @@ Singleton {
         }
 
         ////////////////// Init ///////////////////
+        // The same few derivations of the query were recomputed five times
+        // over, and the two prefix tests walk the whole registry each call.
+        const queryLower = root.query.toLowerCase();
+        const queryTrimmed = root.query.trim();
+        const queryTrimmedLower = queryTrimmed.toLowerCase();
+        const queryHasPrefix = root.queryUsesPrefix(root.query);
+        const settingsQueryEligible = root.isSettingsSearchQuery(root.query);
+
         // NOTE: nonAppResultsTimer is restarted in onQueryChanged, not here
         const mathResultObject = root.mathResult ? resultComp.createObject(null, {
             key: "math:" + root.mathResult,
@@ -1885,7 +2137,9 @@ Singleton {
                 Quickshell.clipboardText = root.mathResult;
             }
         }) : null;
-        const fileResultsObject = root.fileResults.map(entry => {
+        // Gated here rather than at the point of use: this built a result plus
+        // three action objects per path for a list the caller then discarded.
+        const fileResultsObject = !Config.options.search.modules.fileSearch ? [] : root.fileResults.map(entry => {
             // fd already marks directories with a trailing separator, so the
             // type comes back for free — no stat, no second process.
             const isDirectory = entry.endsWith("/");
@@ -1944,11 +2198,11 @@ Singleton {
 
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
-        const browserSiteSearchActive = !root.queryUsesPrefix(root.query);
+        const browserSiteSearchActive = !queryHasPrefix;
         const browserSiteResultObjects = browserSiteSearchActive
             ? BrowserSites.matchSites(root.query).map(site => root.createBrowserSiteResult(site))
             : [];
-        const settingsSearchActive = root.isSettingsSearchQuery(root.query)
+        const settingsSearchActive = settingsQueryEligible
             && Config.options.search.modules.settingsToggles.enable;
         const settingsMatches = settingsSearchActive && root.settingsIndexReady
             ? Ai.settingsIntegration.search(root.query, 100)
@@ -1963,35 +2217,6 @@ Singleton {
             && (!root.settingsIndexReady || settingsMatches.length > 0)
             ? [root.createSettingsPanelResultObject(settingsMatches.length)]
             : [];
-        const commandResultObject = resultComp.createObject(null, {
-            key: "cmd:shell",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
-            verb: Translation.tr("Run"),
-            type: Translation.tr("Command"),
-            fontType: LauncherSearchResult.FontType.Monospace,
-            iconName: 'terminal',
-            iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.runCommandQuery(root.query)
-        });
-        const webSearchResultObject = resultComp.createObject(null, {
-            key: "web:search",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch),
-            verb: Translation.tr("Search"),
-            type: Translation.tr("Web search"),
-            iconName: 'travel_explore',
-            iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.openWebSearch(root.query)
-        });
-        const aiAskResultObject = resultComp.createObject(null, {
-            key: "ai:ask",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
-            verb: Translation.tr("Ask"),
-            type: Translation.tr("AI chat"),
-            iconName: 'auto_awesome',
-            iconType: LauncherSearchResult.IconType.Material,
-            keepOverviewOpen: true,
-            execute: () => root.askAiQuery(root.query)
-        });
         const launcherActionObjects = root.allActions.map(action => {
             const actionString = `${Config.options.search.prefix.action}${action.action}`;
             if (actionString.startsWith(root.query) || root.query.startsWith(actionString)) {
@@ -2034,7 +2259,7 @@ Singleton {
         //////// Prioritized by prefix /////////
         let result = [];
 
-        if (root.query.trim().length === 0)
+        if (queryTrimmed.length === 0)
             result = result.concat(root.favoriteResults());
 
         // App/Folder/Command Aliases
@@ -2124,7 +2349,7 @@ Singleton {
 
         // System Controls matches
         const systemControlResults = [];
-        let queryClean = root.query.toLowerCase().trim();
+        let queryClean = queryTrimmedLower;
         const hasColonPrefix = queryClean.startsWith(":");
         if (hasColonPrefix) {
             queryClean = queryClean.slice(1);
@@ -2162,14 +2387,13 @@ Singleton {
         if (isMath && mathResultObject) {
             result.push(mathResultObject);
         } else if (startsWithShellCommandPrefix) {
-            result.push(commandResultObject);
+            result.push(root.createCommandResultObject());
         } else if (startsWithWebSearchPrefix) {
-            result.push(webSearchResultObject);
+            result.push(root.createWebSearchResultObject());
         }
 
         //////////////// Files /////////////////
-        if (Config.options.search.modules.fileSearch)
-            result = result.concat(fileResultsObject);
+        result = result.concat(fileResultsObject);
 
         //////////////// Apps //////////////////
         result = result.concat(appResultObjects);
@@ -2199,12 +2423,12 @@ Singleton {
         }
 
         ////////// Hyprland keybinds //////////
-        if (Config.options.search.modules.keybinds.enable && root.isSettingsSearchQuery(root.query)) {
+        if (Config.options.search.modules.keybinds.enable && settingsQueryEligible) {
             for (const binding of root.keybindMatches(root.query, 3))
                 result.push(root.createKeybindResultObject(binding));
         }
 
-        if (root.query.trim().length >= 2) {
+        if (queryTrimmed.length >= 2) {
             for (const panel of root.searchPanelMatches(root.query))
                 result.push(root.createSearchPanelResult(panel));
         }
@@ -2217,7 +2441,7 @@ Singleton {
 
         // Panels with no prefix stay discoverable through explicit, compact
         // rows; their query is preserved as the panel's own filter.
-        const naturalQuery = root.query.trim().toLocaleLowerCase();
+        const naturalQuery = queryTrimmed.toLocaleLowerCase();
         if (Config.options.search.modules.settingsToggles.enable
                 && settingsPanelResultObjects.length === 0
                 && ["settings", "config", "configurar", "dotfiles"].some(keyword => keyword.includes(naturalQuery))) {
@@ -2240,8 +2464,8 @@ Singleton {
         }
 
         ////////// Quick toggles //////////
-        if (Config.options.search.modules.quickToggles.enable && root.query.trim().length >= 2) {
-            const quickToggleQuery = root.query.trim().toLowerCase();
+        if (Config.options.search.modules.quickToggles.enable && queryTrimmed.length >= 2) {
+            const quickToggleQuery = queryTrimmedLower;
             for (const entry of QuickToggleRegistry.entries) {
                 const model = entry.model;
                 const matchesKeyword = entry.keywords.some(keyword => String(keyword).toLowerCase().includes(quickToggleQuery));
@@ -2265,8 +2489,8 @@ Singleton {
         }
 
         ////////// Shell actions //////////
-        if (Config.options.search.modules.shellActions && root.query.trim().length >= 2) {
-            const shellActionQuery = root.query.trim().toLowerCase();
+        if (Config.options.search.modules.shellActions && queryTrimmed.length >= 2) {
+            const shellActionQuery = queryTrimmedLower;
             for (const action of ShellActionRegistry.actions) {
                 if (!action.searchable || !action.enabled())
                     continue;
@@ -2317,105 +2541,12 @@ Singleton {
 
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
-        const moduleShortcuts = [
-            {
-                names: ["clipboard", "clip", "paste", "copiar"],
-                prefix: Config.options.search.prefix.clipboard,
-                label: Translation.tr("Clipboard"),
-                icon: "content_paste",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.clipboard
-            },
-            {
-                names: ["emoji", "emojis", "emoticon"],
-                prefix: Config.options.search.prefix.emojis,
-                label: Translation.tr("Emojis"),
-                icon: "mood",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.emojis.enable
-            },
-            {
-                names: ["window", "windows", "janela"],
-                prefix: Config.options.search.prefix.windowSearch,
-                label: Translation.tr("Window Search"),
-                icon: "select_window",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.windowSearch
-            },
-            {
-                names: ["file", "files", "arquivo", "browse"],
-                prefix: Config.options.search.prefix.fileBrowser,
-                label: Translation.tr("File Browser"),
-                icon: "folder_open",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.fileBrowser
-            },
-            {
-                names: ["math", "calc", "calculator", "calcular"],
-                prefix: Config.options.search.prefix.math,
-                label: Translation.tr("Calculator"),
-                icon: "calculate",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.math
-            },
-            {
-                names: ["command", "commands", "terminal", "shell"],
-                prefix: Config.options.search.prefix.shellCommand,
-                label: Translation.tr("Shell Command"),
-                icon: "terminal",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.shellCommand
-            },
-            {
-                names: ["bluetooth"],
-                prefix: Config.options.search.prefix.bluetooth,
-                label: Translation.tr("Bluetooth Manager"),
-                icon: "bluetooth",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.bluetooth
-            },
-            {
-                names: ["translator", "translate", "tradutor", "traduzir"],
-                prefix: Config.options.search.prefix.translator,
-                label: Translation.tr("Translator"),
-                icon: "translate",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.translator
-            },
-            {
-                names: ["material symbols", "icons", "material", "symbols"],
-                prefix: Config.options.search.prefix.materialSymbols,
-                label: Translation.tr("Material Symbols"),
-                icon: "font_download",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.materialSymbols
-            },
-            {
-                names: ["download", "media downloader", "video download"],
-                prefix: Config.options.search.prefix.mediaDownloader,
-                label: Translation.tr("Media Downloader"),
-                icon: "download",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.mediaDownloader && Config.options.mediaDownloader.enabled
-            },
-            {
-                names: ["web", "web search", "internet search"],
-                prefix: Config.options.search.prefix.webSearch,
-                label: Translation.tr("Web Search"),
-                icon: "travel_explore",
-                isBuiltin: true,
-                enabled: () => Config.options.search.modules.webSearch
-            }
-        ];
-
-        const queryLower = root.query.toLowerCase();
-        const registryOwnedPrefixes = new Set(SearchPanelRegistry.enabledPanels
-            .map(panel => SearchPanelRegistry.prefixOf(panel))
-            .filter(prefix => String(prefix).length > 0));
-        for (const mod of moduleShortcuts) {
-            if (!mod.enabled() || registryOwnedPrefixes.has(mod.prefix))
-                continue;
-            if (mod.names.some(n => n.startsWith(queryLower) && queryLower.length >= 2)) {
+        if (queryLower.length >= 2) {
+            for (const mod of root.moduleShortcutDefinitions) {
+                if (!mod.enabled() || root.registryOwnedPrefixes.has(mod.prefix))
+                    continue;
+                if (!mod.names.some(n => n.startsWith(queryLower)))
+                    continue;
                 const execFn = () => {
                     root.query = mod.prefix;
                 };
@@ -2435,7 +2566,7 @@ Singleton {
         // Fallbacks are opt-in and only appear when the regular producers
         // found nothing. They replace the old unavoidable trio with a user
         // ordered list, while prefix modes keep their exact behavior.
-        if (root.query.trim().length > 0 && result.length === 0 && !root.queryUsesPrefix(root.query))
+        if (queryTrimmed.length > 0 && result.length === 0 && !queryHasPrefix)
             result = result.concat(root.fallbackResults());
 
         /// Command, AI and web continuations ///
@@ -2444,15 +2575,15 @@ Singleton {
         // question, and a command name may resemble an installed application.
         // Explicit prefixes own their result set and must not receive this trio.
         const showNormalContinuations = Config.options.search.prefix.showDefaultActionsWithoutPrefix
-            && root.query.trim().length > 0
-            && !root.queryUsesPrefix(root.query);
+            && queryTrimmed.length > 0
+            && !queryHasPrefix;
         if (showNormalContinuations) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
-                result.push(commandResultObject);
+                result.push(root.createCommandResultObject());
             if (Ai.enabled)
-                result.push(aiAskResultObject);
+                result.push(root.createAiAskResultObject());
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
-                result.push(webSearchResultObject);
+                result.push(root.createWebSearchResultObject());
         }
 
         // Filter out duplicate original apps/folders/commands if an alias is shown.

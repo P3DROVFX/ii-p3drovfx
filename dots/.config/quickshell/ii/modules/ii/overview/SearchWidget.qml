@@ -1886,10 +1886,24 @@ Item {
                         }
                     }
 
+                    /**
+                     * The result object written into each model row, mirrored
+                     * on the JS side.
+                     *
+                     * `dynamicRoles` does not round-trip object identity: two
+                     * reads of one slot hand back two different wrappers of the
+                     * same object, so comparing `get(i).modelRef` against the
+                     * incoming ref was always unequal and every row was rewritten
+                     * on every pass. Comparing against what was actually written
+                     * is the only reliable test.
+                     */
+                    property var rowRefs: []
+
                     function applyResultDiffUnguarded(rows) {
                         if (rows.length === 0) {
                             if (resultModel.count > 0)
                                 resultModel.clear();
+                            appResults.rowRefs = [];
                             return;
                         }
 
@@ -1902,6 +1916,13 @@ Item {
                         for (let i = 0; i < resultModel.count; i++)
                             currentKeys.push(resultModel.get(i).key);
 
+                        // Anything that emptied or resized the model behind this
+                        // mirror makes it untrustworthy; a fresh one of nulls
+                        // simply treats every row as changed.
+                        let currentRefs = appResults.rowRefs.length === currentKeys.length
+                            ? appResults.rowRefs.slice()
+                            : currentKeys.map(() => null);
+
                         const newKeySet = new Set();
                         for (let i = 0; i < rows.length; i++)
                             newKeySet.add(rows[i].key);
@@ -1911,6 +1932,7 @@ Item {
                             if (!newKeySet.has(currentKeys[i])) {
                                 resultModel.remove(i);
                                 currentKeys.splice(i, 1);
+                                currentRefs.splice(i, 1);
                             }
                         }
 
@@ -1931,6 +1953,7 @@ Item {
                                     modelRef: rowData.ref
                                 });
                                 currentKeys.splice(newIndex, 0, rowData.key);
+                                currentRefs.splice(newIndex, 0, rowData.ref);
                                 continue;
                             }
 
@@ -1938,6 +1961,8 @@ Item {
                                 resultModel.move(currentIndex, newIndex, 1);
                                 const movedKey = currentKeys.splice(currentIndex, 1)[0];
                                 currentKeys.splice(newIndex, 0, movedKey);
+                                const movedRef = currentRefs.splice(currentIndex, 1)[0];
+                                currentRefs.splice(newIndex, 0, movedRef);
                             }
 
                             // Rows reference the original result object, so an
@@ -1952,16 +1977,21 @@ Item {
                                 resultModel.setProperty(newIndex, "isFirst", rowData.isFirst);
                             if (row.isLast !== rowData.isLast)
                                 resultModel.setProperty(newIndex, "isLast", rowData.isLast);
-                            if (row.modelRef !== rowData.ref)
+                            if (currentRefs[newIndex] !== rowData.ref) {
                                 resultModel.setProperty(newIndex, "modelRef", rowData.ref);
+                                currentRefs[newIndex] = rowData.ref;
+                            }
                         }
 
                         // Whatever the passes above did, the model must end up
                         // exactly as long as `rows`. Anything past that length is a
                         // row the diff failed to account for, and it would stay
                         // visible and clickable.
-                        while (resultModel.count > rows.length)
+                        while (resultModel.count > rows.length) {
                             resultModel.remove(resultModel.count - 1);
+                            currentRefs.pop();
+                        }
+                        appResults.rowRefs = currentRefs;
                     }
 
                     Connections {

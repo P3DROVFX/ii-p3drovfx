@@ -54,15 +54,25 @@ QtObject {
         indexBuild.running = true;
     }
 
+    // The bytes the current index was parsed from. `watchChanges` and the
+    // freshness check both reload the same file, and re-ingesting identical
+    // JSON used to rebuild the scoring records for all ~2000 entries a second
+    // time for no change.
+    property string _ingestedRaw: ""
+
     function ingest(raw: string) {
         try {
+            if (root.ready && raw === root._ingestedRaw)
+                return;
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed?.entries))
                 throw new Error("entries are missing");
             root.index = parsed;
+            root._ingestedRaw = raw;
             root.ready = true;
             root.lastError = "";
         } catch (error) {
+            root._ingestedRaw = "";
             root.ready = false;
             root.lastError = String(error);
         }
@@ -170,17 +180,81 @@ QtObject {
         return token.length > root.stemLength ? token.slice(0, root.stemLength) : "";
     }
 
-    /** Whether any word in `text` starts with `stem`. */
-    function stemHit(stem: string, text: string): bool {
+    /**
+     * The words of a field a stem could ever reach.
+     *
+     * `stemHit` only ever looks at words longer than the stem, so the short
+     * ones are dropped here rather than skipped once per query token.
+     */
+    function stemWords(value: string): var {
+        const words = String(value ?? "").split(/[^a-z0-9_]+/);
+        const kept = [];
+        for (let i = 0; i < words.length; i++) {
+            if (words[i].length > root.stemLength)
+                kept.push(words[i]);
+        }
+        return kept;
+    }
+
+    /** Whether any word in an already-split field starts with `stem`. */
+    function stemHit(stem: string, words: var): bool {
         if (stem.length === 0)
             return false;
-        const words = String(text ?? "").split(/[^a-z0-9_]+/);
-        for (const word of words) {
-            if (word.length > root.stemLength && word.startsWith(stem))
+        for (let i = 0; i < words.length; i++) {
+            if (words[i].startsWith(stem))
                 return true;
         }
         return false;
     }
+
+    /**
+     * Everything scoring reads off an entry, derived once.
+     *
+     * Not one field below depends on the query, yet all of them used to be
+     * rebuilt inside the per-entry scoring loop: seven NFKD normalizations,
+     * two tokenizations and five regex splits, times ~2000 entries, on every
+     * keystroke. That was 40-110ms of the search's ~60-150ms, and it is the
+     * reason typing in the launcher stuttered.
+     */
+    function buildScoreRecord(entry: var): var {
+        const label = root.normalize(entry.label);
+        const key = root.normalize(entry.key);
+        const keyParts = key.split(".");
+        const lastKey = keyParts.length > 0 ? keyParts[keyParts.length - 1] : "";
+        const description = root.normalize(entry.description);
+        const fallback = root.normalize(entry.match ?? "");
+        const optionLabels = root.normalize(Array.from(entry.options ?? [])
+            .map(option => String(option?.label ?? "")).join(" "));
+        return {
+            entry: entry,
+            label: label,
+            key: key,
+            lastKey: lastKey,
+            lastKeyTokens: root.tokens(lastKey),
+            keyWords: root.tokens(key),
+            description: description,
+            // The untranslated strings, so a key someone knows in English stays
+            // findable in a translated interface.
+            fallback: fallback,
+            optionLabels: optionLabels,
+            navigation: root.normalize([
+                Array.from(entry.aliases ?? []).join(" "),
+                entry.pageName ?? "",
+                entry.sectionTitle ?? ""
+            ].join(" ")),
+            keywords: Array.from(entry.keywords ?? []).map(word => root.normalize(word)),
+            hasUi: entry.hasUi === true,
+            labelWords: root.stemWords(label),
+            keyStemWords: root.stemWords(key),
+            descriptionWords: root.stemWords(description),
+            fallbackWords: root.stemWords(fallback),
+            optionWords: root.stemWords(optionLabels)
+        };
+    }
+
+    // Rebuilt only when the index itself is replaced — a file load or a
+    // regeneration, never a keystroke.
+    readonly property var scoreIndex: root.entries.map(entry => root.buildScoreRecord(entry))
 
     /**
      * How well one entry answers a query.
@@ -191,26 +265,8 @@ QtObject {
      * "mode" used to beat the real dark-mode switch for "dark mode", and every
      * option on the Power page used to answer "automatic suspend".
      */
-    function scoreEntry(entry: var, queryTokens: var, queryNormalized: string): var {
-        const label = root.normalize(entry.label);
-        const key = root.normalize(entry.key);
-        const keyParts = key.split(".");
-        const lastKey = keyParts.length > 0 ? keyParts[keyParts.length - 1] : "";
-        const lastKeyTokens = root.tokens(lastKey);
-        const keyWords = root.tokens(key);
-        const description = root.normalize(entry.description);
-        const navigation = root.normalize([
-            Array.from(entry.aliases ?? []).join(" "),
-            entry.pageName ?? "",
-            entry.sectionTitle ?? ""
-        ].join(" "));
-        // The untranslated strings, so a key someone knows in English stays
-        // findable in a translated interface.
-        const fallback = root.normalize(entry.match ?? "");
-        const optionLabels = root.normalize(Array.from(entry.options ?? [])
-            .map(option => String(option?.label ?? "")).join(" "));
-        const keywords = Array.from(entry.keywords ?? []).map(word => root.normalize(word));
-        const hasUi = entry.hasUi === true;
+    function scoreRecord(record: var, queryTokens: var, queryNormalized: string): var {
+        const hasUi = record.hasUi;
 
         let score = hasUi ? 40 : 0;
         let covered = 0;
@@ -219,53 +275,53 @@ QtObject {
         for (const token of queryTokens) {
             const stem = root.stemOf(token);
             let own = 0;
-            if (token === label)
+            if (token === record.label)
                 own = Math.max(own, 500);
-            else if (label.startsWith(token))
+            else if (record.label.startsWith(token))
                 own = Math.max(own, 220);
-            else if (label.indexOf(token) >= 0)
+            else if (record.label.indexOf(token) >= 0)
                 own = Math.max(own, 150);
-            else if (root.stemHit(stem, label))
+            else if (root.stemHit(stem, record.labelWords))
                 own = Math.max(own, 110);
 
-            if (token === lastKey || lastKeyTokens.indexOf(token) >= 0)
+            if (token === record.lastKey || record.lastKeyTokens.indexOf(token) >= 0)
                 own = Math.max(own, 180);
-            else if (keyWords.indexOf(token) >= 0 || keyWords.some(word => word.startsWith(token)))
+            else if (record.keyWords.indexOf(token) >= 0 || record.keyWords.some(word => word.startsWith(token)))
                 own = Math.max(own, 120);
-            else if (root.stemHit(stem, key))
+            else if (root.stemHit(stem, record.keyStemWords))
                 own = Math.max(own, 90);
 
-            if (description.indexOf(token) >= 0)
+            if (record.description.indexOf(token) >= 0)
                 own = Math.max(own, 120);
-            else if (root.stemHit(stem, description))
+            else if (root.stemHit(stem, record.descriptionWords))
                 own = Math.max(own, 80);
 
-            if (fallback.indexOf(token) >= 0)
+            if (record.fallback.indexOf(token) >= 0)
                 own = Math.max(own, 90);
-            else if (root.stemHit(stem, fallback))
+            else if (root.stemHit(stem, record.fallbackWords))
                 own = Math.max(own, 70);
 
             // The visible option names are the control's own words — someone
             // searching "week" means the Day/Week/Month selector, not whatever
             // else on the page contains the letters. Stronger than page-sharing,
             // weaker than the label itself. Mirrors the generator's score_entry.
-            if (root.tokens(optionLabels).indexOf(token) >= 0)
+            if (record.optionLabels.indexOf(token) >= 0)
                 own = Math.max(own, 130);
-            else if (root.stemHit(stem, optionLabels))
+            else if (root.stemHit(stem, record.optionWords))
                 own = Math.max(own, 100);
 
             // A domain synonym is curated for this entry — "dormir" really is
             // what this switch does — so it counts as the entry's own
             // evidence. It is the bridge that lets someone search in one
             // language an interface that is showing another.
-            if (keywords.indexOf(token) >= 0)
+            if (record.keywords.indexOf(token) >= 0)
                 own = Math.max(own, 90);
 
             // Borrowed evidence is not stemmed, and never stands alone.
             // Sharing a page with a word is weak enough already; matching it
             // approximately turns every option on that page into an answer.
             let borrowed = 0;
-            if (navigation.indexOf(token) >= 0)
+            if (record.navigation.indexOf(token) >= 0)
                 borrowed = Math.max(borrowed, 100);
 
             const best = Math.max(own, borrowed);
@@ -277,7 +333,7 @@ QtObject {
         }
 
         let base = score;
-        if (queryNormalized.length > 0 && queryNormalized === label)
+        if (queryNormalized.length > 0 && queryNormalized === record.label)
             score += 500;
         if (!hasUi) {
             score = Math.round(score * 0.6);
@@ -285,6 +341,13 @@ QtObject {
         }
         return { score: score, base: base, covered: covered, identity: identity };
     }
+
+    // One slot is enough: the launcher asks the same question several times per
+    // keystroke, as late file and revision signals each re-run the result set.
+    property string _searchCacheQuery: ""
+    property int _searchCacheLimit: -1
+    property var _searchCacheResult: []
+    onScoreIndexChanged: root._searchCacheLimit = -1
 
     /**
      * The settings that answer a query, best first and few.
@@ -294,16 +357,26 @@ QtObject {
      */
     function search(query: string, limit = 5): var {
         const queryNormalized = root.normalize(String(query ?? "").trim());
-        const words = root.queryTokens(queryNormalized);
-        if (words.length === 0)
-            return [];
+        const effectiveLimit = Math.max(1, Math.min(root.maxResults, Number(limit) || 5));
+        if (root._searchCacheLimit === effectiveLimit && root._searchCacheQuery === queryNormalized)
+            return root._searchCacheResult;
 
+        const words = root.queryTokens(queryNormalized);
+        const found = words.length === 0 ? [] : root._searchScored(words, queryNormalized, effectiveLimit);
+        root._searchCacheQuery = queryNormalized;
+        root._searchCacheLimit = effectiveLimit;
+        root._searchCacheResult = found;
+        return found;
+    }
+
+    function _searchScored(words: var, queryNormalized: string, effectiveLimit: int): var {
         const scored = [];
-        for (const entry of root.entries) {
-            const verdict = root.scoreEntry(entry, words, queryNormalized);
+        const records = root.scoreIndex;
+        for (let i = 0; i < records.length; i++) {
+            const verdict = root.scoreRecord(records[i], words, queryNormalized);
             if (verdict.covered === 0 || verdict.identity === 0)
                 continue;
-            scored.push({ verdict: verdict, entry: entry });
+            scored.push({ verdict: verdict, entry: records[i].entry });
         }
         if (scored.length === 0)
             return [];
@@ -320,7 +393,7 @@ QtObject {
 
         kept.sort((left, right) => right.verdict.score - left.verdict.score);
         return kept
-            .slice(0, Math.max(1, Math.min(root.maxResults, Number(limit) || 5)))
+            .slice(0, effectiveLimit)
             .map(item => root.settingRef(item.entry, item.verdict.score));
     }
 
