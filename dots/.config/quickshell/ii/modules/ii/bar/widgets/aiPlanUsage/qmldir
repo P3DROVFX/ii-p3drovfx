@@ -1,0 +1,6 @@
+module qs.modules.ii.bar.widgets.aiPlanUsage
+AiPlanUsageWidget 1.0 AiPlanUsageWidget.qml
+ExpressiveAiPlanUsage 1.0 ExpressiveAiPlanUsage.qml
+AiQuotaIndicator 1.0 AiQuotaIndicator.qml
+AiQuotaArcGauge 1.0 AiQuotaArcGauge.qml
+AiQuotaTransition 1.0 AiQuotaTransition.qml

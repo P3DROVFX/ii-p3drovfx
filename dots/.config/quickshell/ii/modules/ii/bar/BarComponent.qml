@@ -31,6 +31,7 @@ import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
 import qs.modules.ii.bar.widgets.privacy
+import qs.modules.ii.bar.widgets.aiPlanUsage
 
 import qs.modules.ii.verticalBar as Vertical
 
@@ -523,6 +524,8 @@ Item {
             return true;
         if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
             return true;
+        if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
+            return true;
         // Bare indicator: no group chip, no padding around it.
         if (modelData.id === "privacy_pill")
             return true;
@@ -733,6 +736,10 @@ Item {
             if (isExp)
                 return portWatcherCompExpressive;
             return portWatcherComp;
+        case "ai_plan_usage":
+            if (isExp)
+                return aiPlanUsageCompExpressive;
+            return aiPlanUsageComp;
         case "privacy_pill":
             return privacyPillComp;
         default:
@@ -967,6 +974,18 @@ Item {
     Component {
         id: portWatcherCompExpressive
         ExpressivePortWatcher {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: aiPlanUsageComp
+        AiPlanUsageWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: aiPlanUsageCompExpressive
+        ExpressiveAiPlanUsage {
             vertical: rootItem.vertical
         }
     }

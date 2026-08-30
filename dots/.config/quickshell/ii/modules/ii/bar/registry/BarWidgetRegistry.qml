@@ -28,6 +28,7 @@ QtObject {
             case "sports":                 return s.sports       ?? "default";
             case "active_window":          return s.activeWindow ?? "default";
             case "port_watcher":           return s.portWatcher  ?? "default";
+            case "ai_plan_usage":          return s.aiPlanUsage  ?? "default";
             // Always expressive — no user config toggle
             case "record_indicator":
             case "phone_scrcpy_indicator":

@@ -236,6 +236,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "neurology"
+                cardShape: "Circle"
+                cardHue: 165
+                title: Translation.tr("AI Plan Usage")
+                description: Translation.tr("ChatGPT, Claude, and Antigravity plan quotas and bar gauges")
+                onOpenCard: root.openComponentPage("ai_plan_usage")
+            }
+
+            ServiceCard {
                 cardIcon: "shield_lock"
                 cardShape: "Circle"
                 cardHue: 100

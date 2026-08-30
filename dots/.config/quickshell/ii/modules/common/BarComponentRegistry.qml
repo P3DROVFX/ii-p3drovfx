@@ -98,6 +98,14 @@ Singleton {
             configPage: "SystemMonitorConfig.qml"
         },
         {
+            id: "ai_plan_usage",
+            icon: "neurology",
+            title: "AI Plan Usage",
+            styleConfigKey: "aiPlanUsage",
+            styleOptions: defaultStyleOptions,
+            configPage: "AiPlanUsageConfig.qml"
+        },
+        {
             id: "privacy_pill",
             icon: "shield_lock",
             title: "Privacy pill",

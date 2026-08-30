@@ -2862,6 +2862,7 @@ Singleton {
                     property string keyboard: "expressive"
                     property string sports: "expressive"
                     property string portWatcher: "expressive"
+                    property string aiPlanUsage: "expressive"
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -2996,6 +2997,22 @@ Singleton {
                     property int cpuWarningThreshold: 90
                     property bool expressivePopup: true
                     property bool showDocker: true
+                }
+
+                property JsonObject aiPlanUsage: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 300000
+                    // Enabling a remote provider authorizes read-only quota
+                    // requests with credentials discovered from its client.
+                    // Tokens are never copied into config.json or the cache.
+                    property bool claudeNetworkEnabled: true
+                    property list<string> enabledProviders: ["chatgpt", "claude", "antigravity"]
+                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text
+                    property string percentMode: "remaining" // remaining | used
+                    property bool showWindowLabel: false
+                    property bool hideWhenUnavailable: false
+                    property int lowRemainingThreshold: 20
                 }
 
                 property JsonObject portWatcher: JsonObject {
@@ -3206,6 +3223,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "port_watcher",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "ai_plan_usage",
                                 "visible": true
                             },
                             {
