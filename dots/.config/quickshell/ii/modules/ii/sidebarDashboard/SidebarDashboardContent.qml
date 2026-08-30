@@ -709,7 +709,7 @@ Item {
 
                     text: {
                         const mode = Config.options.sidebar.dashboardHeader.textMode;
-                        const hour = new Date().getHours();
+                        const hour = (DateTime.clock?.date ?? new Date()).getHours();
                         const timeGreeting = hour < 5 ? Translation.tr("Good Night,")
                             : hour < 12 ? Translation.tr("Good Morning,")
                                 : hour < 18 ? Translation.tr("Good Afternoon,")
