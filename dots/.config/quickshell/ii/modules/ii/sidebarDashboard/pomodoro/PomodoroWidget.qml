@@ -20,10 +20,16 @@ Item {
         {
             "name": Translation.tr("Stopwatch"),
             "icon": "timer"
+        },
+        {
+            "name": Translation.tr("Timer"),
+            "icon": "hourglass_top"
         }
     ]
     property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1,
         Persistent.states.sidebar.bottomGroup.timerTab))
+    // Keybind target: the newest countdown is the one the list shows on top.
+    readonly property var firstCountdown: (TimerService.countdowns ?? [])[0] ?? null
 
     function selectTab(index) {
         if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
@@ -45,18 +51,24 @@ Item {
         } else if (event.key === Qt.Key_Space || event.key === Qt.Key_S) { // Pause/resume with Space or S
             if (tabBar.currentIndex === 0) {
                 TimerService.togglePomodoro();
-            } else {
+            } else if (tabBar.currentIndex === 1) {
                 TimerService.toggleStopwatch();
+            } else if (root.firstCountdown) {
+                TimerService.toggleCountdown(root.firstCountdown.id);
+            } else {
+                TimerService.startDraftCountdown();
             }
             event.accepted = true;
         } else if (event.key === Qt.Key_R) { // Reset with R
             if (tabBar.currentIndex === 0) {
                 TimerService.resetPomodoro();
-            } else {
+            } else if (tabBar.currentIndex === 1) {
                 TimerService.stopwatchReset();
+            } else if (root.firstCountdown) {
+                TimerService.removeCountdown(root.firstCountdown.id);
             }
             event.accepted = true;
-        } else if (event.key === Qt.Key_L) { // Record lap with L
+        } else if (event.key === Qt.Key_L && tabBar.currentIndex === 1) { // Record lap with L
             TimerService.stopwatchRecordLap();
             event.accepted = true;
         }
@@ -74,6 +86,9 @@ Item {
             ToolbarTabBar {
                 id: tabBar
                 tabButtonList: root.tabButtonList
+                // Three labelled tabs are wider than the sidebar; only the
+                // selected one keeps its label.
+                collapseInactiveLabels: true
                 requestOnly: true
                 currentIndex: root.selectedTab
                 onIndexSelected: root.selectTab(index)
@@ -105,6 +120,11 @@ Item {
                 active: root.selectedTab === 1
                 asynchronous: true
                 sourceComponent: Stopwatch { entranceTrigger: root.entranceTrigger }
+            }
+            Loader {
+                active: root.selectedTab === 2
+                asynchronous: true
+                sourceComponent: CountdownTimer { entranceTrigger: root.entranceTrigger }
             }
         }
     }

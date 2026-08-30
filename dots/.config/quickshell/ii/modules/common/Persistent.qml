@@ -546,6 +546,12 @@ Singleton {
                     property list<var> laps: []
                 }
                 property list<var> countdowns: []
+                // Last duration dialled into the sidebar's timer picker.
+                property JsonObject countdownDraft: JsonObject {
+                    property int hours: 0
+                    property int minutes: 5
+                    property int seconds: 0
+                }
             }
             property list<var> alarms: []
             property JsonObject water: JsonObject {
