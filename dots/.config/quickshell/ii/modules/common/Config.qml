@@ -3159,6 +3159,7 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true
                     property bool showNetwork: true
@@ -3166,6 +3167,13 @@ Singleton {
                     property bool showVpn: true
                     property bool showTailscale: true
                     property bool showNotifications: true
+                    property bool showPomodoro: true
+                    property bool showStopwatch: true
+                    property bool showEasyEffects: true
+                    property bool showDns: true
+                    property bool showGameMode: true
+                    property bool showMusicRecognition: true
+                    property bool showAlarms: true
                 }
                 property JsonObject layouts: JsonObject {
                     // Only storing id and layout-specific flags (visible, centered)

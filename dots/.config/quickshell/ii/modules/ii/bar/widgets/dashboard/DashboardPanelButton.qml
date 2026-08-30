@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.bar.widgets.dashboard.icons
 
 RippleButton { // Right sidebar button
     id: rightSidebarButton
@@ -41,6 +42,23 @@ RippleButton { // Right sidebar button
         GlobalStates.toggleRightSidebar(screenName);
     }
 
+    readonly property real iconPixelSize: {
+        const size = Appearance.font.pixelSize.larger;
+        return (typeof size === "number" && size > 0) ? size : 18;
+    }
+
+    DashboardIconDriver {
+        id: iconDriver
+        wifiIcon: wifiIcon
+        bluetoothIcon: bluetoothIcon
+        volumeIcon: volumeIcon
+        micIcon: micIcon
+        caffeineIcon: caffeineIcon
+        vpnIcon: vpnIcon
+        tailscaleIcon: tailscaleIcon
+        alarmIcon: alarmIcon
+    }
+
     RowLayout {
         id: indicatorsRowLayout
         anchors.centerIn: parent
@@ -48,16 +66,17 @@ RippleButton { // Right sidebar button
         spacing: 0
 
         Revealer {
-            reveal: Idle.inhibit ?? false
+            reveal: Config.options.bar.dashboardButton.showCaffeine && (Idle.inhibit ?? false)
             Layout.fillHeight: true
             Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
             Behavior on Layout.rightMargin {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
-            MaterialSymbol {
-                text: "coffee"
-                iconSize: Appearance.font.pixelSize.larger
+            CoffeeIcon {
+                id: caffeineIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
+                active: Idle.inhibit ?? false
             }
         }
         Revealer {
@@ -67,9 +86,9 @@ RippleButton { // Right sidebar button
             Behavior on Layout.rightMargin {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
-            MaterialSymbol {
-                text: "volume_off"
-                iconSize: Appearance.font.pixelSize.larger
+            VolumeIcon {
+                id: volumeIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
             }
         }
@@ -80,10 +99,27 @@ RippleButton { // Right sidebar button
             Behavior on Layout.rightMargin {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
-            MaterialSymbol {
-                text: "mic_off"
-                iconSize: Appearance.font.pixelSize.larger
+            MicIcon {
+                id: micIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
+                muted: Audio.source?.audio?.muted ?? false
+            }
+        }
+
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showAlarms && iconDriver.alarmVisible
+            Layout.fillHeight: true
+            Layout.rightMargin: reveal ? indicatorsRowLayout.realSpacing : 0
+            Behavior on Layout.rightMargin {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            AlarmIcon {
+                id: alarmIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                scheduled: iconDriver.alarmCount > 0
+                ringing: iconDriver.alarmRinging
             }
         }
 
@@ -114,49 +150,55 @@ RippleButton { // Right sidebar button
             implicitWidth: netFgIcon.implicitWidth
             implicitHeight: netFgIcon.implicitHeight
 
-            readonly property string fullWifiIcon: {
-                var sym = Network.materialSymbol;
-                if (sym.startsWith("android_wifi") || sym.startsWith("wifi") || sym.startsWith("signal_wifi")) return "wifi";
-                return "";
-            }
-
-            MaterialSymbol {
-                visible: parent.fullWifiIcon !== ""
-                anchors.centerIn: parent
-                text: parent.fullWifiIcon
-                iconSize: Appearance.font.pixelSize.larger
-                opacity: 0.3
-                color: rightSidebarButton.colText
-            }
-
             MaterialSymbol {
                 id: netFgIcon
                 anchors.centerIn: parent
-                text: Network.materialSymbol
-                iconSize: Appearance.font.pixelSize.larger
+                visible: Network.ethernet
+                text: "lan"
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
             }
+
+            WifiIcon {
+                id: wifiIcon
+                anchors.centerIn: parent
+                visible: !Network.ethernet
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                bars: {
+                    if (!Network.ready || Network.wifiStatus !== "connected")
+                        return 0;
+                    const strength = Number(Network.networkStrength);
+                    if (isNaN(strength))
+                        return 1;
+                    return strength > 67 ? 3 : strength > 33 ? 2 : 1;
+                }
+            }
         }
-        MaterialSymbol {
+        BluetoothIcon {
+            id: bluetoothIcon
             Layout.leftMargin: indicatorsRowLayout.realSpacing
             visible: BluetoothStatus.available
-            text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
-            iconSize: Appearance.font.pixelSize.larger
+            iconSize: rightSidebarButton.iconPixelSize
             color: rightSidebarButton.colText
+            connected: BluetoothStatus.connected
+            poweredOff: !BluetoothStatus.enabled
         }
-        MaterialSymbol {
+        VpnKeyIcon {
+            id: vpnIcon
             Layout.leftMargin: indicatorsRowLayout.realSpacing
             visible: Config.options.bar.dashboardButton.showVpn && VpnService.active
-            text: "key"
-            iconSize: Appearance.font.pixelSize.larger
+            iconSize: rightSidebarButton.iconPixelSize
             color: rightSidebarButton.colText
+            connected: VpnService.active
         }
-        MaterialSymbol {
+        TailscaleIcon {
+            id: tailscaleIcon
             Layout.leftMargin: indicatorsRowLayout.realSpacing
             visible: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
-            text: "hub"
-            iconSize: Appearance.font.pixelSize.larger
+            iconSize: rightSidebarButton.iconPixelSize
             color: rightSidebarButton.colText
+            connected: TailscaleService.active
         }
     }
 }
