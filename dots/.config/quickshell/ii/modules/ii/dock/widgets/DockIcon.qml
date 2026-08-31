@@ -102,9 +102,12 @@ Item {
             opacity: root.iconOpacity
 
             // Force reload when icon theme regenerates; cache: false so the reload
-            // re-decodes from disk instead of resurrecting a stale cached pixmap,
-            // async so the re-decode doesn't stall the UI thread
-            asynchronous: true
+            // re-decodes from disk instead of resurrecting a stale cached pixmap.
+            // Loaded on this thread on purpose: an asynchronous icon is resolved on Qt's
+            // image thread, and the icon loader underneath it is one shared, unguarded
+            // object - reading it there while the theme changes returned the theme before
+            // the change, and sometimes took the whole shell down with it.
+            asynchronous: false
             backer.cache: false
             backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision, parent.height + TaskbarApps.iconThemeRevision)
 
