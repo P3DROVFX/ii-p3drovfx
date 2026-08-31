@@ -4,7 +4,8 @@ Premium Material 3 / Material You dotfiles for Hyprland, powered by Quickshell.
 
 ## System Preview
 
-<img width="1966" height="1137" alt="Frame 178" src="https://github.com/user-attachments/assets/82761533-92bc-4e9a-9805-3d6945d46d36" />
+<img width="1924" height="1095" alt="SCreenshots_ii-p3drovfx" src="https://github.com/user-attachments/assets/dd08c71b-0965-4f9c-9c58-01271fd24e67" />
+
 
 ## Overview
 
@@ -50,7 +51,7 @@ cd ii-p3drovfx
 
 ## Documentation
 
-Please refer to the **[upstream ii-vynx wiki](https://github.com/vaguesyntax/ii-vynx/wiki)** for detailed component descriptions.
+Please refer to the **[ii-p3drovfx wiki](https://github.com/P3DROVFX/ii-p3drovfx/wiki)** for detailed component descriptions.
 
 <details> <summary><strong>🛠 Common Issues</strong></summary>
 
