@@ -85,8 +85,7 @@ Singleton {
         // Explicit apply always regenerates, even when colors/theme look unchanged
         command: ["python3", Directories.scriptPath + "/colors/recolor_icons.py", "--force"]
 
-        onRunningChanged: {
-            if (running) return;
+        onExited: (exitCode, exitStatus) => {
             const push = root.pendingPushName;
             root.pendingPushName = "";
             if (exitCode !== 0) {
