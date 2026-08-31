@@ -50,7 +50,6 @@ Singleton {
     property bool baseShaderEnabled: false
     property bool optionReady: false
     property bool baseRefreshPending: false
-    property string lastBaseRefreshTarget: ""
 
     property list<var> hyprshadeShaders: []
     property list<var> scannedShaders: []
@@ -189,9 +188,11 @@ Singleton {
             return;
         }
 
-        const avoidPath = root.lastBaseRefreshTarget.length > 0 ? root.lastBaseRefreshTarget : root.activePath;
+        // Always switch away from the currently compiled path. Both generated
+        // files were just replaced atomically, so selecting the current path
+        // again would not make Hyprland recompile its new contents.
+        const avoidPath = root.activePath;
         const targetPath = Array.from(root.baseShaderPaths).find(path => path !== avoidPath) ?? root.baseShaderPaths[0];
-        root.lastBaseRefreshTarget = targetPath;
         baseRefreshProc.targetPath = targetPath;
         baseRefreshProc.command = ["hyprctl", "keyword", "decoration:screen_shader", targetPath];
         baseRefreshProc.running = true;

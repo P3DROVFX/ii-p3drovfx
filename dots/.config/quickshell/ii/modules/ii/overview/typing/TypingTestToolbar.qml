@@ -20,6 +20,7 @@ Item {
     required property var engine
     property bool settingsOpen: false
     property bool historyOpen: false
+    property bool statsOpen: false
     readonly property bool controlsEnabled: root.engine?.state !== "running"
 
     signal requestMode(string mode)
@@ -29,6 +30,7 @@ Item {
     signal requestToggleNumbers
     signal requestSettings
     signal requestHistory
+    signal requestStats
 
     readonly property real pillHeight: 36
     /** Gap between the group track and the shape sitting inside it. */
@@ -188,6 +190,7 @@ Item {
         PillGroup {
             Repeater {
                 model: [
+                    { id: "stats", icon: "monitoring", tip: Translation.tr("Statistics") },
                     { id: "history", icon: "history", tip: Translation.tr("Score history") },
                     { id: "settings", icon: "tune", tip: Translation.tr("Typing test settings") }
                 ]
@@ -197,8 +200,16 @@ Item {
                     required property var modelData
 
                     pillIcon: circleButton.modelData.icon
-                    active: circleButton.modelData.id === "settings" ? root.settingsOpen : root.historyOpen
-                    onClicked: circleButton.modelData.id === "settings" ? root.requestSettings() : root.requestHistory()
+                    active: circleButton.modelData.id === "settings" ? root.settingsOpen
+                        : (circleButton.modelData.id === "history" ? root.historyOpen : root.statsOpen)
+                    onClicked: {
+                        if (circleButton.modelData.id === "settings")
+                            root.requestSettings();
+                        else if (circleButton.modelData.id === "history")
+                            root.requestHistory();
+                        else
+                            root.requestStats();
+                    }
 
                     StyledToolTip { text: circleButton.modelData.tip }
                 }

@@ -62,6 +62,27 @@ class TypingTestContractTests(unittest.TestCase):
         self.assertEqual(overview.count("&& !root.searchPanelOwned"), 2)
         self.assertNotIn("visible: root.overviewShouldShow && root.overviewFadeProgress", overview)
 
+    def test_both_hosts_share_one_typing_surface(self) -> None:
+        """Two copies of the test would drift; two hosts of one surface cannot."""
+        panel = source("modules/ii/overview/TypingTestPanel.qml")
+        page = source("modules/ii/cheatsheet/CheatsheetTypingTest.qml")
+        cheatsheet = source("modules/ii/cheatsheet/Cheatsheet.qml")
+        config = source("modules/common/Config.qml")
+        settings = source("modules/settings/configs/CheatSheetConfig.qml")
+        for host in (panel, page):
+            self.assertIn("TypingTestSurface {", host)
+        # The frame is all a host may own: no engine, no input sink, no
+        # shortcut table of its own.
+        for host in (panel, page):
+            self.assertNotIn("TypingTestEngine {", host)
+            self.assertNotIn("TextInput {", host)
+            self.assertNotIn("function handleShortcut", host)
+        self.assertIn('"id": "typingTest"', cheatsheet)
+        self.assertIn('return "CheatsheetTypingTest.qml"', cheatsheet)
+        # A new cheatsheet page must not appear unasked.
+        self.assertIn("property bool enableTypingTest: false", config)
+        self.assertIn("Config.options.cheatsheet.enableTypingTest", settings)
+
     def test_config_and_settings_expose_the_feature(self) -> None:
         config = source("modules/common/Config.qml")
         modules = source("modules/settings/configs/widgets/LauncherModulesConfig.qml")
@@ -108,13 +129,49 @@ class TypingTestContractTests(unittest.TestCase):
         # Bounded, opt-out, and never storing what was typed.
         self.assertIn("Config.options.search.typingTest.history.enable", history)
         self.assertIn("maxEntries", history)
+        # Lifetime totals outlive the capped result list, and the activity
+        # tally is bounded rather than derived from keeping every result.
+        for field in ("testsStarted", "testsCompleted", "secondsTyping", "activity"):
+            self.assertIn(field, persistent, field)
+            self.assertIn(field, history, field)
+        self.assertIn("activityWindowDays", history)
+        # Clearing has to take the totals with it, not just the list.
+        cleared = history.split("function clear()", 1)[1]
+        for field in ("recentResults", "personalBests", "testsStarted",
+                      "testsCompleted", "secondsTyping", "activity"):
+            self.assertIn(field, cleared, field)
+
+    def test_stats_page_only_reads_history(self) -> None:
+        """It can be opened mid-session, so it must not be able to alter one."""
+        stats = source("modules/ii/overview/typing/TypingStatsPage.qml")
+        surface = source("modules/ii/overview/typing/TypingTestSurface.qml")
+        self.assertIn("TypingHistory", stats)
+        for banned in ("TypingTestEngine", "Persistent.states", "TypingHistory.record",
+                       "TypingHistory.clear", "TypingHistory.registerStart"):
+            self.assertNotIn(banned, stats, banned)
+        self.assertIn("TypingStatsPage {}", surface)
+        # A StyledToolTip reads `parent.hovered`; on a plain Rectangle that is
+        # `undefined`, which the tooltip treats as hovered — 371 day cells each
+        # showed their tooltip the moment the page opened.
+        self.assertNotIn("StyledToolTip {", stats)
+        # A card's content holder must be a layout: a plain Item takes no
+        # implicit height from its children, so the card collapses and its
+        # content lands on top of the next section.
+        card = stats.split("component Card:", 1)[1].split("component ", 1)[0]
+        self.assertIn("ColumnLayout", card)
+        self.assertNotIn("Item {", card)
+        # The engine announces the start; the surface is what persists it.
+        engine = source("modules/ii/overview/typing/TypingTestEngine.qml")
+        self.assertIn("signal started", engine)
+        self.assertNotIn("Persistent", engine)
+        self.assertIn("onStarted: TypingHistory.registerStart()", surface)
         engine = source("modules/ii/overview/typing/TypingTestEngine.qml")
         payload = engine.split("function resultPayload()", 1)[1].split("function ", 1)[0]
         for banned in ("inputText", "targetText", "targetWords"):
             self.assertNotIn(banned, payload, banned)
 
-    def test_panel_owns_every_documented_shortcut(self) -> None:
-        panel = source("modules/ii/overview/TypingTestPanel.qml")
+    def test_surface_owns_every_documented_shortcut(self) -> None:
+        panel = source("modules/ii/overview/typing/TypingTestSurface.qml")
         for key in (
             "Qt.Key_R",
             "Qt.Key_Comma",
@@ -126,6 +183,7 @@ class TypingTestContractTests(unittest.TestCase):
             "Qt.Key_P",
             "Qt.Key_N",
             "Qt.Key_Tab",
+            "Qt.Key_S",
         ):
             self.assertIn(key, panel, key)
         # Tab points at restart and Enter presses it.
@@ -182,6 +240,8 @@ class TypingTestContractTests(unittest.TestCase):
             source(path)
             for path in (
                 "modules/ii/overview/TypingTestPanel.qml",
+                "modules/ii/cheatsheet/CheatsheetTypingTest.qml",
+                "modules/ii/overview/typing/TypingTestSurface.qml",
                 "modules/ii/overview/typing/TypingTestEngine.qml",
                 "modules/ii/overview/typing/TypingWordViewport.qml",
                 "modules/ii/overview/typing/TypingSounds.qml",

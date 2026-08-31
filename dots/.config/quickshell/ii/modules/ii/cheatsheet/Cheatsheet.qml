@@ -65,6 +65,13 @@ Scope {
                 "name": Translation.tr("Email")
             });
         }
+        if (Config.options.cheatsheet.enableTypingTest) {
+            list.push({
+                "id": "typingTest",
+                "icon": "speed",
+                "name": Translation.tr("Typing test")
+            });
+        }
         return list;
     }
 
@@ -602,6 +609,8 @@ Scope {
                                             return "CheatsheetWorkspaces.qml";
                                         case "mail":
                                             return "CheatsheetEmail.qml";
+                                        case "speed":
+                                            return "CheatsheetTypingTest.qml";
                                         default:
                                             return "";
                                         }

@@ -1123,6 +1123,13 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
+            visible: DisplayColorFilter.applied
+            materialIcon: "science"
+            text: Translation.tr("Experimental feature: the GPU fallback uses Hyprland's screen shader slot, so other screen shaders are disabled while it is active. Activating another shader temporarily pauses these color adjustments.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
             visible: page.selectedMonitorName.length > 0
                 && !DisplayColorFilter.isMonitorNeutral(page.selectedMonitorName)
                 && ScreenShader.active

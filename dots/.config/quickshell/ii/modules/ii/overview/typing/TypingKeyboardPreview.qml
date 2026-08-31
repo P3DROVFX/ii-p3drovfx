@@ -19,8 +19,8 @@ Item {
     /** The character the test expects next, lowercased by the caller. */
     property string nextChar: ""
     property string pressedChar: ""
-    property real keySize: 26
-    property real keySpacing: 4
+    property real keySize: 32
+    property real keySpacing: 5
 
     readonly property var rows: TypingKeyboardLayouts.rowsFor(root.layoutId)
     readonly property real rowHeight: root.keySize + root.keySpacing
@@ -87,7 +87,7 @@ Item {
                         extraBottomBorderWidth: 0
                         borderColor: "transparent"
                         borderRadius: Appearance.rounding.verysmall
-                        pixelSize: Appearance.font.pixelSize.smaller
+                        pixelSize: Appearance.font.pixelSize.small
                         implicitWidth: root.keySize
                         implicitHeight: root.keySize
                         keyColor: keyCap.isPressed ? Appearance.colors.colPrimary
@@ -118,7 +118,7 @@ Item {
             extraBottomBorderWidth: 0
             borderColor: "transparent"
             borderRadius: Appearance.rounding.verysmall
-            pixelSize: Appearance.font.pixelSize.smallest
+            pixelSize: Appearance.font.pixelSize.smaller
             implicitWidth: root.keySize * 7
             implicitHeight: root.keySize
             keyColor: spaceKey.isPressed ? Appearance.colors.colPrimary

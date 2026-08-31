@@ -245,6 +245,16 @@ Singleton {
             property JsonObject typingTest: JsonObject {
                 property list<var> recentResults: []
                 property list<var> personalBests: []
+                // Lifetime tallies. They outlive `recentResults`, which is
+                // capped, so "tests completed" stays true after the oldest
+                // results have been pruned away.
+                property int testsStarted: 0
+                property int testsCompleted: 0
+                property real secondsTyping: 0
+                // [{ d: "YYYY-MM-DD", n: tests }], one entry per active day,
+                // bounded to roughly a year — enough for the activity map and
+                // far smaller than keeping every result to derive it.
+                property list<var> activity: []
             }
 
             property JsonObject googleDrive: JsonObject {

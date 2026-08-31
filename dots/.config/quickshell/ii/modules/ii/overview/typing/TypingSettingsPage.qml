@@ -468,7 +468,8 @@ Item {
                         { keys: ["Ctrl", "N"], label: Translation.tr("Numbers") },
                         { keys: ["Ctrl", "L"], label: Translation.tr("Next language") },
                         { keys: ["Ctrl", ","], label: Translation.tr("These settings") },
-                        { keys: ["Ctrl", "H"], label: Translation.tr("Score history") }
+                        { keys: ["Ctrl", "H"], label: Translation.tr("Score history") },
+                        { keys: ["Ctrl", "S"], label: Translation.tr("Statistics") }
                     ]
 
                     delegate: Rectangle {
@@ -536,7 +537,7 @@ Item {
             OptionRow {
                 Layout.columnSpan: 2
                 label: Translation.tr("Clear every stored result")
-                description: Translation.tr("%1 results and %2 personal bests")
+                description: Translation.tr("%1 results, %2 personal bests and every lifetime total")
                     .arg(String(TypingHistory.results.length))
                     .arg(String(TypingHistory.personalBests.length))
 

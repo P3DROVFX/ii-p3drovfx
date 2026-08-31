@@ -75,6 +75,8 @@ QtObject {
 
     signal resetRequested
     signal finished
+    /** The first committed keystroke of a run. */
+    signal started
     /**
      * One committed code point, carried with the signal rather than read back
      * from `inputText`: the text property is only assigned once the whole edit
@@ -202,6 +204,7 @@ QtObject {
         root._lastSampleSecond = 0;
         root._lastSampleChars = 0;
         root.state = "running";
+        root.started();
     }
 
     function updateInput(value) {

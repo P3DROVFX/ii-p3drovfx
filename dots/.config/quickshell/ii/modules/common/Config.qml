@@ -3432,6 +3432,10 @@ Singleton {
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false
+                // The typing test also lives in the Overview search. Off by
+                // default so the cheatsheet does not gain a tab nobody asked
+                // for; the two hosts share one surface either way.
+                property bool enableTypingTest: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
