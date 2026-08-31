@@ -75,13 +75,22 @@ Item {
     function updateDrop() {
         // The slot is how many other rows have their middle above the ghost's middle - judged
         // on the resting layout, so the sliding rows never feed back into the decision.
+        //
+        // The two ends are exact ties rather than near misses: the ghost is held inside the
+        // list, so dragging the top row all the way down puts its middle exactly on the bottom
+        // row's middle, and never past it. Which way a tie goes therefore has to follow the
+        // direction of travel - counting it below meant the last row could be reached going up
+        // but never going down.
         const centre = root.ghostY + root.ghostHeight / 2;
         let slot = 0;
         for (let i = 0; i < root.count; i++) {
             if (i === root.dragFrom)
                 continue;
             const row = root.rowAt(i);
-            if (row && row.y + row.height / 2 < centre)
+            if (!row)
+                continue;
+            const middle = row.y + row.height / 2;
+            if (i > root.dragFrom ? middle <= centre : middle < centre)
                 slot++;
         }
         root.dropAt = Math.max(0, Math.min(root.count - 1, slot));
