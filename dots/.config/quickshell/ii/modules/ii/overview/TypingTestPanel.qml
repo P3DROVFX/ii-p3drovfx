@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.modules.common
 import qs.modules.ii.overview.typing
+import qs.services
 
 /**
  * The typing test as a hosted panel of the Overview search.
@@ -18,6 +19,7 @@ Item {
     id: root
 
     readonly property int panelWidth: Config.options.search.appearance.panelWidth
+    Component.onCompleted: console.log("[PROBE] parentdir TypingLanguages =", typeof TypingLanguages, "TypingSoundPacks =", typeof TypingSoundPacks) // PROBE
 
     implicitWidth: root.panelWidth
     implicitHeight: scaffold.implicitHeight

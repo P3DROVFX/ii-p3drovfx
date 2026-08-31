@@ -16,6 +16,7 @@ BG_ROOT = (ROOT / "modules/ii/background/BackgroundRoot.qml").read_text()
 WALLPAPER_IMAGE = (ROOT / "modules/ii/background/wallpaper/WallpaperImage.qml").read_text()
 OVERVIEW_BG_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewBackgroundController.qml").read_text()
 OVERVIEW_ZOOM_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewZoomController.qml").read_text()
+OVERVIEW_WINDOW_TRANSITION = (ROOT / "modules/ii/overview/OverviewWindowTransition.qml").read_text()
 
 
 class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
@@ -73,6 +74,29 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         """Legacy OverviewZoomController must not return 1.15 on zoomOutStyle 2."""
         self.assertNotIn("if (Config.options.background.zoomOutStyle === 2)", OVERVIEW_ZOOM_CONTROLLER)
         self.assertNotIn("return 1.15;", OVERVIEW_ZOOM_CONTROLLER)
+
+    def test_gnome_window_handoff_owns_and_disables_one_named_rule(self):
+        """Closing Overview must disable the same no_anim rule used to hide windows."""
+        self.assertIn("quickshell-overview-window-handoff", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("_G.__ii_overview_window_handoff_rule", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("rule:set_enabled(true)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("rule:set_enabled(false)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn(
+            "Component.onDestruction: transitionScope.setWindowHandoffActive(false)",
+            OVERVIEW_WINDOW_TRANSITION,
+        )
+        self.assertGreaterEqual(
+            OVERVIEW_WINDOW_TRANSITION.count("transitionScope.setWindowHandoffActive(false)"),
+            4,
+        )
+
+        # A second anonymous opacity rule restores visibility but leaves the
+        # first rule's no_anim=true active for every future window.
+        self.assertNotIn("opacity = '1.0 1.0'", OVERVIEW_WINDOW_TRANSITION)
+        self.assertNotIn(
+            "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })",
+            OVERVIEW_WINDOW_TRANSITION,
+        )
 
 
 if __name__ == "__main__":

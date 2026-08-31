@@ -40,6 +40,30 @@ Scope {
         Config.options.background.zoomOutEnabled &&
         Config.options.background.windowZoomOnOverview
 
+    // Hyprland window rules are cumulative. The old handoff created one
+    // anonymous no_anim rule on open and a different opacity rule on close,
+    // leaving no_anim active for every future window. Keep one named rule in
+    // Hyprland's Lua VM and toggle that same handle instead.
+    function setWindowHandoffActive(active) {
+        const globalRef = "_G.__ii_overview_window_handoff_rule";
+        let script = "local rule = " + globalRef + "; ";
+        if (active) {
+            script += "local ok = false; if rule ~= nil then ok = pcall(function() rule:set_enabled(true) end) end; ";
+            script += "if not ok then rule = hl.window_rule({ name = 'quickshell-overview-window-handoff', enabled = true, match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true }); " + globalRef + " = rule end";
+        } else {
+            script += "if rule ~= nil then local ok = pcall(function() rule:set_enabled(false) end); if not ok then " + globalRef + " = nil end end";
+        }
+        Quickshell.execDetached(["hyprctl", "eval", script]);
+    }
+
+    Component.onCompleted: {
+        // Recover if Quickshell was restarted while the overview handoff rule
+        // was active in the still-running compositor.
+        if (!GlobalStates.overviewOpen)
+            transitionScope.setWindowHandoffActive(false);
+    }
+    Component.onDestruction: transitionScope.setWindowHandoffActive(false)
+
     Variants {
         id: transitionVariants
         model: Quickshell.screens
@@ -148,7 +172,7 @@ Scope {
                 interval: 60
                 onTriggered: {
                     if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
-                        Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })"]);
+                        transitionScope.setWindowHandoffActive(true);
                     }
                 }
             }
@@ -158,8 +182,20 @@ Scope {
                 interval: 300
                 onTriggered: {
                     if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
-                        Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
+                        transitionScope.setWindowHandoffActive(false);
                     }
+                }
+            }
+
+            onIsGnomeLikeChanged: {
+                if (Quickshell.screens.length === 0 || tRoot.screen !== Quickshell.screens[0])
+                    return;
+                if (!tRoot.isGnomeLike) {
+                    openDelayTimer.stop();
+                    restoreWindowsTimer.stop();
+                    transitionScope.setWindowHandoffActive(false);
+                } else if (GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                    openDelayTimer.restart();
                 }
             }
 
@@ -291,9 +327,8 @@ Scope {
                         exitAnimTimer.stop();
                         tRoot.exitAnimating = false;
                         tRoot.isOverviewActive = false;
-                        if (tRoot.isGnomeLike && GlobalStates.overviewOpen && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
-                            Quickshell.execDetached(["hyprctl", "eval", "hl.window_rule({ match = { class = '.*' }, opacity = '1.0 1.0' })"]);
-                        }
+                        if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
+                            transitionScope.setWindowHandoffActive(false);
                         tRoot.frozenToplevels = [];
                         tRoot.outgoingToplevels = [];
                     }

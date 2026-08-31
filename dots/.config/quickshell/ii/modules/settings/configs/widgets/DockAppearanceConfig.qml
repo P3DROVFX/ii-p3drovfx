@@ -105,7 +105,7 @@ Item {
                     text: Translation.tr("Dock corner radius") + (Config.options.dock.dockRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
                     value: Config.options.dock.dockRadius < 0 ? 0 : Config.options.dock.dockRadius
                     from: 0
-                    to: 60
+                    to: 40
                     stepSize: 1
                     onValueChanged: {
                         Config.options.dock.dockRadius = value === 0 ? -1 : value;
@@ -117,7 +117,7 @@ Item {
                     text: Translation.tr("Widget corner radius") + (Config.options.dock.widgetRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
                     value: Config.options.dock.widgetRadius < 0 ? 0 : Config.options.dock.widgetRadius
                     from: 0
-                    to: 40
+                    to: 30
                     stepSize: 1
                     onValueChanged: {
                         Config.options.dock.widgetRadius = value === 0 ? -1 : value;

@@ -3242,18 +3242,8 @@ Singleton {
                             },
                             {
                                 "centered": false,
-                                "id": "search",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
                                 "id": "record_indicator",
                                 "visible": false
-                            },
-                            {
-                                "centered": false,
-                                "id": "dictation_indicator",
-                                "visible": true
                             },
                             {
                                 "centered": false,
@@ -3277,21 +3267,6 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "system_tray",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "privacy_pill",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "port_watcher",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "ai_plan_usage",
                                 "visible": true
                             },
                             {
