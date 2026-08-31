@@ -182,6 +182,100 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "keyboard"
+        title: Translation.tr("Typing test")
+        tooltip: Translation.tr("Defaults for the offline Monkeytype-style test in Search. Changes apply to the next test so an active run stays deterministic.")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.language
+                options: [
+                    { displayName: Translation.tr("English 1k"), value: "english_1k" },
+                    { displayName: Translation.tr("Português"), value: "portuguese" },
+                    { displayName: Translation.tr("Español"), value: "spanish" },
+                    { displayName: Translation.tr("Français"), value: "french" },
+                    { displayName: Translation.tr("Deutsch"), value: "german" },
+                    { displayName: Translation.tr("Italiano"), value: "italian" },
+                    { displayName: Translation.tr("Русский"), value: "russian" }
+                ]
+                onSelected: value => Config.options.search.typingTest.language = value
+            }
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.mode
+                options: [
+                    { displayName: Translation.tr("Time"), value: "time" },
+                    { displayName: Translation.tr("Words"), value: "words" },
+                    { displayName: Translation.tr("Zen"), value: "zen" }
+                ]
+                onSelected: value => Config.options.search.typingTest.mode = value
+            }
+
+            ConfigSelectionArray {
+                visible: Config.options.search.typingTest.mode === "time"
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.time
+                options: [
+                    { displayName: "15s", value: 15 },
+                    { displayName: "30s", value: 30 },
+                    { displayName: "60s", value: 60 },
+                    { displayName: "120s", value: 120 }
+                ]
+                onSelected: value => Config.options.search.typingTest.time = value
+            }
+
+            ConfigSelectionArray {
+                visible: Config.options.search.typingTest.mode === "words"
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.words
+                options: [
+                    { displayName: "10", value: 10 },
+                    { displayName: "25", value: 25 },
+                    { displayName: "50", value: 50 },
+                    { displayName: "100", value: 100 }
+                ]
+                onSelected: value => Config.options.search.typingTest.words = value
+            }
+
+            ConfigSwitch {
+                buttonIcon: "format_quote"
+                text: Translation.tr("Punctuation by default")
+                checked: Config.options.search.typingTest.punctuation
+                onCheckedChanged: Config.options.search.typingTest.punctuation = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "123"
+                text: Translation.tr("Numbers by default")
+                checked: Config.options.search.typingTest.numbers
+                onCheckedChanged: Config.options.search.typingTest.numbers = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "speed"
+                text: Translation.tr("Show live WPM")
+                checked: Config.options.search.typingTest.showLiveWpm
+                onCheckedChanged: Config.options.search.typingTest.showLiveWpm = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "percent"
+                text: Translation.tr("Show live accuracy")
+                checked: Config.options.search.typingTest.showLiveAccuracy
+                onCheckedChanged: Config.options.search.typingTest.showLiveAccuracy = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Smooth caret")
+                checked: Config.options.search.typingTest.smoothCaret
+                onCheckedChanged: Config.options.search.typingTest.smoothCaret = checked
+            }
+        }
+    }
+
+    ContentSection {
         icon: "tag"
         title: Translation.tr("Search Prefixes")
 
@@ -260,6 +354,11 @@ ContentPage {
                         name: Translation.tr("Material Symbols"),
                         icon: "font_download",
                         prop: "materialSymbols"
+                    },
+                    {
+                        name: Translation.tr("Typing test"),
+                        icon: "keyboard",
+                        prop: "typingTest"
                     }
                 ]
                 delegate: Rectangle {
@@ -270,8 +369,8 @@ ContentPage {
 
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent

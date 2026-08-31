@@ -536,6 +536,10 @@ Scope {
         togglePrefixedSearch(Config.options.search.prefix.translator);
     }
 
+    function toggleTypingTest() {
+        togglePrefixedSearch(Config.options.search.prefix.typingTest);
+    }
+
     function toggleAi() {
         if (!Ai.enabled)
             return;
@@ -578,6 +582,10 @@ Scope {
         function translatorToggle() {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleTranslator();
+        }
+        function typingTestToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleTypingTest();
         }
         function aiToggle() {
             GlobalStates.superReleaseMightTrigger = false;

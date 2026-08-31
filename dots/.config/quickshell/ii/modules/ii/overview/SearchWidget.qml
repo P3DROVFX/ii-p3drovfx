@@ -177,6 +177,10 @@ Item {
     // declared panel width remains the usable width, not the clipped width.
     readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
     readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
+    // Panels normally share SearchBar as their local filter. A panel can
+    // explicitly own the primary TextInput (Typing Test) without requiring a
+    // panel-id branch in focus or keyboard routing.
+    readonly property bool activePanelOwnsInput: root.activePanel?.inputOwner === "panel"
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
     readonly property bool isTranslatorMode: root.activePanelId === "translator"
@@ -230,6 +234,11 @@ Item {
         return root.activePanelId === "ai" ? aiPanelLoader.item : null;
     }
 
+    onActivePanelItemChanged: {
+        if (root.activePanelOwnsInput && root.activePanelItem)
+            Qt.callLater(root.focusPrimaryInput);
+    }
+
     // Legacy panels previously had bespoke Loaders and signal wiring. Hosted
     // panels now share one lifecycle, while the active item's optional signals
     // remain available without coupling SearchWidget to a concrete panel type.
@@ -268,7 +277,7 @@ Item {
             // `aiModeLocked`, so writing it back from this handler made the
             // binding depend on its own result — Qt broke the loop by
             // freezing the property, and Escape then had nothing to change.
-            Qt.callLater(root.focusSearchInput);
+            Qt.callLater(root.focusPrimaryInput);
         } else {
             root.aiDraftHydrated = false;
         }
@@ -555,13 +564,22 @@ Item {
     readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
-        if (root.isAiMode) {
-            root.focusSearchInput();
+        if (root.isAiMode || root.activePanelOwnsInput) {
+            root.focusPrimaryInput();
         } else if (root.activePanelItem && typeof root.activePanelItem.focusInput === "function") {
             root.activePanelItem.focusInput();
         } else {
             appResults.selectFirst();
         }
+    }
+
+    function focusPrimaryInput() {
+        if (root.activePanelOwnsInput && root.activePanelItem
+                && typeof root.activePanelItem.focusInput === "function") {
+            root.activePanelItem.focusInput();
+            return;
+        }
+        root.focusSearchInput();
     }
 
     function focusSearchInput() {
@@ -1211,6 +1229,8 @@ Item {
 
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
+            if (root.activePanelOwnsInput)
+                return;
             if (root.isAiMode) {
                 root.focusSearchInput();
                 return;
@@ -1252,6 +1272,8 @@ Item {
         // Only handle visible printable characters (ignore control chars, arrows, etc.)
         if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab && event.text.charCodeAt(0) >= 0x20)
         {
+            if (root.activePanelOwnsInput)
+                return;
             if (root.isAiMode) {
                 root.focusSearchInput();
                 const input = searchBar.searchInput;
@@ -1422,6 +1444,7 @@ Item {
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
                 activePanel: root.activePanel
+                activePanelOwnsInput: root.activePanelOwnsInput
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true
                 clipboardWidth: 830

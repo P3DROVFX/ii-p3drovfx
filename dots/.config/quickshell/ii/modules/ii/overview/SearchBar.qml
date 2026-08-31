@@ -18,6 +18,7 @@ RowLayout {
     property bool clipboardMode: false
     property bool activePanelMode: false
     property var activePanel: null
+    property bool activePanelOwnsInput: false
     property bool activePanelQueryEmpty: false
     property bool supportsPanelSectionToggle: false
     property int clipboardWidth: 860
@@ -155,6 +156,8 @@ RowLayout {
     }
 
     function forceFocus() {
+        if (root.activePanelOwnsInput)
+            return;
         searchInput.forceActiveFocus();
     }
 
@@ -377,8 +380,10 @@ RowLayout {
         implicitHeight: 40
         implicitWidth: root.clipboardMode ? root.clipboardWidth : ((root.searchingText === "" && !Config.options.search.alwaysListApps && !root.showSuggestionsPanel) ? Appearance.sizes.searchWidthCollapsed : Appearance.sizes.searchWidth)
         focus: GlobalStates.overviewOpen
+        readOnly: root.activePanelOwnsInput
         font.pixelSize: Appearance.font.pixelSize.small
-        placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back") : Translation.tr("Search, calculate or run")
+        placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back")
+            : (root.activePanelOwnsInput ? Translation.tr("Typing test") : Translation.tr("Search, calculate or run"))
 
         // Placeholder fades smoothly when text is entered or mode changes
         placeholderTextColor: (root.searchingText === "" && !root.clipboardMode)
@@ -402,11 +407,13 @@ RowLayout {
         }
 
         onTextChanged: {
-            if (!root.syncingSearchText)
+            if (!root.syncingSearchText && !root.activePanelOwnsInput)
                 LauncherSearch.query = text;
         }
 
         onAccepted: {
+            if (root.activePanelOwnsInput)
+                return;
             if (root.aiModeActive) {
                 root.sendMessage();
                 return;
@@ -431,6 +438,8 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            if (root.activePanelOwnsInput)
+                return;
             if (event.key === Qt.Key_Backspace && root.activePanelMode && root.activePanelQueryEmpty) {
                 root.backspaceOnEmpty();
                 event.accepted = true;

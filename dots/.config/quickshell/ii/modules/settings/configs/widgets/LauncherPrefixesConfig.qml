@@ -161,6 +161,11 @@ Item {
                             "prop": "materialSymbols"
                         },
                         {
+                            "name": Translation.tr("Typing test"),
+                            "icon": "keyboard",
+                            "prop": "typingTest"
+                        },
+                        {
                             "name": Translation.tr("AI Chat"),
                             "icon": "auto_awesome",
                             "prop": "ai"
@@ -173,8 +178,8 @@ Item {
                         color: Appearance.colors.colSurfaceContainerLow
                         topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                         topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                         ScrollAnimate {}
 

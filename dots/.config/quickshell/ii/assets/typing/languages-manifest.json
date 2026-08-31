@@ -1,0 +1,78 @@
+{
+  "source": "monkeytypegame/monkeytype",
+  "upstreamCommit": "91bd24bb8513785c7364cbea29296ff7adafac41",
+  "license": "GPL-3.0-only",
+  "syncedAt": "2026-08-31T00:14:29Z",
+  "languages": [
+    {
+      "id": "english_1k",
+      "label": "English 1k",
+      "file": "languages/english_1k.json",
+      "bcp47": "en",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 1000,
+      "sha256": "f9e758f06aa1ccaa34a6564c1ef70ce87bb69582da25678ba6bef818b830b057"
+    },
+    {
+      "id": "portuguese",
+      "label": "Português",
+      "file": "languages/portuguese.json",
+      "bcp47": "pt-PT",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 201,
+      "sha256": "88657b2beecf728c220ac954bc04d877caaf6843c5cc94533d94d4f41771a858"
+    },
+    {
+      "id": "spanish",
+      "label": "Español",
+      "file": "languages/spanish.json",
+      "bcp47": "es-ES",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 197,
+      "sha256": "00e49bd8b53b7c847ce2d6d345c92bccced70ce9c4de9875cceaf1889a82c4f0"
+    },
+    {
+      "id": "french",
+      "label": "Français",
+      "file": "languages/french.json",
+      "bcp47": "fr-FR",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 174,
+      "sha256": "67ed35348c841c2ef06d066e0bd25d71018f9189a972d218e0e2040f3bf4cdc6"
+    },
+    {
+      "id": "german",
+      "label": "Deutsch",
+      "file": "languages/german.json",
+      "bcp47": "de-DE",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 200,
+      "sha256": "3f7168b5cf202ff5d2b5ebedb686a2890fc097f3fa650d806daf59934b3e097d"
+    },
+    {
+      "id": "italian",
+      "label": "Italiano",
+      "file": "languages/italian.json",
+      "bcp47": "it-IT",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 199,
+      "sha256": "8141da475f665a2fda479ec6d53a79987935f3add56a11d10c1ad6c219fac92b"
+    },
+    {
+      "id": "russian",
+      "label": "Русский",
+      "file": "languages/russian.json",
+      "bcp47": "ru-RU",
+      "rightToLeft": false,
+      "joiningScript": false,
+      "wordCount": 200,
+      "sha256": "e011fe685fe54f306e00a1dd4b9ec7ce198ea717ed96085fa1a183978d6be4f3"
+    }
+  ]
+}

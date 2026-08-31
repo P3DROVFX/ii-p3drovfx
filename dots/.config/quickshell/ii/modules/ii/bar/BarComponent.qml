@@ -147,7 +147,6 @@ Item {
         }
     }
 
-
     NumberAnimation {
         id: moveXAnimation
         target: moveTranslation
@@ -492,9 +491,7 @@ Item {
             return true;
         if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons === "expressive")
             return true;
-        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive"
-                || Config.options.bar.styles.weather === "horizon"
-                || Config.options.bar.styles.weather === "tessera"))
+        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard === "expressive")
             return true;
@@ -637,10 +634,7 @@ Item {
                             //
                             // Reactive, and through the layout, so what is reserved
                             // is what is drawn.
-                            item.Layout.preferredHeight = Qt.binding(() =>
-                                (item.implicitWidth > 0 && item.implicitWidth === item.implicitHeight)
-                                    ? item.width
-                                    : item.implicitHeight);
+                            item.Layout.preferredHeight = Qt.binding(() => (item.implicitWidth > 0 && item.implicitWidth === item.implicitHeight) ? item.width : item.implicitHeight);
                         }
                     }
                 }

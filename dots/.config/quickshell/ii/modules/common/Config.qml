@@ -1141,6 +1141,7 @@ Singleton {
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
+            "search.typingTest.mode": ["time", "words", "zen"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -4114,7 +4115,19 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string typingTest: "^"
                     property string ai: "&"
+                }
+                property JsonObject typingTest: JsonObject {
+                    property string language: "english_1k"
+                    property string mode: "time"
+                    property int time: 30
+                    property int words: 50
+                    property bool punctuation: false
+                    property bool numbers: false
+                    property bool showLiveWpm: false
+                    property bool showLiveAccuracy: false
+                    property bool smoothCaret: true
                 }
                 property JsonObject ai: JsonObject {
                     // How the AI chat is triggered from the search:
@@ -4132,6 +4145,9 @@ Singleton {
                     property bool translator: true
                     property bool mediaDownloader: true
                     property bool materialSymbols: true
+                    property JsonObject typingTest: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject emojis: JsonObject {
                         property bool enable: true
                         property string skinTone: "none"
