@@ -82,13 +82,22 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         self.assertIn("rule:set_enabled(true)", OVERVIEW_WINDOW_TRANSITION)
         self.assertIn("rule:set_enabled(false)", OVERVIEW_WINDOW_TRANSITION)
         self.assertIn(
-            "Component.onDestruction: transitionScope.setWindowHandoffActive(false)",
+            "Component.onDestruction: transitionScope.forceWindowHandoffInactive()",
             OVERVIEW_WINDOW_TRANSITION,
         )
+        self.assertIn("id: windowHandoffProcess", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("if (windowHandoffProcess.running)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("windowHandoffCommandQueued = true", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("transitionScope.runWindowHandoffCommand()", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("windowHandoffProcess.running = false;", OVERVIEW_WINDOW_TRANSITION)
         self.assertGreaterEqual(
             OVERVIEW_WINDOW_TRANSITION.count("transitionScope.setWindowHandoffActive(false)"),
             4,
         )
+
+        # Entering the Gnome preset while Overview is already open must adopt
+        # the live state before scheduling the handoff capture.
+        self.assertIn("tRoot.isOverviewActive = true;", OVERVIEW_WINDOW_TRANSITION)
 
         # A second anonymous opacity rule restores visibility but leaves the
         # first rule's no_anim=true active for every future window.

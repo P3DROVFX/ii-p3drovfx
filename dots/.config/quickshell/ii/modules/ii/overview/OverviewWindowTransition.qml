@@ -30,6 +30,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
@@ -44,16 +45,52 @@ Scope {
     // anonymous no_anim rule on open and a different opacity rule on close,
     // leaving no_anim active for every future window. Keep one named rule in
     // Hyprland's Lua VM and toggle that same handle instead.
-    function setWindowHandoffActive(active) {
+    property bool windowHandoffDesiredActive: false
+    property bool windowHandoffCommandQueued: false
+
+    function windowHandoffScript(active) {
         const globalRef = "_G.__ii_overview_window_handoff_rule";
         let script = "local rule = " + globalRef + "; ";
         if (active) {
             script += "local ok = false; if rule ~= nil then ok = pcall(function() rule:set_enabled(true) end) end; ";
-            script += "if not ok then rule = hl.window_rule({ name = 'quickshell-overview-window-handoff', enabled = true, match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true }); " + globalRef + " = rule end";
+            script += "if not ok then local createdOk, created = pcall(function() return hl.window_rule({ name = 'quickshell-overview-window-handoff', enabled = true, match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true }) end); if createdOk and created ~= nil then " + globalRef + " = created else error(tostring(created)) end end";
         } else {
             script += "if rule ~= nil then local ok = pcall(function() rule:set_enabled(false) end); if not ok then " + globalRef + " = nil end end";
         }
-        Quickshell.execDetached(["hyprctl", "eval", script]);
+        return script;
+    }
+
+    function runWindowHandoffCommand() {
+        windowHandoffProcess.command = ["hyprctl", "eval", transitionScope.windowHandoffScript(transitionScope.windowHandoffDesiredActive)];
+        windowHandoffProcess.running = true;
+    }
+
+    function setWindowHandoffActive(active) {
+        transitionScope.windowHandoffDesiredActive = active;
+        if (windowHandoffProcess.running) {
+            transitionScope.windowHandoffCommandQueued = true;
+            return;
+        }
+        transitionScope.runWindowHandoffCommand();
+    }
+
+    function forceWindowHandoffInactive() {
+        transitionScope.windowHandoffDesiredActive = false;
+        transitionScope.windowHandoffCommandQueued = false;
+        // Do not let an in-flight enable finish after the teardown cleanup.
+        if (windowHandoffProcess.running)
+            windowHandoffProcess.running = false;
+        Quickshell.execDetached(["hyprctl", "eval", transitionScope.windowHandoffScript(false)]);
+    }
+
+    Process {
+        id: windowHandoffProcess
+        onExited: {
+            if (!transitionScope.windowHandoffCommandQueued)
+                return;
+            transitionScope.windowHandoffCommandQueued = false;
+            transitionScope.runWindowHandoffCommand();
+        }
     }
 
     Component.onCompleted: {
@@ -62,7 +99,7 @@ Scope {
         if (!GlobalStates.overviewOpen)
             transitionScope.setWindowHandoffActive(false);
     }
-    Component.onDestruction: transitionScope.setWindowHandoffActive(false)
+    Component.onDestruction: transitionScope.forceWindowHandoffInactive()
 
     Variants {
         id: transitionVariants
@@ -195,6 +232,10 @@ Scope {
                     restoreWindowsTimer.stop();
                     transitionScope.setWindowHandoffActive(false);
                 } else if (GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                    tRoot.exitAnimating = false;
+                    tRoot.isOverviewActive = true;
+                    exitAnimTimer.stop();
+                    restoreWindowsTimer.stop();
                     openDelayTimer.restart();
                 }
             }

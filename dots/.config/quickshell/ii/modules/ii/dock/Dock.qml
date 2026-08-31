@@ -35,8 +35,11 @@ Scope {
         const shadowPad = Math.round(Appearance.sizes.elevationMargin * 1.2)
 
         const concaveReserve = isDynamic ? Math.max(0, opts.concaveCornerRadius || 0) : 0
-        const mainPad = isDynamic ? (concaveReserve * 2) : (isHug ? (shadowPad * 2) : (gapsOut * 2))
-        const crossPad = isAttached ? (isHug ? shadowPad : 0) : (gapsOut * 2)
+        // A floating shadow is larger than gapsOut. Reserve its complete blur
+        // envelope on both sides so the layer surface never becomes a clip wall.
+        const floatingPad = isAttached ? 0 : shadowPad
+        const mainPad = isDynamic ? (concaveReserve * 2) : (isHug ? (shadowPad * 2) : (floatingPad * 2))
+        const crossPad = isAttached ? (isHug ? shadowPad : 0) : (floatingPad * 2)
 
         const barConflicts = opts.barActive && (opts.isVertical !== opts.barIsVertical)
         const barOffset = barConflicts ? (opts.isVertical ? opts.barThickness : 0) : 0
@@ -54,8 +57,8 @@ Scope {
 
         // The PanelWindow reserves a stable safe envelope. Only the visible
         // tray follows the actual animated content geometry.
-        const bgW = Math.max(1, opts.isVertical ? baseContentW : Math.min(contentW + (isDynamic ? concaveReserve * 2 : 0), maxW - (isDynamic ? 0 : (isHug ? shadowPad * 2 : gapsOut * 2))))
-        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH + (isDynamic ? concaveReserve * 2 : 0), maxH - (isDynamic ? 0 : (isHug ? shadowPad * 2 : gapsOut * 2))) : baseContentH)
+        const bgW = Math.max(1, opts.isVertical ? baseContentW : Math.min(contentW + (isDynamic ? concaveReserve * 2 : 0), maxW - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))))
+        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH + (isDynamic ? concaveReserve * 2 : 0), maxH - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))) : baseContentH)
 
         const baseDockW = opts.isVertical ? baseContentW + crossSafety + crossPad : Math.min(baseContentW + mainSafety + mainPad, maxW)
         const baseDockH = opts.isVertical ? Math.min(baseContentH + mainSafety + mainPad, maxH) : Math.min(baseContentH + crossSafety + crossPad, maxH)
@@ -70,6 +73,7 @@ Scope {
             dockHeight: fullDockH,
             dockThickness: opts.isVertical ? fullDockW : fullDockH,
             unmagnifiedThickness: opts.isVertical ? baseContentW + crossPad : baseContentH + crossPad,
+            surfaceMargin: floatingPad,
             backgroundWidth: bgW,
             backgroundHeight: bgH
         }
@@ -102,6 +106,7 @@ Scope {
             readonly property bool isVertical: dock.isVertical
             readonly property real dockThickness: dockRoot.sizing.dockThickness
             readonly property real unmagnifiedThickness: dockRoot.sizing.unmagnifiedThickness
+            readonly property real surfaceMargin: dockRoot.sizing.surfaceMargin
             readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
             readonly property bool isSpecialWorkspaceOpen: {
@@ -309,16 +314,16 @@ Scope {
                         anchors.verticalCenter: dock.isVertical ? parent.verticalCenter : undefined
 
                         anchors.bottom: dock.dockEffectivePosition === "bottom" ? parent.bottom : undefined
-                        anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? (dockRoot.reveal ? (dockRoot.isAttachedToEdge ? 0 : Appearance.sizes.hyprlandGapsOut) : -(dockMouseArea.hoverRegion + 4)) : 0
+                        anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
                         anchors.top: dock.dockEffectivePosition === "top" ? parent.top : undefined
-                        anchors.topMargin: dock.dockEffectivePosition === "top" ? (dockRoot.reveal ? (dockRoot.isAttachedToEdge ? 0 : Appearance.sizes.hyprlandGapsOut) : -(dockMouseArea.hoverRegion + 4)) : 0
+                        anchors.topMargin: dock.dockEffectivePosition === "top" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
                         anchors.left: dock.dockEffectivePosition === "left" ? parent.left : undefined
-                        anchors.leftMargin: dock.dockEffectivePosition === "left" ? (dockRoot.reveal ? (dockRoot.isAttachedToEdge ? 0 : Appearance.sizes.hyprlandGapsOut) : -(dockMouseArea.hoverRegion + 4)) : 0
+                        anchors.leftMargin: dock.dockEffectivePosition === "left" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
                         anchors.right: dock.dockEffectivePosition === "right" ? parent.right : undefined
-                        anchors.rightMargin: dock.dockEffectivePosition === "right" ? (dockRoot.reveal ? (dockRoot.isAttachedToEdge ? 0 : Appearance.sizes.hyprlandGapsOut) : -(dockMouseArea.hoverRegion + 4)) : 0
+                        anchors.rightMargin: dock.dockEffectivePosition === "right" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
                         Behavior on opacity {
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockVisualBackground)
