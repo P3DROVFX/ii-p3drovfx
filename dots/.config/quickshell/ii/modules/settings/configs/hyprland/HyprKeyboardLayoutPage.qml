@@ -248,7 +248,6 @@ Item {
                     index: chosenList.dragFrom
                     ghost: true
                     enabled: false
-                    scale: 1.01
                 }
             }
         }
@@ -398,6 +397,10 @@ Item {
         // corners that have nothing next to them - and it re-rounds them again as rows are
         // pressed and dragged past each other. Every row here is its own card, always.
         buttonRadius: Appearance.rounding.normal
+        // A button grows by a percent under the pointer, which is a nudge on something small and
+        // an overflow on something as wide as the page: the row spills past what contains it and
+        // comes back with its sides cut off. The pointer is told by the colour instead.
+        scale: 1
         colBackground: Appearance.colors.colLayer2
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
