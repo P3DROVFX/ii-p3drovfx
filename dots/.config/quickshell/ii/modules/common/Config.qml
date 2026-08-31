@@ -621,7 +621,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 14
+    readonly property int currentConfigVersion: 15
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1001,6 +1001,22 @@ Singleton {
                     sectionOrder.unshift({ "id": "suggested" });
             }
             console.log("[Config] Added idle Suggestions search result group");
+        }
+
+        // v14 -> v15: the sidebar avatar shape split off from the general
+        // userProfile one. Existing configs kept a single shape for both, so
+        // seed the new key from it to leave the sidebar looking untouched.
+        if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
+            if (raw.sidebar === undefined || raw.sidebar === null
+                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+                raw.sidebar = {};
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
+                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+                raw.sidebar.dashboardHeader = {};
+            if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
+                raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
+                console.log(`[Config] Seeded sidebar.dashboardHeader.avatarShape from userProfile.avatarShape (${raw.userProfile.avatarShape})`);
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -4417,6 +4433,9 @@ Singleton {
                     // picture/uptime row, so this now matches "user_profile".
                     property string profileImageType: "user_profile" // "user_profile", "distro", "none"
                     property string profileImagePath: Directories.userProfileImagePath
+                    // Independent from userProfile.avatarShape: the sidebar avatar is
+                    // shaped on its own so the settings/general avatar can differ.
+                    property string avatarShape: "Cookie9Sided"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }

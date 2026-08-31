@@ -682,6 +682,7 @@ Item {
                     anchors.fill: parent
                     active: GlobalStates.dashboardPanelOpen
                     visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                    avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     fontPixelSize: 32
                     fontWeight: Font.Black
                     borderWidth: 4
@@ -971,6 +972,7 @@ Item {
                         anchors.fill: parent
                         active: GlobalStates.dashboardPanelOpen
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                        avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
                 }
 
