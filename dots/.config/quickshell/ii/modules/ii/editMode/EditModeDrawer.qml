@@ -33,6 +33,7 @@ Item {
     signal addRequested(string widgetId, real dropX, real dropY)
     signal toggleRequested(string widgetId)
     signal barAddRequested(string componentId, string bucket)
+    signal barRemoveRequested(string componentId)
     // A bar component carried out of the catalogue: where the pointer is, in
     // the chrome's coordinates, for the surface to hand to that screen's bar.
     signal barDragMoved(string componentId, real x, real y)
@@ -66,10 +67,21 @@ Item {
     property bool searchHeld: false
     readonly property bool searchFocused: root.searchWanted
 
-    function matches(a, b) {
-        const needle = root.needle;
-        return ((a ?? "").toLowerCase().indexOf(needle) !== -1)
-            || ((b ?? "").toLowerCase().indexOf(needle) !== -1);
+    // Fuzzysort, the matcher the launcher already searches these same apps
+    // with: "fx" finds Firefox, which a substring test never will, and the
+    // results come back best-first. Targets are prepared where each catalogue
+    // is built - preparing two hundred of them per keystroke is the shape that
+    // made the launcher slow ([[launcher-perf-optimization]]).
+    function prepared(title, id) {
+        return Fuzzy.prepare(`${title ?? ""} ${id ?? ""} `);
+    }
+    function fuzzyPick(rows) {
+        return Fuzzy.go(root.needle, rows, {
+            "all": false,
+            "key": "hay",
+            "limit": 80,
+            "threshold": 0.3
+        }).map(result => result.obj);
     }
 
     function releaseSearchFocus() {
@@ -92,7 +104,18 @@ Item {
         return p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height;
     }
 
+
     onSectionChanged: root.clearSearch()
+
+    // Ctrl+F, from the canvas. Only the screen being edited answers: every
+    // screen draws a drawer, and the keyboard is on one of them.
+    function focusSearch() {
+        if (!root.searchable || root.screenName !== GlobalStates.editModeMonitor)
+            return;
+        root.searchWanted = true;
+        searchField.forceActiveFocus();
+        searchField.selectAll();
+    }
 
     Connections {
         target: GlobalStates
@@ -105,6 +128,12 @@ Item {
         function onEditModeChanged() {
             if (!GlobalStates.editMode)
                 root.clearSearch();
+        }
+        function onEditSearchFocusRequested() {
+            root.focusSearch();
+        }
+        function onEditSearchReleaseRequested() {
+            root.releaseSearchFocus();
         }
     }
 
@@ -121,10 +150,19 @@ Item {
                 if (entry && entry.id) ids.push(entry.id);
         return ids;
     }
-    readonly property var barOffer: {
-        const offer = BarComponentRegistry.getAvailableComponents(root.usedBarIds);
-        return root.searching ? offer.filter(c => c && root.matches(c.title, c.id)) : offer;
+    // Every bar component, not only the ones going spare: one already on the
+    // bar is shown checked and clicks off again. Hiding them made the panel
+    // silent about what the bar holds, and left the badge on the bar as the
+    // only way to take anything off it.
+    readonly property var barCatalogue: {
+        const used = root.usedBarIds;
+        return (BarComponentRegistry.allComponents ?? []).map(component => ({
+            "component": component,
+            "used": used.indexOf(component.id) !== -1,
+            "hay": root.prepared(component.title, component.id)
+        }));
     }
+    readonly property var barRows: root.searching ? root.fuzzyPick(root.barCatalogue) : root.barCatalogue
 
     function widgetOnDesktop(widgetId) {
         return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId);
@@ -210,18 +248,26 @@ Item {
         return count;
     }
 
+    // The flattened list a query searches, prepared once per catalogue rather
+    // than per keystroke.
+    readonly property var widgetSearchRows: {
+        const rows = [];
+        for (const group of root.widgetGroups)
+            for (const widget of group.items)
+                rows.push({
+                    "kind": "widget",
+                    "widget": widget,
+                    "hay": root.prepared(widget.name, widget.widgetId)
+                });
+        return rows;
+    }
+
     // One flat list of section headers and, under each open one, its widgets:
     // a list view can only be given rows, and collapsing by dropping the rows
     // costs nothing - a shut section has no delegates at all.
     readonly property var widgetRows: {
-        if (root.searching) {
-            const found = [];
-            for (const group of root.widgetGroups)
-                for (const widget of group.items)
-                    if (root.matches(widget.name, widget.widgetId))
-                        found.push({ "kind": "widget", "widget": widget });
-            return found;
-        }
+        if (root.searching)
+            return root.fuzzyPick(root.widgetSearchRows);
         const rows = [];
         for (const group of root.widgetGroups) {
             rows.push({ "kind": "header", "group": group });
@@ -248,31 +294,39 @@ Item {
         const rest = Array.from(AppSearch.list ?? [])
             .filter(entry => entry && entry.id && !entry.noDisplay
                 && !taken[TaskbarApps.normalizeAppId(entry.id)]);
+        // The name is resolved HERE, once per catalogue, and carried on the
+        // item: a heuristic lookup per row per keystroke over two hundred apps
+        // is the exact cost the launcher had to have taken out of it.
+        const item = (appId, pinned) => ({
+            "appId": appId,
+            "pinned": pinned,
+            "name": root.appName(appId)
+        });
         return [
             {
                 "key": "pinned",
                 "title": Translation.tr("On the dock"),
                 "icon": "keep",
-                "items": pinnedIds.filter(id => !!id).map(id => ({ "appId": id, "pinned": true }))
+                "items": pinnedIds.filter(id => !!id).map(id => item(id, true))
             },
             {
                 "key": "running",
                 "title": Translation.tr("Open now"),
                 "icon": "select_window",
-                "items": running.map(app => ({ "appId": app.appId, "pinned": false }))
+                "items": running.map(app => item(app.appId, false))
             },
             {
                 "key": "installed",
                 "title": Translation.tr("All apps"),
                 "icon": "apps",
-                "items": rest.map(entry => ({ "appId": entry.id, "pinned": false }))
+                "items": rest.map(entry => item(entry.id, false))
             }
         ].filter(group => group.items.length > 0);
     }
 
     // What the showing list has in it, for the empty-result line.
     readonly property int visibleRowCount: root.section === "widgets" ? root.widgetRows.length
-        : root.section === "bar" ? root.barOffer.length
+        : root.section === "bar" ? root.barRows.length
         : root.section === "dock" ? root.dockRows.length
         : root.lockSwitches.length
 
@@ -298,15 +352,21 @@ Item {
         root.expandedDockGroups = next;
     }
 
+    readonly property var dockSearchRows: {
+        const rows = [];
+        for (const group of root.dockGroups)
+            for (const app of group.items)
+                rows.push({
+                    "kind": "app",
+                    "app": app,
+                    "hay": root.prepared(app.name, app.appId)
+                });
+        return rows;
+    }
+
     readonly property var dockRows: {
-        if (root.searching) {
-            const found = [];
-            for (const group of root.dockGroups)
-                for (const app of group.items)
-                    if (root.matches(root.appName(app.appId), app.appId))
-                        found.push({ "kind": "app", "app": app });
-            return found;
-        }
+        if (root.searching)
+            return root.fuzzyPick(root.dockSearchRows);
         const rows = [];
         for (const group of root.dockGroups) {
             rows.push({ "kind": "header", "group": group });
@@ -427,12 +487,12 @@ Item {
                 Layout.rightMargin: 6
                 text: root.section === "widgets"
                     ? (root.lockTab
-                        ? Translation.tr("Click a desktop widget to show or hide it on the lock screen. A widget that is not on the desktop is added to the lock screen only.")
+                        ? Translation.tr("Drag a widget onto the lock screen to place it there, or click to show or hide it. A widget that is not on the desktop is added to the lock screen only.")
                         : Translation.tr("Drag a widget onto the desktop to place it, or click to add or remove it. Drag a desktop widget here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "bar"
-                        ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or click to add it at the end.")
+                        ? Translation.tr("Drag a widget onto the bar to drop it where you want it. Click one to add it at the end, or to take a placed one off.")
                         : Translation.tr("Click an app to pin or unpin it. Drag the icons on the dock itself to reorder them.")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colOnSurfaceVariant
@@ -735,11 +795,15 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 2
-                model: root.section === "bar" ? root.barOffer : []
+                model: root.section === "bar" ? root.barRows : []
 
                 delegate: MouseArea {
                     id: barRow
                     required property var modelData
+                    readonly property var entry: barRow.modelData.component
+                    // Already on the bar: a click takes it off, and there is
+                    // nothing to carry - it has a place already.
+                    readonly property bool used: barRow.modelData.used === true
 
                     width: barList.width
                     height: 52
@@ -762,7 +826,7 @@ Item {
                         barRow.dragActive = false;
                     }
                     onPositionChanged: mouse => {
-                        if (!barRow.pressed)
+                        if (!barRow.pressed || barRow.used)
                             return;
                         // Under the list's own threshold, and the list is shut
                         // off the moment this wins: the bar is straight up from
@@ -775,13 +839,13 @@ Item {
                             barList.interactive = false;
                         barRow.dragActive = true;
                         root.dragMetadata = {
-                            "icon": barRow.modelData.icon ?? "widgets",
-                            "name": barRow.modelData.title ?? barRow.modelData.id
+                            "icon": barRow.entry.icon ?? "widgets",
+                            "name": barRow.entry.title ?? barRow.entry.id
                         };
                         const point = barRow.pointOf(mouse);
                         ghost.x = point.x - ghost.width / 2;
                         ghost.y = point.y - ghost.height / 2;
-                        root.barDragMoved(barRow.modelData.id, point.x, point.y);
+                        root.barDragMoved(barRow.entry.id, point.x, point.y);
                     }
                     onReleased: mouse => {
                         const wasDrag = barRow.dragActive;
@@ -792,11 +856,14 @@ Item {
                         // at the end of the right-hand section, where the
                         // picker this replaced started.
                         if (!wasDrag) {
-                            root.barAddRequested(barRow.modelData.id, "right");
+                            if (barRow.used)
+                                root.barRemoveRequested(barRow.entry.id);
+                            else
+                                root.barAddRequested(barRow.entry.id, "right");
                             return;
                         }
                         const point = barRow.pointOf(mouse);
-                        root.barDropRequested(barRow.modelData.id, point.x, point.y);
+                        root.barDropRequested(barRow.entry.id, point.x, point.y);
                     }
                     onCanceled: {
                         barRow.dragActive = false;
@@ -818,8 +885,9 @@ Item {
 
                     CatalogueRow {
                         anchors.fill: parent
-                        symbol: barRow.modelData.icon ?? "widgets"
-                        title: barRow.modelData.title ?? barRow.modelData.id
+                        symbol: barRow.entry.icon ?? "widgets"
+                        title: barRow.entry.title ?? barRow.entry.id
+                        checked: barRow.used
                     }
                 }
             }
@@ -878,7 +946,7 @@ Item {
                         CatalogueButton {
                             readonly property string appId: appRow.modelData.app.appId ?? ""
                             rowIcon: Quickshell.iconPath(AppSearch.guessIcon(appId), "image-missing")
-                            rowTitle: root.appName(appId)
+                            rowTitle: appRow.modelData.app.name ?? appId
                             rowChecked: appRow.modelData.app.pinned === true
                             onClicked: root.dockToggleRequested(appId)
                         }

@@ -110,6 +110,17 @@ MouseArea {
                 GlobalStates.editUndo();
             return;
         }
+        // Ctrl+F opens the catalogue and puts the caret in its search field.
+        // The field is on the chrome's surface, which holds no keyboard until
+        // it asks for one, so the request travels rather than the key.
+        if (root.editMode && event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier)) {
+            event.accepted = true;
+            if (event.isAutoRepeat)
+                return;
+            GlobalStates.editDrawerOpen = true;
+            GlobalStates.editSearchFocusRequested();
+            return;
+        }
         const nudge = WidgetNudge.direction(event.key, root.arrowKeys);
         if (!nudge || root.selectedWidgets.length === 0)
             return;
@@ -338,6 +349,11 @@ MouseArea {
     // replaces the selection with whatever the band covered, so a plain click
     // - a zero-size band over nothing - is the click-away deselect.
     onPressed: mouse => {
+        // A press on the desktop lets the catalogue's search field go. The
+        // field is on another surface, holding the keyboard exclusively, so no
+        // click can take it away by itself.
+        if (GlobalStates.editSearchFocused)
+            GlobalStates.editSearchReleaseRequested();
         if (mouse.button === Qt.RightButton) {
             root.canvasContextMenuRequested(mouse.x, mouse.y);
             return;

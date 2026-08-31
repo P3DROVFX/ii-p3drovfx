@@ -51,29 +51,26 @@ PanelWindow {
     // None except while the catalogue's search field wants the keyboard: see
     // the Keyboard note above.
     //
-    // Exclusive for a moment first. A surface that is None is not focusable at
-    // the instant of the click that reaches into it, so OnDemand alone would
-    // only be honoured on the NEXT click and the first keystrokes would go to
-    // whatever had the keyboard before. Exclusive takes it at once; the
-    // downgrade a beat later hands pointer focus back where the cursor really
-    // is and lets a click anywhere else take the keyboard away again - the
-    // same two-step both sidebars use ([[layershell-keyboardfocus-steals-pointer]]).
-    property bool searchExclusive: false
+    // Exclusive, and HELD exclusive, for as long as the field holds it.
+    // OnDemand is not enough on its own: a surface at None is not focusable at
+    // the instant of the click that reaches into it, so the first keystrokes
+    // would go wherever the keyboard already was. And downgrading to OnDemand
+    // afterwards - the two-step the sidebars map with
+    // ([[layershell-keyboardfocus-steals-pointer]]) - only survives while the
+    // cursor is over this surface: the downgrade makes Hyprland re-evaluate
+    // pointer focus at the real cursor position, and the desktop's canvas,
+    // which asks OnDemand throughout the mode, takes the keyboard straight
+    // back. That is invisible for a click on the field and fatal for Ctrl+F,
+    // where the cursor is wherever the user left it.
+    //
+    // Holding it means no click can take the keyboard away by itself, so the
+    // field is released explicitly instead: by the catcher in the chrome for a
+    // click on this surface, and by the canvas for one on the desktop.
     readonly property bool searchFocused: chrome.drawerSearchFocused
-    onSearchFocusedChanged: {
-        root.searchExclusive = root.searchFocused;
-        if (root.searchFocused)
-            exclusiveDowngrade.restart();
-        else
-            exclusiveDowngrade.stop();
-    }
-    Timer {
-        id: exclusiveDowngrade
-        interval: 120
-        onTriggered: root.searchExclusive = false
-    }
-    WlrLayershell.keyboardFocus: !root.searchFocused ? WlrKeyboardFocus.None
-        : (root.searchExclusive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand)
+    // Published so the desktop's canvas stands down while the field types and
+    // takes the keyboard back the moment it lets go.
+    onSearchFocusedChanged: GlobalStates.editSearchFocused = root.searchFocused
+    WlrLayershell.keyboardFocus: root.searchFocused ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
 
@@ -158,7 +155,11 @@ PanelWindow {
     readonly property rect drawerReveal: chrome.drawer
     onDrawerRevealChanged: root.publishDrawerReveal(root.drawerReveal)
     Component.onCompleted: root.publishDrawerReveal(root.drawerReveal)
-    Component.onDestruction: root.publishDrawerReveal(null)
+    Component.onDestruction: {
+        root.publishDrawerReveal(null);
+        if (root.searchFocused)
+            GlobalStates.editSearchFocused = false;
+    }
     function publishDrawerReveal(reveal) {
         if (root.screenName === "")
             return;
@@ -200,7 +201,32 @@ PanelWindow {
             "screenWidth": root.width,
             "screenHeight": root.height
         });
-        Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName, GlobalStates.editLockPreview ? "lockOnly" : "hide");
+        if (GlobalStates.editLockPreview) {
+            root.placeOnLock(widgetId, placed.x, placed.y);
+            return;
+        }
+        Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName, "hide");
+    }
+
+    // The same drop on the Lockscreen tab. A widget that is not on the desktop
+    // becomes a lock-only one where it was let go. One that IS on the desktop
+    // keeps its desktop place and gets a lock fork at the drop point instead -
+    // and is shown on the lock if it was hidden there, because dropping a
+    // widget onto the lock screen is asking for it to be on the lock screen.
+    // Without this the drop was silently nothing: the add returns early for a
+    // widget it already knows.
+    function placeOnLock(widgetId, x, y) {
+        const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.widgetId === widgetId) ?? null;
+        if (entry === null) {
+            Config.addWidgetToDesktop(widgetId, x, y, root.screenName, "lockOnly");
+            return;
+        }
+        // One gesture, one Ctrl+Z, even when it both shows and moves.
+        GlobalStates.editHistoryBeginBatch();
+        if ((entry.lockBehavior || "hide") === "hide")
+            Config.updateWidgetLockBehavior(entry.id, "keep");
+        Config.updateWidgetPosition(entry.id, x, y, root.screenName, true);
+        GlobalStates.editHistoryEndBatch();
     }
 
     // On the Lockscreen tab a widget already on the desktop is shown or hidden
@@ -240,6 +266,37 @@ PanelWindow {
         GlobalStates.editHistoryPush({
             "undo": () => { Config.options.bar.layouts[bucket] = before; },
             "redo": () => { Config.options.bar.layouts[bucket] = after; }
+        });
+    }
+
+    // A catalogue row for a component already on the bar: the click takes it
+    // off, from wherever it sits. The badge on the bar does the same thing to
+    // the same lists; this is the way back for a widget whose own badge is
+    // hard to reach.
+    function removeBarComponent(componentId) {
+        const layouts = Config.options.bar.layouts;
+        if (!layouts)
+            return;
+        const buckets = ["left", "center", "right"];
+        const before = {};
+        const after = {};
+        const touched = [];
+        for (const bucket of buckets) {
+            const list = EditModeLogic.listCopy(layouts[bucket] ?? []);
+            const next = list.filter(e => !(e && e.id === componentId));
+            if (next.length === list.length)
+                continue;
+            before[bucket] = list;
+            after[bucket] = next;
+            touched.push(bucket);
+        }
+        if (touched.length === 0)
+            return;
+        for (const bucket of touched)
+            layouts[bucket] = after[bucket];
+        GlobalStates.editHistoryPush({
+            "undo": () => { for (const bucket of touched) Config.options.bar.layouts[bucket] = before[bucket]; },
+            "redo": () => { for (const bucket of touched) Config.options.bar.layouts[bucket] = after[bucket]; }
         });
     }
 
@@ -472,6 +529,7 @@ PanelWindow {
         onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
         onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)
         onDrawerBarAddRequested: (componentId, bucket) => root.addBarComponent(componentId, bucket)
+        onDrawerBarRemoveRequested: componentId => root.removeBarComponent(componentId)
         onDrawerBarDragMoved: (componentId, x, y) => root.barDragMoved(componentId, x, y)
         onDrawerBarDropRequested: (componentId, x, y) => root.barDrop(componentId, x, y)
         onDrawerBarDragCancelled: root.barController()?.externalDragEnd()

@@ -378,6 +378,18 @@ Singleton {
     // `&& editMode` so the exit closes the drawer even if nothing wrote the
     // flag back, and both scalars run down together on the same tier.
     property bool editDrawerOpen: false
+    // Whether the catalogue's search field holds the keyboard. The chrome's
+    // surface raises it while the field is focused; the desktop's canvas - the
+    // mode's real key surface - reads it to know when to take the keyboard back
+    // (BackgroundWidgetsWindow).
+    property bool editSearchFocused: false
+    // Ctrl+F. The key arrives on the canvas, which is the only surface in the
+    // mode holding a keyboard, and the drawer on the edited screen answers it.
+    signal editSearchFocusRequested()
+    // The other direction: a press that is not on the field lets it go. The
+    // chrome's own catcher answers presses on its surface; this carries the
+    // ones that land on the desktop, which is a surface the drawer cannot see.
+    signal editSearchReleaseRequested()
     property real editDrawerProgress: root.editMode && root.editDrawerOpen ? 1 : 0
     Behavior on editDrawerProgress {
         enabled: !Appearance.reducedMotion

@@ -60,7 +60,45 @@ PanelWindow {
     // dropping it on release hands focus back to the previously focused app.
     // A marquee selection and Edit Mode hold it the same way: the arrows,
     // Escape and the mode's own keys arrive on this surface and nowhere else.
-    WlrLayershell.keyboardFocus: (widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Edit Mode's keys - Escape, the arrows, Ctrl+Z, Ctrl+F - arrive on this
+    // surface and nowhere else, but OnDemand focus is only granted once the
+    // user clicks THIS surface: entering the mode from a keybind left the whole
+    // Escape ladder dead until the wallpaper happened to be clicked. Exclusive
+    // takes the keyboard at once, and is downgraded a beat later because
+    // holding it also holds pointer focus, which would make the toolbar and the
+    // drawer unclickable ([[layershell-keyboardfocus-steals-pointer]]).
+    property bool editFocusSeed: false
+    Timer {
+        id: editFocusSeedTimer
+        interval: 120
+        onTriggered: bgWidgetsWindow.editFocusSeed = false
+    }
+    function seedEditFocus() {
+        if (!GlobalStates.editMode || !bgWidgetsWindow.isEditMonitor || GlobalStates.editSearchFocused)
+            return;
+        bgWidgetsWindow.editFocusSeed = true;
+        editFocusSeedTimer.restart();
+    }
+    Connections {
+        target: GlobalStates
+        function onEditModeChanged() {
+            if (GlobalStates.editMode) {
+                bgWidgetsWindow.seedEditFocus();
+                return;
+            }
+            bgWidgetsWindow.editFocusSeed = false;
+            editFocusSeedTimer.stop();
+        }
+        // The catalogue's search borrows the keyboard for the chrome's surface;
+        // this takes it straight back, so Escape works again on the next press
+        // rather than on the next click.
+        function onEditSearchFocusedChanged() {
+            if (!GlobalStates.editSearchFocused)
+                bgWidgetsWindow.seedEditFocus();
+        }
+    }
+    WlrLayershell.keyboardFocus: bgWidgetsWindow.editFocusSeed ? WlrKeyboardFocus.Exclusive
+        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {
