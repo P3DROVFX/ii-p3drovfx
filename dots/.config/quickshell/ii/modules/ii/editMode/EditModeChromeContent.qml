@@ -51,6 +51,9 @@ Item {
     signal drawerAddRequested(string widgetId, real dropX, real dropY)
     signal drawerToggleWidgetRequested(string widgetId)
     signal drawerBarAddRequested(string componentId, string bucket)
+    signal drawerBarDragMoved(string componentId, real x, real y)
+    signal drawerBarDropRequested(string componentId, real x, real y)
+    signal drawerBarDragCancelled()
     signal drawerDockToggleRequested(string appId)
     signal drawerLockLayoutResetRequested()
 
@@ -59,6 +62,9 @@ Item {
     // card's right edge exactly as fast as the desktop makes room for it.
     property rect drawer: Qt.rect(root.width, 0, 0, 0)
     readonly property alias drawerItem: drawerReveal
+    // Whether the catalogue's search field holds the keyboard: the surface
+    // takes focus for it and gives it straight back.
+    readonly property alias drawerSearchFocused: drawerPanel.searchFocused
     property alias drawerScreenName: drawerPanel.screenName
 
     // Published for the surface's input mask: the only pixels of a
@@ -202,6 +208,23 @@ Item {
         }
     }
 
+    // Clicking anywhere but the field lets the keyboard go. Only this surface
+    // needs the catcher: a click on the desktop lands on another surface, which
+    // takes the keyboard with it and deactivates this window on its own. The
+    // press is declined rather than consumed, so whatever was actually clicked
+    // still gets it.
+    MouseArea {
+        anchors.fill: parent
+        z: 200
+        enabled: root.drawerSearchFocused
+        acceptedButtons: Qt.AllButtons
+        onPressed: mouse => {
+            if (!drawerPanel.pointInSearchField(mouse.x, mouse.y))
+                drawerPanel.releaseSearchFocus();
+            mouse.accepted = false;
+        }
+    }
+
     // The reveal: a clip the width of the drawer's animated scalar, with the
     // full-width panel anchored to its left edge, so the panel slides in from
     // the card's right edge and its contents never reflow.
@@ -222,6 +245,9 @@ Item {
             onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
             onToggleRequested: widgetId => root.drawerToggleWidgetRequested(widgetId)
             onBarAddRequested: (componentId, bucket) => root.drawerBarAddRequested(componentId, bucket)
+            onBarDragMoved: (componentId, x, y) => root.drawerBarDragMoved(componentId, x, y)
+            onBarDropRequested: (componentId, x, y) => root.drawerBarDropRequested(componentId, x, y)
+            onBarDragCancelled: root.drawerBarDragCancelled()
             onDockToggleRequested: appId => root.drawerDockToggleRequested(appId)
         }
     }

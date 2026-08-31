@@ -33,12 +33,80 @@ Item {
     signal addRequested(string widgetId, real dropX, real dropY)
     signal toggleRequested(string widgetId)
     signal barAddRequested(string componentId, string bucket)
+    // A bar component carried out of the catalogue: where the pointer is, in
+    // the chrome's coordinates, for the surface to hand to that screen's bar.
+    signal barDragMoved(string componentId, real x, real y)
+    signal barDropRequested(string componentId, real x, real y)
+    signal barDragCancelled()
     signal dockToggleRequested(string appId)
     signal lockLayoutResetRequested()
 
     property string section: "widgets"
-    property string barBucket: "right"
     property var dragMetadata: null
+
+    // ── The query ────────────────────────────────────────────────────────────
+    // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
+    // sections it filters: someone typing is after one row, not after where it
+    // lives. The lock screen's six switches are not worth a search box.
+    readonly property bool searchable: root.section !== "lock"
+    property string query: ""
+    readonly property string needle: root.query.trim().toLowerCase()
+    readonly property bool searching: root.searchable && root.needle !== ""
+    // Whether the chrome's surface has to hold the keyboard. It is None the
+    // rest of the time, deliberately: the desktop's canvas answers Escape and
+    // the arrows from another surface, and a chrome that takes focus swallows
+    // them (see EditModeChromeSurface).
+    //
+    // Intent, NOT `searchField.activeFocus`: active focus needs an ACTIVE
+    // window, a window is only active while the compositor gives its surface
+    // the keyboard, and the surface only asks for the keyboard because of this
+    // flag - reading activeFocus here is a deadlock that no click can break.
+    // The field says when it wants the keyboard and says when it has lost it.
+    property bool searchWanted: false
+    property bool searchHeld: false
+    readonly property bool searchFocused: root.searchWanted
+
+    function matches(a, b) {
+        const needle = root.needle;
+        return ((a ?? "").toLowerCase().indexOf(needle) !== -1)
+            || ((b ?? "").toLowerCase().indexOf(needle) !== -1);
+    }
+
+    function releaseSearchFocus() {
+        root.searchWanted = false;
+        root.searchHeld = false;
+        searchField.focus = false;
+    }
+
+    function clearSearch() {
+        searchField.text = "";
+        root.releaseSearchFocus();
+    }
+
+    // Whether a point in the chrome's coordinates is on the field itself -
+    // asked by the click-anywhere-else catcher, which must not fight the
+    // field's own press or the clear button beside it.
+    function pointInSearchField(x, y) {
+        const from = root.ghostParent ?? root;
+        const p = from.mapToItem(searchRow, x, y);
+        return p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height;
+    }
+
+    onSectionChanged: root.clearSearch()
+
+    Connections {
+        target: GlobalStates
+        // Leaving takes the query with it: a drawer reopened on last week's
+        // half-typed word is a drawer that looks broken.
+        function onEditDrawerOpenChanged() {
+            if (!GlobalStates.editDrawerOpen)
+                root.clearSearch();
+        }
+        function onEditModeChanged() {
+            if (!GlobalStates.editMode)
+                root.clearSearch();
+        }
+    }
 
     // A desktop widget carried back over this drawer: the release removes it.
     readonly property bool dropWouldRemove: root.screenName !== ""
@@ -53,7 +121,10 @@ Item {
                 if (entry && entry.id) ids.push(entry.id);
         return ids;
     }
-    readonly property var barOffer: BarComponentRegistry.getAvailableComponents(root.usedBarIds)
+    readonly property var barOffer: {
+        const offer = BarComponentRegistry.getAvailableComponents(root.usedBarIds);
+        return root.searching ? offer.filter(c => c && root.matches(c.title, c.id)) : offer;
+    }
 
     function widgetOnDesktop(widgetId) {
         return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId);
@@ -143,6 +214,14 @@ Item {
     // a list view can only be given rows, and collapsing by dropping the rows
     // costs nothing - a shut section has no delegates at all.
     readonly property var widgetRows: {
+        if (root.searching) {
+            const found = [];
+            for (const group of root.widgetGroups)
+                for (const widget of group.items)
+                    if (root.matches(widget.name, widget.widgetId))
+                        found.push({ "kind": "widget", "widget": widget });
+            return found;
+        }
         const rows = [];
         for (const group of root.widgetGroups) {
             rows.push({ "kind": "header", "group": group });
@@ -150,6 +229,91 @@ Item {
                 continue;
             for (const widget of group.items)
                 rows.push({ "kind": "widget", "widget": widget });
+        }
+        return rows;
+    }
+
+    // The dock's catalogue, in three sections for the three answers to "why is
+    // this app in the list": it is on the dock, it is open right now, or it is
+    // merely installed. Without the last one an app that is neither pinned nor
+    // running could not be pinned at all - it had to be launched first.
+    readonly property var dockGroups: {
+        const pinnedIds = Config.options.dock.pinnedApps ?? [];
+        const running = (TaskbarApps.apps ?? []).filter(app => app && !app.pinned && app.appId);
+        const taken = {};
+        for (const id of pinnedIds)
+            taken[TaskbarApps.normalizeAppId(id)] = true;
+        for (const app of running)
+            taken[TaskbarApps.normalizeAppId(app.appId)] = true;
+        const rest = Array.from(AppSearch.list ?? [])
+            .filter(entry => entry && entry.id && !entry.noDisplay
+                && !taken[TaskbarApps.normalizeAppId(entry.id)]);
+        return [
+            {
+                "key": "pinned",
+                "title": Translation.tr("On the dock"),
+                "icon": "keep",
+                "items": pinnedIds.filter(id => !!id).map(id => ({ "appId": id, "pinned": true }))
+            },
+            {
+                "key": "running",
+                "title": Translation.tr("Open now"),
+                "icon": "select_window",
+                "items": running.map(app => ({ "appId": app.appId, "pinned": false }))
+            },
+            {
+                "key": "installed",
+                "title": Translation.tr("All apps"),
+                "icon": "apps",
+                "items": rest.map(entry => ({ "appId": entry.id, "pinned": false }))
+            }
+        ].filter(group => group.items.length > 0);
+    }
+
+    // What the showing list has in it, for the empty-result line.
+    readonly property int visibleRowCount: root.section === "widgets" ? root.widgetRows.length
+        : root.section === "bar" ? root.barOffer.length
+        : root.section === "dock" ? root.dockRows.length
+        : root.lockSwitches.length
+
+    function appName(appId) {
+        return DesktopEntries.heuristicLookup(appId)?.name ?? appId;
+    }
+
+    // The two short ones open, the long one shut: the point of a section is
+    // not having to scroll past the ones you are not after.
+    property var expandedDockGroups: ["pinned", "running"]
+
+    function dockGroupExpanded(key) {
+        return root.expandedDockGroups.indexOf(key) !== -1;
+    }
+
+    function toggleDockGroup(key) {
+        const next = root.expandedDockGroups.slice();
+        const at = next.indexOf(key);
+        if (at === -1)
+            next.push(key);
+        else
+            next.splice(at, 1);
+        root.expandedDockGroups = next;
+    }
+
+    readonly property var dockRows: {
+        if (root.searching) {
+            const found = [];
+            for (const group of root.dockGroups)
+                for (const app of group.items)
+                    if (root.matches(root.appName(app.appId), app.appId))
+                        found.push({ "kind": "app", "app": app });
+            return found;
+        }
+        const rows = [];
+        for (const group of root.dockGroups) {
+            rows.push({ "kind": "header", "group": group });
+            if (!root.dockGroupExpanded(group.key))
+                continue;
+            for (const app of group.items)
+                rows.push({ "kind": "app", "app": app });
         }
         return rows;
     }
@@ -268,11 +432,105 @@ Item {
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "bar"
-                        ? Translation.tr("Click a widget to add it to the picked bar section.")
-                        : Translation.tr("Click an app to pin or unpin it on the dock.")
+                        ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or click to add it at the end.")
+                        : Translation.tr("Click an app to pin or unpin it. Drag the icons on the dock itself to reorder them.")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
+            }
+
+            // The one field for all three catalogues: it filters whichever is
+            // showing, and the surface only takes the keyboard while it holds
+            // focus.
+            Item {
+                id: searchRow
+                visible: root.searchable
+                Layout.fillWidth: true
+                Layout.leftMargin: 6
+                Layout.rightMargin: 6
+                implicitHeight: 38
+
+                ToolbarTextField {
+                    id: searchField
+                    anchors.fill: parent
+                    Layout.fillHeight: false
+                    leftPadding: 34
+                    rightPadding: 34
+                    colBackground: Appearance.colors.colLayer1
+                    placeholderText: root.section === "dock" ? Translation.tr("Search apps")
+                        : root.section === "bar" ? Translation.tr("Search bar widgets")
+                        : Translation.tr("Search widgets")
+                    onTextChanged: root.query = searchField.text
+                    onPressed: root.searchWanted = true
+                    // Focus moved on inside the drawer - a row, a section
+                    // button - so the keyboard goes back to the desktop.
+                    onActiveFocusChanged: {
+                        if (searchField.activeFocus) {
+                            root.searchHeld = true;
+                            return;
+                        }
+                        if (!root.searchHeld)
+                            return;
+                        root.searchHeld = false;
+                        root.searchWanted = false;
+                    }
+                    // The first Escape empties the field, the second gives the
+                    // keyboard back - and with it the mode's own Escape ladder.
+                    Keys.onEscapePressed: event => {
+                        if (searchField.text !== "") {
+                            searchField.text = "";
+                            return;
+                        }
+                        root.releaseSearchFocus();
+                        event.accepted = true;
+                    }
+                }
+
+                MaterialSymbol {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "search"
+                    iconSize: 18
+                    color: Appearance.colors.colSubtext
+                }
+
+                FadeLoader {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.verticalCenter: parent.verticalCenter
+                    shown: searchField.text !== ""
+                    sourceComponent: RippleButton {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colRipple: Appearance.colors.colLayer2Active
+                        onClicked: {
+                            searchField.text = "";
+                            searchField.forceActiveFocus();
+                        }
+                        contentItem: MaterialSymbol {
+                            horizontalAlignment: Text.AlignHCenter
+                            text: "close"
+                            iconSize: 16
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+                    }
+                }
+            }
+
+            // Nothing matched: said plainly, because an empty panel under a
+            // typed word reads as a broken list.
+            StyledText {
+                visible: root.searching && root.visibleRowCount === 0
+                Layout.fillWidth: true
+                Layout.topMargin: 20
+                horizontalAlignment: Text.AlignHCenter
+                text: Translation.tr("No matches")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
             }
 
             // ── Widgets ──────────────────────────────────────────────────────
@@ -314,67 +572,15 @@ Item {
                     Component {
                         id: headerFace
 
-                        MouseArea {
-                            id: header
+                        CatalogueHeader {
                             readonly property var group: row.modelData.group
-                            readonly property bool open: root.widgetGroupExpanded(header.group.key)
-                            readonly property int added: root.widgetGroupAdded(header.group)
-
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.toggleWidgetGroup(header.group.key)
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Appearance.rounding.large
-                                color: header.pressed ? Appearance.colors.colLayer1Active
-                                    : header.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
-                                Behavior on color {
-                                    enabled: !Appearance.reducedMotion
-                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                                }
-                            }
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                spacing: 10
-
-                                MaterialSymbol {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: header.group.icon
-                                    iconSize: 22
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                }
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: header.group.title
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    color: Appearance.colors.colOnSurface
-                                    elide: Text.ElideRight
-                                }
-                                StyledText {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: header.added > 0
-                                        ? `${header.added}/${header.group.items.length}`
-                                        : `${header.group.items.length}`
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: header.added > 0 ? Appearance.colors.colPrimary
-                                        : Appearance.colors.colOnSurfaceVariant
-                                }
-                                MaterialSymbol {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: "keyboard_arrow_down"
-                                    iconSize: 20
-                                    color: Appearance.colors.colOnSurfaceVariant
-                                    rotation: header.open ? 0 : -90
-                                    Behavior on rotation {
-                                        enabled: !Appearance.reducedMotion
-                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                                    }
-                                }
-                            }
+                            readonly property int added: root.widgetGroupAdded(group)
+                            symbol: group.icon
+                            title: group.title
+                            countText: added > 0 ? `${added}/${group.items.length}` : `${group.items.length}`
+                            countHighlighted: added > 0
+                            open: root.widgetGroupExpanded(group.key)
+                            onClicked: root.toggleWidgetGroup(group.key)
                         }
                     }
 
@@ -406,9 +612,11 @@ Item {
                                 if (!entry.pressed)
                                     return;
                                 if (!entry.dragActive
-                                        && Math.abs(mouse.x - entry.pressX) < drag.threshold
-                                        && Math.abs(mouse.y - entry.pressY) < drag.threshold)
+                                        && Math.abs(mouse.x - entry.pressX) < 5
+                                        && Math.abs(mouse.y - entry.pressY) < 5)
                                     return;
+                                if (!entry.dragActive)
+                                    widgetList.interactive = false;
                                 entry.dragActive = true;
                                 root.dragMetadata = entry.widget;
                                 const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
@@ -418,6 +626,7 @@ Item {
                             onReleased: mouse => {
                                 const wasDrag = entry.dragActive;
                                 entry.dragActive = false;
+                                widgetList.interactive = true;
                                 root.dragMetadata = null;
                                 if (wasDrag) {
                                     const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
@@ -428,6 +637,7 @@ Item {
                             }
                             onCanceled: {
                                 entry.dragActive = false;
+                                widgetList.interactive = true;
                                 root.dragMetadata = null;
                             }
 
@@ -512,30 +722,10 @@ Item {
             }
 
             // ── Bar ──────────────────────────────────────────────────────────
-            ButtonGroup {
-                visible: root.section === "bar"
-                Layout.leftMargin: 6
-                Layout.rightMargin: 6
-
-                SelectionGroupButton {
-                    leftmost: true
-                    buttonText: Translation.tr("Left")
-                    toggled: root.barBucket === "left"
-                    onClicked: root.barBucket = "left"
-                }
-                SelectionGroupButton {
-                    buttonText: Translation.tr("Center")
-                    toggled: root.barBucket === "center"
-                    onClicked: root.barBucket = "center"
-                }
-                SelectionGroupButton {
-                    rightmost: true
-                    buttonText: Translation.tr("Right")
-                    toggled: root.barBucket === "right"
-                    onClicked: root.barBucket = "right"
-                }
-            }
-
+            // One list, dropped where you want it. The three buckets this
+            // replaced asked for the destination before the widget was even
+            // picked, and still only ever put it at the end of that list; the
+            // bar itself is the better target, and it previews the landing.
             StyledListView {
                 popin: false
                 animateAppearance: false
@@ -547,12 +737,90 @@ Item {
                 spacing: 2
                 model: root.section === "bar" ? root.barOffer : []
 
-                delegate: CatalogueButton {
+                delegate: MouseArea {
+                    id: barRow
                     required property var modelData
+
                     width: barList.width
-                    rowSymbol: modelData.icon ?? "widgets"
-                    rowTitle: modelData.title ?? modelData.id
-                    onClicked: root.barAddRequested(modelData.id, root.barBucket)
+                    height: 52
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    acceptedButtons: Qt.LeftButton
+                    preventStealing: true
+
+                    property real pressX: 0
+                    property real pressY: 0
+                    property bool dragActive: false
+
+                    function pointOf(mouse) {
+                        return barRow.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
+                    }
+
+                    onPressed: mouse => {
+                        barRow.pressX = mouse.x;
+                        barRow.pressY = mouse.y;
+                        barRow.dragActive = false;
+                    }
+                    onPositionChanged: mouse => {
+                        if (!barRow.pressed)
+                            return;
+                        // Under the list's own threshold, and the list is shut
+                        // off the moment this wins: the bar is straight up from
+                        // here, and a drag that way is a flick to a ListView.
+                        if (!barRow.dragActive
+                                && Math.abs(mouse.x - barRow.pressX) < 5
+                                && Math.abs(mouse.y - barRow.pressY) < 5)
+                            return;
+                        if (!barRow.dragActive)
+                            barList.interactive = false;
+                        barRow.dragActive = true;
+                        root.dragMetadata = {
+                            "icon": barRow.modelData.icon ?? "widgets",
+                            "name": barRow.modelData.title ?? barRow.modelData.id
+                        };
+                        const point = barRow.pointOf(mouse);
+                        ghost.x = point.x - ghost.width / 2;
+                        ghost.y = point.y - ghost.height / 2;
+                        root.barDragMoved(barRow.modelData.id, point.x, point.y);
+                    }
+                    onReleased: mouse => {
+                        const wasDrag = barRow.dragActive;
+                        barRow.dragActive = false;
+                        barList.interactive = true;
+                        root.dragMetadata = null;
+                        // A click is still worth something: it puts the widget
+                        // at the end of the right-hand section, where the
+                        // picker this replaced started.
+                        if (!wasDrag) {
+                            root.barAddRequested(barRow.modelData.id, "right");
+                            return;
+                        }
+                        const point = barRow.pointOf(mouse);
+                        root.barDropRequested(barRow.modelData.id, point.x, point.y);
+                    }
+                    onCanceled: {
+                        barRow.dragActive = false;
+                        barList.interactive = true;
+                        root.dragMetadata = null;
+                        root.barDragCancelled();
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.large
+                        color: barRow.pressed ? Appearance.colors.colLayer1Active
+                            : barRow.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
+                        Behavior on color {
+                            enabled: !Appearance.reducedMotion
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        }
+                    }
+
+                    CatalogueRow {
+                        anchors.fill: parent
+                        symbol: barRow.modelData.icon ?? "widgets"
+                        title: barRow.modelData.title ?? barRow.modelData.id
+                    }
                 }
             }
 
@@ -566,17 +834,55 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 2
-                model: root.section === "dock" ? TaskbarApps.apps : []
+                model: root.section === "dock" ? root.dockRows : []
 
-                delegate: CatalogueButton {
+                delegate: Item {
                     id: appRow
                     required property var modelData
-                    readonly property string appId: modelData.appId ?? ""
+                    readonly property bool isHeader: appRow.modelData.kind === "header"
+
                     width: appList.width
-                    rowIcon: Quickshell.iconPath(AppSearch.guessIcon(appRow.appId), "image-missing")
-                    rowTitle: DesktopEntries.heuristicLookup(appRow.appId)?.name ?? appRow.appId
-                    rowChecked: modelData.pinned === true
-                    onClicked: root.dockToggleRequested(appRow.appId)
+                    height: appRow.isHeader ? 42 : 52
+
+                    Loader {
+                        anchors.fill: parent
+                        active: appRow.isHeader
+                        sourceComponent: dockHeaderFace
+                    }
+
+                    // Indented under its section.
+                    Loader {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        active: !appRow.isHeader
+                        sourceComponent: dockAppFace
+                    }
+
+                    Component {
+                        id: dockHeaderFace
+
+                        CatalogueHeader {
+                            readonly property var group: appRow.modelData.group
+                            symbol: group.icon
+                            title: group.title
+                            countText: `${group.items.length}`
+                            countHighlighted: group.key === "pinned"
+                            open: root.dockGroupExpanded(group.key)
+                            onClicked: root.toggleDockGroup(group.key)
+                        }
+                    }
+
+                    Component {
+                        id: dockAppFace
+
+                        CatalogueButton {
+                            readonly property string appId: appRow.modelData.app.appId ?? ""
+                            rowIcon: Quickshell.iconPath(AppSearch.guessIcon(appId), "image-missing")
+                            rowTitle: root.appName(appId)
+                            rowChecked: appRow.modelData.app.pinned === true
+                            onClicked: root.dockToggleRequested(appId)
+                        }
+                    }
                 }
             }
         }
@@ -670,6 +976,70 @@ Item {
             text: face.checked ? "check_circle" : "add"
             iconSize: 22
             color: face.checked ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+        }
+    }
+
+    // A section header: its name, how many rows are under it, and the chevron
+    // that opens it. Shared by the widget catalogue and the dock's.
+    component CatalogueHeader: MouseArea {
+        id: head
+        property string symbol: "widgets"
+        property string title: ""
+        property string countText: ""
+        property bool countHighlighted: false
+        property bool open: false
+
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Appearance.rounding.large
+            color: head.pressed ? Appearance.colors.colLayer1Active
+                : head.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
+            Behavior on color {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            spacing: 10
+
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignVCenter
+                text: head.symbol
+                iconSize: 22
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+            StyledText {
+                Layout.fillWidth: true
+                text: head.title
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurface
+                elide: Text.ElideRight
+            }
+            StyledText {
+                Layout.alignment: Qt.AlignVCenter
+                text: head.countText
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: head.countHighlighted ? Appearance.colors.colPrimary
+                    : Appearance.colors.colOnSurfaceVariant
+            }
+            MaterialSymbol {
+                Layout.alignment: Qt.AlignVCenter
+                text: "keyboard_arrow_down"
+                iconSize: 20
+                color: Appearance.colors.colOnSurfaceVariant
+                rotation: head.open ? 0 : -90
+                Behavior on rotation {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
         }
     }
 

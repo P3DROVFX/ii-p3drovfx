@@ -425,6 +425,35 @@ Singleton {
     // host can place it from whichever screen edge the bar sits on.
     property bool editBarDragActive: false
     signal editBarDragCancel()
+
+    // Which controller answers for a screen's bar. Edit Mode's catalogue is
+    // drawn on the chrome's surface and a row dragged out of it onto the bar
+    // crosses into another layer surface, which it has no way to reach; the
+    // chrome looks the bar up here and hands it the pointer. A list per screen
+    // because both orientations declare a controller and the plain bar window
+    // and Connect Mode's panel can hold one each - the drawn one is the one
+    // that reports itself usable.
+    property var editBarControllers: ({})
+
+    function registerBarEditController(screenName, controller) {
+        const next = {};
+        for (const key in root.editBarControllers) {
+            const kept = root.editBarControllers[key].filter(c => c && c !== controller);
+            if (kept.length > 0)
+                next[key] = kept;
+        }
+        if (screenName !== "")
+            next[screenName] = (next[screenName] ?? []).concat([controller]);
+        root.editBarControllers = next;
+    }
+
+    function unregisterBarEditController(controller) {
+        root.registerBarEditController("", controller);
+    }
+
+    function barEditControllerFor(screenName) {
+        return (root.editBarControllers[screenName] ?? []).find(c => c && c.usable) ?? null;
+    }
     property bool editBarMenuOpen: false
     property string editBarMenuScreenName: ""
     property var editBarMenuController: null

@@ -31,7 +31,10 @@ import qs.modules.ii.editMode
  *
  * Keyboard. None, deliberately: Escape and the arrows are answered by the
  * WidgetCanvas on the widgets surface, and a chrome surface taking OnDemand
- * focus would sit in front of it and swallow the keys.
+ * focus would sit in front of it and swallow the keys. The one exception is
+ * the catalogue's search field, which cannot be typed into without it: the
+ * surface takes OnDemand focus for exactly as long as that field holds it, and
+ * the field's own Escape empties it and then lets go.
  */
 PanelWindow {
     id: root
@@ -45,7 +48,32 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "quickshell:editMode"
     WlrLayershell.layer: root.underneath ? WlrLayer.Bottom : WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // None except while the catalogue's search field wants the keyboard: see
+    // the Keyboard note above.
+    //
+    // Exclusive for a moment first. A surface that is None is not focusable at
+    // the instant of the click that reaches into it, so OnDemand alone would
+    // only be honoured on the NEXT click and the first keystrokes would go to
+    // whatever had the keyboard before. Exclusive takes it at once; the
+    // downgrade a beat later hands pointer focus back where the cursor really
+    // is and lets a click anywhere else take the keyboard away again - the
+    // same two-step both sidebars use ([[layershell-keyboardfocus-steals-pointer]]).
+    property bool searchExclusive: false
+    readonly property bool searchFocused: chrome.drawerSearchFocused
+    onSearchFocusedChanged: {
+        root.searchExclusive = root.searchFocused;
+        if (root.searchFocused)
+            exclusiveDowngrade.restart();
+        else
+            exclusiveDowngrade.stop();
+    }
+    Timer {
+        id: exclusiveDowngrade
+        interval: 120
+        onTriggered: root.searchExclusive = false
+    }
+    WlrLayershell.keyboardFocus: !root.searchFocused ? WlrKeyboardFocus.None
+        : (root.searchExclusive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand)
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
 
@@ -213,6 +241,63 @@ PanelWindow {
             "undo": () => { Config.options.bar.layouts[bucket] = before; },
             "redo": () => { Config.options.bar.layouts[bucket] = after; }
         });
+    }
+
+    // ── A catalogue row carried onto the bar ─────────────────────────────────
+    // The drawer is drawn here; the bar is another layer surface entirely, so
+    // the pointer is brought into the bar window's coordinates and the bar's
+    // own controller answers with the same preview a reorder gets.
+    function barController() {
+        return GlobalStates.barEditControllerFor(root.screenName);
+    }
+
+    // The strip the bar occupies, with a little slack past it: a drop just
+    // short of the bar is a drop on the bar.
+    function overBarStrip(x, y) {
+        const reach = EditModeInsets.barThickness + 16;
+        const side = EditModeInsets.barSide;
+        if (side === "top")
+            return y <= reach;
+        if (side === "bottom")
+            return y >= root.height - reach;
+        if (side === "left")
+            return x <= reach;
+        return x >= root.width - reach;
+    }
+
+    // The inverse of fromBarWindow: the bar sits flush with one screen edge,
+    // so the far edges translate by that window's own size.
+    function toBarWindow(controller, x, y) {
+        const side = EditModeInsets.barSide;
+        if (side === "bottom")
+            return Qt.point(x, y - (root.height - controller.windowHeight));
+        if (side === "right")
+            return Qt.point(x - (root.width - controller.windowWidth), y);
+        return Qt.point(x, y);
+    }
+
+    function barDragMoved(componentId, x, y) {
+        const controller = root.barController();
+        if (!controller)
+            return;
+        if (!root.overBarStrip(x, y)) {
+            controller.externalDragEnd();
+            return;
+        }
+        const point = root.toBarWindow(controller, x, y);
+        controller.externalDragMoved(componentId, point.x, point.y);
+    }
+
+    function barDrop(componentId, x, y) {
+        const controller = root.barController();
+        if (!controller)
+            return;
+        if (!root.overBarStrip(x, y)) {
+            controller.externalDragEnd();
+            return;
+        }
+        const point = root.toBarWindow(controller, x, y);
+        controller.externalDrop(componentId, point.x, point.y);
     }
 
     function toggleDockPin(appId) {
@@ -387,6 +472,9 @@ PanelWindow {
         onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
         onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)
         onDrawerBarAddRequested: (componentId, bucket) => root.addBarComponent(componentId, bucket)
+        onDrawerBarDragMoved: (componentId, x, y) => root.barDragMoved(componentId, x, y)
+        onDrawerBarDropRequested: (componentId, x, y) => root.barDrop(componentId, x, y)
+        onDrawerBarDragCancelled: root.barController()?.externalDragEnd()
         onDrawerDockToggleRequested: appId => root.toggleDockPin(appId)
         // A preference, not a layout edit: no history entry, same as the
         // Settings toggle that writes the same key.
