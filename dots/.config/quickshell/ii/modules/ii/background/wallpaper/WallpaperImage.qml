@@ -240,10 +240,10 @@ Item {
         opacity: wallpaperImageRoot.overviewController.progress
     }
 
-    property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0
-    Behavior on wallpaperClipRadius {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
-    }
+    // cornerRadius is already derived from the controller's animated progress.
+    // A second Behavior here continuously retargets behind that clock, so the
+    // mask stays nearly square until progress stops at the end of the overview.
+    readonly property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0
 
     // Wallpaper planes: scale zoom-out.
     Item {

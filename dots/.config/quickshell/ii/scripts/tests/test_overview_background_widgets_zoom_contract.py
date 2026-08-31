@@ -62,8 +62,9 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         self.assertIn("scaleProgress: overviewController ? overviewController.scaleProgress : 0.0", BG_ROOT)
 
     def test_wallpaper_clip_radius_animates_from_overview_controller(self):
-        """WallpaperImage smoothly derives clip radius from overviewController.cornerRadius."""
-        self.assertIn("property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0", WALLPAPER_IMAGE)
+        """The controller's progress is the only animation clock for clip radius."""
+        self.assertIn("readonly property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0", WALLPAPER_IMAGE)
+        self.assertNotIn("Behavior on wallpaperClipRadius", WALLPAPER_IMAGE)
 
     def test_overview_controller_gnome_preset_decreases_scale(self):
         """Gnome preset must shrink (zoom out < 1.0) and include followWidgetsScale."""
