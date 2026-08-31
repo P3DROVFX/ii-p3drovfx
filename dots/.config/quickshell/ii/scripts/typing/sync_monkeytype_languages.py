@@ -19,15 +19,25 @@ from urllib.request import urlopen
 
 UPSTREAM = "https://raw.githubusercontent.com/monkeytypegame/monkeytype"
 LICENSE = "GPL-3.0-only"
+# (id, label, upstream file, bcp47, rightToLeft, joiningScript)
+#
+# Every entry vendors upstream's 1k list. The base packs are only ~200 words,
+# which made every language but English run out of variety long before a
+# 120-second test did. The ids stay as they are even where the upstream file
+# gained a `_1k` suffix: they are what `search.typingTest.language` and the
+# personal-best keys are stored under, so renaming one would orphan records.
 LANGUAGES = (
-    ("english_1k", "English 1k", "english_1k.json", "en", False, False),
-    ("portuguese", "Português", "portuguese.json", "pt", False, False),
-    ("spanish", "Español", "spanish.json", "es", False, False),
-    ("french", "Français", "french.json", "fr", False, False),
-    ("german", "Deutsch", "german.json", "de", False, False),
-    ("italian", "Italiano", "italian.json", "it", False, False),
-    ("russian", "Русский", "russian.json", "ru", False, False),
+    ("english_1k", "English", "english_1k.json", "en", False, False),
+    ("portuguese", "Português", "portuguese_1k.json", "pt", False, False),
+    ("spanish", "Español", "spanish_1k.json", "es", False, False),
+    ("french", "Français", "french_1k.json", "fr", False, False),
+    ("german", "Deutsch", "german_1k.json", "de", False, False),
+    ("italian", "Italiano", "italian_1k.json", "it", False, False),
+    ("russian", "Русский", "russian_1k.json", "ru", False, False),
 )
+
+# A pack thinner than this is a sign the upstream file moved or was truncated.
+MINIMUM_WORDS = 500
 
 
 def fetch_json(commit: str, filename: str) -> dict:
@@ -51,7 +61,11 @@ def validate_pack(payload: dict, language_id: str) -> list[str]:
         raise RuntimeError(f"{language_id}: words must be non-empty strings")
     # Keep upstream order (usually frequency order) while preventing accidental
     # duplicate entries from distorting a deterministic test sequence.
-    return list(dict.fromkeys(word.strip() for word in words))
+    unique = list(dict.fromkeys(word.strip() for word in words))
+    if len(unique) < MINIMUM_WORDS:
+        raise RuntimeError(
+            f"{language_id}: only {len(unique)} words, expected at least {MINIMUM_WORDS}")
+    return unique
 
 
 def main() -> int:

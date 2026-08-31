@@ -2,11 +2,11 @@
   "source": "monkeytypegame/monkeytype",
   "upstreamCommit": "91bd24bb8513785c7364cbea29296ff7adafac41",
   "license": "GPL-3.0-only",
-  "syncedAt": "2026-08-31T00:14:29Z",
+  "syncedAt": "2026-08-31T06:44:34Z",
   "languages": [
     {
       "id": "english_1k",
-      "label": "English 1k",
+      "label": "English",
       "file": "languages/english_1k.json",
       "bcp47": "en",
       "rightToLeft": false,
@@ -18,11 +18,11 @@
       "id": "portuguese",
       "label": "Português",
       "file": "languages/portuguese.json",
-      "bcp47": "pt-PT",
+      "bcp47": "pt-BR",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 201,
-      "sha256": "88657b2beecf728c220ac954bc04d877caaf6843c5cc94533d94d4f41771a858"
+      "wordCount": 1000,
+      "sha256": "363e5d10e7d3ff4e9c75057b708eb41e16b2becf7aacb87fb9e4b4bd8897ff63"
     },
     {
       "id": "spanish",
@@ -31,8 +31,8 @@
       "bcp47": "es-ES",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 197,
-      "sha256": "00e49bd8b53b7c847ce2d6d345c92bccced70ce9c4de9875cceaf1889a82c4f0"
+      "wordCount": 998,
+      "sha256": "18439d3e194ca5320b598961201c9e76bdcc8c7f77cb8ec692b6222a43f51217"
     },
     {
       "id": "french",
@@ -41,8 +41,8 @@
       "bcp47": "fr-FR",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 174,
-      "sha256": "67ed35348c841c2ef06d066e0bd25d71018f9189a972d218e0e2040f3bf4cdc6"
+      "wordCount": 1394,
+      "sha256": "f2958393a566b13cc4137ff1d16a5432b6bea2ef1159f3b92c90f6d7c9a5f86b"
     },
     {
       "id": "german",
@@ -51,8 +51,8 @@
       "bcp47": "de-DE",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 200,
-      "sha256": "3f7168b5cf202ff5d2b5ebedb686a2890fc097f3fa650d806daf59934b3e097d"
+      "wordCount": 988,
+      "sha256": "a0ecdd9690a06292102357c8e18757f1049c66eff5bd8c8c814fdea2ef1c2994"
     },
     {
       "id": "italian",
@@ -61,8 +61,8 @@
       "bcp47": "it-IT",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 199,
-      "sha256": "8141da475f665a2fda479ec6d53a79987935f3add56a11d10c1ad6c219fac92b"
+      "wordCount": 1159,
+      "sha256": "cd3c452ad4920b672630b389559949c5d2ceb31240b2c5be298962d815d948d1"
     },
     {
       "id": "russian",
@@ -71,8 +71,8 @@
       "bcp47": "ru-RU",
       "rightToLeft": false,
       "joiningScript": false,
-      "wordCount": 200,
-      "sha256": "e011fe685fe54f306e00a1dd4b9ec7ce198ea717ed96085fa1a183978d6be4f3"
+      "wordCount": 996,
+      "sha256": "0a5f5bcd79c5ac9682f5b1015e269bc6577c99dad949ec9fbd1aedf5eb3d0a1f"
     }
   ]
 }

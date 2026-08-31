@@ -270,7 +270,12 @@ class TypingTestContractTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(encoded).hexdigest(), language["sha256"])
             pack = json.loads(encoded)
             self.assertIsInstance(pack["words"], list)
-            self.assertGreater(len(pack["words"]), 20)
+            # Upstream's base packs are ~200 words, which ran out of variety
+            # long before a 120-second test did. Every language ships the 1k
+            # list, so no language is thinner than the rest.
+            self.assertGreaterEqual(len(pack["words"]), 900, language["id"])
+            self.assertEqual(len(pack["words"]), language["wordCount"], language["id"])
+            self.assertEqual(len(set(pack["words"])), len(pack["words"]), language["id"])
             self.assertTrue(all(isinstance(word, str) and word for word in pack["words"]))
 
     def test_golden_metrics(self) -> None:
@@ -292,6 +297,10 @@ class TypingTestContractTests(unittest.TestCase):
     def test_sync_script_is_development_only_and_pinned(self) -> None:
         script = source("scripts/typing/sync_monkeytype_languages.py")
         self.assertIn("--commit", script)
+        # A pack that comes back thin means the upstream file moved; the sync
+        # must fail rather than quietly ship a stub.
+        self.assertIn("MINIMUM_WORDS", script)
+        self.assertIn("_1k.json", script)
         self.assertIn("raw.githubusercontent.com/monkeytypegame/monkeytype", script)
         self.assertIn("sha256", script)
         self.assertNotIn("import Quickshell", script)
