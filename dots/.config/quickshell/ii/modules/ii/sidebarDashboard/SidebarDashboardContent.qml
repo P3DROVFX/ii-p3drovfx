@@ -684,6 +684,8 @@ Item {
                     visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                     fontPixelSize: 32
                     fontWeight: Font.Black
+                    borderWidth: 4
+                    borderColor: Appearance.colors.colLayer1
                 }
             }
 

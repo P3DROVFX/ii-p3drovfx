@@ -24,6 +24,9 @@ Item {
     property int fontWeight: Font.DemiBold
     property int cursorShape: interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
 
+    property real borderWidth: 0
+    property color borderColor: "transparent"
+
     signal clicked()
 
     function resolveShape(s) {
@@ -131,6 +134,18 @@ Item {
 
     readonly property bool hasVisibleImage: (!root.isAnimated && staticImg.visible) || (root.isAnimated && avatarImg.visible)
 
+    // Outer border shape matching avatar shape if borderWidth is set
+    MaterialShape {
+        id: borderShape
+        anchors.centerIn: parent
+        width: parent.width + root.borderWidth * 2
+        height: parent.height + root.borderWidth * 2
+        shape: root.resolveShape(root.avatarShape)
+        color: root.borderColor
+        visible: root.borderWidth > 0
+        z: -1
+    }
+
     // Base shape with solid color and fallback initial text
     MaterialShape {
         id: baseShape
@@ -149,16 +164,20 @@ Item {
         }
     }
 
-    // Static Image loader (hardware-accelerated, zero QMovie overhead)
+    // Static Image loader (hardware-accelerated, zero QMovie overhead, crisp downsampling)
     Image {
         id: staticImg
         anchors.fill: parent
         source: !root.isAnimated ? root.resolvedImageSource : ""
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
+        smooth: true
+        mipmap: true
+        sourceSize: Qt.size(Math.max(256, Math.ceil(root.width * 2)), Math.max(256, Math.ceil(root.height * 2)))
         visible: !root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true
+        layer.smooth: true
         layer.effect: OpacityMask {
             maskSource: MaterialShape {
                 width: staticImg.width
@@ -177,10 +196,13 @@ Item {
         playing: root.shouldPlay
         paused: !root.shouldPlay
         asynchronous: true
+        smooth: true
+        mipmap: true
         cache: false
         visible: root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true
+        layer.smooth: true
         layer.effect: OpacityMask {
             maskSource: MaterialShape {
                 width: avatarImg.width
