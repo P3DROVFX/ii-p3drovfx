@@ -165,6 +165,33 @@ DockButton {
         }
     }
 
+    // Edit Mode: the other half of it. An app that is only open can be kept
+    // from here, so the dock is arranged where it is drawn rather than only
+    // from the catalogue.
+    Loader {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        z: 11
+        active: GlobalStates.editMode && !(root.appToplevel?.pinned ?? false)
+            && (root.appToplevel?.appId ?? "") !== ""
+        sourceComponent: EditAddBadge {
+            onClicked: {
+                const appId = root.appToplevel?.appId ?? "";
+                if (!appId)
+                    return;
+                const pinnedBefore = Array.from(Config.options.dock.pinnedApps ?? []);
+                const orderBefore = Array.from(Config.options.dock.order ?? []);
+                TaskbarApps.togglePin(appId);
+                const pinnedAfter = Array.from(Config.options.dock.pinnedApps ?? []);
+                const orderAfter = Array.from(Config.options.dock.order ?? []);
+                GlobalStates.editHistoryPush({
+                    "undo": () => { Config.options.dock.pinnedApps = pinnedBefore; Config.options.dock.order = orderBefore; },
+                    "redo": () => { Config.options.dock.pinnedApps = pinnedAfter; Config.options.dock.order = orderAfter; }
+                });
+            }
+        }
+    }
+
     // Drag overlay (dots-hyprland pattern)
     Loader {
         anchors.fill: parent
@@ -304,6 +331,9 @@ DockButton {
 
     DockTooltip {
         text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
-        showTooltip: (Config.options?.dock?.enableAppTooltip ?? false) && (hoverAreaLoader.item?.containsMouse ?? false)
+        // Always named while Edit Mode is on: several dock icons are a bare
+        // glyph, and arranging them is easier when they say what they are.
+        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
+            && (hoverAreaLoader.item?.containsMouse ?? false)
     }
 }

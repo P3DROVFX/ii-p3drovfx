@@ -2697,7 +2697,9 @@ Item {
     // ── Preview Popup ──────────────────────────────────────────────────────
     Loader {
         id: previewPopupLoader
-        active: Config.options.dock.enablePreview ?? true
+        // Not while Edit Mode is on: a window preview popping up over the dock
+        // you are rearranging is in the way, and there is nothing to switch to.
+        active: (Config.options.dock.enablePreview ?? true) && !GlobalStates.editMode
         sourceComponent: DockPreviewPopup {
             dockRoot: root
             dockWindow: root.QsWindow.window
