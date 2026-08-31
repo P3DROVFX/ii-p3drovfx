@@ -90,11 +90,70 @@ Singleton {
             root.pendingPushName = "";
             if (exitCode !== 0) {
                 console.warn("[IconThemes] recoloring failed, exit", exitCode);
+                root._finishStep();
                 return;
             }
-            if (push !== "") root._pushName(push);
-            if (root.reloadOnFinish) Quickshell.reload();
+            if (root.reloadOnFinish) {
+                Quickshell.reload();
+                return;
+            }
+            // Still mid-sequence: the name is written once the rebuild it names is on disk.
+            if (push !== "") {
+                root._pushName(push);
+                return;
+            }
+            root._finishStep();
         }
+    }
+
+    // --------------------------------------------------------------- one change at a time
+
+    /// The pack asked for while another one was still being applied, if any. Only the newest
+    /// is kept: the ones in between were never on screen and nobody is waiting for them.
+    property var queuedRequest: null
+    property bool applying: false
+
+    /**
+     * Put one icon change through, start to finish, and only then start the next.
+     *
+     * Applying is several steps - rebuild, write the name into four places, tell every running
+     * app to drop its cached theme - and a Process that is already running ignores being asked
+     * to run again. So a second pick made while the first was still going used to vanish, and
+     * the desktop sat on the pack before the one that was last clicked. Now it queues, and the
+     * icons on screen are invalidated once when the whole sequence ends rather than once per
+     * step: the invalidation is a flip, so an even number of them leaves every icon showing
+     * exactly what it showed before.
+     */
+    function _request(pack: string, recolor: bool) {
+        root.queuedRequest = { "pack": pack, "recolor": recolor };
+        if (root.applying) return;
+        root._startNext();
+    }
+
+    function _startNext() {
+        const request = root.queuedRequest;
+        root.queuedRequest = null;
+        if (!request) {
+            root.applying = false;
+            return;
+        }
+        root.applying = true;
+        if (request.recolor) {
+            // The repoint at DynamicTheme waits for the rebuild: repointing KIconLoader while
+            // the directory is being swapped and its caches rewritten had it read half-written
+            // files, which is a shell crash, not just a miss.
+            root.pendingPushName = "DynamicTheme";
+            root.applyTheme(false, request.pack);
+            return;
+        }
+        root.pendingPushName = "";
+        root._pushName(request.pack);
+    }
+
+    /// End of a sequence: the icons redraw once, and only then does anything queued behind it
+    /// start. Every path through the apply ends here, including the failed ones.
+    function _finishStep() {
+        root.invalidateIcons();
     }
 
     // ------------------------------------------------------------------- the pack picker
@@ -114,15 +173,7 @@ Singleton {
         const pack = String(name ?? "").trim();
         if (pack === "") return;
         Config.options.appearance.iconTheme = pack;
-        if (root.themed) {
-            // The repoint at DynamicTheme waits for the rebuild: repointing KIconLoader
-            // while the directory is being swapped and its caches rewritten had it read
-            // half-written files, which is a shell crash (bad_alloc), not just a miss.
-            root.pendingPushName = "DynamicTheme";
-            root.applyTheme(false, pack);
-            return;
-        }
-        root._pushName(pack);
+        root._request(pack, root.themed);
     }
 
     /**
@@ -135,13 +186,7 @@ Singleton {
         Config.options.appearance.icons.enableThemed = on;
         const base = String(Config.options.appearance.iconTheme || "").trim();
         if (base === "") return;
-        if (on) {
-            root.pendingPushName = "DynamicTheme";
-            root.applyTheme(false, base);
-            return;
-        }
-        root.pendingPushName = "";
-        root._pushName(base);
+        root._request(base, on);
     }
 
     /// Write one theme name into every copy of the setting a toolkit reads, and tell running
@@ -152,13 +197,43 @@ Singleton {
         packApplyProcess.running = true;
     }
 
+    /**
+     * Tell every icon on screen to resolve itself again.
+     *
+     * Deliberately late: the signal above makes KIconLoader throw its parsed theme away and
+     * read the new one, and the shell resolves icons on another thread. Asking for a screen
+     * full of icons while that rebuild is in flight crashed the shell, so the redraw waits
+     * for it to land instead of racing it.
+     */
+    function invalidateIcons() {
+        invalidateTimer.restart();
+    }
+
+    Timer {
+        id: invalidateTimer
+        interval: 250
+        onTriggered: {
+            TaskbarApps.iconThemeRevision = 1 - TaskbarApps.iconThemeRevision;
+            redrawGraceTimer.restart();
+        }
+    }
+
+    /// The redraw above sends every icon on screen back through the icon loader, on another
+    /// thread. The next pack rebuilds that loader, so it waits until the redraw it would have
+    /// interrupted is over - which is also when the run stops counting as in progress, so a
+    /// pick made during the redraw queues behind it instead of landing in the middle of it.
+    Timer {
+        id: redrawGraceTimer
+        interval: 300
+        onTriggered: root._startNext()
+    }
+
     Process {
         id: packApplyProcess
         onExited: (code, status) => {
             if (code !== 0) console.warn("[IconThemes] applying the icon pack failed, exit", code);
-            // Same invalidation the DynamicTheme watcher does: icon bindings re-resolve once.
-            TaskbarApps.iconThemeRevision = 1 - TaskbarApps.iconThemeRevision;
             packProbeProcess.running = true;
+            root._finishStep();
         }
     }
 
@@ -235,10 +310,13 @@ Singleton {
         path: Directories.home + "/.local/share/icons/DynamicTheme.colhash"
         watchChanges: true
         onFileChanged: {
-            // DynamicTheme is atomically replaced before the hash is written.
-            // A single bounded toggle is enough to invalidate icon bindings without
-            // making sourceSize grow after every theme change.
-            TaskbarApps.iconThemeRevision = 1 - TaskbarApps.iconThemeRevision;
+            // DynamicTheme is atomically replaced, and KIconLoader is told about it, before
+            // the hash is written. A single bounded toggle is enough to invalidate icon
+            // bindings without making sourceSize grow after every theme change - and while a
+            // pack is being applied the rebuild is only the first step of it, so the redraw
+            // is left to the end of the sequence rather than done twice.
+            if (root.applying) return;
+            root.invalidateIcons();
         }
     }
 
