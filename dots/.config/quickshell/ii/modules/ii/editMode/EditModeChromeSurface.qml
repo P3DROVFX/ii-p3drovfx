@@ -376,6 +376,8 @@ PanelWindow {
         drawerScreenName: root.screenName
 
         onDoneRequested: GlobalStates.editMode = false
+        onUndoRequested: GlobalStates.editUndo()
+        onRedoRequested: GlobalStates.editRedo()
         onTabRequested: tab => {
             GlobalStates.editWidgetMenuOpen = false;
             GlobalStates.editTab = tab;

@@ -42,6 +42,8 @@ Item {
     property real bandFraction: 0.5
 
     signal doneRequested()
+    signal undoRequested()
+    signal redoRequested()
     signal tabRequested(string tab)
     signal snapToggleRequested()
     signal drawerToggleRequested()
@@ -140,6 +142,46 @@ Item {
                 text: Config.options.background.widgets.enableSnap
                     ? Translation.tr("Edge snapping on")
                     : Translation.tr("Edge snapping off")
+            }
+        }
+
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            implicitWidth: 1
+            implicitHeight: Math.round(Appearance.sizes.toolbarHeight * 0.4)
+            color: Appearance.colors.colOutlineVariant
+        }
+
+        // The two the keyboard already offers, for a pointer that never
+        // reaches for it. Disabled rather than hidden when their stack is
+        // empty: a button that comes and goes moves every other button on the
+        // toolbar with it, and the toolbar is centred on the card, so the whole
+        // row would slide under the pointer on the first edit.
+        IconToolbarButton {
+            id: undoButton
+            Layout.alignment: Qt.AlignVCenter
+            text: "undo"
+            enabled: GlobalStates.editCanUndo
+            onClicked: root.undoRequested()
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Undo (Ctrl+Z)")
+            }
+        }
+
+        IconToolbarButton {
+            id: redoButton
+            Layout.alignment: Qt.AlignVCenter
+            text: "redo"
+            enabled: GlobalStates.editCanRedo
+            onClicked: root.redoRequested()
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Redo (Ctrl+Shift+Z)")
             }
         }
 
