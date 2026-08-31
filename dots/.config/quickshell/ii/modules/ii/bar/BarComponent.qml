@@ -306,7 +306,15 @@ Item {
     // draws itself as though it were active. One that stays blank is still
     // skipped, exactly as before.
     readonly property bool selfVisibleOrEditing: rootItem.widgetSelfVisible || GlobalStates.editMode
-    readonly property bool hasLayoutContent: rootItem.selfVisibleOrEditing && (itemLoader.item ? itemLoader.item.visible : false)
+    readonly property bool loadedItemVisible: itemLoader.item ? itemLoader.item.visible : false
+    // A widget drawing nothing is invisible to the layout, and in the mode that
+    // left it with no drag handle, no badge and no catalogue row - unreachable
+    // in every direction. The stand-in chip gives it a body while the mode is
+    // on; the widget itself is untouched (see BarEditPlaceholder).
+    readonly property bool editPlaceholderShown: GlobalStates.editMode
+        && rootItem.editController !== null && !rootItem.loadedItemVisible
+    readonly property bool hasLayoutContent: rootItem.selfVisibleOrEditing
+        && (rootItem.loadedItemVisible || rootItem.editPlaceholderShown)
     readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
     readonly property bool hasActiveLayoutContent: targetWidth > 0
 
@@ -578,7 +586,7 @@ Item {
 
         transform: [entryTranslation, moveTranslation, verticalTranslation]
 
-        readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && (itemLoader.item ? itemLoader.item.visible : false)
+        readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
         leftPadding: paddingless ? 0 : padding
@@ -654,6 +662,20 @@ Item {
             Layout.fillHeight: item ? ((item.Layout !== undefined && item.Layout.fillHeight) || false) : false
             Layout.fillWidth: item ? ((item.Layout !== undefined && item.Layout.fillWidth) || false) : false
             Layout.alignment: rootItem.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
+        }
+
+        // The stand-in for a widget with nothing to draw. Invisible when it is
+        // not needed, not merely inactive: a layout counts an item with no size
+        // as an item and spaces the row around it.
+        Loader {
+            id: editPlaceholder
+            active: rootItem.editPlaceholderShown
+            visible: rootItem.editPlaceholderShown
+            Layout.alignment: rootItem.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
+            sourceComponent: BarEditPlaceholder {
+                vertical: rootItem.vertical
+                widgetId: modelData.id
+            }
         }
     }
 
