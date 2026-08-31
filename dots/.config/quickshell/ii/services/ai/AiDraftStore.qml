@@ -180,15 +180,13 @@ Scope {
         stdinEnabled: false
         onRunningChanged: {
             if (running) {
-                const payload = String(operationProc.operation?.stdin ?? "");
-                if (payload.length > 0) {
-                    // Process closes stdin when stdinEnabled is switched off;
-                    // this lets the helper finish reading an empty or large
-                    // draft without leaving the queue blocked indefinitely.
-                    operationProc.stdinEnabled = true;
-                    operationProc.write(payload);
-                    operationProc.stdinEnabled = false;
-                }
+                // Switching stdin off is what sends the helper its EOF, and it
+                // blocks on read() until that arrives. Skipping the toggle for
+                // an empty draft left a clear hanging forever: the queue never
+                // advanced again and the sent prompt stayed on disk.
+                operationProc.stdinEnabled = true;
+                operationProc.write(String(operationProc.operation?.stdin ?? ""));
+                operationProc.stdinEnabled = false;
             } else {
                 Qt.callLater(root.runNext);
             }
