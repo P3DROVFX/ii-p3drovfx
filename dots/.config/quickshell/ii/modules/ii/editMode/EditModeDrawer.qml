@@ -66,6 +66,94 @@ Item {
             && (entry.lockBehavior || "hide") !== "hide");
     }
 
+    // The catalogue's sections, named and ordered as Settings names and orders
+    // them. A category the registry hands out that is not listed here - an
+    // extension's own - gets a section of its own at the end, so a widget can
+    // never be added to the registry and then be missing from this list.
+    readonly property var widgetCategoryOrder: [
+        { "key": "Clock", "title": Translation.tr("Clocks"), "icon": "schedule" },
+        { "key": "Media", "title": Translation.tr("Media players"), "icon": "play_circle" },
+        { "key": "Weather", "title": Translation.tr("Weather"), "icon": "cloud" },
+        { "key": "Date", "title": Translation.tr("Date & calendar"), "icon": "calendar_today" },
+        { "key": "Photo", "title": Translation.tr("Photo"), "icon": "image" },
+        { "key": "Devices", "title": Translation.tr("Devices & Bluetooth"), "icon": "earbuds", "merge": ["Bluetooth"] },
+        { "key": "Utility", "title": Translation.tr("Utility"), "icon": "build" },
+        { "key": "System", "title": Translation.tr("System"), "icon": "tune" },
+        { "key": "Resources", "title": Translation.tr("Resources"), "icon": "monitor_heart" }
+    ]
+
+    readonly property var widgetGroups: {
+        const groups = [];
+        const byKey = {};
+        for (const category of root.widgetCategoryOrder) {
+            const group = { "key": category.key, "title": category.title, "icon": category.icon, "items": [] };
+            groups.push(group);
+            byKey[category.key] = group;
+            for (const alias of (category.merge ?? []))
+                byKey[alias] = group;
+        }
+        for (const widget of (WidgetsRegistry.allWidgets ?? [])) {
+            const key = widget?.category ?? "";
+            let group = byKey[key];
+            if (!group) {
+                group = {
+                    "key": key === "" ? "other" : key,
+                    "title": key === "" ? Translation.tr("Other") : key,
+                    "icon": "widgets",
+                    "items": []
+                };
+                byKey[key] = group;
+                groups.push(group);
+            }
+            group.items.push(widget);
+        }
+        return groups.filter(group => group.items.length > 0);
+    }
+
+    // Every section shut on arrival, the way Settings opens its own widget
+    // catalogue: the flat list runs to eighty-odd rows, and the point of a
+    // section is not having to scroll past the ones you are not after.
+    property var expandedWidgetGroups: []
+
+    function widgetGroupExpanded(key) {
+        return root.expandedWidgetGroups.indexOf(key) !== -1;
+    }
+
+    function toggleWidgetGroup(key) {
+        // Reassigned rather than mutated: a list changed in place notifies
+        // nobody, and the rows below are built from it.
+        const next = root.expandedWidgetGroups.slice();
+        const at = next.indexOf(key);
+        if (at === -1)
+            next.push(key);
+        else
+            next.splice(at, 1);
+        root.expandedWidgetGroups = next;
+    }
+
+    function widgetGroupAdded(group) {
+        let count = 0;
+        for (const widget of group.items)
+            if (root.lockTab ? root.widgetOnLock(widget.widgetId) : root.widgetOnDesktop(widget.widgetId))
+                count++;
+        return count;
+    }
+
+    // One flat list of section headers and, under each open one, its widgets:
+    // a list view can only be given rows, and collapsing by dropping the rows
+    // costs nothing - a shut section has no delegates at all.
+    readonly property var widgetRows: {
+        const rows = [];
+        for (const group of root.widgetGroups) {
+            rows.push({ "kind": "header", "group": group });
+            if (!root.widgetGroupExpanded(group.key))
+                continue;
+            for (const widget of group.items)
+                rows.push({ "kind": "widget", "widget": widget });
+        }
+        return rows;
+    }
+
     readonly property bool lockTab: GlobalStates.editLockPreview
     onLockTabChanged: {
         if (root.lockTab ? (root.section === "bar" || root.section === "dock") : root.section === "lock")
@@ -197,75 +285,171 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 2
-                model: root.section === "widgets" ? WidgetsRegistry.allWidgets : []
+                model: root.section === "widgets" ? root.widgetRows : []
 
-                delegate: MouseArea {
-                    id: entry
+                delegate: Item {
+                    id: row
                     required property var modelData
-                    readonly property bool onDesktop: root.widgetOnDesktop(entry.modelData.widgetId)
+                    readonly property bool isHeader: row.modelData.kind === "header"
 
                     width: widgetList.width
-                    height: 60
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton
-                    preventStealing: true
+                    height: row.isHeader ? 42 : 60
 
-                    property real pressX: 0
-                    property real pressY: 0
-                    property bool dragActive: false
+                    Loader {
+                        anchors.fill: parent
+                        active: row.isHeader
+                        sourceComponent: headerFace
+                    }
 
-                    onPressed: mouse => {
-                        entry.pressX = mouse.x;
-                        entry.pressY = mouse.y;
-                        entry.dragActive = false;
+                    // Indented under its section.
+                    Loader {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        active: !row.isHeader
+                        sourceComponent: widgetFace
                     }
-                    onPositionChanged: mouse => {
-                        if (!entry.pressed)
-                            return;
-                        if (!entry.dragActive
-                                && Math.abs(mouse.x - entry.pressX) < drag.threshold
-                                && Math.abs(mouse.y - entry.pressY) < drag.threshold)
-                            return;
-                        entry.dragActive = true;
-                        root.dragMetadata = entry.modelData;
-                        const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
-                        ghost.x = point.x - ghost.width / 2;
-                        ghost.y = point.y - ghost.height / 2;
-                    }
-                    onReleased: mouse => {
-                        const wasDrag = entry.dragActive;
-                        entry.dragActive = false;
-                        root.dragMetadata = null;
-                        if (wasDrag) {
-                            const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
-                            root.addRequested(entry.modelData.widgetId, point.x, point.y);
-                        } else {
-                            root.toggleRequested(entry.modelData.widgetId);
+
+                    // A section: its name, how many of its widgets are already
+                    // placed, and the chevron that opens it.
+                    Component {
+                        id: headerFace
+
+                        MouseArea {
+                            id: header
+                            readonly property var group: row.modelData.group
+                            readonly property bool open: root.widgetGroupExpanded(header.group.key)
+                            readonly property int added: root.widgetGroupAdded(header.group)
+
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.toggleWidgetGroup(header.group.key)
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.large
+                                color: header.pressed ? Appearance.colors.colLayer1Active
+                                    : header.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
+                                Behavior on color {
+                                    enabled: !Appearance.reducedMotion
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                }
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 10
+                                spacing: 10
+
+                                MaterialSymbol {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: header.group.icon
+                                    iconSize: 22
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: header.group.title
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnSurface
+                                    elide: Text.ElideRight
+                                }
+                                StyledText {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: header.added > 0
+                                        ? `${header.added}/${header.group.items.length}`
+                                        : `${header.group.items.length}`
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: header.added > 0 ? Appearance.colors.colPrimary
+                                        : Appearance.colors.colOnSurfaceVariant
+                                }
+                                MaterialSymbol {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: "keyboard_arrow_down"
+                                    iconSize: 20
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    rotation: header.open ? 0 : -90
+                                    Behavior on rotation {
+                                        enabled: !Appearance.reducedMotion
+                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                    }
+                                }
+                            }
                         }
                     }
-                    onCanceled: {
-                        entry.dragActive = false;
-                        root.dragMetadata = null;
-                    }
 
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Appearance.rounding.large
-                        color: entry.pressed ? Appearance.colors.colLayer1Active
-                            : entry.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
-                        Behavior on color {
-                            enabled: !Appearance.reducedMotion
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    // A widget inside an open section: a click adds or removes
+                    // it, a drag places it where the pointer is let go.
+                    Component {
+                        id: widgetFace
+
+                        MouseArea {
+                            id: entry
+                            readonly property var widget: row.modelData.widget
+                            readonly property bool onDesktop: root.widgetOnDesktop(entry.widget.widgetId)
+
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton
+                            preventStealing: true
+
+                            property real pressX: 0
+                            property real pressY: 0
+                            property bool dragActive: false
+
+                            onPressed: mouse => {
+                                entry.pressX = mouse.x;
+                                entry.pressY = mouse.y;
+                                entry.dragActive = false;
+                            }
+                            onPositionChanged: mouse => {
+                                if (!entry.pressed)
+                                    return;
+                                if (!entry.dragActive
+                                        && Math.abs(mouse.x - entry.pressX) < drag.threshold
+                                        && Math.abs(mouse.y - entry.pressY) < drag.threshold)
+                                    return;
+                                entry.dragActive = true;
+                                root.dragMetadata = entry.widget;
+                                const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
+                                ghost.x = point.x - ghost.width / 2;
+                                ghost.y = point.y - ghost.height / 2;
+                            }
+                            onReleased: mouse => {
+                                const wasDrag = entry.dragActive;
+                                entry.dragActive = false;
+                                root.dragMetadata = null;
+                                if (wasDrag) {
+                                    const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
+                                    root.addRequested(entry.widget.widgetId, point.x, point.y);
+                                } else {
+                                    root.toggleRequested(entry.widget.widgetId);
+                                }
+                            }
+                            onCanceled: {
+                                entry.dragActive = false;
+                                root.dragMetadata = null;
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.large
+                                color: entry.pressed ? Appearance.colors.colLayer1Active
+                                    : entry.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
+                                Behavior on color {
+                                    enabled: !Appearance.reducedMotion
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                }
+                            }
+
+                            CatalogueRow {
+                                anchors.fill: parent
+                                symbol: entry.widget.icon ?? "widgets"
+                                title: entry.widget.name ?? entry.widget.widgetId
+                                subtitle: entry.widget.description ?? ""
+                                checked: root.lockTab ? root.widgetOnLock(entry.widget.widgetId) : entry.onDesktop
+                            }
                         }
-                    }
-
-                    CatalogueRow {
-                        anchors.fill: parent
-                        symbol: entry.modelData.icon ?? "widgets"
-                        title: entry.modelData.name ?? entry.modelData.widgetId
-                        subtitle: entry.modelData.description ?? ""
-                        checked: root.lockTab ? root.widgetOnLock(entry.modelData.widgetId) : entry.onDesktop
                     }
                 }
             }
