@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -22,6 +23,13 @@ MouseArea {
     cursorShape: Qt.PointingHandCursor
 
     readonly property bool available: ShellUpdates.hasUpdate
+    // Edit Mode has to be able to reach a widget that is currently showing
+    // nothing: with the checkout up to date this indicator takes no space at
+    // all, so there would be nothing to grab, drag or place. While the mode is
+    // on it is drawn as though an update were waiting. Rendering only - the
+    // stored visibility flag stays on the real condition, and the bar ORs the
+    // mode in on its side.
+    readonly property bool shown: indicator.available || GlobalStates.editMode
     // 0 means the count is unknown (non-GitHub remote, offline, rate-limited),
     // not "level" — hasUpdate already settled that. Never expand into an empty
     // pill when there is no number to show.
@@ -31,10 +39,10 @@ MouseArea {
     readonly property real baseSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 14
     readonly property int animDuration: Math.round(120 * Appearance.animMultiplier)
 
-    implicitWidth: available ? (vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth) : 0
-    implicitHeight: available ? (vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight) : 0
+    implicitWidth: shown ? (vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth) : 0
+    implicitHeight: shown ? (vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight) : 0
 
-    visible: available
+    visible: shown
 
     Component.onCompleted: rootItem.toggleVisible(indicator.available)
     onAvailableChanged: rootItem.toggleVisible(indicator.available)

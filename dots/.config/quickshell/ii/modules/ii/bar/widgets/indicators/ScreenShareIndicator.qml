@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.shared
 import qs.modules.common
 import qs.modules.common.widgets
@@ -14,9 +15,16 @@ MouseArea {
     property bool vertical: false
     property bool activelyScreenSharing: false
 
-    visible: activelyScreenSharing
-    implicitWidth: activelyScreenSharing ? (vertical ? Appearance.sizes.verticalBarWidth : 40) : 0
-    implicitHeight: activelyScreenSharing ? (vertical ? 40 : Appearance.sizes.baseBarHeight) : 0
+    // Edit Mode has to be able to reach a widget that is currently showing
+    // nothing: with nothing to show this takes no room at all, so there would
+    // be nothing to grab, drag or place. While the mode is on it is drawn as
+    // though it were active. Rendering only - the stored visibility flag stays
+    // on the real condition, and the bar ORs the mode in on its side.
+    readonly property bool shown: indicator.activelyScreenSharing || GlobalStates.editMode
+
+    visible: shown
+    implicitWidth: shown ? (vertical ? Appearance.sizes.verticalBarWidth : 40) : 0
+    implicitHeight: shown ? (vertical ? 40 : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: true
     Process {
         id: screenShareProc

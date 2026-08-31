@@ -291,7 +291,15 @@ Item {
         return modelData.id === modeState._displayMode;
     }
 
-    readonly property bool hasLayoutContent: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
+    // A widget that hides itself when it has nothing to say still reports that
+    // through `toggleVisible`, which is a *stored* flag - it is written back to
+    // the layout. Edit Mode must not touch it: the arrangement of the bar has
+    // nothing to do with whether a recording is running. So the mode is ORed in
+    // here instead, and each widget that wants to be arrangeable while idle
+    // draws itself as though it were active. One that stays blank is still
+    // skipped, exactly as before.
+    readonly property bool selfVisibleOrEditing: rootItem.widgetSelfVisible || GlobalStates.editMode
+    readonly property bool hasLayoutContent: rootItem.selfVisibleOrEditing && (itemLoader.item ? itemLoader.item.visible : false)
     readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
     readonly property bool hasActiveLayoutContent: targetWidth > 0
 
@@ -559,7 +567,7 @@ Item {
 
         transform: [entryTranslation, moveTranslation, verticalTranslation]
 
-        readonly property bool itemIsVisible: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
+        readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && (itemLoader.item ? itemLoader.item.visible : false)
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
         leftPadding: paddingless ? 0 : padding
