@@ -86,10 +86,14 @@ MouseArea {
                 elide: Text.ElideRight
             }
 
+            readonly property var primaryPercent: root.primaryDevice ? EarbudsControlService.primaryBatteryPercent(root.primaryDevice) : null
+            readonly property bool batteryAvailable: primaryPercent !== null || (root.primaryDevice && root.primaryDevice.batteryAvailable)
+            readonly property real batteryFraction: primaryPercent !== null ? (primaryPercent / 100.0) : (root.primaryDevice?.battery ?? 0)
+
             // Horizontal battery bar (only visible when connected and battery available)
             StyledProgressBar {
                 id: batteryContainer
-                visible: root.primaryDevice ? root.primaryDevice.batteryAvailable : false
+                visible: parent.batteryAvailable
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredHeight: 8
                 Layout.preferredWidth: 42
@@ -97,11 +101,9 @@ MouseArea {
                 valueBarHeight: 8
                 from: 0
                 to: 1
-                value: root.primaryDevice?.battery ?? 0
+                value: parent.batteryFraction
                 highlightColor: {
-                    if (!root.primaryDevice)
-                        return Appearance.colors.colOnPrimary;
-                    if (root.primaryDevice.battery <= 0.15)
+                    if (parent.batteryFraction <= 0.15)
                         return Appearance.m3colors.m3error;
                     return Appearance.colors.colOnPrimary;
                 }

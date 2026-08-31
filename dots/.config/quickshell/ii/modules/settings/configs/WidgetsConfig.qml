@@ -165,6 +165,12 @@ Item {
                     }
                 }
 
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "info"
+                    text: Translation.tr("Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement")
+                }
+
                 ConfigSlider {
                     Layout.fillWidth: true
                     text: Translation.tr("Global widget scale")

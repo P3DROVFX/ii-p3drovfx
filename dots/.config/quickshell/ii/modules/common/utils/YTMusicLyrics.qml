@@ -13,6 +13,9 @@ Item {
 
     signal lyricsUpdated(string lyrics)
 
+    // Lets the UI tell "still searching" apart from "found nothing".
+    readonly property alias fetching: fetchLyricsProcess.running
+
     property string _lastQueryKey: ""
 
     function fetchLyrics(artist, title) {

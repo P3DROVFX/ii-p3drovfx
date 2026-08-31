@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 
 Item {
     id: root
@@ -13,56 +14,23 @@ Item {
     required property string toggleType
     required property var toggleModel
 
-    // Entrance animation
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
-    property bool _entranceDone: false
-    property real _knobEntranceTranslateX: -50
-    property real _knobEntranceScale: 0.7
-    property real _knobEntranceRotation: -20
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
-    onEntranceTriggerChanged: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        _knobEntranceTranslateX = -50;
-        _knobEntranceScale = 0.7;
-        _knobEntranceRotation = -20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
+    DashboardEntranceProgress {
+        id: entranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        baseDelayRatio: 0.1
     }
 
-    Component.onCompleted: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        _knobEntranceTranslateX = -50;
-        _knobEntranceScale = 0.7;
-        _knobEntranceRotation = -20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: 50 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
-        }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_knobEntranceTranslateX"; from: -50; to: 0; duration: 400; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_knobEntranceScale"; from: 0.7; to: 1.0; duration: 400; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_knobEntranceRotation"; from: -20; to: 0; duration: 400; easing.type: Easing.OutBack }
-        }
-        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    DashboardEntranceProgress {
+        id: knobEntranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        baseDelayRatio: 1.1
     }
 
     readonly property real margin: 4
@@ -78,10 +46,11 @@ Item {
     // Current state index based on the underlying service
     readonly property int currentStateIndex: {
         if (toggleType === "soundcoreAnc") {
-            let mode = SoundcoreService.isConnected ? SoundcoreService.currentMode : (BudsService.isConnected ? BudsService.currentMode : "Normal");
-            if (mode === "NoiseCanceling") return 0;
-            if (mode === "Normal") return 1;
-            if (mode === "Transparency") return 2;
+            let activeDev = EarbudsControlService.activeDevice;
+            let mode = activeDev ? EarbudsControlService.currentNoiseMode(activeDev) : "off";
+            if (mode === "anc") return 0;
+            if (mode === "off") return 1;
+            if (mode === "transparency" || mode === "adaptive") return 2;
             return 1;
         } else if (toggleType === "powerProfile") {
             let prof = PowerProfiles.profile;
@@ -141,13 +110,13 @@ Item {
 
     function applyStateIndex(idx) {
         if (toggleType === "soundcoreAnc") {
-            let targetMode = "Normal";
-            if (idx === 0) targetMode = "NoiseCanceling";
-            else if (idx === 1) targetMode = "Normal";
-            else if (idx === 2) targetMode = "Transparency";
-            
-            let activeService = SoundcoreService.isConnected ? SoundcoreService : (BudsService.isConnected ? BudsService : null);
-            if (activeService) activeService.setMode(targetMode);
+            let activeDev = EarbudsControlService.activeDevice;
+            if (!activeDev) return;
+            let targetMode = "off";
+            if (idx === 0) targetMode = "anc";
+            else if (idx === 1) targetMode = "off";
+            else if (idx === 2) targetMode = "transparency";
+            EarbudsControlService.setNoiseMode(activeDev, targetMode);
         } else if (toggleType === "powerProfile") {
             if (idx === 0) PowerProfiles.profile = PowerProfile.PowerSaver;
             else if (idx === 1) PowerProfiles.profile = PowerProfile.Balanced;
@@ -184,8 +153,8 @@ Item {
         radius: height / 2
         color: Appearance.colors.colLayer2
         border.width: 0
-        opacity: root._entranceDone ? 1.0 : root._entranceOpacity
-        scale: root._entranceDone ? 1.0 : root._entranceScale
+        opacity: entranceProgress.progress
+        scale: 0.85 + 0.15 * entranceProgress.progress
 
         // Left, Center, and Right Dots (Position indicators)
         Rectangle {
@@ -197,7 +166,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.left
             anchors.horizontalCenterOffset: root.posLeft + (root.knobSize / 2)
-            opacity: (root.hoverIndex === 0 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
+            opacity: (root.hoverIndex === 0 ? 0.0 : 1.0) * entranceProgress.progress
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
 
@@ -209,7 +178,7 @@ Item {
             color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.4)
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.horizontalCenter
-            opacity: (root.hoverIndex === 1 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
+            opacity: (root.hoverIndex === 1 ? 0.0 : 1.0) * entranceProgress.progress
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
 
@@ -222,7 +191,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.horizontalCenter: parent.right
             anchors.horizontalCenterOffset: -(root.posLeft + (root.knobSize / 2))
-            opacity: (root.hoverIndex === 2 ? 0.0 : 1.0) * (root._entranceDone ? 1.0 : root._entranceOpacity)
+            opacity: (root.hoverIndex === 2 ? 0.0 : 1.0) * entranceProgress.progress
             Behavior on opacity { NumberAnimation { duration: 150 } }
         }
     }
@@ -234,12 +203,13 @@ Item {
         height: root.knobSize
         radius: width / 2
         y: root.margin
-        x: (root.isDraggingKnob ? root.knobDragX : root.targetX) + (root._entranceDone ? 0 : root._knobEntranceTranslateX)
+        x: (root.isDraggingKnob ? root.knobDragX : root.targetX)
+            - 50 * (1 - knobEntranceProgress.progress)
 
         color: Appearance.colors.colPrimary
-        opacity: root._entranceDone ? 1.0 : root._entranceOpacity
-        scale: root._entranceDone ? 1.0 : root._knobEntranceScale
-        rotation: root._entranceDone ? 0 : root._knobEntranceRotation
+        opacity: entranceProgress.progress
+        scale: 0.7 + 0.3 * knobEntranceProgress.progress
+        rotation: -20 * (1 - knobEntranceProgress.progress)
 
         Behavior on x {
             enabled: !root.isDraggingKnob

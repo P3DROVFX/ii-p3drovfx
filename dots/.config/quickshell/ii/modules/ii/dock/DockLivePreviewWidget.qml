@@ -84,7 +84,9 @@ Item {
     // The compositor frame is intentionally captured above display size so
     // the small dock surface stays readable after the requested crop/zoom.
     readonly property real previewZoom: 1.55
-    readonly property real captureResolutionScale: Math.max(5.0, root.screen?.devicePixelRatio ?? 1.0)
+    // A 5x target made every live frame much larger than the dock surface.
+    // Keep one device-pixel minimum while capping the compositor workload.
+    readonly property real captureResolutionScale: Math.min(2.0, Math.max(1.0, root.screen?.devicePixelRatio ?? 1.0))
     readonly property real overlayInset: Math.max(3, Math.round(root.dotMarginV * 0.45))
     readonly property real widgetRadius: (Config.options?.dock?.widgetRadius ?? -1) >= 0
         ? Config.options.dock.widgetRadius
@@ -100,6 +102,14 @@ Item {
         captureTeardownTimer.stop();
         root.captureLease = false;
         DockLivePreviewService.releaseCapture(root.screenName);
+    }
+
+    Component.onDestruction: {
+        // The outer DockContent loader can destroy this item while the
+        // teardown timer is pending; do not leave the singleton's arbitration
+        // lease owned by a component that no longer exists.
+        if (root.captureLease)
+            DockLivePreviewService.releaseCapture(root.screenName);
     }
 
     function updateCaptureLease() {

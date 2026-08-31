@@ -20,7 +20,7 @@ AbstractBackgroundWidget {
         if (KdeConnectService.activeDevice && KdeConnectService.activeDevice.reachable) {
             list.push({
                 isKdeConnect: true,
-                name: KdeConnectService.activeDevice.name || "Mobile Phone",
+                name: KdeConnectService.activeDeviceDisplayName || "Mobile Phone",
                 battery: (KdeConnectService.activeDevice.charge ?? 68) / 100.0,
                 batteryAvailable: true,
                 type: "phone",

@@ -9,6 +9,41 @@ ContentPage {
     id: page
 
     forceWidth: false
+    property bool confirmWipe: false
+    property bool showBackButton: false
+    signal goBack()
+
+    RowLayout {
+        visible: page.showBackButton
+        spacing: Appearance.sizes.elevationMargin
+        RippleButton {
+            implicitWidth: Appearance.sizes.elevationMargin * 4
+            implicitHeight: implicitWidth
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: page.goBack()
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "arrow_back"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+        }
+        StyledText {
+            text: Translation.tr("Clipboard")
+            font.pixelSize: Appearance.font.pixelSize.large
+            font.family: Appearance.font.family.title
+            color: Appearance.colors.colOnLayer0
+        }
+    }
+
+    Timer {
+        id: wipeConfirmationTimer
+        interval: 4000
+        onTriggered: page.confirmWipe = false
+    }
 
     ContentSection {
         icon: "content_paste"
@@ -461,6 +496,77 @@ ContentPage {
             text: Translation.tr("Fuzzy search for clipboard")
             checked: Config.options.search.clipboard.enableSloppySearch
             onCheckedChanged: Config.options.search.clipboard.enableSloppySearch = checked
+        }
+    }
+
+    ContentSection {
+        icon: "history"
+        title: Translation.tr("History retention")
+        tooltip: Translation.tr("cliphist does not expose dates, so retention starts counting when this option is enabled. Pinned entries are always preserved.")
+
+        ConfigSwitch {
+            buttonIcon: "auto_delete"
+            text: Translation.tr("Delete clipboard history automatically")
+            description: Translation.tr("Remove unpinned entries after the selected retention period.")
+            checked: Config.options.search.clipboard.autoDelete.enable
+            onCheckedChanged: Config.options.search.clipboard.autoDelete.enable = checked
+        }
+
+        ConfigSelectionArray {
+            visible: Config.options.search.clipboard.autoDelete.enable
+            currentValue: Config.options.search.clipboard.autoDelete.retentionDays
+            options: [
+                { displayName: Translation.tr("7 days"), value: 7, icon: "calendar_view_week" },
+                { displayName: Translation.tr("30 days"), value: 30, icon: "calendar_month" },
+                { displayName: Translation.tr("90 days"), value: 90, icon: "date_range" }
+            ]
+            onSelected: value => Config.options.search.clipboard.autoDelete.retentionDays = value
+        }
+
+        ConfigSwitch {
+            visible: Config.options.search.clipboard.autoDelete.enable
+            buttonIcon: "power_settings_new"
+            text: Translation.tr("Clear history when the shell exits")
+            description: Translation.tr("Removes unpinned cliphist entries during a clean Quickshell shutdown. Pinned entries are preserved.")
+            checked: Config.options.search.clipboard.autoDelete.wipeOnShutdown
+            onCheckedChanged: Config.options.search.clipboard.autoDelete.wipeOnShutdown = checked
+        }
+
+        RippleButton {
+            Layout.fillWidth: true
+            implicitHeight: clearHistoryContent.implicitHeight + Appearance.sizes.elevationMargin * 2
+            buttonRadius: Appearance.rounding.normal
+            colBackground: page.confirmWipe ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
+            colBackgroundHover: page.confirmWipe ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer2Hover
+            colRipple: page.confirmWipe ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer2Active
+            onClicked: {
+                if (!page.confirmWipe) {
+                    page.confirmWipe = true;
+                    wipeConfirmationTimer.restart();
+                    return;
+                }
+                page.confirmWipe = false;
+                wipeConfirmationTimer.stop();
+                Persistent.states.clipboard.historySeen = [];
+                Cliphist.wipeUnpinned();
+            }
+
+            RowLayout {
+                id: clearHistoryContent
+                anchors.fill: parent
+                anchors.margins: Appearance.sizes.elevationMargin
+                spacing: Appearance.sizes.elevationMargin
+                MaterialSymbol {
+                    text: page.confirmWipe ? "warning" : "delete_sweep"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: page.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: page.confirmWipe ? Translation.tr("Press again to clear unpinned history") : Translation.tr("Clear unpinned clipboard history now")
+                    color: page.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
+                }
+            }
         }
     }
 

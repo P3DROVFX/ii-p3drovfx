@@ -36,10 +36,10 @@ var TOGGLE_TYPES = {
     keyboardBacklight: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     modes: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
-    volumeSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    micSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    brightnessSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    gammaSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
+    volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    micSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    brightnessSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    gammaSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
 
     mediaWidget: {
         kind: "media",

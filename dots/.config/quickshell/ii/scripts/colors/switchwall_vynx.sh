@@ -19,6 +19,18 @@ terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
 # shell silently stuck on the previous colors.
 report_matugen_failure() {
     local script_name="$1"
+    local exit_code="${2:-1}"
+    local flag_file="$STATE_DIR/matugen_error_notified"
+    local extra_flags=()
+
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+    if [[ -f "$flag_file" ]]; then
+        extra_flags+=(-t 0 -h boolean:suppress-sound:true)
+    else
+        touch "$flag_file" 2>/dev/null || true
+    fi
+
     local cfg="$MATUGEN_DIR/config.toml"
     local missing=()
     local p
@@ -31,15 +43,15 @@ report_matugen_failure() {
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "[$script_name] matugen aborted; missing template inputs: ${missing[*]}" >&2
-        notify-send -a "Wallpaper switcher" -c "im.error" \
-            "Color generation failed" \
-            "matugen aborted because these templates are missing: ${missing[*]} - fix or remove them in $cfg" 2>/dev/null || true
+        echo "[$script_name] matugen aborted (exit code $exit_code); missing template inputs: ${missing[*]}" >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" "${extra_flags[@]}" \
+            "Color generation failed (code $exit_code)" \
+            "matugen aborted with error code $exit_code because these templates are missing: ${missing[*]} - fix or remove them in $cfg" 2>/dev/null || true
     else
-        echo "[$script_name] matugen failed; keeping the previous palette." >&2
-        notify-send -a "Wallpaper switcher" -c "im.error" \
-            "Color generation failed" \
-            "matugen exited with an error, so the shell kept its previous palette." 2>/dev/null || true
+        echo "[$script_name] matugen failed (exit code $exit_code); keeping the previous palette." >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" "${extra_flags[@]}" \
+            "Color generation failed (code $exit_code)" \
+            "matugen exited with error code $exit_code, so the shell kept its previous palette." 2>/dev/null || true
     fi
 }
 
@@ -146,6 +158,15 @@ VIDEO_OPTS="no-audio loop hwdec=auto scale=bilinear interpolation=no video-sync=
 is_video() {
     local extension="${1##*.}"
     [[ "$extension" == "mp4" || "$extension" == "webm" || "$extension" == "mkv" || "$extension" == "avi" || "$extension" == "mov" ]] && return 0 || return 1
+}
+
+# mpvpaper paints the *desktop* background layer. The lockscreen and the
+# light-mode variant are only ever stored paths — they never own that layer. So
+# picking a video for one of them must not take the live desktop over, and
+# picking a static image for one of them must not kill a video the desktop is
+# already playing. Both used to happen.
+is_desktop_target() {
+    [[ -z "$lockscreen_flag" && -z "$lightmode_flag" ]]
 }
 
 kill_existing_mpvpaper() {
@@ -592,30 +613,39 @@ done"
                 video_path="${imgpath%.*}_1080p.mp4"
             fi
             kill_existing_mpvpaper
-            monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
-            for monitor in $monitors; do
-                nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
-                sleep 0.1
-            done
+            if is_desktop_target; then
+                monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
+                for monitor in $monitors; do
+                    nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
+                    sleep 0.1
+                done
+            fi
 
             # Extract first frame for color generation
             thumbnail="$THUMBNAIL_DIR/$(basename "$imgpath").jpg"
             ffmpeg -y -i "$imgpath" -vframes 1 "$thumbnail" 2>/dev/null
 
-            # Set thumbnail path
-            set_thumbnail_path "$thumbnail"
+            # Set thumbnail path. Global, so it belongs to the desktop wallpaper —
+            # a lockscreen or light-mode pick must not repaint the desktop preview.
+            if is_desktop_target; then
+                set_thumbnail_path "$thumbnail"
+            fi
 
             if [ -f "$thumbnail" ]; then
                 matugen_args+=(image "$thumbnail")
                 generate_colors_material_args=(--path "$thumbnail")
-                create_restore_script "$video_path"
+                if is_desktop_target; then
+                    create_restore_script "$video_path"
+                fi
             else
                 echo "Cannot create image to colorgen"
                 remove_restore
                 exit 1
             fi
         else
-            kill_existing_mpvpaper
+            if is_desktop_target; then
+                kill_existing_mpvpaper
+            fi
             matugen_args+=(image "$imgpath")
             generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
@@ -628,7 +658,9 @@ done"
                     set_wallpaper_path "$imgpath" "desktop"
                 fi
             fi
-            remove_restore
+            if is_desktop_target; then
+                remove_restore
+            fi
         fi
     fi
     fi
@@ -686,12 +718,17 @@ done"
     if [[ -n "$theme_file" ]]; then
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
+        rm -f "$STATE_DIR/matugen_error_notified"
         echo "[switchwall_vynx.sh] Applied theme: $type_flag"
         if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor_vynx.sh
     else
+        matugen_exit_code=0
         if ! matugen "${matugen_args[@]}"; then
-            report_matugen_failure "switchwall_vynx.sh"
+            matugen_exit_code=$?
+            report_matugen_failure "switchwall_vynx.sh" "$matugen_exit_code"
+        else
+            rm -f "$STATE_DIR/matugen_error_notified"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2

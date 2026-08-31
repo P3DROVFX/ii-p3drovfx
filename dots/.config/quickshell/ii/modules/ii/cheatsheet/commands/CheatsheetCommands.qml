@@ -75,6 +75,10 @@ Item {
             filterField.forceActiveFocus();
     }
 
+    // Injected by Cheatsheet.qml so the search field can hand focus to
+    // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
+    property Item keyNavTarget: null
+
     function refreshTags() {
         if (CommandsService)
             allTags = CommandsService.allTags();
@@ -676,6 +680,7 @@ Item {
                 clip: true
                 font.pixelSize: Appearance.font.pixelSize.small
                  onTextChanged: root.searchText = text
+                keyNavTarget: root.keyNavTarget
             }
 
             IconToolbarButton {

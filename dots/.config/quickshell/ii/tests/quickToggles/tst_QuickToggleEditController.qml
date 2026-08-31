@@ -180,10 +180,12 @@ TestCase {
         fakeConfig.pages = pages;
         controller.persistedPages = pages;
         verify(controller.beginResize("volume", 0));
-        verify(!controller.previewResize(4, 2));
-        compare(controller.draftPages[0][0].sizeW, 4);
-        compare(controller.draftPages[0][0].sizeH, 1);
-        verify(controller.cancelResize());
+        verify(controller.previewResize(1, 2));
+        compare(controller.draftPages[0][0].sizeW, 1);
+        compare(controller.draftPages[0][0].sizeH, 2);
+        verify(controller.commitResize());
+        compare(fakeConfig.pages[0][0].sizeW, 1);
+        compare(fakeConfig.pages[0][0].sizeH, 2);
     }
 
     function test_page_management_uses_single_persist_boundary() {

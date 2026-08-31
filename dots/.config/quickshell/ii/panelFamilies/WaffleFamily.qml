@@ -17,6 +17,7 @@ import qs.modules.waffle.sessionScreen
 import qs.modules.waffle.taskView
 
 // Fallbacks
+import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.oledSaver
 import qs.modules.ii.keypressDisplay
@@ -43,6 +44,7 @@ Scope {
     PanelLoader { component: WaffleSessionScreen {} }
     PanelLoader { component: WaffleTaskView {} }
 
+    PanelLoader { component: BluetoothPairing {} }
     PanelLoader { component: Cheatsheet {} }
     PanelLoader { component: OledSaver {} }
     PanelLoader { component: KeypressDisplay {} }

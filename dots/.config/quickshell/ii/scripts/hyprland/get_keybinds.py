@@ -121,6 +121,10 @@ LUA_FIRST_ARG_RE = re.compile(r'"([^"]+)"')
 LUA_DESC_RE = re.compile(r'description\s*=\s*"([^"]*)"')
 LUA_SECTION_RE = re.compile(r'^--##!\s+(.+)$')
 LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\w*\s*=')
+LUA_DISPATCH_RE = re.compile(
+    r'hl\.dsp\.(?P<dispatcher>global|exec_cmd)\s*\(\s*"(?P<params>(?:\\.|[^"\\])*)"\s*\)',
+    re.DOTALL,
+)
 
 
 def parse_lua_binds(path):
@@ -242,11 +246,23 @@ def process_lua_bind(bind_src, current, is_unbind=False):
         current["unbinds"].append(Unbinding(mods, key, comment))
         return
 
-    # Skip binds without descriptions (they're internal)
+    # Skip binds without descriptions (they're internal).
     if not comment:
         return
 
-    current["keybinds"].append(KeyBinding(mods, key, '', '', comment))
+    # The Lua frontend registers its binds as internal `__lua` callbacks, so
+    # `hyprctl binds` cannot expose the command that should run. Preserve the
+    # literal dispatchers the frontend declares instead. The Search can then
+    # invoke `global quickshell:…` or `exec …` through Hyprland.dispatch when
+    # the selected keybind receives Enter.
+    dispatch_match = LUA_DISPATCH_RE.search(bind_src)
+    dispatcher = ''
+    params = ''
+    if dispatch_match:
+        dispatcher = 'exec' if dispatch_match.group('dispatcher') == 'exec_cmd' else 'global'
+        params = bytes(dispatch_match.group('params'), 'utf-8').decode('unicode_escape')
+
+    current["keybinds"].append(KeyBinding(mods, key, dispatcher, params, comment))
 
 
 # ─── Conf parser (original) ──────────────────────────────────────────────────

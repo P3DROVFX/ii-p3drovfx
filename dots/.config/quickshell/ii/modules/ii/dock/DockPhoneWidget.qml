@@ -47,7 +47,7 @@ Item {
         return Item.Bottom;
     }
     readonly property bool hasDevice: KdeConnectService.activeDeviceId !== "" && KdeConnectService.activeReachable
-    readonly property string deviceName: KdeConnectService.activeDevice?.name || Translation.tr("No connected phone")
+    readonly property string deviceName: KdeConnectService.activeDeviceDisplayName || Translation.tr("No connected phone")
     readonly property int deviceCharge: KdeConnectService.activeDevice?.charge ?? -1
     readonly property string deviceImageSource: "file://" + Directories.assetsPath + "/images/devices/Google_Pixel_9_Pro_XL_(Hazel)_rear.svg"
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning

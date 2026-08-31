@@ -687,6 +687,11 @@ Singleton {
         function onSyncIntervalChanged() {
             syncTimer.restart();
         }
+        function onEnabledChanged() {
+            if (options.enabled && root.configured && !root.syncing) {
+                root.startScheduledSync();
+            }
+        }
     }
 
     Connections {

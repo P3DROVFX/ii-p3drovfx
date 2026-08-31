@@ -24,5 +24,14 @@ AbstractBackgroundWidget {
 
     needsColText: false
 
-    DialClock {}
+    // Supersampled: DialClock is a Canvas, so it rasterises at its own item
+    // size. Without this it would be a stretched bitmap once the widget grows.
+    Supersampled {
+        anchors.fill: parent
+        factor: root.renderScale
+
+        DialClock {
+            anchors.fill: parent
+        }
+    }
 }

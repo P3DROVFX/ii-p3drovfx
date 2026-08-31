@@ -91,16 +91,56 @@ fn monitor_index(monitors: &Value, name: &str) -> i64 {
         .unwrap_or(0)
 }
 
-/// First workspace id belonging to this monitor. When the bar's own workspace-map isolation is
-/// on, defer to it entirely so the compactor and the bar always agree. Otherwise fall back to
-/// the Hyprland-lua `workspace_in_group()` convention (fixed-size blocks per monitor) that
-/// actually places windows when `SUPER+digit` is pressed.
-fn block_base(cfg: &WorkspaceMapConfig, monitor_idx: i64, active_ws: i64, group_size: i64) -> i64 {
-    if cfg.use_map {
-        cfg.map.get(monitor_idx as usize).copied().unwrap_or(monitor_idx * cfg.shown)
-    } else {
-        (active_ws - 1) / group_size * group_size
+/// `workspaceGroupSize` from the Hyprland config — the page size `workspace_in_group()` counts in.
+/// The keybind passes no argument, so read it rather than assuming the default of 10. `custom/`
+/// wins: it is sourced last and overrides the shipped value.
+fn read_group_size() -> Option<i64> {
+    let home = env::var("HOME").ok()?;
+    for rel in ["custom/variables.lua", "hyprland/variables.lua"] {
+        let Ok(contents) = std::fs::read_to_string(format!("{}/.config/hypr/{}", home, rel)) else {
+            continue;
+        };
+        let found = contents
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.starts_with("--") {
+                    return None;
+                }
+                let value = line.strip_prefix("workspaceGroupSize")?.trim_start().strip_prefix('=')?;
+                let token = value.split_whitespace().next()?.trim_end_matches(';');
+                token.parse::<i64>().ok().filter(|&n| n > 0)
+            })
+            .last();
+        if found.is_some() {
+            return found;
+        }
     }
+    None
+}
+
+/// The block of workspaces the active one sits in: ids in `(base, base + span]`. `base` is one
+/// below the block's first id, so the rank-`n` occupied workspace lands on `base + n`.
+struct Block {
+    base: i64,
+    span: i64,
+}
+
+/// Which workspaces this compaction is allowed to touch. When the bar's own workspace-map
+/// isolation is on, defer to it entirely so the compactor and the bar always agree: a monitor owns
+/// the ids above its `workspaceMap` entry, paged into groups of `shown`. Otherwise fall back to
+/// the Hyprland-lua `workspace_in_group()` convention (fixed-size blocks of `group_size`) that
+/// actually places windows when `SUPER+digit` is pressed.
+fn active_block(cfg: &WorkspaceMapConfig, monitor_idx: i64, active_ws: i64, group_size: i64) -> Block {
+    if !cfg.use_map {
+        let span = group_size.max(1);
+        return Block { base: (active_ws - 1) / span * span, span };
+    }
+    let offset = cfg.map.get(monitor_idx as usize).copied().unwrap_or(monitor_idx * cfg.shown);
+    let span = cfg.shown.max(1);
+    // Mirrors `workspaceGroup` in Workspaces.qml: the page the bar is showing right now.
+    let page = (active_ws - offset - 1).max(0) / span;
+    Block { base: offset + page * span, span }
 }
 
 struct Snap {
@@ -180,15 +220,17 @@ fn main() {
     // --auto marks a background invocation (Quickshell's Auto-Compact service): the user did
     // not ask for this compaction, so the view must never be moved on their behalf.
     let mut auto = false;
-    // Only used when the bar's own workspace-map isolation (below) is off.
-    let mut group_size: i64 = 10;
+    // Only used when the bar's own workspace-map isolation (below) is off. An explicit argument
+    // beats the value read out of the Hyprland config.
+    let mut group_size: Option<i64> = None;
     for arg in env::args().skip(1) {
         if arg == "--auto" {
             auto = true;
         } else if let Some(n) = arg.parse::<i64>().ok().filter(|&n| n > 0) {
-            group_size = n;
+            group_size = Some(n);
         }
     }
+    let group_size = group_size.or_else(read_group_size).unwrap_or(10);
     // The shell's lock screen parks monitors on temporary workspaces with ids >= 10000 (see
     // Lock.qml). Compacting relative to one would push every window up next to it, and the lock
     // screen then sweeps them all onto a single workspace on unlock.
@@ -196,9 +238,15 @@ fn main() {
         return;
     }
     let ws_map_cfg = read_workspace_map_config();
-    let base = block_base(&ws_map_cfg, monitor_index(&monitors, mon_name), active_ws, group_size);
+    let block = active_block(&ws_map_cfg, monitor_index(&monitors, mon_name), active_ws, group_size);
 
-    let snaps = snapshot(mon_id);
+    // Only the active block takes part. A monitor can hold several blocks at once (workspaces
+    // 11-20 are the second page of a single monitor), and compacting across them would renumber
+    // windows from every other page into this one instead of closing the gaps inside it.
+    let snaps: Vec<Snap> = snapshot(mon_id)
+        .into_iter()
+        .filter(|s| s.ws_id > block.base && s.ws_id <= block.base + block.span)
+        .collect();
     if snaps.is_empty() {
         return;
     }
@@ -210,7 +258,7 @@ fn main() {
     let mapping: HashMap<i64, i64> = occupied
         .iter()
         .enumerate()
-        .map(|(rank, &ws)| (ws, base + rank as i64 + 1))
+        .map(|(rank, &ws)| (ws, block.base + rank as i64 + 1))
         .collect();
 
     if mapping.iter().all(|(src, dst)| src == dst) {
@@ -294,4 +342,34 @@ fn main() {
         focus.push(format!("hl.dsp.focus({{ window = \"address:{}\" }})", addr));
     }
     dispatch_batch(&focus);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(use_map: bool, map: Vec<i64>, shown: i64) -> WorkspaceMapConfig {
+        WorkspaceMapConfig { use_map, map, shown }
+    }
+
+    #[test]
+    fn fallback_blocks() {
+        let c = cfg(false, vec![], 10);
+        for (ws, base) in [(1, 0), (9, 0), (10, 0), (11, 10), (20, 10), (21, 20)] {
+            let b = active_block(&c, 0, ws, 10);
+            assert_eq!((b.base, b.span), (base, 10), "ws {}", ws);
+        }
+        // non-default page size
+        let b = active_block(&c, 0, 8, 5);
+        assert_eq!((b.base, b.span), (5, 5));
+    }
+
+    #[test]
+    fn map_blocks() {
+        let c = cfg(true, vec![0, 10], 10);
+        assert_eq!(active_block(&c, 0, 3, 10).base, 0);
+        assert_eq!(active_block(&c, 0, 11, 10).base, 10); // page 2 of monitor 0
+        assert_eq!(active_block(&c, 1, 11, 10).base, 10);
+        assert_eq!(active_block(&c, 1, 25, 10).base, 20);
+    }
 }

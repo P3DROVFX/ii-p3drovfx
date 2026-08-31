@@ -35,10 +35,10 @@ Item {
     }
 
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     // ── Horizontal Layout ─────────────────────────────────────────────────────
@@ -379,16 +379,10 @@ Item {
         implicitHeight: vertical ? (countTextV.implicitHeight + iconCircleV.height + 16) : (Appearance.sizes.baseBarHeight - 8)
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         // Horizontal capsule

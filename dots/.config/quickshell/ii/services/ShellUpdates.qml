@@ -39,6 +39,8 @@ Singleton {
 
     readonly property int autoCheckPeriodMs: {
         switch (Config.options?.update?.autoCheckInterval ?? "daily") {
+        case "10min":
+            return 10 * 60 * 1000;
         case "hourly":
             return 60 * 60 * 1000;
         case "daily":
@@ -74,12 +76,15 @@ Singleton {
         stateReadProc.running = true;
     }
 
-    function maybeAutoCheck() {
+    // minAgeMs overrides how stale the last check must be to earn a new one;
+    // it defaults to the configured period.
+    function maybeAutoCheck(minAgeMs) {
         if (root.autoCheckPeriodMs <= 0) return;
+        const age = minAgeMs ?? root.autoCheckPeriodMs;
         const now = Date.now();
         // A timestamp in the future (clock jump, hand-edited config) would
         // otherwise wedge the check until real time caught up with it.
-        if (root.lastCheck <= now && now - root.lastCheck < root.autoCheckPeriodMs) return;
+        if (root.lastCheck <= now && now - root.lastCheck < age) return;
         root.refresh();
     }
 
@@ -189,17 +194,32 @@ Singleton {
         onFileChanged: root.reloadState()
     }
 
-    // Read the local state right away so the bar is correct either way, but
-    // give the shell time to finish starting before spending a network probe.
-    Timer {
-        running: Config.ready
-        interval: 20000
-        onTriggered: root.maybeAutoCheck()
+    // A QML live-reload re-creates this singleton, so a plain timer would spend a
+    // probe on every file save. PersistentProperties survives reloads within the
+    // same process, which makes this exactly one check per shell process.
+    PersistentProperties {
+        id: session
+        reloadableId: "shellUpdatesSession"
+        property bool startupCheckDone: false
     }
 
+    // Every shell start checks, whatever the interval — a machine that was off
+    // all week should not have to wait another week to hear about it. The few
+    // seconds of delay keep the request out of the startup rush.
+    Timer {
+        running: Config.ready && !session.startupCheckDone
+        interval: 8000
+        onTriggered: {
+            session.startupCheckDone = true;
+            root.maybeAutoCheck(0); // 0: any age qualifies, but "disabled" still wins
+        }
+    }
+
+    // Ticks far more often than any period, since it only compares timestamps;
+    // the shortest setting is 10 minutes and would drift badly on a coarse tick.
     Timer {
         running: Config.ready && root.autoCheckPeriodMs > 0
-        interval: 5 * 60 * 1000
+        interval: 60 * 1000
         repeat: true
         onTriggered: root.maybeAutoCheck()
     }

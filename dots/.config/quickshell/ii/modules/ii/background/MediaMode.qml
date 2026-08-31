@@ -17,6 +17,8 @@ import qs.modules.common.functions
 Item { // Fullscreen MediaMode instance
     id: root
 
+    signal closeRequested(bool allMonitors)
+
     opacity: 0
     Behavior on opacity {
         NumberAnimation {
@@ -125,14 +127,12 @@ Item { // Fullscreen MediaMode instance
 
     Component.onCompleted: {
         Persistent.states.background.mediaMode.userScrollOffset = 0;
-        GlobalStates.mediaModeCount++;
         root.opacity = 1.0;
         if (videoActive) {
             Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
         }
     }
     Component.onDestruction: {
-        GlobalStates.mediaModeCount--;
         Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
     }
 
@@ -606,24 +606,7 @@ Item { // Fullscreen MediaMode instance
                                 }
 
                                 onClicked: {
-                                    if (!Config.options.background.mediaMode.togglePerMonitor) {
-                                        // Global mode: trigger closes ALL loaders on all monitors.
-                                        // Set counts to 0 since all instances are closing.
-                                        LyricsService.mediaModeOpenCount = 0;
-                                        GlobalStates.mediaModeCloseAllTrigger++;
-                                        // NOTE: the trigger above destroys this component synchronously
-                                        // (via Connections → loader.active=false → Loader destroys MediaMode).
-                                        // Nothing after this point executes.
-                                    } else if (typeof mediaModeLoader !== "undefined") {
-                                        // Per-monitor mode: close only this instance.
-                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
-                                        mediaModeLoader.active = false;
-                                        // Balance count: onDestruction handles -1, this handles the other -1.
-                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                                    } else {
-                                        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
-                                        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                                    }
+                                    root.closeRequested(!Config.options.background.mediaMode.togglePerMonitor);
                                 }
 
                                 StyledToolTip {
@@ -717,7 +700,9 @@ Item { // Fullscreen MediaMode instance
                                                 anchors.centerIn: parent
                                                 text: {
                                                     if (lyricsItem.hasSyncedLines)
-                                                        return Translation.tr("Synced LRC");
+                                                        return LyricsService.usingCustomLyrics
+                                                            ? Translation.tr("Custom LRC")
+                                                            : Translation.tr("Synced LRC");
                                                     if (LyricsService.plainLyrics && LyricsService.plainLyrics.trim().length > 0) {
                                                         const p = Config.options.lyricsService.lyricsProvider;
                                                         if (p === "ytmusic")
@@ -728,7 +713,11 @@ Item { // Fullscreen MediaMode instance
                                                             return Translation.tr("LRCLib Plain");
                                                         return Translation.tr("Plain Text");
                                                     }
-                                                    return Translation.tr("Searching...");
+                                                    if (lyricsItem.instrumental)
+                                                        return Translation.tr("Instrumental");
+                                                    if (lyricsItem.searching)
+                                                        return Translation.tr("Searching...");
+                                                    return Translation.tr("No lyrics");
                                                 }
                                                 font.pixelSize: Appearance.font.pixelSize.smallest
                                                 font.weight: Font.Medium
@@ -870,6 +859,17 @@ Item { // Fullscreen MediaMode instance
                                         readonly property bool geniusEnabled: Config.options.lyricsService.enableGenius
                                         readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
                                         readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
+                                        readonly property bool anyProviderEnabled: geniusEnabled || lrclibEnabled || ytmusicEnabled
+
+                                        // Four mutually exclusive "no scrolling lyrics" answers, only the
+                                        // last of which is actually a failure.
+                                        readonly property bool hasPlainLyrics: !hasSyncedLines && LyricsService.hasPlainLyrics
+                                        readonly property bool instrumental: !hasSyncedLines && !hasPlainLyrics
+                                            && LyricsService.instrumental
+                                        readonly property bool searching: !hasSyncedLines && !hasPlainLyrics
+                                            && !instrumental && anyProviderEnabled && LyricsService.searching
+                                        readonly property bool notFound: !hasSyncedLines && !hasPlainLyrics
+                                            && !instrumental && !searching
 
                                         Component.onCompleted: {
                                             if (!geniusEnabled && !lrclibEnabled && !ytmusicEnabled)
@@ -878,7 +878,7 @@ Item { // Fullscreen MediaMode instance
                                         }
 
                                         FadeLoader {
-                                            shown: !lyricsItem.hasSyncedLines
+                                            shown: lyricsItem.hasPlainLyrics
                                             anchors.fill: parent
                                             sourceComponent: LyricsFlickable {
                                                 anchors.fill: parent
@@ -888,13 +888,40 @@ Item { // Fullscreen MediaMode instance
                                         }
 
                                         FadeLoader {
+                                            shown: lyricsItem.searching
+                                            anchors.fill: parent
+                                            sourceComponent: MediaModeLyricsSkeleton {
+                                                anchors.fill: parent
+                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.5 * root.lyricsScaleMultiplier
+                                                activeColor: root.dynamicAccentColor
+                                            }
+                                        }
+
+                                        FadeLoader {
+                                            shown: lyricsItem.instrumental || lyricsItem.notFound
+                                            anchors.fill: parent
+                                            sourceComponent: MediaModeLyricsFallback {
+                                                anchors.fill: parent
+                                                mode: lyricsItem.instrumental ? "instrumental" : "notFound"
+                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.5 * root.lyricsScaleMultiplier
+                                                activeColor: root.dynamicAccentColor
+                                                onAccentContainerColor: root.dynamicOnAccentContainer
+                                                artFilePath: root.displayedArtFilePath
+                                                player: root.player
+                                                visualizerPoints: root.visualizerPoints
+                                                playing: root.player?.isPlaying ?? false
+                                            }
+                                        }
+
+                                        FadeLoader {
                                             shown: lyricsItem.hasSyncedLines
                                             anchors.fill: parent
-                                            sourceComponent: LyricsSyllable {
+                                            sourceComponent: MediaModeLyrics {
                                                 anchors.fill: parent
-                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.8 * root.lyricsScaleMultiplier
+                                                // Resting size; the centred line renders at
+                                                // focusedFontSizeMultiplier times this.
+                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.5 * root.lyricsScaleMultiplier
                                                 activeColor: root.dynamicAccentColor
-                                                highlightColor: root.dynamicOnAccentContainer
                                             }
                                         }
                                     }

@@ -34,9 +34,12 @@ Singleton {
         return root.getMonitorForScreen(root.targetScreen);
     }
 
+    // Dimming below the backlight minimum by lowering gamma is opt-out
+    readonly property bool gammaDimming: Config.options?.light?.gamma?.dimBelowMinimum ?? true
+
     function increaseBrightness(): void {
         // if gamma is not yet 100, first increase gamma
-        if (Hyprsunset.gamma !== 100) {
+        if (root.gammaDimming && Hyprsunset.gamma !== 100) {
             Hyprsunset.setGamma(Hyprsunset.gamma + 5);
             return;
         }
@@ -48,13 +51,13 @@ Singleton {
 
     function decreaseBrightness(): void {
         const monitor = root.getTargetMonitor();
-        if (monitor && monitor.brightness > 0)
+        if (monitor && monitor.brightness > 0) {
             monitor.setBrightness(monitor.brightness - 0.05);
-        else
-        // if brightness is 0, then decrease gamma
-        {
-            Hyprsunset.setGamma(Hyprsunset.gamma - 5);
+            return;
         }
+        // if brightness is 0, then decrease gamma
+        if (root.gammaDimming)
+            Hyprsunset.setGamma(Hyprsunset.gamma - 5);
     }
 
     reloadableId: "brightness"

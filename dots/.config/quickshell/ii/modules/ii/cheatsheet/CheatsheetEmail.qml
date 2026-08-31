@@ -110,7 +110,18 @@ Item {
 
                 loading: EmailService.loading
                 activeTab: root.activeTab
-                model: root.activeTab === "all_inboxes" ? EmailService.allInboxesMessages : root.activeTab === "spam" ? EmailService.spamMessages : root.activeTab === "sent" ? EmailService.sentMessages : root.activeTab === "trash" ? EmailService.trashMessages : root.activeTab === "starred" ? EmailService.starredMessages : root.activeTab === "important" ? EmailService.importantMessages : root.activeTab === "purchases" ? EmailService.purchasesMessages : root.activeTab === "search" ? EmailService.searchMessagesModel : root.activeTab.indexOf("label_") === 0 ? EmailService.searchMessagesModel : EmailService.inboxMessages
+                model: {
+                    let tab = (root.activeTab || "").toLowerCase();
+                    if (tab === "all_inboxes") return EmailService.allInboxesMessages;
+                    if (tab === "spam") return EmailService.spamMessages;
+                    if (tab === "sent") return EmailService.sentMessages;
+                    if (tab === "trash") return EmailService.trashMessages;
+                    if (tab === "starred") return EmailService.starredMessages;
+                    if (tab === "important") return EmailService.importantMessages;
+                    if (tab === "purchases") return EmailService.purchasesMessages;
+                    if (tab === "search" || tab.indexOf("label_") === 0) return EmailService.searchMessagesModel;
+                    return EmailService.inboxMessages;
+                }
                 onEmailSelected: function (messageId, threadId, isStack, startX, startY, startWidth, startHeight, iconX, iconY, iconW, iconH, subjectX, subjectY, subjectW, subjectH) {
                     // Buscar dados do email no model ativo
                     var currentModel = emailInbox.model;

@@ -10,6 +10,9 @@ Item {
     id: root
 
     property int entranceTrigger: -1
+    // Defensive fallback for alternate hosts smaller than the dashboard's
+    // fixed 350px bottom group.
+    readonly property bool compact: root.height > 0 && root.height < 300
 
     property var tabButtonList: [
         {
@@ -25,8 +28,12 @@ Item {
         Persistent.states.sidebar.bottomGroup.todoTab))
     property bool showAddDialog: false
     property int dialogMargins: 20
-    property int fabSize: 48
-    property int fabMargins: 14
+    // 56 is FloatingActionButton's own baseSize; fabSize was never handed to it,
+    // so the button was 56 while the list reserved room for 48. Compact scales
+    // both buttons by the same 260/350 the bottom group itself lost.
+    property int fabSize: root.compact ? 42 : 56
+    property int fabMargins: root.compact ? 10 : 14
+    property int syncButtonSize: root.compact ? 27 : 36
 
     function selectTab(index) {
         if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
@@ -61,7 +68,7 @@ Item {
 
         Toolbar {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: 52
+            Layout.preferredHeight: root.compact ? 44 : 52
             enableShadow: false
             colBackground: Appearance.colors.colSurfaceContainer
             ToolbarTabBar {
@@ -77,7 +84,7 @@ Item {
             id: swipeView
             property bool initialized: false
 
-            Layout.topMargin: 10
+            Layout.topMargin: root.compact ? 4 : 10
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 10
@@ -144,14 +151,6 @@ Item {
         }
     }
 
-    Connections {
-        target: root
-        function onSelectedTabChanged() {
-            if (swipeView.currentIndex !== root.selectedTab)
-                swipeView.currentIndex = root.selectedTab;
-        }
-    }
-
     // Provider sync / status indicator
     RippleButton {
         id: syncButton
@@ -159,8 +158,8 @@ Item {
         anchors.bottom: parent.bottom
         anchors.leftMargin: root.fabMargins
         anchors.bottomMargin: root.fabMargins
-        implicitWidth: 36
-        implicitHeight: 36
+        implicitWidth: root.syncButtonSize
+        implicitHeight: root.syncButtonSize
         buttonRadius: Appearance.rounding.full
 
         onClicked: {
@@ -183,7 +182,7 @@ Item {
                 }
                 return Todo.syncing ? "sync" : "cloud_done";
             }
-            font.pixelSize: 18
+            font.pixelSize: root.compact ? 13 : 18
             color: {
                 if (!Todo.remoteEnabled) {
                     return Appearance.colors.colOnSurfaceVariant;
@@ -234,6 +233,8 @@ Item {
         anchors.bottom: parent.bottom
         anchors.rightMargin: root.fabMargins
         anchors.bottomMargin: root.fabMargins
+        baseSize: root.fabSize
+        iconSize: root.compact ? 20 : 26
         onClicked: root.showAddDialog = true
         iconText: "add"
     }
@@ -330,6 +331,23 @@ Item {
                         width: 1
                         color: todoInput.activeFocus ? Appearance.colors.colPrimary : "transparent"
                         radius: 1
+                    }
+
+                    StyledTextContextMenu {
+                        id: todoContextMenu
+                        targetField: todoInput
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.RightButton
+                        onPressed: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                todoInput.forceActiveFocus();
+                                todoContextMenu.popup(mouse.x, mouse.y);
+                            }
+                        }
                     }
                 }
 

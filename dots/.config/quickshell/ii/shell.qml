@@ -36,6 +36,7 @@ ShellRoot {
         }
         MaterialThemeLoader.reapplyTheme();
         Hyprsunset.load();
+        DisplayColorFilter.load();
         ConflictKiller.load();
         Cliphist.refresh();
         Wallpapers.load();
@@ -46,6 +47,12 @@ ShellRoot {
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
+        CalendarNotifier.enabled; // Touch singleton: evaluates calendar VALARMs every minute
+        CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
+        GmailCalendarImport.enabled; // Touch singleton: imports opted-in Gmail ICS attachments idempotently
+        OutlookCalendarImport.enabled; // Touch singleton: mirrors opted-in Outlook events into a read-only calendar
+        OutlookIcsImport.enabled; // Touch singleton: imports opted-in Outlook ICS attachments idempotently
+        BirthdaysService.enabled; // Touch singleton: projects contact birthdays into timetable items
         GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
@@ -54,6 +61,8 @@ ShellRoot {
         WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
         IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
         DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
+        BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
+        EarbudsControlService.connected; // Touch singleton: provider-priority earbuds router
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
@@ -80,7 +89,7 @@ ShellRoot {
         if (!(Config.options && Config.options.appearance && Config.options.appearance.openrgb && Config.options.appearance.openrgb.applyOnStartup))
             return;
         openRgbStartupApplied = true;
-        openRgbApplyProc.command = ["python", openRgbApplyScript];
+        openRgbApplyProc.command = ["python3", openRgbApplyScript];
         openRgbApplyProc.running = false;
         openRgbApplyProc.running = true;
     }
@@ -212,4 +221,3 @@ ShellRoot {
         onPressed: root.cyclePanelFamily()
     }
 }
-

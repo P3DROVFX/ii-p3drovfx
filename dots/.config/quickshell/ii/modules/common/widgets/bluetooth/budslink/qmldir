@@ -1,0 +1,8 @@
+module qs.modules.common.widgets.bluetooth.budslink
+
+BudsLinkSlider 1.0 BudsLinkSlider.qml
+BudsLinkCheckOptions 1.0 BudsLinkCheckOptions.qml
+BudsLinkRadioOptions 1.0 BudsLinkRadioOptions.qml
+BudsLinkOptionBox 1.0 BudsLinkOptionBox.qml
+BudsLinkToggleGroup 1.0 BudsLinkToggleGroup.qml
+BudsLinkDynamicControls 1.0 BudsLinkDynamicControls.qml

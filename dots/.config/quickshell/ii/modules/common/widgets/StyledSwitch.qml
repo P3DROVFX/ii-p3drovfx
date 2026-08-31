@@ -30,13 +30,8 @@ Switch {
         height: parent.height
         radius: Appearance?.rounding.full ?? 9999
         color: root.checked ? root.activeColor : root.inactiveColor
-        border.width: 2 * root.sizeScale
-        border.color: root.checked ? root.activeColor : Appearance.m3colors.m3outline
 
         Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-        Behavior on border.color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
     }

@@ -17,6 +17,11 @@ using the very layout Hyprland has loaded, which is the only way the overlay can
 show what the user actually typed.  Without the bindings installed the script
 still runs, falling back to the US names carried by evdev itself.
 
+Modifiers also report their *release*, so the overlay can keep a held `Ctrl`
+visibly pressed down until it is let go.  Ordinary keys only report presses,
+plus their auto-repeat when `--repeats` is given, which is how a held Backspace
+becomes a climbing `×N` on screen rather than a single chip.
+
 Nothing is ever written to disk: the stream exists only for as long as the
 overlay is visible, and dies with the process.
 """
@@ -297,12 +302,18 @@ def main() -> int:
                 if event.type != ecodes.EV_KEY:
                     continue
                 # value: 0 released, 1 pressed, 2 auto-repeat
-                pressed = event.value != 0
-                if event.code not in MOUSE_BUTTONS:
-                    translator.update(event.code, pressed)
+                # xkb refcounts key-downs, so an auto-repeat (value 2) fed to it
+                # as another press would outlive the single release and leave
+                # the modifier stuck: only the real edges reach it.
+                if event.value != 2 and event.code not in MOUSE_BUTTONS:
+                    translator.update(event.code, event.value == 1)
                 if event.value == 0:
+                    if event.code in MODIFIER_KEYS:
+                        emit({"type": "release", "label": MODIFIER_KEYS[event.code]})
                     continue
-                if event.value == 2 and not args.repeats:
+                if event.value == 2 and (not args.repeats or event.code in MODIFIER_KEYS):
+                    # A held modifier is already shown as held; its auto-repeat
+                    # carries no information the release will not.
                     continue
 
                 stamp = time.monotonic()
@@ -334,10 +345,14 @@ def main() -> int:
                 # `A` — so only the other three promote a key to a combo.
                 mods = translator.active_modifiers()
                 is_shortcut = any(mod in ("Ctrl", "Alt", "Super") for mod in mods)
+                label = translator.label(event.code, is_shortcut)
+                # Typed text is a single character that landed in a document;
+                # an arrow is one character too, but it is a key.
+                is_text = event.code not in NAMED_KEYS and len(label) == 1
                 emit({
                     "type": "key",
-                    "kind": "shortcut" if is_shortcut else "text",
-                    "label": translator.label(event.code, is_shortcut),
+                    "kind": "shortcut" if is_shortcut else ("text" if is_text else "key"),
+                    "label": label,
                     "modifiers": [mod for mod in mods if mod != "Shift" or is_shortcut],
                     "repeat": event.value == 2,
                 })

@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -30,6 +31,12 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.namespace: "quickshell:backgroundWidgets"
+    // Wayland gives no client the global key stream: without keyboard focus,
+    // Qt's modifier state stays empty and mouse.modifiers is always 0, which
+    // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
+    // drag is active we take OnDemand focus so real modifier events flow in;
+    // dropping it on release hands focus back to the previously focused app.
+    WlrLayershell.keyboardFocus: widgetCanvas.draggingActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     color: "transparent"
 
     anchors {
@@ -270,17 +277,6 @@ PanelWindow {
 
     readonly property bool overviewOpen: GlobalStates.overviewOpen
 
-    OverviewZoomController {
-        id: gnomeOverviewController
-        wallpaperZoomedOut: bgWidgetsWindow.isGnomeLikeOverview
-            && GlobalStates.overviewBackgroundActive
-            && bgWidgetsWindow.isMonitorFocused
-        minSafeScale: bgWidgetsWindow.minSafeScale
-        zoomOutCoverScale: 1.05
-        screenWidth: bgWidgetsWindow.screen.width
-        screenHeight: bgWidgetsWindow.screen.height
-    }
-
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
@@ -291,15 +287,63 @@ PanelWindow {
     readonly property real defaultRatio: zoomInStyle ? zoomLevels.in.default : zoomLevels.out.default
     readonly property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
-    // overviewOpen also flips true for the plain search bar (searchOnlyMode, or when the
-    // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
-    // the grid of window thumbnails is actually what's covering the background.
-    readonly property bool overviewGridVisible: overviewOpen && Config.options.overview.enable && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
-    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
+    // The window blur stays on through the launcher and the overview - the overview composes its
+    // own dim on top of the blurred wallpaper rather than replacing it.
+    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+    readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
+    readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
+
+    Item {
+        id: materialShapeMaskContainer
+        x: 0
+        y: 0
+        width: bgWidgetsWindow.screen.width
+        height: bgWidgetsWindow.screen.height
+        visible: bgWidgetsWindow.isMaterialShapeOverview
+
+        MaterialShape {
+            id: materialShapeMask
+            anchors.centerIn: parent
+            width: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
+            height: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
+            shapeString: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.currentMaterialShape : "Flower"
+            color: "#ffffff"
+
+            transform: [
+                Scale {
+                    origin.x: materialShapeMask.width / 2
+                    origin.y: materialShapeMask.height / 2
+                    xScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
+                    yScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
+                },
+                Rotation {
+                    origin.x: materialShapeMask.width / 2
+                    origin.y: materialShapeMask.height / 2
+                    angle: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskRotation : 0.0
+                }
+            ]
+        }
+    }
+
+    ShaderEffectSource {
+        id: materialShapeMaskSource
+        sourceItem: materialShapeMaskContainer
+        hideSource: true
+        live: bgWidgetsWindow.isMaterialShapeOverview
+        visible: false
+    }
 
     Item {
         id: transformContainer
         anchors.fill: parent
+
+        layer.enabled: bgWidgetsWindow.isMaterialShapeOverview
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: materialShapeMaskSource
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
 
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
             ? 0.0
@@ -318,28 +362,14 @@ PanelWindow {
 
         transform: [
             Scale {
-                origin.x: bgWidgetsWindow.isGnomeLikeOverview
-                    ? gnomeOverviewController.scaleOriginX
-                    : (bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginX : bgWidgetsWindow.width / 2)
-                origin.y: bgWidgetsWindow.isGnomeLikeOverview
-                    ? gnomeOverviewController.scaleOriginY
-                    : (bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginY : bgWidgetsWindow.height / 2)
-                xScale: bgWidgetsWindow.isGnomeLikeOverview
-                    ? gnomeOverviewController.scaleValue
-                    : (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0)
-                yScale: bgWidgetsWindow.isGnomeLikeOverview
-                    ? gnomeOverviewController.scaleValue
-                    : (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0)
+                origin.x: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginX : bgWidgetsWindow.width / 2
+                origin.y: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.scaleOriginY : bgWidgetsWindow.height / 2
+                xScale: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0
+                yScale: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale ? bgWidgetsWindow.overviewController.scale : 1.0
             },
             Translate {
-                x: !bgWidgetsWindow.isGnomeLikeOverview
-                    && bgWidgetsWindow.overviewController
-                    && bgWidgetsWindow.overviewController.followWidgetsTranslation
-                    ? bgWidgetsWindow.overviewController.translateX : 0
-                y: !bgWidgetsWindow.isGnomeLikeOverview
-                    && bgWidgetsWindow.overviewController
-                    && bgWidgetsWindow.overviewController.followWidgetsTranslation
-                    ? bgWidgetsWindow.overviewController.translateY : 0
+                x: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateX : 0
+                y: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateY : 0
             }
         ]
 

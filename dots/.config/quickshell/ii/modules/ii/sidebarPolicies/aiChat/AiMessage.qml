@@ -1374,6 +1374,7 @@ Item {
                     case "ragResults":
                         return ragResultsCard;
                     case "taskMutationPreview":
+                    case "calendarMutationPreview":
                         return taskMutationPreviewCard;
                     }
                     // A kind this build does not know: a session written by a

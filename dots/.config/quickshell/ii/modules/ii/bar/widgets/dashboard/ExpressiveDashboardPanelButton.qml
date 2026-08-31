@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.bar.widgets.dashboard.icons
 
 Item {
     id: root
@@ -20,17 +21,11 @@ Item {
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutQuint
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     MouseArea {
@@ -70,17 +65,11 @@ Item {
         height: implicitHeight
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutQuint
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         onPillColorChanged: requestPaint()
@@ -149,6 +138,36 @@ Item {
         }
     }
 
+    // Appearance.font is a QtObject assigned during Appearance's own setup, so
+    // the first evaluation of a binding that reaches into it can land before it
+    // exists. Reading it through a guarded property keeps that from reaching a
+    // typed `real` as undefined.
+    readonly property real iconPixelSize: {
+        const size = Appearance.font.pixelSize.larger;
+        return (typeof size === "number" && size > 0) ? size : 18;
+    }
+
+    // All three dashboard buttons share one state → cue mapping.
+    DashboardIconDriver {
+        id: iconDriver
+        wifiIcon: wifiIcon
+        bluetoothIcon: bluetoothIcon
+        volumeIcon: volumeIcon
+        micIcon: micIcon
+        notificationIcon: notificationIcon
+        caffeineIcon: caffeineIcon
+        vpnIcon: vpnIcon
+        tailscaleIcon: tailscaleIcon
+        pomodoroIcon: pomodoroIcon
+        stopwatchIcon: stopwatchIcon
+        easyEffectsIcon: easyEffectsIcon
+        dnsIcon: dnsIcon
+        gameModeIcon: gameModeIcon
+        songRecIcon: songRecIcon
+        alarmIcon: alarmIcon
+        countdownIcon: countdownIcon
+    }
+
     Grid {
         id: flow
         anchors.centerIn: parent
@@ -162,16 +181,30 @@ Item {
         }
 
         Revealer {
+            reveal: Config.options.bar.dashboardButton.showCaffeine && (Idle.inhibit ?? false)
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: caffeineWrapper
+                vertical: root.vertical
+                CoffeeIcon {
+                    id: caffeineIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: caffeineWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    active: Idle.inhibit ?? false
+                }
+            }
+        }
+        Revealer {
             reveal: Config.options.bar.dashboardButton.showVolume
             vertical: root.vertical
             ExpressiveIconWrapper {
                 id: volumeWrapper
                 vertical: root.vertical
-                MaterialSymbol {
-                    width: parent.width
-                    height: parent.height
-                    text: Audio.sink?.audio?.muted ? "volume_off" : "volume_up"
-                    iconSize: Appearance.font.pixelSize.larger
+                VolumeIcon {
+                    id: volumeIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
                     color: volumeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                 }
             }
@@ -182,12 +215,12 @@ Item {
             ExpressiveIconWrapper {
                 id: micWrapper
                 vertical: root.vertical
-                MaterialSymbol {
-                    width: parent.width
-                    height: parent.height
-                    text: "mic_off"
-                    iconSize: Appearance.font.pixelSize.larger
+                MicIcon {
+                    id: micIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
                     color: micWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    muted: iconDriver.sourceMuted
                 }
             }
         }
@@ -198,28 +231,28 @@ Item {
                 id: netWrapper
                 vertical: root.vertical
 
-                readonly property string fullWifiIcon: {
-                    var sym = Network.materialSymbol;
-                    if (sym.startsWith("android_wifi") || sym.startsWith("wifi") || sym.startsWith("signal_wifi")) return "wifi";
-                    return "";
-                }
-
                 MaterialSymbol {
-                    visible: netWrapper.fullWifiIcon !== ""
-                    width: parent.width
-                    height: parent.height
-                    text: netWrapper.fullWifiIcon
-                    iconSize: Appearance.font.pixelSize.larger
-                    opacity: 0.3
+                    anchors.centerIn: parent
+                    visible: Network.ethernet
+                    text: "lan"
+                    iconSize: root.iconPixelSize
                     color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                 }
 
-                MaterialSymbol {
-                    width: parent.width
-                    height: parent.height
-                    text: Network.materialSymbol
-                    iconSize: Appearance.font.pixelSize.larger
+                WifiIcon {
+                    id: wifiIcon
+                    anchors.centerIn: parent
+                    visible: !Network.ethernet
+                    iconSize: root.iconPixelSize
                     color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    bars: {
+                        if (!Network.ready || Network.wifiStatus !== "connected")
+                            return 0;
+                        const strength = Number(Network.networkStrength);
+                        if (isNaN(strength))
+                            return 1;
+                        return strength > 67 ? 3 : strength > 33 ? 2 : 1;
+                    }
                 }
             }
         }
@@ -229,12 +262,13 @@ Item {
             ExpressiveIconWrapper {
                 id: btWrapper
                 vertical: root.vertical
-                MaterialSymbol {
-                    width: parent.width
-                    height: parent.height
-                    text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
-                    iconSize: Appearance.font.pixelSize.larger
+                BluetoothIcon {
+                    id: bluetoothIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
                     color: btWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    connected: BluetoothStatus.connected
+                    poweredOff: !BluetoothStatus.enabled
                 }
             }
         }
@@ -244,11 +278,12 @@ Item {
             ExpressiveIconWrapper {
                 id: vpnWrapper
                 vertical: root.vertical
-                MaterialSymbol {
+                VpnKeyIcon {
+                    id: vpnIcon
                     anchors.centerIn: parent
-                    text: "key"
-                    iconSize: Appearance.font.pixelSize.larger
+                    iconSize: root.iconPixelSize
                     color: vpnWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    connected: VpnService.active
                 }
             }
         }
@@ -258,12 +293,136 @@ Item {
             ExpressiveIconWrapper {
                 id: tailscaleWrapper
                 vertical: root.vertical
-                MaterialSymbol {
+                TailscaleIcon {
+                    id: tailscaleIcon
                     anchors.centerIn: parent
-                    text: "hub"
-                    iconSize: Appearance.font.pixelSize.normal
-                    fill: 1
+                    iconSize: root.iconPixelSize
                     color: tailscaleWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    connected: TailscaleService.active
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showPomodoro && TimerService.pomodoroRunning
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: pomodoroWrapper
+                vertical: root.vertical
+                TimerIcon {
+                    id: pomodoroIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: pomodoroWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    running: TimerService.pomodoroRunning
+                    onBreak: TimerService.pomodoroBreak
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showStopwatch && TimerService.stopwatchRunning
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: stopwatchWrapper
+                vertical: root.vertical
+                StopwatchIcon {
+                    id: stopwatchIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: stopwatchWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    running: TimerService.stopwatchRunning
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: countdownWrapper
+                vertical: root.vertical
+                HourglassIcon {
+                    id: countdownIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: countdownWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    running: iconDriver.countdownRunning
+                    paused: iconDriver.countdownPaused
+                    finished: iconDriver.countdownFinished
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showEasyEffects && EasyEffects.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: easyEffectsWrapper
+                vertical: root.vertical
+                EqualizerIcon {
+                    id: easyEffectsIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: easyEffectsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    active: EasyEffects.active
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showDns && DnsOverTls.active
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: dnsWrapper
+                vertical: root.vertical
+                EncryptedDnsIcon {
+                    id: dnsIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: dnsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    active: DnsOverTls.active
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showGameMode && iconDriver.gameModeOn
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: gameModeWrapper
+                vertical: root.vertical
+                GamepadIcon {
+                    id: gameModeIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: gameModeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    active: iconDriver.gameModeOn
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showMusicRecognition && SongRec.running
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: songRecWrapper
+                vertical: root.vertical
+                MusicRecognitionIcon {
+                    id: songRecIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: songRecWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    listening: SongRec.running
+                }
+            }
+        }
+        Revealer {
+            reveal: Config.options.bar.dashboardButton.showAlarms && iconDriver.alarmVisible
+            vertical: root.vertical
+            ExpressiveIconWrapper {
+                id: alarmWrapper
+                vertical: root.vertical
+                AlarmIcon {
+                    id: alarmIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: alarmWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    scheduled: iconDriver.alarmCount > 0
+                    ringing: iconDriver.alarmRinging
                 }
             }
         }
@@ -273,37 +432,14 @@ Item {
             ExpressiveIconWrapper {
                 id: notifWrapper
                 vertical: root.vertical
-                Loader {
-                    id: notifLoader
-                    source: "ExpressiveNotificationUnreadCount.qml"
-                    anchors.fill: parent
-                    Binding {
-                        target: notifLoader.item
-                        property: "width"
-                        value: notifLoader.width
-                        when: notifLoader.item !== null
-                    }
-                    Binding {
-                        target: notifLoader.item
-                        property: "height"
-                        value: notifLoader.height
-                        when: notifLoader.item !== null
-                    }
-                    Binding {
-                        target: notifLoader.item
-                        property: "color"
-                        value: notifWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
-                        when: notifLoader.item !== null
-                    }
-                    Binding {
-                        target: notifLoader.item
-                        property: "iconSize"
-                        value: Appearance.font.pixelSize.larger
-                        when: notifLoader.item !== null
-                    }
+                BellWithBadge {
+                    id: notificationIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: notifWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    silent: Notifications.silent
                 }
             }
         }
     }
 }
-

@@ -11,6 +11,7 @@ RippleButton {
     property string iconText: "add"
     property bool expanded: false
     property real baseSize: 56
+    property real iconSize: 26
     property real elementSpacing: 5
     implicitWidth: expanded ? (Math.max(contentRowLayout.implicitWidth + 10 * 2, baseSize)) : baseSize
     implicitHeight: baseSize
@@ -37,7 +38,7 @@ RippleButton {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            iconSize: 26
+            iconSize: root.iconSize
             color: root.colOnBackground
             text: root.iconText
         }

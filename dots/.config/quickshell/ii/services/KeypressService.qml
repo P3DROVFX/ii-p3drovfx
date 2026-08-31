@@ -28,6 +28,11 @@ import qs.modules.common.functions
  * turning it on for one clip never leaks into the next one. It deliberately
  * lives here rather than in the state file, which `record.sh` rewrites once a
  * second and would clobber.
+ *
+ * What ends up on screen is a row of chips, each one a chord of keycaps: the
+ * keys it is made of (`keysJson`), what it is (`kind`), how many times in a row
+ * it was pressed (`count`), whether it is still being held (`held`) and a
+ * counter the overlay watches to replay its press animation (`pulse`).
  */
 Singleton {
     id: root
@@ -48,6 +53,12 @@ Singleton {
     readonly property bool showMouseButtons: root.opts?.showMouseButtons ?? false
     readonly property bool onlyShortcuts: root.opts?.onlyShortcuts ?? false
     readonly property bool mergeTyping: root.opts?.mergeTyping ?? true
+
+    // Pressing the same thing again this soon reads as one repeated action
+    // (`Ctrl+Z` ×3) rather than three separate ones.
+    readonly property int repeatWindowMs: 650
+    // Longer than this and a typed word stops being readable at a glance.
+    readonly property int maxWordLength: 24
 
     /** True once the reader has confirmed it can see a keyboard. */
     property bool ready: false
@@ -104,6 +115,9 @@ Singleton {
     function restartIfRunning() {
         if (!monitorProcess.running) return;
         monitorProcess.running = false;
+        // The release of anything held right now will go to the new reader,
+        // which never saw the press; nothing may stay pressed down forever.
+        root.releaseAll();
         restartTimer.restart();
     }
 
@@ -113,6 +127,7 @@ Singleton {
         onTriggered: if (root.visible) monitorProcess.running = true
     }
 
+    // ── Chip model ────────────────────────────────────────────────────────
     function clear() {
         chipModel.clear();
     }
@@ -123,25 +138,67 @@ Singleton {
             chipModel.remove(chipModel.count - 1);
     }
 
-    function pushChip(label, kind) {
+    function releaseAll() {
+        const now = Date.now();
+        for (let i = 0; i < chipModel.count; i++) {
+            if (!chipModel.get(i).held) continue;
+            chipModel.setProperty(i, "held", false);
+            chipModel.setProperty(i, "expiresAt", now + root.hideDelayMs);
+        }
+    }
+
+    /** The held modifier chip nearest the tail lets go; its clock starts now. */
+    function releaseModifier(label) {
+        const keysJson = JSON.stringify([label]);
+        for (let i = chipModel.count - 1; i >= 0; i--) {
+            const chip = chipModel.get(i);
+            if (chip.kind !== "modifier" || !chip.held || chip.keysJson !== keysJson) continue;
+            chipModel.setProperty(i, "held", false);
+            chipModel.setProperty(i, "expiresAt", Date.now() + root.hideDelayMs);
+            return;
+        }
+    }
+
+    function pushChip(keys, kind, held, repeat) {
         const now = Date.now();
         const expiry = now + root.hideDelayMs;
+        const keysJson = JSON.stringify(keys);
+        const lastIndex = chipModel.count - 1;
+        const last = lastIndex >= 0 ? chipModel.get(lastIndex) : null;
 
-        if (root.mergeTyping && kind === "text" && chipModel.count > 0) {
-            const lastIndex = chipModel.count - 1;
-            const last = chipModel.get(lastIndex);
-            // Only glue onto a chip that is still alive and is itself typed
-            // text; a shortcut in between means a new word started.
-            if (last.kind === "text" && last.expiresAt > now && last.label.length < 24) {
-                chipModel.setProperty(lastIndex, "label", last.label + label);
+        // Typing glues onto the word being typed, as long as that chip is
+        // still alive: a shortcut in between means a new word started.
+        if (root.mergeTyping && kind === "text" && last && last.kind === "text" && last.expiresAt > now) {
+            const word = JSON.parse(last.keysJson)[0];
+            if (word.length < root.maxWordLength) {
+                chipModel.setProperty(lastIndex, "keysJson", JSON.stringify([word + keys[0]]));
                 chipModel.setProperty(lastIndex, "expiresAt", expiry);
+                chipModel.setProperty(lastIndex, "pressedAt", now);
+                chipModel.setProperty(lastIndex, "pulse", last.pulse + 1);
                 return;
             }
         }
 
+        // The same chord again, quickly or by auto-repeat, counts up on the
+        // chip already there instead of lining up copies of it.
+        const again = last && last.kind === kind && last.keysJson === keysJson
+            && (repeat || now - last.pressedAt <= root.repeatWindowMs);
+        if (again) {
+            chipModel.setProperty(lastIndex, "count", last.count + 1);
+            chipModel.setProperty(lastIndex, "held", held);
+            chipModel.setProperty(lastIndex, "expiresAt", expiry);
+            chipModel.setProperty(lastIndex, "pressedAt", now);
+            chipModel.setProperty(lastIndex, "pulse", last.pulse + 1);
+            return;
+        }
+
         chipModel.append({
-            "label": label,
+            "keysJson": keysJson,
             "kind": kind,
+            "count": 1,
+            "held": held,
+            "pulse": 0,
+            "pressedAt": now,
             "expiresAt": expiry
         });
         while (chipModel.count > root.maxKeys) chipModel.remove(0);
@@ -164,14 +221,25 @@ Singleton {
             if (String(event.message ?? "").includes("xkbcommon")) root.layoutAware = false;
             return;
         }
+        if (event.type === "release") {
+            root.releaseModifier(event.label);
+            return;
+        }
         if (event.type !== "key") return;
 
         if (event.kind === "mouse" && !root.showMouseButtons) return;
         if (root.onlyShortcuts && event.kind !== "shortcut") return;
 
-        const mods = Array.from(event.modifiers ?? []);
-        const label = mods.length > 0 ? `${mods.join("+")}+${event.label}` : event.label;
+        const repeat = event.repeat === true;
 
+        // A modifier on its own is shown held down until it is let go; it is
+        // what the combo it turns out to be part of will replace.
+        if (event.kind === "modifier") {
+            root.pushChip([event.label], "modifier", true, false);
+            return;
+        }
+
+        const mods = Array.from(event.modifiers ?? []);
         // A held modifier is shown while it is the only thing happening, then
         // gives way to the combo it turned out to be part of — "Ctrl" "Shift"
         // "Ctrl+Shift+P" says the same thing three times.
@@ -179,8 +247,16 @@ Singleton {
 
         // A combo is never merged into a word, and neither is a named key: a
         // chip reading "Space" beats an invisible gap in the middle of one.
-        const isPlainCharacter = mods.length === 0 && event.kind === "text" && event.label.length === 1;
-        root.pushChip(label, isPlainCharacter ? "text" : (event.kind === "modifier" ? "modifier" : "key"));
+        if (mods.length === 0 && event.kind === "text") {
+            // A held letter fills the word chip in well under a second; the
+            // editor shows the flood already, the overlay need not.
+            if (repeat && root.mergeTyping) return;
+            root.pushChip([event.label], "text", false, repeat);
+            return;
+        }
+
+        const kind = event.kind === "mouse" ? "mouse" : "key";
+        root.pushChip(mods.concat([event.label]), kind, false, repeat);
     }
 
     function handleChunk(chunk) {
@@ -210,7 +286,7 @@ Singleton {
     Process {
         id: monitorProcess
         command: {
-            const args = ["python3", root.monitorScript, "--layout", root.layoutCode || "us"];
+            const args = ["python3", root.monitorScript, "--layout", root.layoutCode || "us", "--repeats"];
             if (root.layoutVariant.length > 0) args.push("--variant", root.layoutVariant);
             if (root.showMouseButtons) args.push("--mouse");
             return args;
@@ -231,20 +307,25 @@ Singleton {
 
         onExited: (exitCode, exitStatus) => {
             root.ready = false;
+            root.releaseAll();
             if (root.visible && exitCode !== 0 && root.lastError.length === 0)
                 root.lastError = Translation.tr("Keystroke reader stopped unexpectedly");
         }
     }
 
     // Chips expire themselves; sweeping on one timer rather than one timer per
-    // chip keeps the model cheap no matter how fast the user types.
+    // chip keeps the model cheap no matter how fast the user types. A held
+    // chip never expires, and does not shield the chips behind it either.
     Timer {
         running: root.visible && chipModel.count > 0
         interval: 200
         repeat: true
         onTriggered: {
             const now = Date.now();
-            while (chipModel.count > 0 && chipModel.get(0).expiresAt <= now) chipModel.remove(0);
+            for (let i = chipModel.count - 1; i >= 0; i--) {
+                const chip = chipModel.get(i);
+                if (!chip.held && chip.expiresAt <= now) chipModel.remove(i);
+            }
         }
     }
 

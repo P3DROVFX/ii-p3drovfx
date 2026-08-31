@@ -53,16 +53,35 @@ Singleton {
     // One file per local day, written by the app_stats sampler.
     property string appStats: FileUtils.trimFileProtocol(`${Directories.state}/user/app_stats`)
     property string commandsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/commands.json`)
+    // User-authored shortcut collections. Hyprland remains a generated,
+    // read-only page and is deliberately not duplicated into this file.
+    property string keybindsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/keybinds.json`)
+    property string keybindTemplatesPath: FileUtils.trimFileProtocol(Quickshell.shellPath("defaults/keybinds/templates.json"))
+    property string keybindImporterPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/keybinds/import_keybinds.py`)
+    property string keybindAiCategorizerPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/keybinds/ai_categorize.py`)
     property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.json`)
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
     property string lyricsPath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/lyrics.json`)
+    // Hand-written .lrc keyed by track. Lives in state, not cache: it can't be
+    // re-fetched from anywhere if it gets cleared.
+    property string customLyricsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/custom-lyrics.json`)
     property string generatedMaterialThemePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/colors.json`)
     property string wallpaperPreviewColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper_preview_colors.json`)
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     property string desktopColorsBackupPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/desktop_colors.json`)
+    // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
+    property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
+    // ESPN scoreboards and per-game summaries shared by the sports widgets
+    // and the timetable. Kept outside calendar storage by design.
+    property string sportsCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/sports.json`)
+    // iCalUID -> Google colorId, plus the account palette. The synced .ics files
+    // carry no COLOR, so this is the only place that mapping can live locally.
+    property string googleCalendarColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/google_calendar_colors.json`)
     property string generateLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/generate-lockscreen-colors.sh`)
     property string gammaControlScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/brightness/ii-gamma-control`)
+    property string displayColorFilterWriterPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/display/write_color_filter.py`)
+    property string displayColorFilterGeneratedPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/display-color-filter`)
     property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)
     property string generatedWallpaperCategoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper/category.txt`)
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
@@ -122,9 +141,12 @@ Singleton {
         Quickshell.execDetached(["bash", "-c", `rm -rf '${cliphistDecode}'; mkdir -p '${cliphistDecode}'`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiChats}`]);
         Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(aiUsage)}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(keybindsPath)}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiRagIndexDir}`]);
         Quickshell.execDetached(["mkdir", "-p", `${aiDrafts}`]);
         Quickshell.execDetached(["mkdir", "-p", `${appStats}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(holidaysCachePath)}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${FileUtils.parentDirectory(customLyricsPath)}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userActions}`]);
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);

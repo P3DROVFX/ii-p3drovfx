@@ -1766,6 +1766,17 @@ Singleton {
     }
 
     Connections {
+        target: root.timeIntegration
+        function onCalendarMutationFinished(key, operationId, outcome) {
+            const message = root.messageForToolKey(String(key));
+            if (message)
+                root.finishCalendarMutation(message, outcome);
+            if (root.broker.isPending(String(key)))
+                root.broker.settle(String(key), outcome);
+        }
+    }
+
+    Connections {
         target: SongRec
         function onRecognizedTrackChanged() {
             const track = SongRec.recognizedTrack ?? ({});
@@ -1850,6 +1861,9 @@ Singleton {
             "timer_status": call => root.toolTimerStatus(call),
             "calendar_list_events": call => root.toolCalendarListEvents(call),
             "calendar_next_event": call => root.toolCalendarNextEvent(call),
+            "calendar_create_event": call => root.toolCalendarCreateEvent(call),
+            "calendar_move_event": call => root.toolCalendarMoveEvent(call),
+            "calendar_delete_event": call => root.toolCalendarDeleteEvent(call),
             "weather_get": call => root.toolWeatherGet(call),
             "tasks_list": call => root.toolTasksList(call),
             "tasks_search": call => root.toolTasksSearch(call),
@@ -1968,7 +1982,7 @@ Singleton {
     // Approval bodies are actionable only while pending. Keeping their final
     // state in the model lets the transcript turn the card into one outcome
     // row instead of removing it from under the reader.
-    readonly property var approvalCardKinds: ["settingsDiff", "reminderPreview", "memoryFact", "fileAttachPreview", "notesPreview", "systemControlPreview", "windowMovePreview", "wallpaperPreview", "mediaControlPreview", "songIdentifyPreview", "taskPreview", "taskMutationPreview"]
+    readonly property var approvalCardKinds: ["settingsDiff", "reminderPreview", "memoryFact", "fileAttachPreview", "notesPreview", "systemControlPreview", "windowMovePreview", "wallpaperPreview", "mediaControlPreview", "songIdentifyPreview", "taskPreview", "taskMutationPreview", "calendarMutationPreview"]
     readonly property var resolvedApprovalStates: ["done", "denied", "failed", "needsInspection"]
 
     function visibleToolCards(message): var {
@@ -4409,6 +4423,9 @@ Singleton {
             "reminder_create": pending => root.createReminderNow(pending.message, pending.args, pending.sessionId),
             "alarm_create": pending => root.createAlarmNow(pending.message, pending.args, pending.sessionId),
             "timer_start": pending => root.startTimerNow(pending.message, pending.args, pending.sessionId),
+            "calendar_create_event": pending => root.startCalendarMutation(pending),
+            "calendar_move_event": pending => root.startCalendarMutation(pending),
+            "calendar_delete_event": pending => root.startCalendarMutation(pending),
             "tasks_create": pending => root.startTaskCreate(pending),
             "tasks_update": pending => root.startTaskMutation(pending, "update"),
             "tasks_complete": pending => root.startTaskMutation(pending, "complete"),
@@ -5218,6 +5235,85 @@ Singleton {
                 : Translation.tr("No upcoming calendar event"),
             data: { event: result.event }
         };
+    }
+
+    function calendarMutationTool(call: var, operation: string): var {
+        const preview = root.timeIntegration.calendarMutationPreview(operation, call.args);
+        if (!preview.ok)
+            return {
+                status: "error",
+                summary: String(preview.error ?? Translation.tr("That calendar change is not valid")),
+                data: preview,
+                retryable: true
+            };
+        const toolId = "calendar_" + operation + "_event";
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: toolId,
+            kind: "calendarMutationPreview",
+            state: "pending",
+            summary: operation === "delete" ? Translation.tr("Calendar deletion needs approval") : Translation.tr("Calendar change needs approval"),
+            data: { operation: operation, preview: preview }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function toolCalendarCreateEvent(call: var): var {
+        return root.calendarMutationTool(call, "create");
+    }
+
+    function toolCalendarMoveEvent(call: var): var {
+        return root.calendarMutationTool(call, "move");
+    }
+
+    function toolCalendarDeleteEvent(call: var): var {
+        return root.calendarMutationTool(call, "delete");
+    }
+
+    function approveCalendarMutation(message: AiMessageData): void {
+        if (!message?.functionPending || root.pendingToolExecution?.message === message)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        const operation = String(preview?.operation ?? "");
+        if (!preview || ["create", "move", "delete"].indexOf(operation) < 0) {
+            root.rejectCalendarMutation(message);
+            return;
+        }
+        root.beginToolExecution(message, "calendar_" + operation + "_event", { args: preview });
+    }
+
+    function rejectCalendarMutation(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Calendar change discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Calendar change discarded"),
+            data: Translation.tr("The user chose not to change the calendar."),
+            retryable: false
+        });
+    }
+
+    function finishCalendarMutation(message: AiMessageData, outcome): void {
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        root.updateToolCard(message, key, {
+            state: outcome.status === "success" ? "done" : String(outcome.status ?? "error"),
+            summary: String(outcome.summary ?? "")
+        });
+        root.broker.settle(key, outcome);
+    }
+
+    function startCalendarMutation(pending): void {
+        const outcome = root.timeIntegration.executeCalendarMutation(pending.args, root.toolKeyFor(pending.message), pending.operationId);
+        if (outcome.status !== "pending")
+            root.finishCalendarMutation(pending.message, outcome);
     }
 
     function toolWeatherGet(call: var): var {

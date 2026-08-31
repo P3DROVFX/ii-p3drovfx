@@ -267,7 +267,8 @@ class LauncherTests(unittest.TestCase):
 
     def test_settings_do_not_flood_the_launcher(self):
         launcher = (ROOT / "services" / "LauncherSearch.qml").read_text(encoding="utf-8")
-        self.assertIn("Ai.settingsIntegration.search(query, 3)", launcher)
+        self.assertIn("Config.options.search.modules.settingsToggles.maxInlineResults", launcher)
+        self.assertIn("settingsMatches.slice(0, maxInlineSettings)", launcher)
 
 
 if __name__ == "__main__":

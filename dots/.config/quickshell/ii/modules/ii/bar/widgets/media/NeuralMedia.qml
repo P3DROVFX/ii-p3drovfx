@@ -16,7 +16,14 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    Layout.fillHeight: true
+    // No `Layout.fillHeight` on purpose. This root *is* the album-art card —
+    // the rounded mask and every gradient layer anchor to it — so letting the
+    // router stretch it to the bar height would stretch the card too. Three
+    // things used to fight over `height` here: `fillHeight` (which made the
+    // router bind height to the loader, i.e. 40), an `implicitHeight` of
+    // `baseBarHeight - 8` (32) that the layout reserved, and a `height:
+    // implicitHeight` line the router's binding overwrote. The card drew at 40
+    // inside a 32px slot and sat off-centre against its neighbours.
     property bool vertical: false
     property bool isMaterial: true
 
@@ -104,11 +111,13 @@ Item {
                 ? customSize
                 : (calculatedPillWidth + visualizerWidth + 24))
         : 0
+    // The card's own thickness, vertically centred in the bar row by the
+    // router's `Layout.alignment`. `height` follows `implicitHeight` on its
+    // own — restating it only invited something else to overwrite it.
     implicitHeight: hasTrack ? Appearance.sizes.baseBarHeight - 8 : 0
-    height: implicitHeight
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     onHasTrackChanged: {
@@ -117,11 +126,34 @@ Item {
         }
     }
 
+    function updatePopupRect() {
+        if (root.visible && root.width > 0 && root.height > 0) {
+            var globalPos = root.mapToItem(null, 0, 0);
+            GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+        }
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(updatePopupRect)
+    onWidthChanged: if (visible) Qt.callLater(updatePopupRect)
+    onHeightChanged: if (visible) Qt.callLater(updatePopupRect)
+    onXChanged: if (visible) Qt.callLater(updatePopupRect)
+    onYChanged: if (visible) Qt.callLater(updatePopupRect)
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen && root.visible) {
+                root.updatePopupRect();
+            }
+        }
+    }
+
     Component.onCompleted: {
         LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined") {
             rootItem.toggleVisible(hasTrack);
         }
+        Qt.callLater(updatePopupRect);
     }
 
     onArtFilePathChanged: {

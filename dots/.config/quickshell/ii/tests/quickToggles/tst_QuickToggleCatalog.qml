@@ -7,7 +7,7 @@ TestCase {
 
     function test_catalog_contains_current_types() {
         var types = Catalog.allTypes();
-        compare(types.length, 33);
+        compare(types.length, Object.keys(Catalog.TOGGLE_TYPES).length);
         verify(Catalog.hasType("network"));
         verify(Catalog.hasType("volumeSlider"));
         verify(Catalog.hasType("mediaWidget"));
@@ -20,6 +20,14 @@ TestCase {
         compare(Catalog.defaultSize("mediaWidget"), [2, 2]);
         compare(Catalog.kind("mediaWidget"), "media");
         compare(Catalog.kind("unknown"), "unknown");
+    }
+
+    function test_slider_vertical_and_horizontal_sizes() {
+        compare(Catalog.normalizeSize("volumeSlider", 1, 2, 4), [1, 2]);
+        compare(Catalog.normalizeSize("volumeSlider", 1, 3, 4), [1, 3]);
+        compare(Catalog.normalizeSize("volumeSlider", 4, 1, 4), [4, 1]);
+        verify(Catalog.isSizeAllowed("volumeSlider", 1, 2, 4));
+        verify(Catalog.isSizeAllowed("volumeSlider", 4, 1, 4));
     }
 
     function test_media_allowed_sizes_and_column_clamp() {

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtMultimedia
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -185,7 +186,7 @@ Item {
             ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
             : (Config.options.background.scaleLargeWallpapers
                 ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                : wallpaperImageRoot.decodeSizeFor(screen.width, screen.height))
+                : Qt.size(-1, -1))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
     }
 
@@ -239,9 +240,7 @@ Item {
         opacity: wallpaperImageRoot.overviewController.progress
     }
 
-    property real wallpaperClipRadius: isGnomeLikeOverview
-        ? (legacyGnomeZoomedOut ? Appearance.rounding.windowRounding : 0)
-        : overviewController.cornerRadius
+    property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0
     Behavior on wallpaperClipRadius {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
     }
@@ -280,8 +279,7 @@ Item {
             y: 0
             width: screen.width
             height: screen.height
-            visible: false
-            layer.enabled: wallpaperImageRoot.overviewController.isMaterialShape && wallpaperImageRoot.overviewAnimationVisible
+            visible: wallpaperImageRoot.overviewAnimationVisible
 
             MaterialShape {
                 id: materialShapeMask
@@ -305,6 +303,14 @@ Item {
                     }
                 ]
             }
+        }
+
+        ShaderEffectSource {
+            id: materialShapeMaskSource
+            sourceItem: materialShapeMaskContainer
+            hideSource: true
+            live: wallpaperImageRoot.overviewAnimationVisible
+            visible: false
         }
 
         StyledRectangularShadow {
@@ -341,7 +347,7 @@ Item {
             layer.enabled: (radius > 0) || (wallpaperImageRoot.overviewController.isMaterialShape && wallpaperImageRoot.overviewAnimationVisible)
             layer.effect: MultiEffect {
                 maskEnabled: true
-                maskSource: wallpaperImageRoot.overviewController.isMaterialShape ? materialShapeMaskContainer : centralClipMask
+                maskSource: wallpaperImageRoot.overviewController.isMaterialShape ? materialShapeMaskSource : centralClipMask
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
 
@@ -428,21 +434,68 @@ Item {
 
                         visible: opacity > 0
                         opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
+                        // When scaleLargeWallpapers is false (default, like upstream end-4), loads at full native resolution with no downscaling limit.
+                        // When enabled, caps sourceSize to screen resolution * preferred scale to save VRAM.
                         sourceSize: Config.options.background.scaleLargeWallpapers
                             ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                            : wallpaperImageRoot.decodeSizeFor(wallpaperPlanes.wallpaperW, wallpaperPlanes.wallpaperH)
+                            : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
-                        // GPU: mipmap:false — mip-chain generation on GPU is wasteful for a full-screen image.
-                        // The image is displayed at near-native size; mipmaps provide no quality benefit here.
-                        mipmap: false
-                        antialiasing: false
+                        mipmap: true
+                        antialiasing: true
+                        smooth: true
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    }
+
+    // ── Video lockscreen wallpaper ───────────────────────────────────────
+                    // A video picked for the lockscreen used to be handed to
+                    // mpvpaper, which owns the *desktop* background layer — so it
+                    // replaced the live wallpaper instead of the lock screen.
+                    // switchwall.sh now leaves that layer alone for variant
+                    // targets (see is_desktop_target) and the shell plays the
+                    // file itself, here, only while locked.
+                    Loader {
+                        id: lockscreenVideo
+                        anchors.fill: parent
+                        z: 1
+
+                        readonly property bool isVideoLockscreen: lockscreenWallpaper.isActive
+                            && Wallpapers.isVideoFile(String(wallpaperImageRoot.lockscreenWallpaperPath).toLowerCase())
+                        // Built on lock and torn down on unlock: a decoder has no
+                        // business staying alive behind an unlocked desktop.
+                        active: isVideoLockscreen && GlobalStates.screenLocked
+                        visible: active && opacity > 0
+                        opacity: active ? 1 : 0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Math.round(750 * Appearance.animMultiplier)
+                                easing.type: Easing.InOutCubic
+                            }
+                        }
+
+                        sourceComponent: Item {
+                            MediaPlayer {
+                                id: lockVideoPlayer
+                                source: CF.FileUtils.trimFileProtocol(wallpaperImageRoot.lockscreenWallpaperPath)
+                                autoPlay: true
+                                loops: MediaPlayer.Infinite
+                                // Muted deliberately: this is wallpaper, and the
+                                // lock screen is the last place that should make
+                                // noise on its own.
+                                audioOutput: null
+                                videoOutput: lockVideoOutput
+                                Component.onCompleted: play()
+                            }
+                            VideoOutput {
+                                id: lockVideoOutput
+                                anchors.fill: parent
+                                fillMode: VideoOutput.PreserveAspectCrop
+                            }
+                        }
                     }
 
                     TransitionImage {
@@ -462,7 +515,12 @@ Item {
 
                         // GPU: same dynamic sourceSize cap as main wallpaper
                         sourceSize: Config.options.background.scaleLargeWallpapers ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080) : Qt.size(-1, -1)
-                        imageSource: (isActive && !wallpaperSafetyTriggered) ? wallpaperImageRoot.lockscreenWallpaperPath : ""
+                        // An Image cannot decode a video container; handing it one
+                        // just produced an error and a blank layer. The poster frame
+                        // ffmpeg extracts stands in until the decoder has a picture.
+                        imageSource: (isActive && !wallpaperSafetyTriggered && !lockscreenVideo.isVideoLockscreen)
+                            ? wallpaperImageRoot.lockscreenWallpaperPath
+                            : ""
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
@@ -471,6 +529,17 @@ Item {
                         antialiasing: false
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
                     }
+                }
+
+                // Sits directly above the wallpaper and below every dim layer, so the overview's
+                // dim and the widget-drag dim still compose on top of the blurred wallpaper
+                // instead of being hidden underneath it.
+                WindowBlur {
+                    id: windowBlur
+                    anchors.fill: parent
+                    sourceItem: wallpaperVisualContainer
+                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
+                    hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
                 }
 
                 Rectangle {
@@ -531,18 +600,6 @@ Item {
                     sourceItem: wallpaperVisualContainer
                     baseScale: wallpaperImageRoot.baseWallpaperScale
                     lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-                }
-
-                WindowBlur {
-                    id: windowBlur
-                    anchors.fill: parent
-                    sourceItem: wallpaperVisualContainer
-                    sourceReady: wallpaperImageRoot.wallpaperSourceReady
-                    hasWindowsInActiveWorkspace: wallpaperImageRoot.hasWindowsInActiveWorkspace
-                    overviewOpen: wallpaperImageRoot.overviewOpen
-                    overviewProgress: wallpaperImageRoot.isGnomeLikeOverview
-                        ? 0.0
-                        : (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.progress : 0.0)
                 }
             }
         }

@@ -204,10 +204,10 @@ Item {
     implicitHeight: vertical ? pill.implicitHeight : root.btnSize
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on blur {
@@ -242,10 +242,10 @@ Item {
             implicitHeight: flow.implicitHeight + (root.vertical ? 4 : 0)
 
             Behavior on implicitWidth {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
             Behavior on implicitHeight {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
 
             // ── Active workspace indicator ───────────────────────────────
@@ -428,10 +428,7 @@ Item {
                                     visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
 
                                     Behavior on width {
-                                        NumberAnimation {
-                                            duration: 200
-                                            easing.type: Easing.OutQuint
-                                        }
+                                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                     }
                                     Behavior on color {
                                         ColorAnimation {

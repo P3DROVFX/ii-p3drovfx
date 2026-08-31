@@ -309,8 +309,11 @@ Scope {
                                 currentIndex: root.view === "battery" ? 1 : 0
 
                                 onCurrentIndexChanged: {
-                                    root.view = viewTabs.currentIndex === 1 ? "battery" : "apps";
-                                    root.rememberView();
+                                    const nextView = viewTabs.currentIndex === 1 ? "battery" : "apps";
+                                    if (root.view !== nextView) {
+                                        root.view = nextView;
+                                        root.rememberView();
+                                    }
                                 }
 
                                 Repeater {

@@ -35,6 +35,9 @@ Item {
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
     implicitWidth: contentItem.implicitWidth
     implicitHeight: 40
+    property bool showShortcutHints: false
+    // See ToolbarTabButton: keeps a three-tab bar inside a narrow panel.
+    property bool collapseInactiveLabels: false
     property int _delegateRevision: 0
 
     property Component delegate: ToolbarTabButton {
@@ -43,6 +46,9 @@ Item {
         current: index == root.currentIndex
         text: modelData.name
         materialSymbol: modelData.icon
+        collapseInactiveLabel: root.collapseInactiveLabels
+        shortcutIndex: index + 1
+        showShortcut: root.showShortcutHints
         onClicked: {
             root.setCurrentIndex(index);
         }

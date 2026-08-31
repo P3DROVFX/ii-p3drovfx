@@ -2,22 +2,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.settings.configs.ai
-import qs.modules.ii.usage
 
-/**
- * The AI settings page.
- *
- * A dashboard, not a manual: the usage view and daily preferences stay on
- * this page, while focused configuration tasks live behind their own entry
- * buttons. Keys are deliberately still absent: they belong in the chat's
- * key panel, next to the model that needs one.
- */
 Item {
     id: aiRoot
     anchors.fill: parent
@@ -31,529 +21,204 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
+        // ── General Preferences ───────────────────────────────────────────
         ContentSection {
             icon: "neurology"
-            title: Translation.tr("AI Assistant")
+            title: Translation.tr("General")
+            tooltip: Translation.tr("Everyday behavior, key shortcuts and transcript layout.")
 
-            HelperLinkBox {
+            ColumnLayout {
                 Layout.fillWidth: true
-                title: Translation.tr("Google AI Studio")
-                text: Translation.tr("Get your Gemini API Key here for free. Keys are entered from the key panel in the chat, and kept in the system keyring.")
-                isFirst: true
+                spacing: Appearance.sizes.elevationMargin / 2
 
-                RippleButtonWithIcon {
-                    mainText: Translation.tr("Open Website")
-                    materialIcon: "open_in_new"
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
-                    colBackground: Appearance.colors.colLayer0
-                    colBackgroundHover: Appearance.colors.colLayer0Hover
-                    colRipple: Appearance.colors.colLayer0Active
-                    downAction: () => {
-                        Qt.openUrlExternally("https://aistudio.google.com/app/apikey");
-                    }
-                }
-            }
+                HelperLinkBox {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Google AI Studio")
+                    text: Translation.tr("Get your Gemini API Key here for free. Keys are entered from the key panel in the chat, and kept in the system keyring.")
+                    isFirst: true
 
-            ConfigSwitch {
-                buttonIcon: "smart_toy"
-                text: Translation.tr("List available models at startup")
-                checked: Config.options.ai.indexAtStartup
-                onCheckedChanged: {
-                    Config.options.ai.indexAtStartup = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "text_fields"
-                text: Translation.tr("Fade answers in as they arrive")
-                checked: Config.options.sidebar.ai.textFadeIn
-                onCheckedChanged: {
-                    Config.options.sidebar.ai.textFadeIn = checked;
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "account_tree"
-            title: Translation.tr("Context")
-
-            ConfigSwitch {
-                buttonIcon: "summarize"
-                text: Translation.tr("Manage long conversations")
-                checked: Config.options.ai.context.manage
-                onCheckedChanged: {
-                    Config.options.ai.context.manage = checked;
-                }
-            }
-
-            ConfigSwitch {
-                enabled: Config.options.ai.context.manage
-                buttonIcon: "auto_awesome"
-                text: Translation.tr("Summarise earlier messages when needed")
-                checked: Config.options.ai.context.summarise
-                onCheckedChanged: {
-                    Config.options.ai.context.summarise = checked;
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.ai.context.manage
-                icon: "data_usage"
-                text: Translation.tr("Tokens reserved for each answer")
-                value: Config.options.ai.context.reserveTokens
-                from: 256
-                to: 32768
-                stepSize: 256
-                onValueChanged: {
-                    Config.options.ai.context.reserveTokens = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "text_snippet"
-                text: Translation.tr("Extract text from attached documents")
-                checked: Config.options.ai.extractDocuments
-                onCheckedChanged: {
-                    Config.options.ai.extractDocuments = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "psychology"
-                text: Translation.tr("Remember facts between conversations")
-                checked: Config.options.ai.memory.enabled
-                onCheckedChanged: {
-                    Config.options.ai.memory.enabled = checked;
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.ai.memory.enabled
-                icon: "memory"
-                text: Translation.tr("Facts remembered between conversations")
-                value: Config.options.ai.memory.limit
-                from: 0
-                to: 200
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.ai.memory.limit = value;
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "notifications"
-            title: Translation.tr("Notifications")
-
-            ConfigSwitch {
-                buttonIcon: "notifications_active"
-                text: Translation.tr("Notify when an answer is ready")
-                checked: Config.options.ai.notify.whenDone
-                onCheckedChanged: {
-                    Config.options.ai.notify.whenDone = checked;
-                }
-            }
-
-            ConfigSwitch {
-                enabled: Config.options.ai.notify.whenDone
-                buttonIcon: "visibility_off"
-                text: Translation.tr("Only while the chat is out of view")
-                checked: Config.options.ai.notify.onlyWhenAway
-                onCheckedChanged: {
-                    Config.options.ai.notify.onlyWhenAway = checked;
-                }
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.ai.notify.whenDone
-                icon: "timer"
-                text: Translation.tr("Minimum answer time before notifying (seconds)")
-                value: Config.options.ai.notify.minimumSeconds
-                from: 0
-                to: 60
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.ai.notify.minimumSeconds = value;
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "forum"
-            title: Translation.tr("Conversation")
-
-            ConfigSwitch {
-                buttonIcon: "auto_awesome"
-                text: Translation.tr("Name new conversations automatically")
-                checked: Config.options.ai.autoTitle
-                onCheckedChanged: Config.options.ai.autoTitle = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "inventory_2"
-                text: Translation.tr("Keep status messages in saved conversations")
-                checked: !Config.options.ai.ephemeralInterfaceMessages
-                onCheckedChanged: Config.options.ai.ephemeralInterfaceMessages = !checked
-            }
-
-            ConfigSpinBox {
-                icon: "delete_sweep"
-                text: Translation.tr("Days to keep deleted conversations")
-                value: Config.options.ai.sessions.retentionDays
-                from: 1
-                to: 3650
-                stepSize: 1
-                onValueChanged: Config.options.ai.sessions.retentionDays = value
-            }
-        }
-
-        ContentSection {
-            icon: "chat"
-            title: Translation.tr("Chat experience")
-
-            ContentSubsection {
-                Layout.fillWidth: true
-                title: Translation.tr("Transcript density")
-                icon: "density_medium"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.ai.density
-                    onSelected: newValue => Config.options.sidebar.ai.density = newValue
-                    options: [
-                        { displayName: Translation.tr("Comfortable"), icon: "view_agenda", value: "comfortable" },
-                        { displayName: Translation.tr("Compact"), icon: "view_headline", value: "compact" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                Layout.fillWidth: true
-                title: Translation.tr("Default thinking")
-                icon: "psychology"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.ai.thinkingDefault
-                    onSelected: newValue => Config.options.sidebar.ai.thinkingDefault = newValue
-                    options: [
-                        { displayName: Translation.tr("Remembered"), icon: "bookmark", value: "" },
-                        { displayName: Translation.tr("Off"), icon: "block", value: "off" },
-                        { displayName: Translation.tr("Low"), icon: "speed", value: "low" },
-                        { displayName: Translation.tr("Medium"), icon: "balance", value: "medium" },
-                        { displayName: Translation.tr("High"), icon: "psychology", value: "high" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                Layout.fillWidth: true
-                title: Translation.tr("Activity details")
-                icon: "pending_actions"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.ai.activityDefault
-                    onSelected: newValue => Config.options.sidebar.ai.activityDefault = newValue
-                    options: [
-                        { displayName: Translation.tr("Automatic"), icon: "auto_mode", value: "auto" },
-                        { displayName: Translation.tr("Expanded"), icon: "unfold_more", value: "expanded" },
-                        { displayName: Translation.tr("Collapsed"), icon: "unfold_less", value: "collapsed" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                Layout.fillWidth: true
-                title: Translation.tr("Send message with")
-                icon: "keyboard_return"
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.sidebar.ai.sendKey
-                    onSelected: newValue => Config.options.sidebar.ai.sendKey = newValue
-                    options: [
-                        { displayName: Translation.tr("Enter"), icon: "keyboard_return", value: "enter" },
-                        { displayName: Translation.tr("Ctrl+Enter"), icon: "keyboard", value: "ctrlEnter" }
-                    ]
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "schedule"
-                text: Translation.tr("Show message timestamps")
-                checked: Config.options.sidebar.ai.showTimestamps
-                onCheckedChanged: Config.options.sidebar.ai.showTimestamps = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "timer"
-                text: Translation.tr("Show answer time")
-                checked: Config.options.sidebar.ai.showResponseTime
-                onCheckedChanged: Config.options.sidebar.ai.showResponseTime = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "smart_toy"
-                text: Translation.tr("Show the answering model")
-                checked: Config.options.sidebar.ai.showAnswerModel
-                onCheckedChanged: Config.options.sidebar.ai.showAnswerModel = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "vertical_align_bottom"
-                text: Translation.tr("Follow new answers automatically")
-                checked: Config.options.sidebar.ai.autoScroll
-                onCheckedChanged: Config.options.sidebar.ai.autoScroll = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "motion_photos_off"
-                text: Translation.tr("Reduce motion in AI chat")
-                checked: Config.options.sidebar.ai.reducedMotion
-                onCheckedChanged: Config.options.sidebar.ai.reducedMotion = checked
-            }
-        }
-
-        ContentSection {
-            icon: "code"
-            title: Translation.tr("Answer formatting")
-
-            ConfigSwitch {
-                buttonIcon: "markdown"
-                text: Translation.tr("Render Markdown")
-                checked: Config.options.sidebar.ai.renderMarkdown
-                onCheckedChanged: Config.options.sidebar.ai.renderMarkdown = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "functions"
-                text: Translation.tr("Render mathematical notation")
-                checked: Config.options.sidebar.ai.renderLatex
-                onCheckedChanged: Config.options.sidebar.ai.renderLatex = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "wrap_text"
-                text: Translation.tr("Wrap code blocks")
-                checked: Config.options.sidebar.ai.codeWrap
-                onCheckedChanged: Config.options.sidebar.ai.codeWrap = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "format_list_numbered"
-                text: Translation.tr("Show code line numbers")
-                checked: Config.options.sidebar.ai.codeLineNumbers
-                onCheckedChanged: Config.options.sidebar.ai.codeLineNumbers = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "unfold_less"
-                text: Translation.tr("Collapse long answers")
-                checked: Config.options.sidebar.ai.collapseLongAnswers
-                onCheckedChanged: Config.options.sidebar.ai.collapseLongAnswers = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "keyboard"
-                text: Translation.tr("Show empty-chat keyboard hints")
-                checked: Config.options.sidebar.ai.emptyStateKeys
-                onCheckedChanged: Config.options.sidebar.ai.emptyStateKeys = checked
-            }
-
-            ConfigSwitch {
-                buttonIcon: "volume_up"
-                text: Translation.tr("Play a sound when an answer is ready")
-                checked: Config.options.sidebar.ai.soundOnAnswer
-                onCheckedChanged: Config.options.sidebar.ai.soundOnAnswer = checked
-            }
-
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("Empty-chat greeting")
-                icon: "waving_hand"
-                placeholderText: Translation.tr("Use a rotating greeting")
-                tooltip: Translation.tr("Leave empty to use the built-in rotating greeting.")
-                inputText: Config.options.sidebar.ai.greeting
-                textField.onEditingFinished: Config.options.sidebar.ai.greeting = textField.text
-            }
-
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("Toolbar items")
-                icon: "toolbar"
-                placeholderText: "keys, advanced, sessions, newChat"
-                tooltip: Translation.tr("Comma-separated: keys, advanced, sessions, newChat, model, thinking, tools, prompt, projects, memory, slash.")
-                inputText: Array.from(Config.options.sidebar.ai.barKeys ?? []).join(", ")
-                textField.onEditingFinished: {
-                    const allowed = ["keys", "advanced", "sessions", "newChat", "model", "thinking", "tools", "prompt", "projects", "memory", "slash"];
-                    const items = textField.text.split(",").map(item => item.trim())
-                        .filter((item, index, all) => allowed.indexOf(item) >= 0 && all.indexOf(item) === index);
-                    Config.options.sidebar.ai.barKeys = items;
-                }
-            }
-        }
-
-        ContentSection {
-            icon: "extension"
-            title: Translation.tr("Configuration")
-
-            SubPageEntryButton {
-                entryIcon: "key"
-                entryTitle: Translation.tr("Models & Keys")
-                entryDescription: Translation.tr("Manage provider credentials and add custom models")
-                entryAccent: Appearance.colors.colPrimary
-                entryOnAccent: Appearance.colors.colOnPrimary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiModelsKeysConfig.qml")
-            }
-
-            SubPageEntryButton {
-                entryIcon: "service_toolbox"
-                entryTitle: Translation.tr("Tools & Permissions")
-                entryDescription: Translation.tr("Choose available tools and decide when they need approval")
-                entryAccent: Appearance.colors.colTertiary
-                entryOnAccent: Appearance.colors.colOnTertiary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiToolsPermissionsConfig.qml")
-            }
-
-            SubPageEntryButton {
-                entryIcon: "attach_file"
-                entryTitle: Translation.tr("Files, Vision & Voice")
-                entryDescription: Translation.tr("Attachments, local file search, OCR and dictation")
-                entryAccent: Appearance.colors.colSecondary
-                entryOnAccent: Appearance.colors.colOnSecondary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiFilesVisionVoiceConfig.qml")
-            }
-
-            SubPageEntryButton {
-                entryIcon: "manage_search"
-                entryTitle: Translation.tr("Local Retrieval (RAG)")
-                entryDescription: Translation.tr("Index chosen folders locally through Ollama")
-                entryAccent: Appearance.colors.colPrimary
-                entryOnAccent: Appearance.colors.colOnPrimary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
-            }
-
-            SubPageEntryButton {
-                entryIcon: "tune"
-                entryTitle: Translation.tr("Request Limits")
-                entryDescription: Translation.tr("Answer size, timeouts, retries and chat-toolbar metrics")
-                entryAccent: Appearance.colors.colTertiary
-                entryOnAccent: Appearance.colors.colOnTertiary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRequestLimitsConfig.qml")
-            }
-
-            SubPageEntryButton {
-                entryIcon: "terminal"
-                entryTitle: Translation.tr("Remote Access & IPC")
-                entryDescription: Translation.tr("Ask this chat from scripts, cron or SSH via Quickshell IPC")
-                entryAccent: Appearance.colors.colSecondary
-                entryOnAccent: Appearance.colors.colOnSecondary
-                onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRemoteAccessConfig.qml")
-            }
-
-        }
-
-        ContentSection {
-            icon: "monitoring"
-            title: Translation.tr("Usage & Cost")
-            customBackgroundColor: Appearance.colors.colLayer0
-
-            AiUsageDashboard {
-                Layout.fillWidth: true
-            }
-        }
-
-        ContentSection {
-            icon: "description"
-            title: Translation.tr("System Prompt")
-
-            TipBox {
-                Layout.fillWidth: true
-                text: Translation.tr("A persona replaces this while it is picked. This is what the assistant falls back to.")
-            }
-
-            // Height-capped so a long prompt cannot stretch the page: past the
-            // cap the text scrolls inside the field instead of growing it.
-            ScrollView {
-                id: promptScroll
-                Layout.fillWidth: true
-                implicitHeight: Math.min(systemPromptArea.implicitHeight, 240)
-                clip: true
-
-                ScrollBar.vertical: ScrollBar {
-                    id: promptScrollBar
-                    policy: ScrollBar.AsNeeded
-                    opacity: size < 1 ? 1 : 0
-                    visible: opacity > 0
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    RippleButtonWithIcon {
+                        mainText: Translation.tr("Open Website")
+                        materialIcon: "open_in_new"
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        colBackground: Appearance.colors.colLayer0
+                        colBackgroundHover: Appearance.colors.colLayer0Hover
+                        colRipple: Appearance.colors.colLayer0Active
+                        downAction: () => {
+                            Qt.openUrlExternally("https://aistudio.google.com/app/apikey");
                         }
                     }
+                }
 
-                    contentItem: Rectangle {
-                        implicitWidth: 6
-                        radius: Appearance.rounding.small
-                        color: Appearance.colors.colLayer2Active
+                ConfigSwitch {
+                    buttonIcon: "smart_toy"
+                    text: Translation.tr("List available models at startup")
+                    checked: Config.options.ai.indexAtStartup
+                    onCheckedChanged: {
+                        Config.options.ai.indexAtStartup = checked;
                     }
                 }
 
-                MaterialTextArea {
-                    id: systemPromptArea
-                    width: promptScroll.width
-                    placeholderText: Translation.tr("System prompt")
-                    text: Config.options.ai.systemPrompt
-                    wrapMode: TextEdit.Wrap
-                    onTextChanged: {
-                        Qt.callLater(() => {
-                            Config.options.ai.systemPrompt = text;
-                        });
+                ConfigSwitch {
+                    buttonIcon: "text_fields"
+                    text: Translation.tr("Fade answers in as they arrive")
+                    checked: Config.options.sidebar.ai.textFadeIn
+                    onCheckedChanged: {
+                        Config.options.sidebar.ai.textFadeIn = checked;
                     }
+                }
+
+                ContentSubsection {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Transcript density")
+                    icon: "density_medium"
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.sidebar.ai.density
+                        onSelected: newValue => Config.options.sidebar.ai.density = newValue
+                        options: [
+                            { displayName: Translation.tr("Comfortable"), icon: "view_agenda", value: "comfortable" },
+                            { displayName: Translation.tr("Compact"), icon: "view_headline", value: "compact" }
+                        ]
+                    }
+                }
+
+                ContentSubsection {
+                    Layout.fillWidth: true
+                    title: Translation.tr("Send message with")
+                    icon: "keyboard_return"
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.sidebar.ai.sendKey
+                        onSelected: newValue => Config.options.sidebar.ai.sendKey = newValue
+                        options: [
+                            { displayName: Translation.tr("Enter"), icon: "keyboard_return", value: "enter" },
+                            { displayName: Translation.tr("Ctrl+Enter"), icon: "keyboard", value: "ctrlEnter" }
+                        ]
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "vertical_align_bottom"
+                    text: Translation.tr("Follow new answers automatically")
+                    checked: Config.options.sidebar.ai.autoScroll
+                    onCheckedChanged: Config.options.sidebar.ai.autoScroll = checked
                 }
             }
         }
 
+        // ── Intelligence & Context ────────────────────────────────────────
         ContentSection {
-            icon: "privacy_tip"
-            title: Translation.tr("Privacy & context")
+            icon: "account_tree"
+            title: Translation.tr("Intelligence & context")
+            tooltip: Translation.tr("Context retention, attachments, local retrieval and document search.")
 
-            TipBox {
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: Translation.tr("Clipboard text, a launcher result, and active-app metadata are sent only when you attach them in the composer. Each attachment shows its source, size, destination, and a remove action before sending.")
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSubpageRow {
+                    buttonIcon: "psychology"
+                    title: Translation.tr("Context & Memory")
+                    description: Translation.tr("Message summaries, token limits and cross-session facts")
+                    summary: Config.options.ai.memory.enabled ? Translation.tr("Memory on (%1 facts)").arg(Config.options.ai.memory.limit) : Translation.tr("Memory off")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiContextMemoryConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "attach_file"
+                    title: Translation.tr("Files, Vision & Voice")
+                    description: Translation.tr("Attachments, local file search, OCR and dictation")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiFilesVisionVoiceConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "manage_search"
+                    title: Translation.tr("Local Retrieval (RAG)")
+                    description: Translation.tr("Index chosen folders locally through Ollama")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/RagConfig.qml")
+                }
             }
+        }
 
-            TipBox {
+        // ── Models & Execution ────────────────────────────────────────────
+        ContentSection {
+            icon: "tune"
+            title: Translation.tr("Models & execution")
+            tooltip: Translation.tr("Provider credentials, custom models, tool permissions and automation.")
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: String(Config.options.ai.systemPrompt ?? "").includes("{WINDOWCLASS}")
-                    ? Translation.tr("Your system prompt currently includes {WINDOWCLASS}; it is replaced with the active application's class on every request.")
-                    : Translation.tr("Your system prompt does not include active-window metadata.")
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSubpageRow {
+                    buttonIcon: "key"
+                    title: Translation.tr("Models & Keys")
+                    description: Translation.tr("Manage provider credentials and add custom models")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiModelsKeysConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "service_toolbox"
+                    title: Translation.tr("Tools & Permissions")
+                    description: Translation.tr("Choose available tools and decide when they need approval")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiToolsPermissionsConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "speed"
+                    title: Translation.tr("Request Limits")
+                    description: Translation.tr("Answer size, timeouts, retries and chat-toolbar metrics")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRequestLimitsConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "terminal"
+                    title: Translation.tr("Remote Access & IPC")
+                    description: Translation.tr("Ask this chat from scripts, cron or SSH via Quickshell IPC")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiRemoteAccessConfig.qml")
+                }
             }
+        }
 
-            RippleButton {
+        // ── Chat & Data ───────────────────────────────────────────────────
+        ContentSection {
+            icon: "forum"
+            title: Translation.tr("Chat & data")
+            tooltip: Translation.tr("Formatting, notifications, system prompts and usage tracking.")
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                visible: String(Config.options.ai.systemPrompt ?? "").includes("{WINDOWCLASS}")
-                implicitHeight: 40
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: Config.options.ai.systemPrompt = String(Config.options.ai.systemPrompt ?? "").replace("{WINDOWCLASS}", "")
+                spacing: Appearance.sizes.elevationMargin / 2
 
-                contentItem: RowLayout {
-                    spacing: 8
+                ConfigSubpageRow {
+                    buttonIcon: "format_paint"
+                    title: Translation.tr("Conversation & Formatting")
+                    description: Translation.tr("Thinking presets, activity panel, markdown, latex, code styling")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiConversationAppearanceConfig.qml")
+                }
 
-                    MaterialSymbol {
-                        text: "visibility_off"
-                        iconSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnSecondaryContainer
-                    }
+                ConfigSubpageRow {
+                    buttonIcon: "notifications_active"
+                    title: Translation.tr("Notifications")
+                    description: Translation.tr("Response readiness alerts and background banners")
+                    summary: Config.options.ai.notify.whenDone ? Translation.tr("Notifications enabled") : Translation.tr("Notifications off")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiNotificationsConfig.qml")
+                }
 
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Remove active-window metadata from the prompt")
-                        color: Appearance.colors.colOnSecondaryContainer
-                    }
+                ConfigSubpageRow {
+                    buttonIcon: "monitoring"
+                    title: Translation.tr("Usage & Cost")
+                    description: Translation.tr("Token metrics, cost breakdown, and request dashboard")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiUsageCostConfig.qml")
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "description"
+                    title: Translation.tr("System Prompt & Privacy")
+                    description: Translation.tr("Base persona prompt and window-class metadata privacy")
+                    onClicked: aiRoot.activeSubPage = Qt.resolvedUrl("ai/AiPromptPrivacyConfig.qml")
                 }
             }
         }
@@ -564,5 +229,4 @@ Item {
         anchors.fill: parent
         z: 10
     }
-
 }

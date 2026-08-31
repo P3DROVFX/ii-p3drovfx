@@ -21,7 +21,7 @@ ModeCondition {
     reason: {
         if (!root.paired)
             return "no phone paired";
-        const name = KdeConnectService.activeDevice?.name ?? "phone";
+        const name = KdeConnectService.activeDeviceDisplayName || "phone";
         const charge = root.charge >= 0 ? ` ${root.charge} %` : "";
         return root.reachable ? `${name}${charge}` : `${name} out of reach`;
     }

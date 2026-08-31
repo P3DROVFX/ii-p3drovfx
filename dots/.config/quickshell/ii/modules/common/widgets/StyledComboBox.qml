@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -13,6 +15,11 @@ ComboBox {
     hoverEnabled: true
 
     property string buttonIcon: ""
+    // Optional role containing a desktop-entry icon name/path. Keeping this
+    // opt-in preserves the Material Symbol treatment used by existing lists,
+    // while allowing app pickers to show the real application artwork.
+    property string iconSourceRole: ""
+    property string iconSourceFallback: "image-missing"
     property real popupWidth: 0
     property bool iconOnly: false
     property real buttonRadius: Appearance.rounding.full
@@ -78,7 +85,12 @@ ComboBox {
 
             Loader {
                 Layout.alignment: root.iconOnly ? Qt.AlignHCenter : Qt.AlignVCenter
-                active: root.buttonIcon.length > 0 || (root.currentIndex >= 0 && typeof root.model[root.currentIndex] === 'object' && root.model[root.currentIndex]?.icon)
+                active: root.buttonIcon.length > 0
+                    || (root.currentIndex >= 0
+                        && typeof root.model[root.currentIndex] === 'object'
+                        && (root.iconSourceRole.length === 0
+                            || String(root.model[root.currentIndex]?.[root.iconSourceRole] ?? "").length === 0)
+                        && root.model[root.currentIndex]?.icon)
                 visible: active
                 sourceComponent: MaterialSymbol {
                     text: {
@@ -89,6 +101,24 @@ ComboBox {
                     }
                     iconSize: Appearance.font.pixelSize.larger
                     color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
+
+            Loader {
+                Layout.alignment: root.iconOnly ? Qt.AlignHCenter : Qt.AlignVCenter
+                Layout.preferredWidth: Appearance.font.pixelSize.larger
+                Layout.preferredHeight: Appearance.font.pixelSize.larger
+                active: root.iconSourceRole.length > 0
+                    && root.currentIndex >= 0
+                    && typeof root.model[root.currentIndex] === "object"
+                    && String(root.model[root.currentIndex]?.[root.iconSourceRole] ?? "").length > 0
+                visible: active
+
+                sourceComponent: IconImage {
+                    source: Quickshell.iconPath(
+                        String(root.model[root.currentIndex]?.[root.iconSourceRole] ?? ""),
+                        root.iconSourceFallback
+                    )
                 }
             }
 
@@ -151,7 +181,10 @@ ComboBox {
             Loader {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredHeight: Appearance.font.pixelSize.larger
-                active: typeof itemDelegate.model === 'object' && itemDelegate.model?.icon?.length > 0
+                active: typeof itemDelegate.model === 'object'
+                    && (root.iconSourceRole.length === 0
+                        || String(itemDelegate.model?.[root.iconSourceRole] ?? "").length === 0)
+                    && itemDelegate.model?.icon?.length > 0
                 visible: active
 
                 sourceComponent: Item {
@@ -165,6 +198,23 @@ ComboBox {
                         iconSize: Appearance.font.pixelSize.larger
                         color: itemDelegate.colText
                     }
+                }
+            }
+
+            Loader {
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredWidth: Appearance.font.pixelSize.larger
+                Layout.preferredHeight: Appearance.font.pixelSize.larger
+                active: root.iconSourceRole.length > 0
+                    && typeof itemDelegate.model === "object"
+                    && String(itemDelegate.model?.[root.iconSourceRole] ?? "").length > 0
+                visible: active
+
+                sourceComponent: IconImage {
+                    source: Quickshell.iconPath(
+                        String(itemDelegate.model?.[root.iconSourceRole] ?? ""),
+                        root.iconSourceFallback
+                    )
                 }
             }
 

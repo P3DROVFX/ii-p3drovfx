@@ -721,7 +721,7 @@ ContentPage {
             Layout.topMargin: 8
             title: Translation.tr("Automatic update check")
             icon: "schedule"
-            tooltip: Translation.tr("How often the shell probes this fork's remote for new commits. The check is a single git ls-remote plus one GitHub API request — it never touches your config. Only the bar indicator and the badge above react to it; nothing updates on its own.")
+            tooltip: Translation.tr("How often the shell probes this fork's remote for new commits, plus once a few seconds after every shell start. The check is a single git ls-remote plus one GitHub API request — it never touches your config. Only the bar indicator and the badge above react to it; nothing updates on its own.")
 
             ConfigSelectionArray {
                 currentValue: Config.options.update.autoCheckInterval
@@ -733,6 +733,11 @@ ContentPage {
                         "displayName": Translation.tr("Disabled"),
                         "icon": "block",
                         "value": "disabled"
+                    },
+                    {
+                        "displayName": Translation.tr("Every 10 min"),
+                        "icon": "bolt",
+                        "value": "10min"
                     },
                     {
                         "displayName": Translation.tr("Hourly"),

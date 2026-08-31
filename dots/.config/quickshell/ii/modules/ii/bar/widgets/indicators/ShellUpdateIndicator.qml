@@ -118,6 +118,7 @@ MouseArea {
 
     StyledToolTip {
         extraVisibleCondition: indicator.containsMouse
+        requireOverlay: false
         text: {
             const where = `${ShellUpdates.activeFork} @ ${ShellUpdates.activeBranch}`;
             const count = indicator.behind > 0 ? Translation.tr("%1 new commit(s)").arg(indicator.behind) : Translation.tr("New commits available");

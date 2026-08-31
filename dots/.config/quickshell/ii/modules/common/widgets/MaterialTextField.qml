@@ -29,7 +29,7 @@ TextField {
 
     font {
         family: Appearance.font.family.main
-        pixelSize: Appearance?.font.pixelSize.small ?? 15
+        pixelSize: Appearance.font.pixelSize.small
         hintingPreference: Font.PreferFullHinting
         variableAxes: Appearance.font.variableAxes.main
     }
@@ -55,10 +55,21 @@ TextField {
         }
     }
 
+    StyledTextContextMenu {
+        id: contextMenu
+        targetField: root
+    }
+
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: Qt.RightButton
         hoverEnabled: true
         cursorShape: Qt.IBeamCursor
+        onPressed: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                root.forceActiveFocus();
+                contextMenu.popup(mouse.x, mouse.y);
+            }
+        }
     }
 }

@@ -14,9 +14,8 @@ Scope {
 
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")
-    readonly property bool sidebarOccludesPopup:
-        (root.notifIsLeft && GlobalStates.effectiveLeftOpen)
-        || (root.notifIsRight && GlobalStates.effectiveRightOpen)
+    readonly property bool popupOnLeftSide: Config.options.bar.vertical ? !Config.options.bar.bottom : root.notifIsLeft
+    readonly property bool popupOnRightSide: Config.options.bar.vertical ? Config.options.bar.bottom : root.notifIsRight
 
     // Native Process avoids qs ipc call round-trip from external shell
     Process {
@@ -78,8 +77,16 @@ Scope {
             visible: Quickshell.screens.length > 0
                 && Config.options.bar.tooltips.enablePopups
                 && Config.options.bar.tooltips.enableColorPickerPopup
-                && !root.sidebarOccludesPopup
             screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
+
+            readonly property real sidebarPush: {
+                const screenName = popupWindow.screen?.name ?? "";
+                if (root.popupOnLeftSide && screenName === GlobalStates.effectiveLeftMonitor)
+                    return GlobalStates.animatedLeftSidebarWidth;
+                if (root.popupOnRightSide && screenName === GlobalStates.effectiveRightMonitor)
+                    return GlobalStates.animatedRightSidebarWidth;
+                return 0;
+            }
 
             WlrLayershell.namespace: "quickshell:colorPickerPopup"
             WlrLayershell.layer: WlrLayer.Overlay
@@ -115,21 +122,21 @@ Scope {
                 }
                 left: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness;
+                        return (Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
                     }
                     if (root.notifIsRight) {
-                        return barGaps + 4 + leftFrameThickness;
+                        return barGaps + 4 + leftFrameThickness + popupWindow.sidebarPush;
                     }
-                    return leftFrameThickness;
+                    return leftFrameThickness + popupWindow.sidebarPush;
                 }
                 right: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness;
+                        return (Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
                     }
                     if (root.notifIsLeft) {
-                        return barGaps + 4 + rightFrameThickness;
+                        return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;
                     }
-                    return rightFrameThickness;
+                    return rightFrameThickness + popupWindow.sidebarPush;
                 }
             }
 

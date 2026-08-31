@@ -25,23 +25,37 @@ Item {
 
     readonly property real dockPadding: 0
     readonly property bool isVertical: dock.isVertical
-    readonly property real dotMargin: (Config.options?.dock.height ?? 60) * 0.2 - 2
+    readonly property real dotMargin: ((Config.options && Config.options.dock) ? Config.options.dock.height : 60) * 0.2 - 2
     readonly property real dotMarginV: dotMargin
     readonly property real sepThickness: Math.max(3, Math.round(Appearance.sizes.dockButtonSize * 0.06))
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
     readonly property real sportsWidgetSlots: 4
-    readonly property real livePreviewWidgetSlots: Math.max(2, Math.min(6, Config.options?.dock?.livePreviewSlots ?? 2))
+    readonly property real livePreviewWidgetSlots: {
+        const slots = (Config.options && Config.options.dock) ? Config.options.dock.livePreviewSlots : 2
+        return Math.max(2, Math.min(6, slots !== undefined ? slots : 2))
+    }
     readonly property string dockPos: dock.dockEffectivePosition
-    readonly property bool islandsStyle: Config.options?.dock?.islandsStyle ?? false
-    readonly property real islandSpacing: Math.max(0, Config.options?.dock?.islandSpacing ?? 8)
+    readonly property string effectiveDockStyle: {
+        const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+            return st
+        return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
+    }
+    readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
+    readonly property bool isHug: effectiveDockStyle === "hug"
+    readonly property bool isAttachedToEdge: isDynamicIsland || isHug
+    readonly property bool islandsStyle: effectiveDockStyle === "islands"
+    readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
     readonly property real islandExtraGap: islandsStyle
-        ? Math.max(0, islandSpacing - (Config.options?.dock?.iconSpacing ?? 0))
+        ? Math.max(0, islandSpacing - ((Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0))
         : 0
-    readonly property bool effectiveShowDividers: (Config.options?.dock?.showDividers ?? true) && !islandsStyle
-    readonly property real dockCornerRadius: (Config.options?.dock?.dockRadius ?? -1) >= 0
-        ? Config.options.dock.dockRadius
-        : Appearance.rounding.windowRounding + 12
+    readonly property bool effectiveShowDividers: ((Config.options && Config.options.dock && Config.options.dock.showDividers !== undefined) ? Config.options.dock.showDividers : true) && !islandsStyle
+    readonly property real dockCornerRadius: {
+        const rad = (Config.options && Config.options.dock && Config.options.dock.dockRadius !== undefined) ? Config.options.dock.dockRadius : -1
+        if (rad >= 0) return rad
+        return isAttachedToEdge ? Appearance.rounding.windowRounding : Appearance.rounding.windowRounding + 12
+    }
 
     readonly property real layoutVisualMainExtent: isVertical ? unifiedColumn.height : unifiedRow.width
     readonly property real animatedVisualMainExtent: layoutVisualMainExtent
@@ -50,7 +64,12 @@ Item {
     readonly property real baseVisualWidth: isVertical ? buttonSlotSize : baseMetrics.totalMainExtent
     readonly property real baseVisualHeight: isVertical ? baseMetrics.totalMainExtent : buttonSlotHeight
 
-    readonly property bool requestDockShow: previewPopupLoader.item?.visible || anyContextMenuOpen
+    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.visible) || anyContextMenuOpen
+
+    // PanelWindow.visible stays true while the auto-hide surface is moved off
+    // screen. Expensive visual widgets must follow reveal, not only the
+    // lifetime of the panel window.
+    readonly property bool dockWidgetsActive: root.dockRevealed && root.dockWindowVisible
 
     readonly property real maxWindowPreviewHeight: 200
     readonly property real maxWindowPreviewWidth: 300
@@ -87,16 +106,16 @@ Item {
     property string externalDragIcon: ""
     property bool externalDragOver: false
 
-    readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
-    readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
-    readonly property real magnificationInfluenceRadiusSlots: Config.options?.dock?.magnificationInfluenceRadius ?? 2.35
+    readonly property bool enableMagnification: (Config.options && Config.options.dock && Config.options.dock.enableMagnification !== undefined) ? Config.options.dock.enableMagnification : false
+    readonly property real magnificationScale: (Config.options && Config.options.dock && Config.options.dock.magnificationScale !== undefined) ? Config.options.dock.magnificationScale : 1.5
+    readonly property real magnificationInfluenceRadiusSlots: (Config.options && Config.options.dock && Config.options.dock.magnificationInfluenceRadius !== undefined) ? Config.options.dock.magnificationInfluenceRadius : 2.35
     readonly property real magnificationInfluenceRadiusPx: Math.max(
         Appearance.sizes.dockButtonSize,
         buttonSlotSize * magnificationInfluenceRadiusSlots
     )
-    readonly property string magnificationCurve: Config.options?.dock?.magnificationCurve ?? "cosine"
-    readonly property string magnificationMotion: Config.options?.dock?.magnificationMotion ?? "balanced"
-    readonly property bool magnificationDynamicSpacing: Config.options?.dock?.magnificationDynamicSpacing ?? true
+    readonly property string magnificationCurve: (Config.options && Config.options.dock && Config.options.dock.magnificationCurve !== undefined) ? Config.options.dock.magnificationCurve : "cosine"
+    readonly property string magnificationMotion: (Config.options && Config.options.dock && Config.options.dock.magnificationMotion !== undefined) ? Config.options.dock.magnificationMotion : "balanced"
+    readonly property bool magnificationDynamicSpacing: (Config.options && Config.options.dock && Config.options.dock.magnificationDynamicSpacing !== undefined) ? Config.options.dock.magnificationDynamicSpacing : true
     readonly property var magnificationMotionProfile: {
         switch (magnificationMotion) {
         case "fast":
@@ -677,12 +696,8 @@ Item {
     function updateMagnificationPointerFrom(item, x, y) {
         if (!item)
             return;
-        const mapped = item.mapToItem(root, x, y);
-        // The visible tray is centered inside a stable PanelWindow and grows
-        // as wrappers animate. Mapping directly into `root` therefore makes
-        // the same physical cursor position move in content coordinates on
-        // every animation frame. Keep the proximity field anchored to the
-        // unscaled layout instead of feeding that recentering back into it.
+        const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
+        const mapped = item.mapToItem(targetContainer, x, y);
         const visualExtra = root.isVertical
             ? Math.max(0, root.visualHeight - root.baseVisualHeight)
             : Math.max(0, root.visualWidth - root.baseVisualWidth);
@@ -2059,7 +2074,7 @@ Item {
         Row {
             id: unifiedRow
             visible: !root.isVertical
-            spacing: Config.options.dock.iconSpacing
+            spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
 
             Repeater {
                 id: itemRepeater
@@ -2071,7 +2086,7 @@ Item {
         Column {
             id: unifiedColumn
             visible: root.isVertical
-            spacing: Config.options.dock.iconSpacing
+            spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
 
             Repeater {
                 id: columnItemRepeater
@@ -2511,11 +2526,15 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockMediaWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: mediaItemRoot._index
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockMediaWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    delegateIndex: mediaItemRoot._index
+                }
             }
         }
     }
@@ -2559,15 +2578,19 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.livePreviewWidgetSlots
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockLivePreviewWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                dockRevealed: root.dockRevealed
-                dockWindowVisible: root.dockWindowVisible
-                delegateIndex: livePreviewItemRoot._index
-                onPickerRequested: {
-                    // Picker wiring belongs to the following live-preview phase.
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockLivePreviewWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    dockRevealed: root.dockRevealed
+                    dockWindowVisible: root.dockWindowVisible
+                    delegateIndex: livePreviewItemRoot._index
+                    onPickerRequested: {
+                        // Picker wiring belongs to the following live-preview phase.
+                    }
                 }
             }
         }

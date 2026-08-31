@@ -28,7 +28,10 @@ Column {
                 }
                 anchors.top: parent.top
                 anchors.topMargin: -font.pixelSize / 2
-                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: 8
+                width: parent.width - 8
+                horizontalAlignment: Text.AlignRight
                 font.weight: Font.Medium
                 color: Appearance.colors.colOnSurfaceVariant
                 elide: Text.ElideRight

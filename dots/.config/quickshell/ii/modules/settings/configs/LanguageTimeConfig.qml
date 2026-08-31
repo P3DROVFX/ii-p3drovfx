@@ -541,6 +541,56 @@ Item {
 
     }
 
+    ContentSection {
+        icon: "celebration"
+        title: Translation.tr("Holidays")
+
+        ConfigSwitch {
+            buttonIcon: "flag"
+            text: Translation.tr("Show public holidays")
+            checked: Config.options.calendar.holidays.enable
+            onCheckedChanged: Config.options.calendar.holidays.enable = checked
+
+            StyledToolTip {
+                text: Translation.tr("Public holidays are fetched once per year from the Nager.Date open API and kept on disk")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "calendar_month"
+            text: Translation.tr("Show holidays in month view")
+            checked: Config.options.calendar.holidays.showInMonthView
+            enabled: Config.options.calendar.holidays.enable
+            onCheckedChanged: Config.options.calendar.holidays.showInMonthView = checked
+        }
+
+        ConfigTextField {
+            icon: "public"
+            text: Translation.tr("Country code")
+            placeholderText: Translation.tr("auto")
+            tooltip: Translation.tr("An ISO 3166-1 alpha-2 code such as BR, US or GB.\n\"auto\" derives it from your system locale.")
+            inputText: Config.options.calendar.holidays.countryCode
+            enabled: Config.options.calendar.holidays.enable
+            textField.onEditingFinished: {
+                const value = textField.text.trim();
+                Config.options.calendar.holidays.countryCode = value.length > 0 ? value : "auto";
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.topMargin: 4
+            opacity: Config.options.calendar.holidays.enable ? 1 : 0.4
+            text: Holidays.countryCode.length > 0
+                ? Translation.tr("Showing holidays for %1").arg(Holidays.countryCode)
+                : Translation.tr("No country could be resolved — enter a two-letter code above")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.Wrap
+        }
+    }
+
     }
 
     // Sub-page overlay (slides in from the right)

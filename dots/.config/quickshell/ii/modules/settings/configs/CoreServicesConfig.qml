@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -20,6 +21,9 @@ Item {
     }
 
     function closeSubPage() {
+        const win = root.QsWindow.window;
+        if (win && win.navigateBack !== undefined && win.navigateBack())
+            return;
         root.activeSubPage = "";
     }
 

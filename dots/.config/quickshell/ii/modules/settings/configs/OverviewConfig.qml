@@ -9,6 +9,7 @@ import qs.modules.settings.configs.widgets
 ContentPage {
     id: page
     forceWidth: false
+    readonly property bool overviewLockedByAppList: Config.options.search.alwaysListApps
 
     readonly property bool videoWallpaper: {
         const background = Config.options && Config.options.background ? Config.options.background : null;
@@ -46,17 +47,27 @@ ContentPage {
         title: Translation.tr("Overview Configuration")
         icon: "dashboard"
 
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.overviewLockedByAppList
+            materialIcon: "lock"
+            text: Translation.tr("Overview is disabled while 'Always list apps on empty query' is active. Disable it in Launcher settings to enable the Overview again.")
+        }
+
         // Group 1: General Options
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
 
             ConfigSwitch {
+                enabled: !page.overviewLockedByAppList
                 buttonIcon: "toggle_on"
                 text: Translation.tr("Enable")
-                checked: Config.options.overview.enable
+                description: page.overviewLockedByAppList ? Translation.tr("Locked by the Launcher app-list mode") : ""
+                checked: Config.options.overview.enable && !page.overviewLockedByAppList
                 onCheckedChanged: {
-                    Config.options.overview.enable = checked;
+                    if (!page.overviewLockedByAppList)
+                        Config.options.overview.enable = checked;
                 }
             }
 

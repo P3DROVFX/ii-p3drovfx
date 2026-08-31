@@ -38,7 +38,7 @@ ColumnLayout {
 
     FormHint {
         text: KdeConnectService.activeReachable
-            ? Translation.tr("To %1, which is reachable now").arg(KdeConnectService.activeDevice?.name ?? "")
+            ? Translation.tr("To %1, which is reachable now").arg(KdeConnectService.activeDeviceDisplayName)
             : Translation.tr("To the paired phone; skipped while it is out of reach")
     }
 }

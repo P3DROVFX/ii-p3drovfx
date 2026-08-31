@@ -193,6 +193,7 @@ AbstractQuickPanel {
             anchors.leftMargin: root.buttonSize / 2
             anchors.rightMargin: root.buttonSize / 2
             shown: root.editMode && root.unusedToggles.length > 0
+            fade: false
             active: shown || opacity > 0
             sourceComponent: Rectangle {
                 implicitHeight: 1
@@ -204,6 +205,7 @@ AbstractQuickPanel {
         FadeLoader {
             anchors.horizontalCenter: parent.horizontalCenter
             shown: root.editMode && root.unusedToggles.length > 0
+            fade: false
             active: shown || opacity > 0
             sourceComponent: Rectangle {
                 implicitWidth: unusedGrid.implicitWidth + root.groupPadding * 2

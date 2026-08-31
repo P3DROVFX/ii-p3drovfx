@@ -74,12 +74,12 @@ Item {
     // already visible turns make a short, ordered entrance instead.
     property int transcriptRevealToken: -1
 
-    function pinnedModelIds(): var {
+    function pinnedModelIds() {
         return Array.from(Config.options.sidebar.ai.pinnedModels ?? [])
             .filter(id => Ai.catalog.models[id]);
     }
 
-    function selectPinnedModel(index: int): bool {
+    function selectPinnedModel(index) {
         const id = root.pinnedModelIds()[index];
         return id ? Ai.setModel(id, false) : false;
     }
@@ -110,7 +110,7 @@ Item {
     }
 
     /** delta -1 walks to an older prompt (Up); +1 walks back toward the live draft (Down). */
-    function stepPromptHistory(delta: int): bool {
+    function stepPromptHistory(delta) {
         const history = Ai.ownPromptHistory;
         if (history.length === 0)
             return false;
@@ -149,14 +149,16 @@ Item {
         const found = [];
         for (let i = 0; i < ids.length; i++) {
             const message = Ai.messageByID[ids[i]];
-            const haystack = `${message?.content ?? ""}\n${message?.thought ?? ""}`.toLowerCase();
+            const content = message && message.content ? message.content : "";
+            const thought = message && message.thought ? message.thought : "";
+            const haystack = (content + "\n" + thought).toLowerCase();
             if (haystack.indexOf(needle) >= 0)
                 found.push(i);
         }
         return found;
     }
 
-    function goToMatch(step: int) {
+    function goToMatch(step) {
         const matches = root.transcriptMatches;
         if (matches.length === 0)
             return;
@@ -180,7 +182,7 @@ Item {
         }
     }
 
-    function beginEdit(messageId: string, content: string) {
+    function beginEdit(messageId, content) {
         root.editingMessageId = messageId;
         messageInputField.text = String(content ?? "");
         messageInputField.cursorPosition = messageInputField.text.length;
@@ -199,7 +201,7 @@ Item {
      * old wording, so the service forks first and leaves that branch behind
      * rather than deleting it.
      */
-    function commitEdit(text: string) {
+    function commitEdit(text) {
         const id = root.editingMessageId;
         root.editingMessageId = "";
         messageInputField.clear();
@@ -339,7 +341,7 @@ Item {
             return false;
         messageListView.following = false;
         messageListView.positionViewAtIndex(index, ListView.Center);
-        const offset = Number(anchor?.offset ?? 0);
+        const offset = Number(anchor && anchor.offset !== undefined ? anchor.offset : 0);
         if (isFinite(offset) && offset > 0)
             messageListView.contentY = Math.max(0, messageListView.contentY - offset);
         Qt.callLater(function() {
@@ -384,24 +386,26 @@ Item {
     // key works wherever the focus happens to be inside the panel.
 
     /** The newest question, which is what Ctrl+E takes back. */
-    function lastMessageIdOfRole(role: string): string {
+    function lastMessageIdOfRole(role) {
         for (let at = Ai.messageIDs.length - 1; at >= 0; at--) {
             const id = Ai.messageIDs[at];
-            if (Ai.messageByID[id]?.role === role)
+            const msg = Ai.messageByID[id];
+            if (msg && msg.role === role)
                 return id;
         }
         return "";
     }
 
-    function editLastQuestion(): bool {
+    function editLastQuestion() {
         const id = root.lastMessageIdOfRole("user");
         if (id.length === 0)
             return false;
-        root.beginEdit(id, String(Ai.messageByID[id]?.content ?? ""));
+        const msg = Ai.messageByID[id];
+        root.beginEdit(id, String(msg && msg.content ? msg.content : ""));
         return true;
     }
 
-    function regenerateLastAnswer(): bool {
+    function regenerateLastAnswer() {
         const id = root.lastMessageIdOfRole("assistant");
         if (id.length === 0)
             return false;
@@ -413,7 +417,7 @@ Item {
      * Moves the focus from turn to turn. A transcript nobody can walk with a
      * keyboard is a transcript a screen reader cannot walk either.
      */
-    function stepThroughTurns(delta: int) {
+    function stepThroughTurns(delta) {
         const count = messageListView.count;
         if (count <= 0)
             return;
@@ -430,7 +434,7 @@ Item {
     }
 
     /** Runs a panel shortcut. Returns whether the key belonged to one. */
-    function handleShortcut(event): bool {
+    function handleShortcut(event) {
         const control = (event.modifiers & Qt.ControlModifier) !== 0;
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0;
         const alt = (event.modifiers & Qt.AltModifier) !== 0;
@@ -693,8 +697,9 @@ Item {
             execute: args => {
                 if (args.length == 0 || args[0] == "get") {
                     const model = Ai.currentModelEntry;
-                    if (!model?.thinking) {
-                        Ai.addMessage(Translation.tr("%1 does not think out loud.").arg(model?.name ?? Translation.tr("This model")), Ai.interfaceRole);
+                    if (!model || !model.thinking) {
+                        const modelName = model && model.name ? model.name : Translation.tr("This model");
+                        Ai.addMessage(Translation.tr("%1 does not think out loud.").arg(modelName), Ai.interfaceRole);
                         return;
                     }
                     Ai.addMessage(Translation.tr("Thinking: %1").arg(Ai.thinkingLevel), Ai.interfaceRole);
@@ -936,7 +941,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
         property string imageDecodePath: Directories.cliphistDecode
         property string imageDecodeFileName: "image"
         property string imageDecodeFilePath: `${imageDecodePath}/${imageDecodeFileName}`
-        function handleEntry(entry: string) {
+        function handleEntry(entry) {
             imageDecodeFileName = parseInt(entry.match(/^(\d+)\t/)[1]);
             decodeImageAndAttachProc.exec(["bash", "-c", `[ -f ${imageDecodeFilePath} ] || echo '${StringUtils.shellSingleQuoteEscape(entry)}' | ${Cliphist.cliphistBinary} decode > '${imageDecodeFilePath}'`]);
         }
@@ -1246,7 +1251,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
                             visible: !Ai.currentModelTakesFiles
-                            text: Translation.tr("%1 cannot read files").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"))
+                            text: Translation.tr("%1 cannot read files").arg((Ai.currentModelEntry && Ai.currentModelEntry.title) ? Ai.currentModelEntry.title : Translation.tr("This model"))
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             color: Appearance.colors.colOnPrimaryContainer
                             opacity: 0.78
@@ -1608,7 +1613,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             id: emptyStatePlaceholder
                             anchors.fill: parent
                             shown: Ai.messageIDs.length === 0
-                            icon: Ai.currentPersona?.icon ?? "neurology"
+                            icon: (Ai.currentPersona && Ai.currentPersona.icon) ? Ai.currentPersona.icon : "neurology"
                             iconSize: Appearance.font.pixelSize.huge * 3
                             iconPadding: Appearance.rounding.normal
                             titlePixelSize: Appearance.font.pixelSize.huge
@@ -1616,12 +1621,12 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                             // A persona speaks with its own name; without one,
                             // the greeting rolls a fresh hello for this opening.
                             title: {
-                                const personaName = Ai.currentPersona?.name;
+                                const personaName = Ai.currentPersona ? Ai.currentPersona.name : null;
                                 if (personaName)
                                     return personaName;
                                 return root.emptyStateGreeting.length > 0 ? root.emptyStateGreeting : Translation.tr("Hello");
                             }
-                            description: Ai.currentPersona?.description ?? Translation.tr("Ask anything")
+                            description: (Ai.currentPersona && Ai.currentPersona.description) ? Ai.currentPersona.description : Translation.tr("Ask anything")
                             shape: MaterialShape.Shape.PixelCircle
                             animateIconOnShow: true
                             entranceTrigger: root.entranceTrigger
@@ -1793,14 +1798,14 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         // Not `atYEnd`: an answer streaming in moves the view itself,
                         // and this would offer a way back to where the reader already
                         // was on every token.
-                        shown: !messageListView.following
+                        shown: !emptyStatePlaceholder.shown && Ai.messageIDs.length > 0 && !messageListView.following && (messageListView.contentHeight > messageListView.height)
                         newItemCount: messageListView.unseenMessageCount
                         downAction: () => messageListView.pinToEnd()
                     }
                 }
                 DescriptionBox {
                     id: descriptionBox
-                    text: root.suggestionList[suggestions.selectedIndex]?.description ?? ""
+                    text: (root.suggestionList[suggestions.selectedIndex] && root.suggestionList[suggestions.selectedIndex].description) ? root.suggestionList[suggestions.selectedIndex].description : ""
                     showArrows: root.suggestionList.length > 1
 
                     opacity: 0.0
@@ -2071,7 +2076,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                 contextRuler.thickness + Appearance.rounding.unsharpenmore)
                             visible: contextRuler.window > 0
 
-                            readonly property int window: Number(Ai.currentModelEntry?.contextWindow ?? 0)
+                            readonly property int window: Number((Ai.currentModelEntry && Ai.currentModelEntry.contextWindow) ? Ai.currentModelEntry.contextWindow : 0)
                             readonly property int historyTokens: Number(Ai.estimatedContextTokens ?? 0)
                             readonly property int memoryTokens: Ai.estimateTokens(Ai.contextSummary)
                             readonly property int promptTokens: Ai.estimateTokens(messageInputField.text)
@@ -2203,8 +2208,8 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                             const providerInfo = Ai.providers[providerName];
                                             return {
                                                 name: `${messageInputField.text.trim().split(" ").length == 1 ? (root.commandPrefix + "provider ") : ""}${providerName}`,
-                                                displayName: providerInfo?.name ?? providerName,
-                                                description: providerInfo?.description ?? ""
+                                                displayName: (providerInfo && providerInfo.name) ? providerInfo.name : providerName,
+                                                description: (providerInfo && providerInfo.description) ? providerInfo.description : ""
                                             };
                                         });
                                     } else if (messageInputField.text.startsWith(`${root.commandPrefix}model`)) {
@@ -2516,7 +2521,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                                             MaterialSymbol {
                                                 id: composerModelIcon
-                                                text: Ai.currentModelEntry?.materialIcon || "auto_awesome"
+                                                text: (Ai.currentModelEntry && Ai.currentModelEntry.materialIcon) ? Ai.currentModelEntry.materialIcon : "auto_awesome"
                                                 fill: 1
                                                 iconSize: Appearance.font.pixelSize.larger
                                                 color: Appearance.colors.colOnPrimary
@@ -2527,7 +2532,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                 Layout.maximumWidth: Math.max(0, composerModelPill.widthLimit
                                                     - composerModelIcon.implicitWidth - composerModelRow.spacing
                                                     - root.composerControlExtent * 0.6)
-                                                text: Ai.currentModelEntry?.title ?? Translation.tr("No model")
+                                                text: (Ai.currentModelEntry && Ai.currentModelEntry.title) ? Ai.currentModelEntry.title : Translation.tr("No model")
                                                 font.pixelSize: Appearance.font.pixelSize.normal
                                                 font.bold: true
                                                 elide: Text.ElideRight
@@ -2543,7 +2548,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                             // glance, and the level is a detail
                                             // worth a hover.
                                             text: {
-                                                const name = Ai.currentModelEntry?.name ?? Translation.tr("none");
+                                                const name = (Ai.currentModelEntry && Ai.currentModelEntry.name) ? Ai.currentModelEntry.name : Translation.tr("none");
                                                 if (!Ai.currentModelThinks || root.thinkingShortLabel.length === 0)
                                                     return Translation.tr("Model: %1").arg(name);
                                                 return Translation.tr("Model: %1\nThinking: %2").arg(name).arg(root.thinkingShortLabel);
@@ -2724,7 +2729,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                                                 symbol: "screenshot_region"
                                                 label: Translation.tr("Send part of the screen")
                                                 enabled: Ai.currentModelSupportsVision
-                                                disabledReason: Translation.tr("%1 cannot look at images.").arg(Ai.currentModelEntry?.title ?? Translation.tr("This model"))
+                                                disabledReason: Translation.tr("%1 cannot look at images.").arg((Ai.currentModelEntry && Ai.currentModelEntry.title) ? Ai.currentModelEntry.title : Translation.tr("This model"))
                                                 onTriggered: {
                                                     if (!root.snipHeld) {
                                                         root.snipHeld = true;

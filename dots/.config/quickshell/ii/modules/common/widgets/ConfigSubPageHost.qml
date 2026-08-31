@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.modules.common
 
 /**
@@ -38,6 +39,13 @@ Item {
 
     function close() {
         activeSubPage = "";
+    }
+
+    function requestBack() {
+        const win = host.QsWindow.window;
+        if (win && win.navigateBack !== undefined && win.navigateBack())
+            return;
+        host.close();
     }
 
     function findNestedNavigationHost(node) {
@@ -130,9 +138,7 @@ Item {
                 if (item.hasOwnProperty("showBackButton"))
                     item.showBackButton = true;
 
-                item.goBack.connect(function() {
-                    host.activeSubPage = "";
-                });
+                item.goBack.connect(host.requestBack);
             }
         }
 

@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * What the assistant is allowed to remember between conversations.
@@ -22,7 +23,7 @@ import qs.modules.common
 Singleton {
     id: root
 
-    readonly property string path: `${Directories.state}/user/ai/memory.json`
+    readonly property string path: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/memory.json`)
     property bool loaded: false
     /** Facts, newest last: {id, text, at, source}. */
     property var facts: []
@@ -98,7 +99,7 @@ Singleton {
     Component.onCompleted: {
         // The state directory may not exist yet on a fresh install, and a
         // write into a missing directory fails silently.
-        Quickshell.execDetached(["mkdir", "-p", `${Directories.state}/user/ai`]);
+        Quickshell.execDetached(["mkdir", "-p", FileUtils.parentDirectory(root.path)]);
     }
 
     FileView {

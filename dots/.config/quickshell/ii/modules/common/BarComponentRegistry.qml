@@ -37,6 +37,30 @@ Singleton {
             configPage: "ActiveWindowConfig.qml"
         },
         {
+            id: "search",
+            icon: "search",
+            title: "Search",
+            styleConfigKey: "search",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ],
+            configPage: "SearchBarWidgetConfig.qml"
+        },
+        {
             id: "music_player",
             icon: "music_note",
             title: "Music player",
@@ -56,6 +80,16 @@ Singleton {
                     displayName: qsTr("Neural"),
                     icon: "graphic_eq",
                     value: "neural"
+                },
+                {
+                    displayName: qsTr("Ring"),
+                    icon: "motion_photos_on",
+                    value: "ring"
+                },
+                {
+                    displayName: qsTr("Tonal"),
+                    icon: "gradient",
+                    value: "tonal"
                 }
             ],
             configPage: "MediaPlayerConfig.qml"
@@ -98,11 +132,33 @@ Singleton {
             configPage: "SystemMonitorConfig.qml"
         },
         {
+            id: "ai_plan_usage",
+            icon: "neurology",
+            title: "AI Plan Usage",
+            styleConfigKey: "aiPlanUsage",
+            styleOptions: defaultStyleOptions,
+            configPage: "AiPlanUsageConfig.qml"
+        },
+        {
+            id: "privacy_pill",
+            icon: "shield_lock",
+            title: "Privacy pill",
+            configPage: "PrivacyPillConfig.qml"
+        },
+        {
+            id: "port_watcher",
+            icon: "lan",
+            title: "Port Watcher",
+            styleConfigKey: "portWatcher",
+            styleOptions: defaultStyleOptions,
+            configPage: "PortWatcherConfig.qml"
+        },
+        {
             id: "clock",
             icon: "nest_clock_farsight_analog",
             title: "Clock",
             styleConfigKey: "clock",
-            configPage: "ClockDateWidgetConfig.qml",
+            configPage: "ClockBarWidgetConfig.qml",
             styleOptions: [
                 {
                     displayName: qsTr("Default"),
@@ -118,6 +174,16 @@ Singleton {
                     displayName: qsTr("Expressive"),
                     icon: "fluid_med",
                     value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                },
+                {
+                    displayName: qsTr("Relief"),
+                    icon: "content_cut",
+                    value: "relief"
                 }
             ]
         },
@@ -177,7 +243,25 @@ Singleton {
             id: "date",
             icon: "date_range",
             title: "Date",
-            configPage: "ClockDateWidgetConfig.qml"
+            styleConfigKey: "date",
+            configPage: "DateBarWidgetConfig.qml",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ]
         },
         {
             id: "battery",
@@ -214,8 +298,29 @@ Singleton {
             icon: "weather_mix",
             title: "Weather",
             styleConfigKey: "weather",
-            styleOptions: defaultStyleOptions,
-            pageId: "weather"
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Horizon"),
+                    icon: "landscape",
+                    value: "horizon"
+                },
+                {
+                    displayName: qsTr("Tessera"),
+                    icon: "view_module",
+                    value: "tessera"
+                }
+            ],
+            configPage: "WeatherBarWidgetConfig.qml"
         },
         {
             id: "utility_buttons",

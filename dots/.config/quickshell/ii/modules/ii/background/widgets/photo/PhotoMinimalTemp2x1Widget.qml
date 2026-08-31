@@ -25,6 +25,26 @@ AbstractBackgroundWidget {
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
+    readonly property string cleanSource: {
+        let entry = Config.options.background.widgets[root.configEntryName];
+        let path = (entry && entry.imagePath && entry.imagePath !== "") ? entry.imagePath : Config.options.background.widgets.photo.imagePath;
+        if (!path || path === "") return "";
+        const qIdx = path.indexOf("?");
+        if (qIdx !== -1) path = path.substring(0, qIdx);
+        return path.startsWith("file://") ? path : ("file://" + path);
+    }
+
+    readonly property bool isAnimated: {
+        const lower = root.cleanSource.toLowerCase();
+        return lower.includes(".gif") || lower.includes(".webp");
+    }
+
+    readonly property bool shouldPlay: {
+        return root.visible && root.opacity > 0 && root.isAnimated
+            && !GlobalStates.screenLocked
+            && !GlobalStates.activeWorkspaceHasWindows;
+    }
+
     Rectangle {
         id: mainCard
         anchors.fill: parent
@@ -37,39 +57,51 @@ AbstractBackgroundWidget {
             anchors.margins: 4
 
             Rectangle {
-                id: maskShape
-                anchors.fill: parent
-                radius: Appearance.rounding.windowRounding - 4
-                visible: false
-            }
-
-            Rectangle {
                 id: fallbackBg
                 anchors.fill: parent
-                radius: maskShape.radius
+                radius: Appearance.rounding.windowRounding - 4
                 color: WidgetColorScheme.innerShapeColor
             }
 
+            // Static Image loader (hardware-accelerated, zero QMovie overhead)
             Image {
-                id: photoImage
+                id: staticImg
                 anchors.fill: parent
-                source: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    let path = (entry && entry.imagePath && entry.imagePath !== "") ? entry.imagePath : Config.options.background.widgets.photo.imagePath;
-                    if (!path || path === "") return "";
-                    return path.startsWith("file://") ? path : ("file://" + path);
-                }
+                source: !root.isAnimated ? root.cleanSource : ""
                 fillMode: Image.PreserveAspectCrop
-                visible: false
+                asynchronous: true
+                visible: !root.isAnimated && status === Image.Ready
+
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: staticImg.width
+                        height: staticImg.height
+                        radius: Appearance.rounding.windowRounding - 4
+                    }
+                }
             }
 
-            // Crisp clear image layer
-            OpacityMask {
-                id: maskedImage
+            // Animated GIF loader (only active when isAnimated is true)
+            AnimatedImage {
+                id: photoImage
                 anchors.fill: parent
-                source: photoImage
-                maskSource: maskShape
-                visible: photoImage.status === Image.Ready
+                source: root.isAnimated ? root.cleanSource : ""
+                fillMode: Image.PreserveAspectCrop
+                playing: root.shouldPlay
+                paused: !root.shouldPlay
+                asynchronous: true
+                cache: false
+                visible: root.isAnimated && status === Image.Ready
+
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: photoImage.width
+                        height: photoImage.height
+                        radius: Appearance.rounding.windowRounding - 4
+                    }
+                }
             }
 
             // Bottom-right temp badge
@@ -85,45 +117,11 @@ AbstractBackgroundWidget {
                     return entry && entry.showOverlay !== undefined ? entry.showOverlay : true;
                 }
 
-                Rectangle {
-                    id: tempMask
-                    anchors.fill: parent
-                    radius: Appearance.rounding.windowRounding
-                    visible: false
-                }
-
-                // Blur layer (using technique from BarGradientOverlay.qml)
-                Item {
-                    anchors.fill: parent
-                    layer.enabled: photoImage.status === Image.Ready
-                    layer.effect: OpacityMask {
-                        maskSource: tempMask
-                    }
-
-                    ShaderEffectSource {
-                        id: tempShaderSource
-                        anchors.fill: parent
-                        sourceItem: maskedImage
-                        sourceRect: Qt.rect(tempBadgeContainer.x, tempBadgeContainer.y, tempBadgeContainer.width, tempBadgeContainer.height)
-                        live: false
-                        hideSource: false
-                        visible: false
-                    }
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: tempShaderSource
-                        blurEnabled: true
-                        blurMax: 64
-                        blur: 0.65
-                    }
-                }
-
-                // Semi-transparent color overlay over the blurred region
+                // Semi-transparent color overlay
                 Rectangle {
                     anchors.fill: parent
-                    radius: 16
-                    color: Qt.rgba(WidgetColorScheme.cardBgColor.r, WidgetColorScheme.cardBgColor.g, WidgetColorScheme.cardBgColor.b, 0.55)
+                    radius: Appearance.rounding.full
+                    color: ColorUtils.applyAlpha(WidgetColorScheme.cardBgColor, 0.75)
                 }
 
                 RowLayout {

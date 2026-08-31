@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.ii.background
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
+import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.dock
 import qs.modules.ii.lock
@@ -152,6 +153,11 @@ Scope {
     OverviewWindowTransition {}
     PanelLoader {
         component: Polkit {}
+    }
+    // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
+    // is asking anything, and nothing is built until it is.
+    PanelLoader {
+        component: BluetoothPairing {}
     }
     PanelLoader {
         component: RegionSelector {}

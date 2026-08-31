@@ -46,7 +46,7 @@ ColumnLayout {
     FormHint {
         text: KdeConnectService.available
             ? (KdeConnectService.activeDevice
-                ? Translation.tr("Watches %1 through KDE Connect.").arg(KdeConnectService.activeDevice.name)
+                ? Translation.tr("Watches %1 through KDE Connect.").arg(KdeConnectService.activeDeviceDisplayName)
                 : Translation.tr("No phone is paired in KDE Connect yet."))
             : Translation.tr("Needs KDE Connect.")
     }

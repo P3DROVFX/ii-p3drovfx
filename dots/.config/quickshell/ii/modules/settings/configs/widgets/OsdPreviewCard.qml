@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../../../.."
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.onScreenDisplay
@@ -30,9 +31,11 @@ Rectangle {
     }
 
     function triggerRealOsd() {
-        GlobalStates.osdCurrentIndicator = "volume";
-        GlobalStates.osdVolumeOpen = true;
-        GlobalStates.osdInteraction();
+        if (typeof GlobalStates !== "undefined") {
+            GlobalStates.osdCurrentIndicator = "volume";
+            GlobalStates.osdVolumeOpen = true;
+            GlobalStates.osdInteraction();
+        }
         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "osd", "trigger"]);
     }
 

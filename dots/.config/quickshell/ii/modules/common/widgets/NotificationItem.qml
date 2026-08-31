@@ -17,6 +17,7 @@ Item { // Notification item area
     property real zoom: 1.0
     property real fontSize: Appearance.font.pixelSize.small * zoom
     property real padding: onlyNotification ? 0 : 8 * zoom
+    property var animationSpec: Appearance.animation.elementMoveFast
 
     property real dragConfirmThreshold: 70 // Drag further to discard notification
     property real dismissOvershoot: notificationIcon.implicitWidth + 20 // Account for gaps and bouncy animations
@@ -119,7 +120,11 @@ Item { // Notification item area
         visible: opacity > 0
 
         Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            NumberAnimation {
+                duration: root.animationSpec.duration
+                easing.type: root.animationSpec.type
+                easing.bezierCurve: root.animationSpec.bezierCurve
+            }
         }
 
         image: notificationObject.image
@@ -162,9 +167,6 @@ Item { // Notification item area
         color: (expanded && !onlyNotification) ? (notificationObject.urgency == NotificationUrgency.Critical) ? ColorUtils.mix(Appearance.colors.colSecondaryContainer, Appearance.colors.colLayer2, 0.35) : (Appearance.colors.colLayer3) : ColorUtils.transparentize(Appearance.colors.colLayer3)
 
         implicitHeight: expanded ? (contentColumn.implicitHeight + padding * 2) : summaryRow.implicitHeight
-        Behavior on implicitHeight {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-        }
 
         ColumnLayout { // Content column
             id: contentColumn
@@ -173,7 +175,11 @@ Item { // Notification item area
             spacing: 3
 
             Behavior on anchors.margins {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                NumberAnimation {
+                    duration: root.animationSpec.duration
+                    easing.type: root.animationSpec.type
+                    easing.bezierCurve: root.animationSpec.bezierCurve
+                }
             }
 
             ColumnLayout { // Summary and collapsed body
@@ -193,10 +199,14 @@ Item { // Notification item area
                 StyledText {
                     id: collapsedBodyText
                     opacity: !root.expanded ? 1 : 0
-                    visible: opacity > 0
+                    visible: !root.expanded
                     Layout.fillWidth: true
                     Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        NumberAnimation {
+                            duration: root.animationSpec.duration
+                            easing.type: root.animationSpec.type
+                            easing.bezierCurve: root.animationSpec.bezierCurve
+                        }
                     }
                     font.pixelSize: root.fontSize
                     color: Appearance.colors.colSubtext
@@ -214,13 +224,18 @@ Item { // Notification item area
                 id: expandedContentColumn
                 Layout.fillWidth: true
                 opacity: root.expanded ? 1 : 0
-                visible: opacity > 0
+                visible: root.expanded
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.animationSpec.duration
+                        easing.type: root.animationSpec.type
+                        easing.bezierCurve: root.animationSpec.bezierCurve
+                    }
+                }
 
                 StyledText { // Notification body (expanded)
                     id: notificationBodyText
-                    Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                    }
                     Layout.fillWidth: true
                     font.pixelSize: root.fontSize
                     color: Appearance.colors.colSubtext
@@ -265,10 +280,18 @@ Item { // Notification item area
                         contentWidth: actionRowLayout.implicitWidth
 
                         Behavior on opacity {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            NumberAnimation {
+                                duration: root.animationSpec.duration
+                                easing.type: root.animationSpec.type
+                                easing.bezierCurve: root.animationSpec.bezierCurve
+                            }
                         }
                         Behavior on implicitHeight {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            NumberAnimation {
+                                duration: root.animationSpec.duration
+                                easing.type: root.animationSpec.type
+                                easing.bezierCurve: root.animationSpec.bezierCurve
+                            }
                         }
 
                         RowLayout {

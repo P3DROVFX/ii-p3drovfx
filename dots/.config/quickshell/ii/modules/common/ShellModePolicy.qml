@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import qs
 
 /**
  * Shared policy for the Default/Connect shell modes.
@@ -87,8 +88,14 @@ QtObject {
         if (!isVertical && Config.options.bar.cornerStyle === 3 && root.effectiveMode === "connect") {
             Config.options.sidebar.sidebarStyle = "default";
         }
-        Config.options.bar.bottom = (value & 1) !== 0;
-        Config.options.bar.vertical = isVertical;
+        const bottom = (value & 1) !== 0;
+        // GlobalStates runs the slide and writes the placement itself once the
+        // shell is off screen. It returns false when there is nothing to move,
+        // in which case the write still has to happen here.
+        if (!GlobalStates.requestBarPlacement(bottom, isVertical)) {
+            Config.options.bar.bottom = bottom;
+            Config.options.bar.vertical = isVertical;
+        }
         return true;
     }
 }

@@ -61,6 +61,34 @@ Item {
         return Appearance.animationCurves.emphasizedDecel;
     }
 
+    // ── Content resize vs mode resize ────────────────────────────────────────
+    // Two different reasons for this pill to change size, and they need
+    // opposite treatment:
+    //
+    //  • A mode change (notch collapse/expand, OSD, notification, search) moves
+    //    the width to a fixed target. That one animates.
+    //  • A widget growing or shrinking inside moves it to whatever the content
+    //    now measures. That one must NOT animate: the widgets already animate
+    //    their own size on Appearance.animation.barResize, and a second
+    //    animation on the container chases a target that is itself moving —
+    //    which is exactly what made the pill lag behind the active window title
+    //    and the dock icons. Following the content directly keeps the two
+    //    locked together for the whole travel.
+    property bool modeResizing: false
+    Timer {
+        id: modeResizeWindow
+        interval: Appearance.animation.elementResize.duration + 120
+        repeat: false
+        onTriggered: root.modeResizing = false
+    }
+    function beginModeResize() {
+        root.modeResizing = true;
+        modeResizeWindow.restart();
+    }
+    readonly property string _modeKey: modeState._displayMode + "|" + modeState.expanded
+    on_ModeKeyChanged: root.beginModeResize()
+    onIsSearchActiveHereChanged: root.beginModeResize()
+
     readonly property bool searchStable: modeState._displayMode === "search" && (searchWidgetLoader.item ? searchWidgetLoader.item.openStateStable : false)
     readonly property bool isSearchModeActive: (modeState._displayMode === "search") || searchWidgetLoader.visible || root.isSearchActiveHere
 
@@ -128,7 +156,7 @@ Item {
 
         Behavior on height {
             id: barHeightBehavior
-            enabled: !root.searchStable
+            enabled: !root.searchStable && root.modeResizing
             NumberAnimation {
                 duration: {
                     if (modeState.notchModeEnabled) {
@@ -199,7 +227,7 @@ Item {
         bottomRightRadius: Config.options.bar.bottom ? 0 : baseRadius
 
         Behavior on width {
-            enabled: !root.searchStable
+            enabled: !root.searchStable && root.modeResizing
             NumberAnimation {
                 duration: {
                     if (modeState.notchModeEnabled) {
@@ -288,10 +316,10 @@ Item {
                 Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.OutCubic
-                    }
+                    // Content-driven, like the pill above: only a mode change
+                    // is worth animating here.
+                    enabled: root.modeResizing
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {
@@ -330,10 +358,10 @@ Item {
                 Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.OutCubic
-                    }
+                    // Content-driven, like the pill above: only a mode change
+                    // is worth animating here.
+                    enabled: root.modeResizing
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {

@@ -234,6 +234,27 @@ Singleton {
 
             property JsonObject search: JsonObject {
                 property list<var> aliases: []
+                property list<string> recentEmojis: []
+                property list<string> recentQueries: []
+                property list<string> pinnedEntries: []
+                property list<var> panelUsage: []
+            }
+
+            // Typing test scores. Only aggregate metrics are kept — never the
+            // target text and never the keys that were actually pressed.
+            property JsonObject typingTest: JsonObject {
+                property list<var> recentResults: []
+                property list<var> personalBests: []
+                // Lifetime tallies. They outlive `recentResults`, which is
+                // capped, so "tests completed" stays true after the oldest
+                // results have been pruned away.
+                property int testsStarted: 0
+                property int testsCompleted: 0
+                property real secondsTyping: 0
+                // [{ d: "YYYY-MM-DD", n: tests }], one entry per active day,
+                // bounded to roughly a year — enough for the activity map and
+                // far smaller than keeping every result to derive it.
+                property list<var> activity: []
             }
 
             property JsonObject googleDrive: JsonObject {
@@ -300,10 +321,47 @@ Singleton {
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
+                // Empty selects the generated Hyprland page. User page ids are
+                // stable across edits and imports, so the last collection can
+                // be restored without coupling it to its list position.
+                property string keybindPageId: ""
+                // The page rail follows the timetable sidebar pattern and
+                // remembers whether the user left it expanded.
+                property bool keybindSidebarVisible: true
+                // "day" | "threeDay" | "week" | "month" — timetable range.
+                property string timetableView: "month"
+                property bool timetableShowUpcoming: true
+                // "comfortable" | "compact" | "dots" — month-cell density.
+                property string timetableMonthDensity: "compact"
+                property bool timetableCollapseRecurring: true
+                // Horizon buckets hidden in the month view's upcoming rail.
+                property list<string> timetableCollapsedUpcomingGroups: []
+                // Pixels per hour in the timetable grid. WeekView constrains
+                // writes to its discrete zoom scale.
+                property int timetableSlotHeight: 168
+                // One-shot migrations can change the comfortable default
+                // without overwriting a later zoom choice on every reopen.
+                property int timetableSlotHeightVersion: 0
+                // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
+                // CalendarNotifier so notifications do not repeat after reload.
+                property list<string> timetableNotified: []
+                // Pending calendar reminder snoozes. Each DTO is reconstructed
+                // by CalendarNotifier; no CalendarService object crosses disk.
+                property list<var> timetableSnoozes: []
+                // Gmail account + attachment identity for calendar files the
+                // user opted into importing. Keeps periodic scans idempotent.
+                property list<string> timetableGmailIcsImports: []
+                // The Outlook equivalent. Each entry includes the account,
+                // message attachment identity and a content digest.
+                property list<string> timetableOutlookIcsImports: []
             }
 
             property JsonObject clipboard: JsonObject {
                 property list<string> pinnedEntries: []
+                // cliphist exposes stable IDs but no timestamps. These compact
+                // records let its opt-in retention policy age entries without
+                // guessing from their content or deleting pinned data.
+                property list<var> historySeen: []
             }
 
             property JsonObject sidebar: JsonObject {
@@ -354,6 +412,10 @@ Singleton {
                 property int gamma: 100
                 property string gammaByMonitorJson: "{}"
                 property string sessionId: ""
+            }
+
+            property JsonObject displayColorFilter: JsonObject {
+                property string profilesJson: "{}"
             }
 
             // Runtime state of services/Modes.qml: what is running and what
@@ -503,6 +565,13 @@ Singleton {
                     property bool running: false
                     property int start: 0
                     property list<var> laps: []
+                }
+                property list<var> countdowns: []
+                // Last duration dialled into the sidebar's timer picker.
+                property JsonObject countdownDraft: JsonObject {
+                    property int hours: 0
+                    property int minutes: 5
+                    property int seconds: 0
                 }
             }
             property list<var> alarms: []

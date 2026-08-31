@@ -19,7 +19,7 @@ Item {
     readonly property bool isMedia: target && target.buttonData ? target.buttonData.type === "mediaWidget" : false
     readonly property bool isSlider: target && target.buttonData ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(target.buttonData.type) : false
     readonly property bool canResize: target && target.pageIndex >= 0 && !root.isUnused
-    readonly property bool canResizeHeight: root.canResize && !root.isSlider
+    readonly property bool canResizeHeight: root.canResize
 
     property real pressX: 0
     property real pressY: 0

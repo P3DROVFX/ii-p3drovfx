@@ -5,6 +5,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
@@ -99,86 +100,20 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
-    // Entrance animation (Reorder animation effect - tuned delay & full opacity fade)
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.92
-    property real _entranceOffsetX: ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18)
-    property real _entranceOffsetY: ((buttonIndex % 2 === 0) ? -12 : 12)
-    property bool _entranceDone: false
-    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    readonly property bool entrancePageActive: root.pageIndex === -1 || !root.panel
+        || root.panel.currentPage === root.pageIndex
 
-    onEntranceTriggerChanged: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceOffsetX = 0;
-            _entranceOffsetY = 0;
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.92;
-        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
-        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    Component.onCompleted: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceOffsetX = 0;
-            _entranceOffsetY = 0;
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.92;
-        _entranceOffsetX = ((buttonIndex % 3 === 0) ? -18 : (buttonIndex % 3 === 1) ? 0 : 18);
-        _entranceOffsetY = ((buttonIndex % 2 === 0) ? -12 : 12);
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: 80 + Math.min(Math.max(root.buttonIndex, 0), 15) * 25 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.92; to: 1.0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
-            NumberAnimation { target: root; property: "_entranceOffsetX"; from: ((root.buttonIndex % 3 === 0) ? -18 : (root.buttonIndex % 3 === 1) ? 0 : 18); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
-            NumberAnimation { target: root; property: "_entranceOffsetY"; from: ((root.buttonIndex % 2 === 0) ? -12 : 12); to: 0; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
-        }
-        PropertyAction { target: root; property: "_entranceDone"; value: true }
-    }
-
-    property real pageScale: 1.0
-
-    Connections {
-        target: root.panel
-        function onCurrentPageChanged() {
-            if (root.panel && root.panel.currentPage === root.pageIndex && root.pageIndex !== -1) {
-                pageEntranceAnimation.restart();
-            }
-        }
-    }
-
-    SequentialAnimation {
-        id: pageEntranceAnimation
-        NumberAnimation {
-            target: root
-            property: "pageScale"
-            from: 0.96
-            to: 1.0
-            duration: 350
-            easing.type: Easing.OutQuint
-        }
+    DashboardEntranceProgress {
+        id: entranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        pageActive: root.entrancePageActive
+        delayIndex: Math.min(Math.max(root.buttonIndex, 0), 15)
+        baseDelayRatio: 0.2
+        staggerRatio: 0.06
     }
 
     // Sizing shenanigans - use effective sizes for live resize preview
@@ -215,9 +150,9 @@ Item {
         width: root.width
         height: root.height
 
-        scale: (root.isDragging ? 1.05 : 1.0) * root.pageScale * (root._entranceDone ? 1.0 : root._entranceScale)
+        scale: (root.isDragging ? 1.05 : 1.0) * (0.92 + 0.08 * entranceProgress.progress)
         opacity: {
-            if (!root._entranceDone) return root._entranceOpacity;
+            if (entranceProgress.progress < 1) return entranceProgress.progress;
             if (root.isUnused) return 0.5;
             if (root.editMode && !root.isDragging) return 0.9;
             if (root.isDragging) return 0.95;
@@ -226,16 +161,19 @@ Item {
         z: root.isDragging ? 99 : 1
 
         transform: Translate {
-            x: (root.isDragging ? root.dragOffsetX : 0) + (root._entranceDone ? 0 : root._entranceOffsetX)
-            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceOffsetY)
+            x: (root.isDragging ? root.dragOffsetX : 0)
+                + ((root.buttonIndex % 3 === 0) ? -18 : (root.buttonIndex % 3 === 1) ? 0 : 18)
+                    * (1 - entranceProgress.progress)
+            y: (root.isDragging ? root.dragOffsetY : 0)
+                + ((root.buttonIndex % 2 === 0) ? -12 : 12) * (1 - entranceProgress.progress)
         }
         
         Behavior on scale {
-            enabled: !root.isDragging && !pageEntranceAnimation.running && !entranceAnim.running
+            enabled: !root.isDragging && !entranceProgress.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 

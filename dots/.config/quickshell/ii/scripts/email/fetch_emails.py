@@ -7,13 +7,18 @@ import sys, json, urllib.request, urllib.parse, concurrent.futures, re
 import gmail_config
 
 def api_get(url, token):
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read())
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        return {}
 
 def fetch_detail(msg_id, token):
     url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date"
     detail = api_get(url, token)
+    if not detail or "id" not in detail:
+        return None
     headers = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
     label_ids = detail.get("labelIds", [])
     subject = headers.get("Subject", "")
@@ -38,17 +43,24 @@ def main():
         sys.exit(0)
 
     refresh_token = sys.argv[1]
-    label_id = sys.argv[2]
+    raw_label = sys.argv[2].strip()
+    label_upper = raw_label.upper()
     max_results = int(sys.argv[3]) if len(sys.argv) > 3 else 50
     
     flags_arg = ""
     page_token = ""
     last_history_id = ""
     
-    if label_id == "INBOX":
-        flags_arg = sys.argv[4] if len(sys.argv) > 4 else ""
-        page_token = sys.argv[5] if len(sys.argv) > 5 else ""
-        last_history_id = sys.argv[6] if len(sys.argv) > 6 else ""
+    if label_upper == "INBOX":
+        arg4 = sys.argv[4] if len(sys.argv) > 4 else ""
+        if "," in arg4:
+            flags_arg = arg4
+            page_token = sys.argv[5] if len(sys.argv) > 5 else ""
+            last_history_id = sys.argv[6] if len(sys.argv) > 6 else ""
+        else:
+            flags_arg = ""
+            page_token = arg4
+            last_history_id = sys.argv[5] if len(sys.argv) > 5 else ""
     else:
         page_token = sys.argv[4] if len(sys.argv) > 4 else ""
         last_history_id = sys.argv[5] if len(sys.argv) > 5 else ""
@@ -56,6 +68,7 @@ def main():
     try:
         token = gmail_config.resolve_token(refresh_token)
     except Exception:
+        print(json.dumps({"messages": [], "nextPageToken": "", "historyId": ""}))
         sys.exit(1)
 
     profile = api_get("https://gmail.googleapis.com/gmail/v1/users/me/profile", token)
@@ -85,30 +98,31 @@ def main():
         except Exception:
             pass
 
-    if label_id == "INBOX":
-        cats = []
-        if flags_arg:
+    if label_upper == "INBOX":
+        if flags_arg and "," in flags_arg:
             flags = flags_arg.split(",")
-            if len(flags) == 3:
+            # Only filter if user explicitly selected a custom subset of categories
+            if len(flags) == 3 and not (flags[0] == flags[1] == flags[2]):
+                cats = ["category:primary"]
                 if flags[0] == "1": cats.append("category:updates")
                 if flags[1] == "1": cats.append("category:promotions")
                 if flags[2] == "1": cats.append("category:social")
-        
-        if cats:
-            cats.insert(0, "category:primary")
-            q_cats = "{" + " ".join(cats) + "}"
-            q_param = f"in:inbox {q_cats}"
+                q_cats = "{" + " ".join(cats) + "}"
+                q_param = f"in:inbox {q_cats}"
+                query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
+            else:
+                # Default, all enabled (1,1,1) or all disabled (0,0,0 legacy) -> fetch all INBOX
+                query_params = f"labelIds=INBOX&maxResults={max_results}"
         else:
-            q_param = "in:inbox category:primary"
-        query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
-    elif label_id.startswith("SEARCH:"):
-        q = label_id[7:]
+            query_params = f"labelIds=INBOX&maxResults={max_results}"
+    elif raw_label.upper().startswith("SEARCH:"):
+        q = raw_label[7:]
         query_params = f"q={urllib.parse.quote(q)}&maxResults={max_results}"
     else:
-        query_params = f"labelIds={label_id}&maxResults={max_results}"
+        query_params = f"labelIds={label_upper}&maxResults={max_results}"
 
     if page_token:
-        query_params += f"&pageToken={page_token}"
+        query_params += f"&pageToken={urllib.parse.quote(page_token)}"
 
     listing = api_get(
         f"https://gmail.googleapis.com/gmail/v1/users/me/messages?{query_params}",
@@ -131,7 +145,9 @@ def main():
         futures = {pool.submit(fetch_detail, m["id"], token): i for i, m in enumerate(messages)}
         for future in concurrent.futures.as_completed(futures):
             try:
-                results.append((futures[future], future.result()))
+                res = future.result()
+                if res is not None:
+                    results.append((futures[future], res))
             except Exception:
                 pass
 

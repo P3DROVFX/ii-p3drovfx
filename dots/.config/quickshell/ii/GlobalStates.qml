@@ -6,6 +6,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 
 Singleton {
     id: root
@@ -21,6 +22,12 @@ Singleton {
     property var mediaModeMonitors: []
     property int mediaModeCloseAllTrigger: 0
     property int widgetReStackTrigger: 0
+
+    readonly property bool activeWorkspaceHasWindows: {
+        const activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? HyprlandData.activeWorkspace?.id;
+        if (activeWsId === undefined || activeWsId === null) return false;
+        return (HyprlandData.windowList ?? []).some(w => w.workspace?.id === activeWsId);
+    }
 
     function setMediaModeActiveForScreen(screenName, active) {
         if (!screenName)
@@ -45,6 +52,13 @@ Singleton {
     }
     property bool alarmRinging: false
     property bool cheatsheetOpen: false
+    // A stable tab id makes deep links independent from the user-configurable
+    // tab order. Cheatsheet consumes this intent as soon as it opens.
+    property string cheatsheetPendingTab: ""
+    // Notification actions can ask the lazily-loaded timetable to land on a
+    // concrete local date. A serial makes two clicks for the same day visible.
+    property string timetableRequestedDate: ""
+    property int timetableNavigationRequest: 0
     property bool crosshairOpen: false
     property bool notesOpen: false
     property bool mediaControlsOpen: false
@@ -58,6 +72,39 @@ Singleton {
     property bool overlayOpen: false
     property bool overviewOpen: false
     property bool searchOnlyMode: false
+    // Snapshot before the Overview receives focus. Window-management actions
+    // must never target the layer-shell surface that hosts Search itself.
+    property string searchTargetWindowAddress: ""
+
+    function captureSearchTargetWindow(): void {
+        let rawAddress = String(ToplevelManager.activeToplevel?.HyprlandToplevel?.address ?? "").trim();
+        // Foreign-toplevel focus can be momentarily empty during a global
+        // shortcut. Fall back to Hyprland's most recently focused client on
+        // the current workspace instead of making every action unavailable.
+        if (rawAddress.length === 0) {
+            const workspaceId = Number(HyprlandData.activeWorkspace?.id ?? -1);
+            const candidates = Array.from(HyprlandData.windowList ?? [])
+                .filter(window => Number(window?.workspace?.id ?? -2) === workspaceId)
+                .sort((left, right) => Number(left?.focusHistoryID ?? 9999) - Number(right?.focusHistoryID ?? 9999));
+            rawAddress = String(candidates[0]?.address ?? "").trim();
+        }
+        root.searchTargetWindowAddress = rawAddress.length === 0
+            ? ""
+            : (rawAddress.startsWith("0x") ? rawAddress : `0x${rawAddress}`);
+    }
+
+    function openTimetableAt(dateValue): void {
+        const text = String(dateValue ?? "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text))
+            return;
+        const parts = text.split("-").map(Number);
+        const date = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (Qt.formatDate(date, "yyyy-MM-dd") !== text)
+            return;
+        root.timetableRequestedDate = text;
+        root.timetableNavigationRequest++;
+        root.cheatsheetOpen = true;
+    }
 
     // Legacy Gnome-like window transition state.  These values intentionally
     // remain global because the transition layer and the focused background
@@ -77,7 +124,8 @@ Singleton {
     }
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
-        return Boolean(background && background.zoomOutEnabled && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen));
+        return Boolean(background && background.zoomOutEnabled
+            && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -121,6 +169,120 @@ Singleton {
         // overshoot and make a fade look like an abrupt blink.
         animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(root)
     }
+    // ── Bar widget lifecycle ─────────────────────────────────────────────
+    // Assigning `Config.options.bar.layouts.<group>` replaces the whole JS
+    // array, so the Repeater backing that group destroys and recreates *every*
+    // delegate — not only the one that changed. With no way to tell an arrival
+    // from a rebuild, all of them replayed their entry animation and grew from
+    // zero width at once: that is the flicker when a single widget is added or
+    // removed, and it happened on every config reload too.
+    //
+    // This is the id census of the layout as it stood *before* the current
+    // change. Delegates are recreated synchronously when the array is
+    // reassigned, so they read this while it still describes the old layout;
+    // the refresh is deferred to the next event loop pass on purpose.
+    property var barLayoutSnapshot: ({})
+    readonly property var _barLayoutIds: {
+        const out = {};
+        const groups = [Config.options.bar.layouts.left, Config.options.bar.layouts.center, Config.options.bar.layouts.right];
+        for (let g = 0; g < groups.length; g++) {
+            const group = groups[g];
+            if (!group)
+                continue;
+            for (let i = 0; i < group.length; i++) {
+                const id = group[i] ? group[i].id : "";
+                if (!id)
+                    continue;
+                out[id] = (out[id] ?? 0) + 1;
+            }
+        }
+        return out;
+    }
+    on_BarLayoutIdsChanged: Qt.callLater(() => root.barLayoutSnapshot = root._barLayoutIds)
+
+    // The snapshot is filled in a deferred pass, which lands long before the bar
+    // is first built — so without this the whole bar would come up silently at
+    // startup. The first build flips it (deferred too, so every delegate in that
+    // same build still counts as arriving) and from then on the census rules.
+    property bool barWidgetsIntroduced: false
+
+    // False for a widget that was already on the bar a moment ago — it is being
+    // rebuilt, not arriving, and must land silently.
+    function isNewBarWidget(widgetId) {
+        if (!root.barWidgetsIntroduced)
+            return true;
+        if (!widgetId)
+            return false;
+        return (root.barLayoutSnapshot[widgetId] ?? 0) === 0;
+    }
+
+    // ── Bar placement swap ───────────────────────────────────────────────
+    // Moving the bar between edges used to be a hard cut: the loaders were
+    // destroyed and rebuilt on the other side. This is the shared clock that
+    // turns it into a round trip — the shell retracts through the edge it is
+    // on, the placement is written while it is off screen, and it comes back
+    // in through the new edge. Every host multiplies its own outward direction
+    // by this, so the direction flips on its own when the config does.
+    property real barPlacementSwapProgress: 0
+    property bool barPlacementSwapping: false
+    property bool _pendingBarBottom: false
+    property bool _pendingBarVertical: false
+
+    // Returns false when there is nothing to do, so callers can fall back to a
+    // plain write. Config is only touched from inside the animation.
+    function requestBarPlacement(bottom, vertical) {
+        if (!Config.ready)
+            return false;
+        if (Config.options.bar.bottom === bottom && Config.options.bar.vertical === vertical)
+            return false;
+        root._pendingBarBottom = bottom;
+        root._pendingBarVertical = vertical;
+        barPlacementSwapAnim.restart();
+        return true;
+    }
+
+    SequentialAnimation {
+        id: barPlacementSwapAnim
+        PropertyAction {
+            target: root
+            property: "barPlacementSwapping"
+            value: true
+        }
+        NumberAnimation {
+            target: root
+            property: "barPlacementSwapProgress"
+            to: 1
+            duration: Appearance.animation.shellEdgeSlide.exitDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
+        }
+        ScriptAction {
+            script: {
+                Config.options.bar.bottom = root._pendingBarBottom;
+                Config.options.bar.vertical = root._pendingBarVertical;
+            }
+        }
+        // The bar loaders are torn down and rebuilt on the config change
+        // (see barExtraCondition in IllogicalImpulseFamily). Hold off screen
+        // long enough for the new ones to exist before sliding them in.
+        PauseAnimation {
+            duration: Appearance.animation.shellEdgeSlide.swapHold
+        }
+        NumberAnimation {
+            target: root
+            property: "barPlacementSwapProgress"
+            to: 0
+            duration: Appearance.animation.shellEdgeSlide.enterDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+        PropertyAction {
+            target: root
+            property: "barPlacementSwapping"
+            value: false
+        }
+    }
+
     property bool lockScreenCentered: false
     property bool lockAnimationActive: false
     property bool workspaceRestoreInProgress: false
@@ -144,6 +306,11 @@ Singleton {
     property bool modeFlashActive: false
     property var modeFlashPayload: null
     property bool superReleaseMightTrigger: true
+    // Whether a hosted panel (or the AI chat) currently owns the Search
+    // surface. The Super shortcut lives outside any PanelWindow, so it cannot
+    // ask a SearchWidget directly, and closing the whole Overview from inside
+    // a panel loses a level of navigation the user expects Super to walk back.
+    property bool searchPanelActive: false
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
@@ -167,6 +334,11 @@ Singleton {
     // because the settings window may not exist yet when the deep link is
     // made — the same reason the page and sub-page wait here.
     property string settingsPendingSection: ""
+    // Which tab the Network page was left on. The page itself is destroyed the
+    // moment another settings page is picked, so it cannot remember anything;
+    // held here it survives until the shell reloads, which is where the Wi-Fi
+    // default comes back.
+    property int settingsNetworkTab: 0
     // Welcome is an in-process window. Keep its lifecycle in the shared state
     // graph so first-run, keybinds and Settings deep links all use one owner.
     property bool welcomeOpen: false
@@ -234,6 +406,18 @@ Singleton {
     property real activeSearchHeight: 0
     property real activeSearchWidth: 0
     property string activeSearchQuery: ""
+    // Search panels are lazy and may be hosted on any monitor. Keep a small
+    // transient intent here so callers do not need to know which SearchWidget
+    // instance will render it.
+    property string searchPendingPanel: ""
+    property string searchPendingPanelQuery: ""
+    property int searchPanelNavigationRequest: 0
+    // A search result snapshot belongs to the File Browser surface, not to a
+    // second LauncherSearch provider. The monotonically increasing request lets
+    // a kept-alive panel consume each transient handoff exactly once.
+    property var fileBrowserSearchResults: []
+    property string fileBrowserSearchQuery: ""
+    property int fileBrowserSearchRequest: 0
     property bool searchDropActive: false
     property real searchDropExclusionX: 0
     property real searchDropExclusionY: 0
@@ -421,7 +605,8 @@ Singleton {
         root.cheatsheetOpen = !root.cheatsheetOpen;
     }
 
-    function openCheatsheet() {
+    function openCheatsheet(tabId) {
+        root.cheatsheetPendingTab = String(tabId ?? "");
         if (root.cheatsheetOpen) {
             root.cheatsheetOpen = false;
         }
@@ -481,6 +666,10 @@ Singleton {
 
         function open(): void {
             root.openCheatsheet();
+        }
+
+        function openTab(tabId: string): void {
+            root.openCheatsheet(tabId);
         }
 
         function close(): void {
@@ -825,14 +1014,86 @@ Singleton {
         if (root.overviewOpen) {
             root.overviewOpen = false;
         } else {
+            root.captureSearchTargetWindow();
             root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
             root.overviewOpen = true;
         }
     }
 
     function openSearch(monitorName) {
+        // A panel can be requested from a row after Search is already open.
+        // Keep the opening snapshot in that case: the active surface is now
+        // the Overview, not the application the action must operate on.
+        if (!root.overviewOpen)
+            root.captureSearchTargetWindow();
         root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.overviewOpen = true;
+    }
+
+    function toggleSearchOnly(monitorName) {
+        const requestedMonitor = monitorName || "";
+        const sameMonitor = requestedMonitor === ""
+            || root.activeSearchMonitor === ""
+            || root.activeSearchMonitor === requestedMonitor;
+
+        if (root.overviewOpen && root.searchOnlyMode && sameMonitor) {
+            root.overviewOpen = false;
+            return;
+        }
+
+        root.searchOnlyMode = true;
+        root.openSearch(monitorName);
+    }
+
+    function openSearchPanel(panelId, monitorName, initialQuery) {
+        const requested = String(panelId ?? "").trim();
+        if (requested.length === 0)
+            return;
+        if (requested === "fileBrowser")
+            root.clearFileBrowserSearchResults();
+        root.searchPendingPanel = requested;
+        root.searchPendingPanelQuery = String(initialQuery ?? "");
+        root.searchPanelNavigationRequest++;
+        root.openSearch(monitorName);
+    }
+
+    function clearFileBrowserSearchResults() {
+        root.fileBrowserSearchResults = [];
+        root.fileBrowserSearchQuery = "";
+        root.fileBrowserSearchRequest++;
+    }
+
+    function openFileBrowserResults(paths, query, monitorName) {
+        const results = Array.from(paths ?? []).filter(path => String(path ?? "").length > 0);
+        if (results.length === 0)
+            return;
+        root.fileBrowserSearchResults = results;
+        root.fileBrowserSearchQuery = String(query ?? "");
+        root.fileBrowserSearchRequest++;
+        root.searchPendingPanel = "fileBrowser";
+        root.searchPendingPanelQuery = "";
+        root.searchPanelNavigationRequest++;
+        root.openSearch(monitorName);
+    }
+
+    function consumePendingSearchPanel() {
+        const pending = root.searchPendingPanel;
+        root.searchPendingPanel = "";
+        return pending;
+    }
+
+    function consumePendingSearchPanelQuery() {
+        const pending = root.searchPendingPanelQuery;
+        root.searchPendingPanelQuery = "";
+        return pending;
+    }
+
+    IpcHandler {
+        target: "searchPanel"
+
+        function open(panelId: string): void {
+            root.openSearchPanel(panelId);
+        }
     }
 
     Timer {
@@ -848,12 +1109,20 @@ Singleton {
 
     onOverviewOpenChanged: {
         if (root.overviewOpen) {
+            // Some shortcuts and IPC entry points assign overviewOpen
+            // directly. Capture here as the common synchronous boundary,
+            // before the layer-shell surface can become the active toplevel.
+            root.captureSearchTargetWindow();
             resetSearchOnlyModeTimer.stop();
             if (root.activeSearchMonitor === "") {
                 root.activeSearchMonitor = Hyprland.focusedMonitor?.name ?? "";
             }
         } else {
             root.activeSearchMonitor = "";
+            // A panel cannot outlive the surface that hosted it, and a flag
+            // left set would make the next Super press try to leave a panel
+            // that is not there instead of opening the launcher.
+            root.searchPanelActive = false;
             resetSearchOnlyModeTimer.start();
         }
     }

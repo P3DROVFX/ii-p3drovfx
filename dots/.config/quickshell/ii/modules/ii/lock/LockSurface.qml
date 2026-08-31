@@ -36,6 +36,7 @@ MouseArea {
     onPressed: mouse => {
         forceFieldFocus();
         layoutDialog.close();
+        lockContextMenu.close();
         if (Config.options.lock.rippleEffect ?? true) {
             // Emit via GlobalStates so Background.qml (WlrLayer.Top) renders the ripple
             // — the WlSessionLock surface renders under the background panel when locked.
@@ -71,6 +72,7 @@ MouseArea {
     property bool ctrlHeld: false
     Keys.onPressed: event => {
         root.context.resetClearTimer();
+        lockContextMenu.close();
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = true;
         }
@@ -125,125 +127,342 @@ MouseArea {
         sourceComponent: LockNotifications {}
     }
 
-    // Now Playing island
-    Toolbar {
-        id: nowPlayingIsland
+    // Top Toolbars Row (Now Playing & Sports)
+    Row {
+        id: topToolbars
         anchors {
             top: parent.top
             topMargin: 20
             horizontalCenter: parent.horizontalCenter
         }
-        
-        readonly property bool showNowPlaying: (Config.options.lock.nowPlaying ?? true) && MprisController.activePlayer !== null
-        
-        opacity: root.toolbarOpacity * (showNowPlaying ? 1 : 0)
-        scale: root.toolbarScale * (showNowPlaying ? 1 : 0.8)
-        visible: opacity > 0.01
+        spacing: 12
+        z: 5
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutCubic
-            }
-        }
-        Behavior on scale {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutBack
-            }
-        }
+        // Now Playing island
+        Toolbar {
+            id: nowPlayingIsland
+            
+            readonly property bool showNowPlaying: (Config.options.lock.nowPlaying ?? true) && MprisController.activePlayer !== null
+            
+            opacity: root.toolbarOpacity * (showNowPlaying ? 1 : 0)
+            scale: root.toolbarScale * (showNowPlaying ? 1 : 0.8)
+            visible: opacity > 0.01
 
-        transform: Translate {
-            y: nowPlayingIsland.showNowPlaying ? (1.0 - root.toolbarOpacity) * -40 : -40
-            Behavior on y {
+            Behavior on opacity {
                 NumberAnimation {
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                    easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
-                }
-            }
-        }
-
-        padding: 6
-        spacing: 8
-
-        Item {
-            id: textWrapper
-            Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 8
-            implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
-            implicitHeight: textColumn.implicitHeight
-            clip: true
-
-            Behavior on implicitWidth {
-                NumberAnimation {
-                    duration: 300
+                    duration: 250
                     easing.type: Easing.OutCubic
                 }
             }
-
-            ColumnLayout {
-                id: textColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2
-                
-                StyledText {
-                    Layout.fillWidth: true
-                    text: MprisController.activeTrack ? MprisController.activeTrack.title : Translation.tr("Unknown Title")
-                    font.weight: Font.Bold
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                    elide: Text.ElideRight
-                }
-                
-                StyledText {
-                    Layout.fillWidth: true
-                    text: MprisController.activeTrack ? MprisController.activeTrack.artist : Translation.tr("Unknown Artist")
-                    font.weight: Font.Light
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.colors.colOnSurface
-                    opacity: 0.7
-                    elide: Text.ElideRight
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutBack
                 }
             }
-        }
 
-        Item {
-            implicitWidth: 40
-            implicitHeight: 40
-            Layout.alignment: Qt.AlignVCenter
-            
-            Image {
-                id: albumArt
-                anchors.fill: parent
-                source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
-                fillMode: Image.PreserveAspectCrop
-                visible: source !== ""
-                
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: albumArt.width
-                        height: albumArt.height
-                        radius: width / 2
+            transform: Translate {
+                y: nowPlayingIsland.showNowPlaying ? (1.0 - root.toolbarOpacity) * -40 : -40
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
                     }
                 }
             }
 
-            Rectangle {
-                id: placeholderCircle
-                anchors.fill: parent
-                color: Appearance.colors.colPrimary
-                radius: width / 2
-                visible: !albumArt.visible
+            padding: 6
+            spacing: 8
+
+            Item {
+                id: textWrapper
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 8
+                implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
+                implicitHeight: textColumn.implicitHeight
+                clip: true
+
+                Behavior on implicitWidth {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                ColumnLayout {
+                    id: textColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: MprisController.activeTrack ? MprisController.activeTrack.title : Translation.tr("Unknown Title")
+                        font.weight: Font.Bold
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnSurface
+                        elide: Text.ElideRight
+                    }
+                    
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: MprisController.activeTrack ? MprisController.activeTrack.artist : Translation.tr("Unknown Artist")
+                        font.weight: Font.Light
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colOnSurface
+                        opacity: 0.7
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
+            Item {
+                implicitWidth: 40
+                implicitHeight: 40
+                Layout.alignment: Qt.AlignVCenter
                 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "music_note"
-                    color: Appearance.colors.colOnPrimary
-                    iconSize: 20
+                Image {
+                    id: albumArt
+                    anchors.fill: parent
+                    source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
+                    fillMode: Image.PreserveAspectCrop
+                    visible: source !== ""
+                    
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: albumArt.width
+                            height: albumArt.height
+                            radius: width / 2
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: placeholderCircle
+                    anchors.fill: parent
+                    color: Appearance.colors.colPrimary
+                    radius: width / 2
+                    visible: !albumArt.visible
+                    
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "music_note"
+                        color: Appearance.colors.colOnPrimary
+                        iconSize: 20
+                    }
+                }
+            }
+        }
+
+        // Sports island
+        MouseArea {
+            id: sportsIsland
+            readonly property bool showSports: (Config.options.lock.sports ?? true) && SportsService.currentGame !== null && SportsService.allGames.length > 0
+            property var displayGame: SportsService.currentGame
+
+            implicitWidth: sportsToolbar.implicitWidth
+            implicitHeight: sportsToolbar.implicitHeight
+
+            opacity: root.toolbarOpacity * (showSports ? 1 : 0)
+            scale: (pressed ? 0.95 : 1.0) * root.toolbarScale * (showSports ? 1 : 0.8)
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutBack
+                }
+            }
+
+            transform: Translate {
+                y: sportsIsland.showSports ? (1.0 - root.toolbarOpacity) * -40 : -40
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                    }
+                }
+            }
+
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: {
+                SportsService.nextGame();
+            }
+
+            StyledToolTipContent {
+                text: sportsIsland.displayGame ? `${sportsIsland.displayGame.league || "Sports"} • ${sportsIsland.displayGame.name || ""}` : Translation.tr("Sports")
+                shown: sportsIsland.containsMouse
+                anchors.top: parent.bottom
+                anchors.topMargin: 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                z: 100
+            }
+
+            Connections {
+                target: SportsService
+                function onCurrentGameChanged() {
+                    if (sportsIsland.showSports && sportsIsland.displayGame !== SportsService.currentGame) {
+                        if (sportsIsland.displayGame && SportsService.currentGame && sportsIsland.displayGame.id === SportsService.currentGame.id) {
+                            sportsIsland.displayGame = SportsService.currentGame;
+                        } else {
+                            sportsSwitchAnim.restart();
+                        }
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: sportsSwitchAnim
+                NumberAnimation { target: sportsIsland; property: "opacity"; to: 0.3; duration: 100; easing.type: Easing.InSine }
+                ScriptAction {
+                    script: {
+                        if (SportsService.currentGame) {
+                            sportsIsland.displayGame = SportsService.currentGame;
+                        }
+                    }
+                }
+                NumberAnimation { target: sportsIsland; property: "opacity"; to: root.toolbarOpacity; duration: 150; easing.type: Easing.OutSine }
+            }
+
+            Toolbar {
+                id: sportsToolbar
+                anchors.fill: parent
+                padding: 6
+                spacing: 8
+
+                // Home Team Shield (inside Circle)
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    radius: width / 2
+                    color: Appearance.colors.colSurfaceContainerHigh
+
+                    StyledImage {
+                        id: homeLogoImg
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        source: (sportsIsland.displayGame && sportsIsland.displayGame.home && sportsIsland.displayGame.home.logo) ? sportsIsland.displayGame.home.logo : ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        cache: true
+                        visible: source !== ""
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "sports_soccer"
+                        color: Appearance.colors.colOnSurfaceVariant
+                        iconSize: 20
+                        visible: !homeLogoImg.visible
+                    }
+                }
+
+                // Home Team Score (outer side)
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 2
+                    Layout.rightMargin: 2
+                    text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.home) ? (sportsIsland.displayGame.home.score || "0") : ""
+                    visible: text !== ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnSurface
+                    animateChange: true
+                }
+
+                // Center Timer / Status Pill
+                Rectangle {
+                    id: timerPill
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitHeight: 28
+                    implicitWidth: Math.max(timerText.implicitWidth + 16, 32)
+                    radius: height / 2
+                    color: {
+                        if (!sportsIsland.displayGame) return Appearance.colors.colSurfaceContainerHighest;
+                        if (sportsIsland.displayGame.state === "in") return Appearance.colors.colPrimary;
+                        return Appearance.colors.colSurfaceContainerHighest;
+                    }
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
+
+                    StyledText {
+                        id: timerText
+                        anchors.centerIn: parent
+                        text: {
+                            if (!sportsIsland.displayGame) return "";
+                            if (sportsIsland.displayGame.state === "in") {
+                                return SportsService.compactMatchStatus(sportsIsland.displayGame.status, "in");
+                            }
+                            return sportsIsland.displayGame.status || "";
+                        }
+                        font.weight: Font.Bold
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: {
+                            if (!sportsIsland.displayGame) return Appearance.colors.colOnSurfaceVariant;
+                            if (sportsIsland.displayGame.state === "in") return Appearance.colors.colOnPrimary;
+                            return Appearance.colors.colOnSurfaceVariant;
+                        }
+                        animateChange: true
+                    }
+                }
+
+                // Away Team Score (outer side)
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 2
+                    Layout.rightMargin: 2
+                    text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.away) ? (sportsIsland.displayGame.away.score || "0") : ""
+                    visible: text !== ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnSurface
+                    animateChange: true
+                }
+
+                // Away Team Shield (inside Circle)
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    radius: width / 2
+                    color: Appearance.colors.colSurfaceContainerHigh
+
+                    StyledImage {
+                        id: awayLogoImg
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        source: (sportsIsland.displayGame && sportsIsland.displayGame.away && sportsIsland.displayGame.away.logo) ? sportsIsland.displayGame.away.logo : ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        cache: true
+                        visible: source !== ""
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "sports_soccer"
+                        color: Appearance.colors.colOnSurfaceVariant
+                        iconSize: 20
+                        visible: !awayLogoImg.visible
+                    }
                 }
             }
         }
@@ -387,6 +606,21 @@ MouseArea {
 
             Keys.onPressed: event => {
                 root.context.resetClearTimer();
+                lockContextMenu.close();
+            }
+
+            // Context menu on right-click
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                cursorShape: Qt.IBeamCursor
+                onPressed: mouse => {
+                    if (mouse.button === Qt.RightButton) {
+                        layoutDialog.close();
+                        const globalPos = passwordBox.mapToItem(root, mouse.x, mouse.y);
+                        lockContextMenu.openAt(globalPos.x, globalPos.y);
+                    }
+                }
             }
             
             layer.enabled: true
@@ -752,7 +986,7 @@ MouseArea {
             
             contentItem: Image {
                 anchors.centerIn: parent
-                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                source: WeatherIcons.getWeatherIcon((Weather.data && Weather.data.wCode !== undefined) ? Weather.data.wCode : 113, false)
                 sourceSize: Qt.size(22, 22)
             }
         }
@@ -845,7 +1079,7 @@ MouseArea {
         ToolbarButton {
             id: modeButton
             readonly property bool shown: Modes.active && Config.options.modes.lockPill
-            readonly property string colorKey: Modes.activeMode?.color ?? ""
+            readonly property string colorKey: (Modes.activeMode && Modes.activeMode.color) ? Modes.activeMode.color : ""
             Layout.fillHeight: true
             Layout.preferredWidth: shown ? (modeRow.implicitWidth + 24) : 0
             visible: Layout.preferredWidth > 0
@@ -869,14 +1103,14 @@ MouseArea {
                 spacing: 6
 
                 MaterialSymbol {
-                    text: Modes.activeMode?.icon ?? "tune"
+                    text: (Modes.activeMode && Modes.activeMode.icon) ? Modes.activeMode.icon : "tune"
                     iconSize: 18
                     color: ModeUi.onContainer(modeButton.colorKey)
                     fill: 1
                 }
 
                 StyledText {
-                    text: Modes.activeMode?.name ?? ""
+                    text: (Modes.activeMode && Modes.activeMode.name) ? Modes.activeMode.name : ""
                     font.weight: Font.Medium
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: ModeUi.onContainer(modeButton.colorKey)
@@ -1111,10 +1345,17 @@ MouseArea {
         }
     }
 
+    LockContextMenu {
+        id: lockContextMenu
+        targetField: passwordBox
+        lockContext: root.context
+    }
+
     Connections {
         target: GlobalStates
         function onScreenLockedChanged() {
             layoutDialog.close();
+            lockContextMenu.close();
         }
     }
 }

@@ -387,6 +387,22 @@ ContentPage {
         }
     }
 
+    ContentSection {
+        icon: "link"
+        title: Translation.tr("Related settings")
+
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "lockScreen"
+                label: Translation.tr("Lock screen settings")
+                sectionHighlight: Translation.tr("Widgets & Layout")
+            }
+        }
+    }
+
     // ── LeagueChip component ──────────────────────────────────────────────
     component LeagueChip: Rectangle {
         property string text

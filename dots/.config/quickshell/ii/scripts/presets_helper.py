@@ -22,6 +22,27 @@ def is_sensitive_key(key: str) -> bool:
         return True
     return False
 
+DOCK_BLACKLIST_KEYS = {
+    "pinnedApps",
+    "pinnedFiles",
+    "appGroups",
+    "order",
+    "ignoredAppRegexes",
+    "livePreviewAppId",
+    "enableMediaWidget",
+    "enableWeatherWidget",
+    "enableSportsWidget",
+    "enableLivePreviewWidget",
+    "livePreviewSlots",
+    "livePreviewPaintCursor",
+    "livePreviewCaptureMode",
+    "livePreviewFollowActiveWindow",
+    "showPhoneButton",
+    "showTrashButton",
+    "showOverviewButton",
+    "showPinButton",
+}
+
 def remove_secrets_and_userdata(data):
     if isinstance(data, dict):
         cleaned = {}
@@ -39,6 +60,14 @@ def remove_secrets_and_userdata(data):
                         continue
                     search_copy[sk] = remove_secrets_and_userdata(sv)
                 cleaned[k] = search_copy
+                continue
+            if k == 'dock' and isinstance(v, dict):
+                dock_copy = {}
+                for dk, dv in v.items():
+                    if dk in DOCK_BLACKLIST_KEYS or is_sensitive_key(dk):
+                        continue
+                    dock_copy[dk] = remove_secrets_and_userdata(dv)
+                cleaned[k] = dock_copy
                 continue
             cleaned[k] = remove_secrets_and_userdata(v)
         return cleaned
@@ -133,6 +162,10 @@ def sanitize_data(data, home_dir):
     normalize_path_field(data, 'screenRecord', 'savePath', home_dir, '$HOME/Videos')
     normalize_path_field(data, 'screenSnip', 'savePath', home_dir, '$HOME/Pictures/Screenshots')
     normalize_path_field(data, 'localsend', 'downloadPath', home_dir, '$HOME/Downloads')
+    normalize_path_field(data, 'userProfile', 'imagePath', home_dir)
+    normalize_path_field(data, 'sidebar', 'bannerImage', home_dir)
+    if 'sidebar' in data and isinstance(data['sidebar'], dict) and 'dashboardHeader' in data['sidebar'] and isinstance(data['sidebar']['dashboardHeader'], dict):
+        normalize_path_field(data['sidebar'], 'dashboardHeader', 'profileImagePath', home_dir)
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)
@@ -182,12 +215,73 @@ def expand(input_path, output_path, presets_dir, preset_name):
             if fallback:
                 bg['wallpaperPath'] = fallback
                 data['background'] = bg
-                
+
+    # Check if userProfile.imagePath exists
+    profile = data.get('userProfile', {})
+    if isinstance(profile, dict):
+        profile_path = profile.get('imagePath', '')
+        if not profile_path or not os.path.exists(profile_path):
+            fallback_prof = find_profile_fallback(presets_dir, preset_name)
+            if fallback_prof:
+                profile['imagePath'] = fallback_prof
+                data['userProfile'] = profile
+
+    # Check sidebar.dashboardHeader.profileImagePath and sidebar.bannerImage
+    sb = data.get('sidebar', {})
+    if isinstance(sb, dict):
+        dash_hdr = sb.get('dashboardHeader', {})
+        if isinstance(dash_hdr, dict):
+            p_path = dash_hdr.get('profileImagePath', '')
+            if not p_path or not os.path.exists(p_path):
+                fallback_prof = find_profile_fallback(presets_dir, preset_name)
+                if fallback_prof:
+                    dash_hdr['profileImagePath'] = fallback_prof
+                    sb['dashboardHeader'] = dash_hdr
+
+        banner_path = sb.get('bannerImage', '')
+        if not banner_path or not os.path.exists(banner_path):
+            fallback_banner = find_banner_fallback(presets_dir, preset_name)
+            if fallback_banner:
+                sb['bannerImage'] = fallback_banner
+                data['sidebar'] = sb
+
+    # Preserve target user's existing dock apps and widgets when output config already exists
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, 'r', encoding='utf-8') as f:
+                existing_config = json.load(f)
+            if isinstance(existing_config, dict) and isinstance(existing_config.get('dock'), dict):
+                if 'dock' not in data or not isinstance(data['dock'], dict):
+                    data['dock'] = {}
+                for key in DOCK_BLACKLIST_KEYS:
+                    if key in existing_config['dock']:
+                        data['dock'][key] = existing_config['dock'][key]
+        except Exception:
+            pass
+
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
 def find_wallpaper_fallback(presets_dir, preset_name):
     pattern = os.path.join(presets_dir, f"{preset_name}.*")
+    for filepath in glob.glob(pattern):
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in ('.json', '.zip'):
+            base = os.path.basename(filepath)
+            if not base.startswith(f"{preset_name}_profile.") and not base.startswith(f"{preset_name}_banner."):
+                return filepath
+    return None
+
+def find_profile_fallback(presets_dir, preset_name):
+    pattern = os.path.join(presets_dir, f"{preset_name}_profile.*")
+    for filepath in glob.glob(pattern):
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in ('.json', '.zip'):
+            return filepath
+    return None
+
+def find_banner_fallback(presets_dir, preset_name):
+    pattern = os.path.join(presets_dir, f"{preset_name}_banner.*")
     for filepath in glob.glob(pattern):
         ext = os.path.splitext(filepath)[1].lower()
         if ext not in ('.json', '.zip'):

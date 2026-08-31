@@ -212,18 +212,13 @@ ApiStrategy {
             baseData.options = Object.assign({}, baseData.options ?? {}, {
                 num_predict: maxOutputTokens(model)
             });
-            // Ollama loads a model with a 4096-token window unless the
-            // client asks for more, no matter how large `context_length`
-            // from `/api/show` says the model actually supports. The shell's
-            // own budgeting (`historyWithinWindow`) already trusts that
-            // number as the real ceiling; without repeating it here, that
-            // trust is one-sided, and a full system prompt plus a handful of
-            // tool schemas - or one attached image, which can cost thousands
-            // of vision tokens on its own - silently exceeds the 4096 Ollama
-            // actually allocated. The failure is a fast, opaque HTTP 400
-            // ("exceeds the available context size"), not a graceful trim.
-            if (model.contextWindow > 0)
-                baseData.options.num_ctx = model.contextWindow;
+            // `context_length` from /api/tags is the maximum the model
+            // supports, not an allocation that every machine can afford.
+            // Passing it as `num_ctx` overrides Ollama's VRAM-aware default
+            // (and any OLLAMA_CONTEXT_LENGTH chosen by the user), forcing a
+            // KV cache for the model maximum before it can answer. Let the
+            // daemon select its usable context so API chat matches `ollama
+            // run`, including on lower-memory machines.
         } else {
             baseData[quirk(model, "maxTokensKey", "max_tokens")] = maxOutputTokens(model);
         }

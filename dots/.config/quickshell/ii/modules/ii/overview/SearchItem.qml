@@ -15,6 +15,7 @@ import Quickshell.Hyprland
 
 RippleButton {
     id: root
+    signal resultExecuted(string feedbackText)
     property var entry
     readonly property bool keepsOverviewOpen: entry?.keepOverviewOpen ?? false
     property string query
@@ -36,27 +37,9 @@ RippleButton {
     property string bigText: entry?.iconType === LauncherSearchResult.IconType.Text ? entry?.iconName ?? "" : ""
     property string materialSymbol: entry?.iconType === LauncherSearchResult.IconType.Material ? entry?.iconName ?? "" : ""
     property string cliphistRawString: entry?.rawValue ?? ""
-    property string filePath: Images.isValidImageByName(entry?.name) ? entry?.name : ""
+    readonly property string fallbackIconName: entry?.fallbackIconName ?? ""
     property bool blurImage: entry?.blurImage ?? false
-
-    readonly property string artUrl: MprisController.artUrl || ""
-    readonly property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-
-    // Art is downloaded by SearchWidget. We just reference the cached file path.
-    readonly property string artSource: {
-        if (!artUrl)
-            return "";
-        if (isLocalArt)
-            return artUrl;
-        return Qt.resolvedUrl(artFilePath); // SearchWidget ensures this exists
-    }
-
-    onArtFilePathChanged: {
-        // Art downloading is managed by SearchWidget
-    }
+    readonly property bool hasInlineSwitch: entry?.controlKind === "switch"
 
     function formatMathResult(raw) {
         if (!raw)
@@ -87,23 +70,36 @@ RippleButton {
     }
 
     property bool actionPanelOpen: false
-    readonly property bool isNowPlaying: root.itemType === Translation.tr("Now Playing")
     readonly property bool isBuiltinItem: (root.entry?.key?.startsWith("mock:") || root.entry?.key?.startsWith("shortcut:")) || !!root.entry?.isBuiltin
     readonly property var entryActions: entry?.actions ?? []
     readonly property bool hasCustomActions: root.entryActions.length > 0
     readonly property bool hasActions: root.hasCustomActions || root.itemType === Translation.tr("App")
 
     visible: root.entryShown
-    property int horizontalMargin: 10
+    // Hosts override this; it is the inset the row keeps from the panel edge.
+    property int horizontalMargin: Appearance.sizes.elevationMargin
     property int buttonHorizontalPadding: 10
     property int buttonVerticalPadding: 8
+    /**
+     * AGENTS requires durations to come from `Appearance.animation.*` so the
+     * user's animation multiplier applies to them. These row micro-transitions
+     * have no matching token — they are deliberately shorter than
+     * elementMoveFast, which is what makes a row feel responsive rather than
+     * animated — so they take the multiplier directly instead of ignoring it,
+     * which is the part that actually mattered.
+     */
+    function scaledDuration(milliseconds: int): int {
+        return Math.max(0, Math.round(milliseconds * (Appearance.animMultiplier ?? 1.0)));
+    }
+
     property bool keyboardDown: false
-    property real entryOpacity: 0.0
-    property real entryScale: 0.94
-    property real entryTranslateY: -20
+    // Hosts that already animate their rows (the launcher list animates the
+    // delegate) turn this off rather than stacking a second fade underneath.
+    property bool animateEntrance: true
+    property real entryOpacity: root.animateEntrance ? 0.0 : 1.0
+    property real entryTranslateY: root.animateEntrance ? -Appearance.sizes.elevationMargin : 0
 
     opacity: entryOpacity
-    scale: entryScale
     transform: Translate {
         y: root.entryTranslateY
     }
@@ -115,8 +111,8 @@ RippleButton {
     property bool isFirst: listIndex === 0
     property bool isLast: listIndex === listCount - 1
     readonly property bool isSelected: listIndex === listCurrentIndex
-    readonly property bool isAboveSelected: listCurrentIndex === listIndex + 1 && listCurrentIndex !== -1
-    readonly property bool isBelowSelected: listCurrentIndex === listIndex - 1 && listCurrentIndex !== -1
+    readonly property bool isAboveSelected: !root.isLast && listCurrentIndex === listIndex + 1 && listCurrentIndex !== -1
+    readonly property bool isBelowSelected: !root.isFirst && listCurrentIndex === listIndex - 1 && listCurrentIndex !== -1
     readonly property real pillRadius: Math.min(height / 2, Appearance.rounding.large)
     readonly property int activeHIndex: root.actionPanelOpen ? root.actionSelectedIndex + 1 : 0
 
@@ -125,95 +121,22 @@ RippleButton {
     readonly property real actionBtnPadY: 4
 
     property var allActionItems: {
-        // Lazy: only compute when this item is selected or action panel is open.
+        // Lazy: only compute when this item is selected or the panel is open.
         // Avoids creating closures for every off-screen / unselected item.
         if (!root.isSelected && !root.actionPanelOpen)
             return [];
-
-        let items = [];
-        items.push({
-            name: root.itemClickActionName || Translation.tr("Open"),
-            icon: "open_in_new",
-            execute: () => {
-                const isSystemControl = root.entry?.key?.startsWith("sys:");
-                const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
-                const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
-                const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
-
+        return SearchResultActions.build(root.entry, {
+            onDone: () => {
                 root.actionPanelOpen = false;
-                if (!isConfirming && !isModeSwitch) {
-                    GlobalStates.overviewOpen = false;
-                }
-                root.itemExecute();
-            }
+            },
+            onExecuted: feedbackText => root.resultExecuted(feedbackText)
         });
-        if (root.entry?.type === Translation.tr("App") || root.itemType === Translation.tr("App")) {
-            const isPinned = TaskbarApps.isPinned(root.entry ? root.entry.id : root.iconName);
-            items.push({
-                name: isPinned ? Translation.tr("Unpin from Dock") : Translation.tr("Pin to Dock"),
-                icon: isPinned ? "keep_off" : "keep",
-                execute: () => {
-                    TaskbarApps.togglePin(root.entry ? root.entry.id : root.iconName);
-                    root.actionPanelOpen = false;
-                }
-            });
-            items.push({
-                name: Translation.tr("Copy ID"),
-                icon: "content_copy",
-                execute: () => {
-                    Quickshell.clipboardText = root.entry ? root.entry.id : root.iconName;
-                    root.actionPanelOpen = false;
-                }
-            });
-            items.push({
-                name: Translation.tr("Reset"),
-                icon: "restart_alt",
-                execute: () => {
-                    AppUsage.resetRanking(root.entry ? root.entry.id : root.iconName);
-                    root.actionPanelOpen = false;
-                }
-            });
-        }
-        if (root.contentType === "filepath" || root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias")) {
-            const isDir = root.itemType === Translation.tr("Directory") || root.itemType === Translation.tr("Folder Alias") || FileUtils.isDirectory(root.itemName);
-            if (isDir) {
-                const pinnedFiles = Config.options?.dock?.pinnedFiles ?? [];
-                const cleanPath = root.itemName.toString().replace(/^file:\/\//, "");
-                const isPinned = pinnedFiles.includes(cleanPath);
-
-                items.push({
-                    name: isPinned ? Translation.tr("Unpin folder from Dock") : Translation.tr("Pin folder to Dock"),
-                    icon: isPinned ? "folder_off" : "create_new_folder",
-                    execute: () => {
-                        if (isPinned) {
-                            TaskbarApps.removePinnedFile(root.itemName);
-                        } else {
-                            TaskbarApps.addPinnedFile(root.itemName);
-                        }
-                        root.actionPanelOpen = false;
-                    }
-                });
-            }
-        }
-        const ea = root.entry?.actions ?? [];
-        for (const action of ea) {
-            items.push({
-                name: action.name,
-                icon: action.iconName || "play_arrow",
-                nativeIcon: action.iconType === LauncherSearchResult.IconType.System,
-                execute: () => {
-                    root.actionPanelOpen = false;
-                    GlobalStates.overviewOpen = false;
-                    action.execute();
-                }
-            });
-        }
-        return items;
     }
 
     property int actionSelectedIndex: 0
 
-    property real normalHeight: 48
+    property real normalHeight: 52
+    readonly property real rowHeight: 52
     property bool _animateWidthChange: false
     onActionPanelOpenChanged: {
         if (actionPanelOpen) {
@@ -238,18 +161,12 @@ RippleButton {
             allActionItems[actionSelectedIndex].execute();
     }
 
-    implicitHeight: {
-        if (isNowPlaying)
-            return nowPlayingLoader.item ? nowPlayingLoader.item.implicitHeight + buttonVerticalPadding * 2 : 80;
-        if (root.actionPanelOpen)
-            return normalHeight;
-        return contentRow.implicitHeight + buttonVerticalPadding * 2;
-    }
+    implicitHeight: root.actionPanelOpen ? normalHeight : root.rowHeight
     implicitWidth: contentRow.implicitWidth + root.buttonHorizontalPadding * 2
 
     Behavior on implicitHeight {
         NumberAnimation {
-            duration: 250
+            duration: root.scaledDuration(250)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
         }
@@ -264,27 +181,45 @@ RippleButton {
 
     readonly property string highlightPrefix: `<u><font color="${Appearance.colors.colPrimary}">`
     readonly property string highlightSuffix: `</font></u>`
+    /**
+     * Underline the query inside a result name.
+     *
+     * Only the first contiguous fuzzy-match run is emphasized. Highlighting
+     * every later island made long names look like confetti and obscured the
+     * suffix that actually distinguishes similarly named applications.
+     */
     function highlightContent(content, query) {
-        if (!query || query.length === 0 || content == query || fontType === "monospace")
+        if (!query || query.length === 0 || content === query || root.fontType === "monospace")
             return StringUtils.escapeHtml(content);
-        let contentLower = content.toLowerCase();
-        let queryLower = query.toLowerCase();
-        let result = "";
-        let lastIndex = 0;
-        let qIndex = 0;
-        for (let i = 0; i < content.length && qIndex < query.length; i++) {
-            if (contentLower[i] === queryLower[qIndex]) {
-                if (i > lastIndex)
-                    result += StringUtils.escapeHtml(content.slice(lastIndex, i));
-                result += root.highlightPrefix + StringUtils.escapeHtml(content[i]) + root.highlightSuffix;
-                lastIndex = i + 1;
-                qIndex++;
+
+        const contentLower = content.toLowerCase();
+        const queryLower = query.toLowerCase();
+        let runStart = -1;
+        let runEnd = -1;
+        let queryIndex = 0;
+
+        for (let i = 0; i < content.length; i++) {
+            const matches = queryIndex < query.length && contentLower[i] === queryLower[queryIndex];
+            if (matches) {
+                if (runStart === -1)
+                    runStart = i;
+                queryIndex++;
+            } else if (runStart !== -1) {
+                runEnd = i;
+                break;
             }
         }
-        if (lastIndex < content.length)
-            result += StringUtils.escapeHtml(content.slice(lastIndex));
-        return result;
+        if (runStart === -1)
+            return StringUtils.escapeHtml(content);
+        if (runEnd === -1)
+            runEnd = content.length;
+        return StringUtils.escapeHtml(content.slice(0, runStart))
+            + root.highlightPrefix
+            + StringUtils.escapeHtml(content.slice(runStart, runEnd))
+            + root.highlightSuffix
+            + StringUtils.escapeHtml(content.slice(runEnd));
     }
+
     property string displayContent: {
         // Skip highlight computation when selected — text shows itemName directly
         if (root.isSelected)
@@ -320,13 +255,13 @@ RippleButton {
 
         Behavior on topLeftRadius {
             NumberAnimation {
-                duration: 100
+                duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
             }
         }
         Behavior on bottomLeftRadius {
             NumberAnimation {
-                duration: 100
+                duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
             }
         }
@@ -361,7 +296,7 @@ RippleButton {
             Behavior on x {
                 enabled: root._animateWidthChange
                 NumberAnimation {
-                    duration: 250
+                    duration: root.scaledDuration(250)
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                 }
@@ -383,7 +318,7 @@ RippleButton {
                 Behavior on width {
                     enabled: root._animateWidthChange
                     NumberAnimation {
-                        duration: 250
+                        duration: root.scaledDuration(250)
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
@@ -393,25 +328,25 @@ RippleButton {
                 // animating all 4 independently costs 4x animation overhead per item
                 Behavior on topLeftRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on topRightRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomLeftRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomRightRadius {
                     NumberAnimation {
-                        duration: 100
+                        duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -434,7 +369,6 @@ RippleButton {
                     anchors.fill: parent
                     anchors.leftMargin: root.buttonHorizontalPadding
                     anchors.rightMargin: root.buttonHorizontalPadding
-                    visible: !root.isNowPlaying
 
                     Item {
                         id: iconContainer
@@ -454,28 +388,10 @@ RippleButton {
                                 color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
 
-                                transform: Scale {
-                                    origin.x: iconContainer.width / 2
-                                    origin.y: iconContainer.height / 2
-                                    xScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
-                                    yScale: root.isSelected && !root.actionPanelOpen ? 1.06 : 1.0
-                                    Behavior on xScale {
-                                        NumberAnimation {
-                                            duration: 80
-                                            easing.type: Easing.OutBack
-                                        }
-                                    }
-                                    Behavior on yScale {
-                                        NumberAnimation {
-                                            duration: 80
-                                            easing.type: Easing.OutBack
-                                        }
-                                    }
-                                }
                             }
 
                             IconImage {
@@ -485,7 +401,7 @@ RippleButton {
                                 smooth: true
                                 Behavior on implicitSize {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: root.scaledDuration(150)
                                     }
                                 }
                             }
@@ -494,14 +410,44 @@ RippleButton {
                         MaterialSymbol {
                             anchors.centerIn: parent
                             visible: root.iconType === LauncherSearchResult.IconType.Material
-                            text: root.materialSymbol
+                                || (root.iconType === LauncherSearchResult.IconType.Image && resultImage.status !== Image.Ready)
+                            text: root.iconType === LauncherSearchResult.IconType.Image
+                                ? (root.fallbackIconName.length > 0 ? root.fallbackIconName : "link")
+                                : root.materialSymbol
                             iconSize: 26
                             fill: root.isSelected ? 1.0 : 0.0
                             color: root.colForeground
                             Behavior on iconSize {
                                 NumberAnimation {
-                                    duration: 150
+                                    duration: root.scaledDuration(150)
                                 }
+                            }
+                        }
+
+                        // Rounded so a photo reads as part of the row rather than
+                        // a rectangle dropped into it.
+                        ClippingRectangle {
+                            anchors.centerIn: parent
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            visible: root.iconType === LauncherSearchResult.IconType.Image
+                                && resultImage.status === Image.Ready
+                            color: "transparent"
+                            radius: Appearance.rounding.verysmall
+
+                            StyledImage {
+                                id: resultImage
+                                anchors.fill: parent
+                                // Without a source size Qt decodes the file at full
+                                // resolution to paint 32 pixels — a wallpaper hit
+                                // would cost tens of megabytes per row.
+                                sourceSize.width: 64
+                                sourceSize.height: 64
+                                visible: root.iconType === LauncherSearchResult.IconType.Image
+                                source: visible ? root.iconName : ""
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                cache: true
                             }
                         }
 
@@ -515,7 +461,7 @@ RippleButton {
                                 color: root.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -534,8 +480,6 @@ RippleButton {
                         height: 14
                         radius: Appearance.rounding.full
                         color: root.itemName || "transparent"
-                        border.width: 1
-                        border.color: Appearance.colors.colOutlineVariant
                         visible: root.contentType === "hex-color" && !root.actionPanelOpen
                     }
 
@@ -610,7 +554,7 @@ RippleButton {
                                 font.family: (root.fontType === "monospace" || root.contentType === "json") ? Appearance.font.family.monospace : Appearance.font.family.main
                                 color: root.colForeground
                                 horizontalAlignment: Text.AlignLeft
-                                elide: Text.ElideRight
+                                elide: Text.ElideMiddle
                                 text: root.isSelected ? root.itemName : root.displayContent
                             }
                         }
@@ -711,16 +655,6 @@ RippleButton {
                             }
                         }
 
-                        Loader {
-                            active: root.filePath != ""
-                            sourceComponent: FileSearchImage {
-                                Layout.fillWidth: true
-                                imagePath: root.filePath
-                                maxWidth: contentColumn.width
-                                maxHeight: 140
-                                blur: Config.options.search.blurFileSearchResultPreviews
-                            }
-                        }
                     }
 
                     StyledText {
@@ -731,157 +665,50 @@ RippleButton {
                         font.family: Appearance.font.family.main
                         font.weight: Font.Medium
                         color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                        elide: Text.ElideRight
+                        elide: Text.ElideMiddle
                     }
 
                     Item {
                         id: actionIndicator
-                        readonly property bool shouldShow: root.isSelected && !root.actionPanelOpen && root.allActionItems.length > 1
+                        readonly property bool shouldShow: root.isSelected && !root.actionPanelOpen && !root.hasInlineSwitch && root.allActionItems.length > 1
                         visible: (shouldShow || indicatorAnim.running) && !root.actionPanelOpen
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: 44
                         implicitHeight: 16
                         opacity: shouldShow ? 1.0 : 0.0
-                        scale: shouldShow ? 1.0 : 0.7
                         Behavior on opacity {
                             NumberAnimation {
                                 id: indicatorAnim
-                                duration: 100
+                                duration: root.scaledDuration(100)
                                 easing.type: Easing.OutQuad
                             }
                         }
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 100
-                                easing.type: Easing.OutBack
-                            }
-                        }
-                        Row {
+                        KeyHint {
                             anchors.centerIn: parent
-                            spacing: 2
-                            Rectangle {
-                                width: 26
-                                height: 16
-                                radius: 3
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: "Ctrl"
-                                    font.pixelSize: 9
-                                    font.family: Appearance.font.family.main
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceContainer
-                                }
-                            }
-                            Rectangle {
-                                width: 14
-                                height: 16
-                                radius: 3
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: "K"
-                                    font.pixelSize: 9
-                                    font.family: Appearance.font.family.main
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurfaceContainer
-                                }
-                            }
+                            keys: ["Ctrl", "K"]
+                            surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                            onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                         }
                     }
-                }
 
-                Loader {
-                    id: nowPlayingLoader
-                    active: root.isNowPlaying
-                    visible: root.isNowPlaying
-                    anchors.fill: parent
-                    anchors.leftMargin: root.buttonHorizontalPadding
-                    anchors.rightMargin: root.buttonHorizontalPadding
-                    anchors.topMargin: root.buttonVerticalPadding
-                    anchors.bottomMargin: root.buttonVerticalPadding
+                    KeyHint {
+                        visible: !root.actionPanelOpen && (root.entry?.keyHints?.length ?? 0) > 0
+                        Layout.alignment: Qt.AlignVCenter
+                        keys: root.entry?.keyHints ?? []
+                        surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                        onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                    }
 
-                    sourceComponent: RowLayout {
-                        spacing: 14
-
-                        Item {
-                            Layout.preferredWidth: 56
-                            Layout.preferredHeight: 56
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Appearance.rounding.large
-                                color: Appearance.colors.colSurfaceContainerHighest
+                    StyledSwitch {
+                        visible: root.hasInlineSwitch && !root.actionPanelOpen
+                        Layout.alignment: Qt.AlignVCenter
+                        sizeScale: 0.62
+                        checked: Boolean(root.entry?.controlValue)
+                        onToggled: {
+                            if (typeof root.itemExecute === "function") {
+                                root.itemExecute();
+                                root.resultExecuted(String(root.entry?.feedbackText ?? ""));
                             }
-
-                            Image {
-                                anchors.fill: parent
-                                source: root.artSource
-                                fillMode: Image.PreserveAspectCrop
-                                smooth: true
-                                visible: source !== ""
-                                layer.enabled: true
-                                layer.effect: OpacityMask {
-                                    maskSource: Rectangle {
-                                        width: 56
-                                        height: 56
-                                        radius: Appearance.rounding.large
-                                    }
-                                }
-                            }
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "music_note"
-                                iconSize: 28
-                                color: Appearance.colors.colOnSurfaceVariant
-                                visible: root.artSource === ""
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            StyledText {
-                                text: MprisController.activePlayer?.trackTitle || Translation.tr("Nothing playing")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                font.weight: Font.DemiBold
-                                font.family: Appearance.font.family.main
-                                color: root.colForeground
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            StyledText {
-                                text: MprisController.activePlayer?.trackArtist || ""
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.family: Appearance.font.family.main
-                                color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                                opacity: root.isSelected ? 0.7 : 1.0
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                                visible: text !== ""
-                            }
-                        }
-
-                        RippleButton {
-                            implicitWidth: 44
-                            implicitHeight: 44
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colPrimary
-                            colBackgroundHover: Appearance.colors.colPrimaryHover
-                            colRipple: Appearance.colors.colPrimaryActive
-                            visible: !root.actionPanelOpen
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: MprisController.isPlaying ? "pause" : "play_arrow"
-                                iconSize: 26
-                                color: Appearance.m3colors.m3onPrimary
-                            }
-                            onClicked: MprisController.togglePlaying()
                         }
                     }
                 }
@@ -912,37 +739,37 @@ RippleButton {
                     opacity: root.actionPanelOpen ? 1.0 : 0.0
                     Behavior on opacity {
                         NumberAnimation {
-                            duration: 250
+                            duration: root.scaledDuration(250)
                             easing.type: Easing.OutCubic
                         }
                     }
 
                     Behavior on color {
                         ColorAnimation {
-                            duration: 80
+                            duration: root.scaledDuration(80)
                         }
                     }
                     Behavior on topLeftRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on topRightRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomLeftRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomRightRadius {
                         NumberAnimation {
-                            duration: 140
+                            duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
@@ -973,7 +800,7 @@ RippleButton {
                                 color: actionBtn.isBtnActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -995,7 +822,7 @@ RippleButton {
                                 color: actionBtn.isBtnActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnSurfaceVariant
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 80
+                                        duration: root.scaledDuration(80)
                                     }
                                 }
                             }
@@ -1011,7 +838,7 @@ RippleButton {
                             Layout.maximumWidth: 120
                             Behavior on color {
                                 ColorAnimation {
-                                    duration: 80
+                                    duration: root.scaledDuration(80)
                                 }
                             }
                         }
@@ -1026,10 +853,6 @@ RippleButton {
             root.actionPanelOpen = false;
             return;
         }
-        if (root.isNowPlaying) {
-            MprisController.togglePlaying();
-            return;
-        }
 
         const isSystemControl = root.entry?.key?.startsWith("sys:");
         const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
@@ -1040,6 +863,7 @@ RippleButton {
             GlobalStates.overviewOpen = false;
         }
         root.itemExecute();
+        root.resultExecuted(String(root.entry?.feedbackText ?? ""));
     }
 
     Keys.onPressed: event => {
@@ -1081,7 +905,7 @@ RippleButton {
         running: false
 
         PauseAnimation {
-            duration: Math.max(0, Math.min(6, root.listIndex) * 30)
+            duration: Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
         }
 
         ParallelAnimation {
@@ -1089,27 +913,23 @@ RippleButton {
                 target: root
                 property: "entryOpacity"
                 to: 1.0
-                duration: 50
-                easing.type: Easing.OutQuad
-            }
-            NumberAnimation {
-                target: root
-                property: "entryScale"
-                to: 1.0
-                duration: 100
-                easing.type: Easing.OutBack
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
             NumberAnimation {
                 target: root
                 property: "entryTranslateY"
                 to: 0
-                duration: 50
-                easing.type: Easing.OutQuad
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
         }
     }
 
     Component.onCompleted: {
-        entryAnim.start();
+        if (root.animateEntrance)
+            entryAnim.start();
     }
 }

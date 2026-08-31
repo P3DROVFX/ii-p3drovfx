@@ -24,6 +24,13 @@ Item {
     readonly property bool tabsWanted: GlobalStates.sidebarLeftOpen || root.keepLoaded
     property string routedSessionRequestId: ""
 
+    function cycleTab(direction) {
+        if (root.tabCount <= 1)
+            return;
+        const next = (tabBar.currentIndex + direction + root.tabCount) % root.tabCount;
+        tabBar.setCurrentIndex(next);
+    }
+
     // Policy controls must be handled at the content boundary as well as by
     // the surrounding PanelWindow/TopLayer. The active tab can contain a
     // TextEdit, which otherwise consumes Ctrl+D/P/O before the window-level
@@ -50,9 +57,13 @@ Item {
             else
                 GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
         } else if (event.key === Qt.Key_PageDown) {
-            swipeView.incrementCurrentIndex();
+            root.cycleTab(1);
         } else if (event.key === Qt.Key_PageUp) {
-            swipeView.decrementCurrentIndex();
+            root.cycleTab(-1);
+        } else if (event.key === Qt.Key_Tab) {
+            root.cycleTab((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+        } else if (event.key === Qt.Key_Backtab) {
+            root.cycleTab(-1);
         } else {
             return;
         }
@@ -161,7 +172,8 @@ Item {
                 root.visitedTabs = {};
             }
             if (GlobalStates.sidebarLeftOpen) {
-                if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
+                const animMultiplier = (Config.options && Config.options.appearance && Config.options.appearance.animationMultiplier !== undefined) ? Config.options.appearance.animationMultiplier : 1.0;
+                if (animMultiplier <= 0.25) {
                     toolbarContainer.opacity = 1
                     toolbarTrans.x = 0
                     tabBar.opacity = 1
@@ -176,7 +188,7 @@ Item {
                 toolbarEntranceAnim.stop()
                 toolbarEntranceAnim.start()
 
-                if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
+                if (swipeView.currentItem && swipeView.currentItem.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
                     swipeView.currentItem.item.triggerContentEntrance();
                 }
             }
@@ -216,8 +228,23 @@ Item {
     // tab, when the user switches to it, and when its Loader finishes activating.
     function focusAiInput() {
         if (!GlobalStates.sidebarLeftOpen) return;
-        if (root.activeTabs[swipeView.currentIndex]?.icon !== "neurology") return;
-        swipeView.currentItem?.item?.forceActiveFocus();
+        if (!root.activeTabs[swipeView.currentIndex] || root.activeTabs[swipeView.currentIndex].icon !== "neurology") return;
+        if (swipeView.currentItem && swipeView.currentItem.item) {
+            swipeView.currentItem.item.forceActiveFocus();
+        }
+    }
+
+    // The Translator tab owns keyboard shortcuts that live on its root ("type /
+    // to translate" and Ctrl+Enter to swap languages). Keys only reach that root
+    // while it (or its input) holds active focus, so hand it focus the same way
+    // the AI tab gets its composer focused.
+    function focusTranslatorInput() {
+        console.log("[TranslatorTest] focusTranslatorInput, tab icon:", root.activeTabs[swipeView.currentIndex]?.icon);
+        if (!GlobalStates.sidebarLeftOpen) return;
+        if (!root.activeTabs[swipeView.currentIndex] || root.activeTabs[swipeView.currentIndex].icon !== "translate") return;
+        if (swipeView.currentItem && swipeView.currentItem.item) {
+            swipeView.currentItem.item.forceActiveFocus();
+        }
     }
 
     // Consume a sidebar deep-link only after the AI tab is the visible
@@ -229,7 +256,7 @@ Item {
             return;
         if (!GlobalStates.sidebarLeftOpen || intent.monitorName !== GlobalStates.activeLeftSidebarMonitor)
             return;
-        if (root.activeTabs[swipeView.currentIndex]?.icon !== "neurology" || !swipeView.currentItem?.item)
+        if (!root.activeTabs[swipeView.currentIndex] || root.activeTabs[swipeView.currentIndex].icon !== "neurology" || !swipeView.currentItem || !swipeView.currentItem.item)
             return;
         if (intent.sessionId.length > 0 && Ai.sessions.currentId !== intent.sessionId) {
             if (root.routedSessionRequestId !== intent.requestId) {
@@ -275,7 +302,10 @@ Item {
     Connections {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
-            if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
+            if (GlobalStates.sidebarLeftOpen) {
+                Qt.callLater(root.focusAiInput);
+                Qt.callLater(root.focusTranslatorInput);
+            }
             root.tryConsumeSurfaceIntent();
         }
     }
@@ -375,7 +405,7 @@ Item {
                         }
                     }
 
-                    if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
+                    if (swipeView.currentItem && swipeView.currentItem.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {
                         swipeView.currentItem.item.triggerContentEntrance();
                     }
 
@@ -429,6 +459,7 @@ Item {
                                         }
                                     });
                                     Qt.callLater(root.focusAiInput);
+                                    Qt.callLater(root.focusTranslatorInput);
                                 }
                             }
                         }
@@ -451,6 +482,7 @@ Item {
                                         tabDelegate.item.triggerContentEntrance();
                                     }
                                 });
+                                Qt.callLater(root.focusTranslatorInput);
                             } else {
                                 tabDelegate.opacity = 1;
                                 trans.x = 0;

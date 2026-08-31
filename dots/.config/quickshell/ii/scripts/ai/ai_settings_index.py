@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 6
 # How far below the best match a result may score and still be worth showing.
 RELEVANCE_FLOOR = 0.5
 # A hard ceiling on results, whatever the caller asks for. A question has a
@@ -186,9 +186,44 @@ def property_expression(block: str, name: str) -> str:
     # Option objects inside `options: [...]` are written JSON-style with the
     # key quoted ("displayName": ...), which the plain-identifier pattern
     # never matched — every selection array came back with zero options.
-    pattern = re.compile(rf"(?:^|\n)\s*\"?{re.escape(name)}\"?\s*:\s*([^\n]+)")
+    # Compact QML also places several properties on one line separated by
+    # semicolons. Capturing to the newline made `buttonIcon: "bluetooth";
+    # text: "Bluetooth"` one expression, and the later translated label won
+    # when it was interpreted as text. Recognize semicolons as property
+    # boundaries and stop only at a top-level separator, preserving nested JS
+    # expressions and quoted punctuation.
+    pattern = re.compile(rf"(?:^|[\n;])\s*\"?{re.escape(name)}\"?\s*:\s*")
     match = pattern.search(block)
-    return match.group(1).strip().rstrip(";").strip().rstrip(",") if match else ""
+    if not match:
+        return ""
+
+    start = match.end()
+    depth = 0
+    quote = ""
+    escaped = False
+    index = start
+    while index < len(block):
+        char = block[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            index += 1
+            continue
+        if char in ("'", '"', "`"):
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}" and depth > 0:
+            depth -= 1
+        elif depth == 0 and char in (";", "\n"):
+            break
+        index += 1
+
+    return block[start:index].strip().rstrip(",").strip()
 
 
 def text_from_expression(expression: str) -> str:
@@ -227,11 +262,13 @@ def assigned_keys(block: str) -> set[str]:
 def direct_binding(expression: str) -> str:
     """The config path when a binding reads exactly one, bare."""
     expression = expression.strip()
-    if not expression.startswith("Config.options."):
-        # A computed value (`a ? "x" : "b"`, `page.opts.helper`) cannot be
-        # written back safely by anything that only knows the entry key.
-        return ""
-    return config_key(expression)
+    match = re.fullmatch(
+        r"Config\.options\.([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)",
+        expression,
+    )
+    # A computed value (`Config.options.x * 100`, a ternary, a helper) cannot
+    # be written back safely by anything that only knows the stored key.
+    return match.group(1) if match else ""
 
 
 def qml_value(expression: str) -> Any:
@@ -275,11 +312,26 @@ def _object_property(block: str, name: str) -> str:
 
 
 def option_values(block: str) -> list[dict[str, Any]]:
-    """Extract the stable display/value pairs from ConfigSelectionArray."""
-    match = re.search(r"(?:^|\n)\s*options\s*:\s*\[", block)
+    """Extract stable display/value pairs from a ConfigSelectionArray.
+
+    Pages use both a literal ``options: [...]`` and a computed binding such as
+    ``options: { ...; return [...]; }``.  The latter is especially common for
+    composite controls (bar position, sidebar position), which must remain
+    searchable even though the launcher deliberately refuses to write them
+    inline.
+    """
+    match = re.search(r"(?:^|\n)\s*options\s*:", block)
     if not match:
         return []
-    opening = block.find("[", match.start())
+    expression = block[match.end():]
+    direct_array = re.match(r"\s*\[", expression)
+    returned_array = None if direct_array else re.search(r"\breturn\s*\[", expression)
+    if direct_array:
+        opening = match.end() + direct_array.end() - 1
+    elif returned_array:
+        opening = match.end() + returned_array.end() - 1
+    else:
+        return []
     end = _matching_end(block, opening, "[", "]")
     if end is None:
         return []
@@ -302,6 +354,34 @@ def option_values(block: str) -> list[dict[str, Any]]:
             })
         index = finish + 1
     return values
+
+
+def options_are_dynamic(block: str) -> bool:
+    """Whether option availability is decided by executable QML/JS.
+
+    The generated index intentionally stores only stable labels and values.
+    It cannot reproduce an option's live ``enabled`` binding, so a computed
+    option array is searchable but must be opened in its real Settings page.
+    """
+    match = re.search(r"(?:^|\n)\s*options\s*:", block)
+    if not match:
+        return False
+    expression = block[match.end():]
+    direct_array = re.match(r"\s*\[", expression)
+    returned_array = None if direct_array else re.search(r"\breturn\s*\[", expression)
+    if direct_array:
+        opening = match.end() + direct_array.end() - 1
+    elif returned_array:
+        opening = match.end() + returned_array.end() - 1
+    else:
+        # An external/helper-provided option model is executable state too.
+        return True
+    end = _matching_end(block, opening, "[", "]")
+    if end is None:
+        return True
+    array = block[opening + 1:end]
+    has_live_availability = re.search(r"(?:^|[,{])\s*[\"']?enabled[\"']?\s*:", array) is not None
+    return direct_array is None or has_live_availability
 
 
 def parse_pages(registry_path: Path) -> list[dict[str, Any]]:
@@ -421,20 +501,29 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
     entries: list[dict[str, Any]] = []
     for widget, (widget_type, binding) in WIDGETS.items():
         for block in extract_blocks(text, widget):
-            binding_key = direct_binding(property_expression(block["inner"], binding))
+            binding_expression = property_expression(block["inner"], binding)
+            binding_key = direct_binding(binding_expression)
+            referenced_binding_key = config_key(binding_expression)
             writes = assigned_keys(block["inner"])
             key = binding_key
-            if not key and len(writes) == 1:
+            if binding_key:
+                has_ui = len(writes) == 0 or writes == {binding_key}
+            elif referenced_binding_key:
+                # The display value mentions this key but transforms or
+                # combines it. Keep the result discoverable without exposing
+                # a control that writes display units into stored units.
+                key = referenced_binding_key
+                has_ui = False
+            elif len(writes) == 1:
                 # Controls that keep the current value on a helper object and
                 # write the choice to config from the handler
                 # (`currentValue: page.opts.x` + `onSelected: … appStats.x = v`).
                 key = next(iter(writes))
+                has_ui = True
             # A control driving several settings at once (the bar-position
             # selector packs bottom+vertical into one bitmask) must stay
             # findable and openable, but nothing may claim to write it
             # directly: writing one of its keys alone would corrupt the pair.
-            if key:
-                has_ui = len(writes) == 0 or writes == {key}
             else:
                 # Last resort for identity only — the first config path the
                 # block happens to mention. Never writable, still searchable
@@ -459,6 +548,8 @@ def extract_entries(record: dict[str, Any], root: Path, translations: dict[str, 
             if not icon:
                 icon = text_from_expression(property_expression(block["inner"], "buttonIcon")) or section_icon
             options = option_values(block["inner"])
+            if options_are_dynamic(block["inner"]):
+                has_ui = False
             option_labels = [str(option.get("label", "")) for option in options]
             if label:
                 source_label = label

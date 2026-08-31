@@ -34,6 +34,17 @@ import ai_web  # noqa: E402
 
 
 class ContextWindowContractTests(unittest.TestCase):
+    def test_native_ollama_defers_context_allocation_to_the_daemon(self):
+        # `context_length` from /api/tags is the model's supported maximum,
+        # not a safe allocation for this user's hardware.  Sending it as
+        # `num_ctx` bypasses Ollama's own VRAM-aware context choice and can
+        # make even a short chat fail while `ollama run` still works.
+        native_request = OPENAI_STRATEGY.split(
+            "if (nativeOllama) {\n            const baseName", 1
+        )[1].split("        } else {", 1)[0]
+        self.assertNotRegex(native_request, r"\\b(?:baseData\\.options\\.)?num_ctx\\s*[:=]")
+        self.assertIn("num_predict: maxOutputTokens(model)", native_request)
+
     def test_request_sends_only_what_fits(self):
         self.assertIn("historyWithinWindow(filteredMessageArray, model)", AI_SERVICE)
         self.assertIn("strategy.buildRequestData(model, windowed.messages", AI_SERVICE)

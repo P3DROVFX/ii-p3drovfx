@@ -24,6 +24,14 @@ OverlayBackground {
         updateCopyListEntries();
     }
 
+    Component.onDestruction: {
+        // The debounce timer dies with this widget; commit whatever it was still holding.
+        if (saveDebounce.running) {
+            saveDebounce.stop();
+            root.saveToFile();
+        }
+    }
+
     Connections {
         target: NotesService
         function onDataChanged() {

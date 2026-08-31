@@ -24,7 +24,7 @@ Item {
     onCompVisibleChanged: rootItem.toggleVisible(compVisible)
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Rectangle {

@@ -57,22 +57,6 @@ Item {
         }
     }
 
-    Rectangle {
-        id: bottomShadowGradient
-        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
-        anchors {
-            bottom: barBackground.bottom
-            left: barBackground.left
-            right: barBackground.right
-        }
-        height: 6
-        radius: barBackground.radius
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.12) }
-        }
-    }
-
     // ── Islands (barBackgroundStyle === 3) ────────────────────────────────────
     property color islandFillColor: Config.options.bar.expressiveColors
         ? root.activeTheme.barBackground
@@ -180,6 +164,7 @@ Item {
             Repeater {
                 model: root.leftList
                 delegate: BarComponent {
+                    growthEdge: "trailing"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
@@ -202,6 +187,7 @@ Item {
             Repeater {
                 model: root.rightList
                 delegate: BarComponent {
+                    growthEdge: "leading"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }

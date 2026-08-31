@@ -30,6 +30,25 @@ AbstractBackgroundWidget {
         radius: width / 2
     }
 
+    readonly property string cleanSource: {
+        let path = Config.options.background.widgets.photo.imagePath;
+        if (!path || path === "") return "";
+        const qIdx = path.indexOf("?");
+        if (qIdx !== -1) path = path.substring(0, qIdx);
+        return path.startsWith("file://") ? path : ("file://" + path);
+    }
+
+    readonly property bool isAnimated: {
+        const lower = root.cleanSource.toLowerCase();
+        return lower.includes(".gif") || lower.includes(".webp");
+    }
+
+    readonly property bool shouldPlay: {
+        return root.visible && root.opacity > 0 && root.isAnimated
+            && !GlobalStates.screenLocked
+            && !GlobalStates.activeWorkspaceHasWindows;
+    }
+
     Item {
         anchors.fill: outerCircle
         anchors.margins: 8
@@ -41,30 +60,45 @@ AbstractBackgroundWidget {
             color: WidgetColorScheme.innerShapeColor
         }
 
-        MaterialShape {
-            id: maskShape
+        // Static Image loader (hardware-accelerated, zero QMovie overhead)
+        Image {
+            id: staticImg
             anchors.fill: parent
-            shape: MaterialShape.Shape.Cookie12Sided
-            visible: false
+            source: !root.isAnimated ? root.cleanSource : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            visible: !root.isAnimated && status === Image.Ready
+
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: MaterialShape {
+                    width: staticImg.width
+                    height: staticImg.height
+                    shape: MaterialShape.Shape.Cookie12Sided
+                }
+            }
         }
 
-        Image {
+        // Animated GIF loader (only active when isAnimated is true)
+        AnimatedImage {
             id: photoImage
             anchors.fill: parent
-            source: {
-                let path = Config.options.background.widgets.photo.imagePath;
-                if (!path || path === "") return "";
-                return "file://" + path;
-            }
+            source: root.isAnimated ? root.cleanSource : ""
             fillMode: Image.PreserveAspectCrop
-            visible: false
-        }
+            playing: root.shouldPlay
+            paused: !root.shouldPlay
+            asynchronous: true
+            cache: false
+            visible: root.isAnimated && status === Image.Ready
 
-        OpacityMask {
-            anchors.fill: parent
-            source: photoImage
-            maskSource: maskShape
-            visible: photoImage.status === Image.Ready
+            layer.enabled: true
+            layer.effect: OpacityMask {
+                maskSource: MaterialShape {
+                    width: photoImage.width
+                    height: photoImage.height
+                    shape: MaterialShape.Shape.Cookie12Sided
+                }
+            }
         }
     }
 }

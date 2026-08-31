@@ -70,14 +70,22 @@ AbstractBackgroundWidget {
         }
 
         // 2. Dots, Bubbles & Hands Canvas Overlay
-        ScallopDotClock {
+        // Supersampled: this dial is a Canvas, so it rasterises at its own
+        // item size. Without this it would be a stretched bitmap the moment
+        // the widget is scaled up.
+        Supersampled {
             anchors.fill: parent
-            useBlackBg:            root.cfgUseBlackBg
-            enableGlassReflection: root.cfgEnableGlassReflection
-            showHourHand:          root.cfgShowHourHand
-            showMinuteBubble:      root.cfgShowMinuteBubble
-            showDots:              root.cfgShowDots
-            boldFont:              root.cfgBoldFont
+            factor: root.renderScale
+        
+            ScallopDotClock {
+                anchors.fill: parent
+                useBlackBg:            root.cfgUseBlackBg
+                enableGlassReflection: root.cfgEnableGlassReflection
+                showHourHand:          root.cfgShowHourHand
+                showMinuteBubble:      root.cfgShowMinuteBubble
+                showDots:              root.cfgShowDots
+                boldFont:              root.cfgBoldFont
+            }
         }
 
         // ── 3D Glass Dome Reflection ──────────────────────────────────────────

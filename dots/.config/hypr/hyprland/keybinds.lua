@@ -22,6 +22,10 @@ hl.bind("SUPER + Tab", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { d
 -- hl.bind("CTRL + Space", hl.dsp.global("quickshell:searchOnlyToggle"), { description = "Shell: Open search only" }) -- Disabled by default for those who play games
 hl.bind("SUPER + V", hl.dsp.global("quickshell:overviewClipboardToggle"))
 hl.bind("SUPER + Period", hl.dsp.global("quickshell:overviewEmojiToggle"))
+-- Super+Shift+C is already the Color Picker. Keep that established shortcut
+-- and give Commands its own conflict-free entry point.
+hl.bind("SUPER + ALT + C", hl.dsp.global("quickshell:overviewCommandsOpen"),
+    { description = "Shell: Open Search commands" })
 hl.bind("SUPER + A", hl.dsp.global("quickshell:sidebarLeftToggle"), { description = "Shell: Toggle left sidebar" })
 hl.bind("SUPER + ALT + A", hl.dsp.global("quickshell:sidebarLeftToggleDetach"))
 hl.bind("SUPER + B", hl.dsp.global("quickshell:sidebarLeftToggle"))

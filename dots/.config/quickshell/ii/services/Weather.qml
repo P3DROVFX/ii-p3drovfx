@@ -28,6 +28,63 @@ Singleton {
         refetchDebounce.restart();
     }
 
+    signal dataRefreshed
+    signal refreshFailed(string reason)
+
+    // A manual refresh (bar right-click, widget refresh button) is an explicit user
+    // action, so it must bypass the rate limit that exists to throttle automatic
+    // fetches. The notification is only sent once real data lands.
+    property bool manualRefreshPending: false
+
+    function refreshManually() {
+        // Repeated clicks while a request is still in flight would each hit the API,
+        // since a manual refresh skips the rate limit. Fold them into the first one.
+        if (root.manualRefreshPending) return;
+        root.manualRefreshPending = true;
+        manualRefreshTimeout.restart();
+        root.getData(true);
+    }
+
+    onDataRefreshed: {
+        if (!root.manualRefreshPending) return;
+        root.manualRefreshPending = false;
+        manualRefreshTimeout.stop();
+        root.notifyRefreshed();
+    }
+
+    onRefreshFailed: reason => {
+        if (!root.manualRefreshPending) return;
+        root.manualRefreshPending = false;
+        manualRefreshTimeout.stop();
+        console.error(`[WeatherService] Manual refresh failed: ${reason}`);
+    }
+
+    // The request can die without either callback ever reporting back (no network,
+    // DNS blackhole). Drop the pending flag so a later automatic fetch doesn't
+    // surface a notification the user never asked for.
+    Timer {
+        id: manualRefreshTimeout
+        interval: 20000
+        repeat: false
+        onTriggered: root.manualRefreshPending = false
+    }
+
+    function notifyRefreshed() {
+        const d = root.data;
+        const hour = DateTime.clock.date.getHours();
+        const icon = WeatherIcons.getWeatherIcon(d.wCode ?? 113, hour >= 18 || hour < 6);
+        const body = [
+            Translation.tr("%1 · feels like %2").arg(d.wDesc).arg(d.tempFeelsLike),
+            Translation.tr("Wind %1 %2 · Humidity %3 · UV %4")
+                .arg(d.wind).arg(d.windDir).arg(d.humidity).arg(Math.round(d.uv)),
+            Translation.tr("Sunrise %1 · Sunset %2").arg(d.sunrise).arg(d.sunset),
+            Translation.tr("Updated %1").arg(DateTime.time)
+        ].join("\n");
+
+        Quickshell.execDetached(["notify-send", `${d.city} · ${d.temp}`, body,
+            "-a", "Shell", "-u", "low", "-h", `string:image-path:${icon}`]);
+    }
+
     Timer {
         id: refetchDebounce
         interval: 250
@@ -242,6 +299,7 @@ Singleton {
         }
         root.hourlyData = hourlyList;
         root.forecastLoading = false;
+        root.dataRefreshed();
     }
 
     property double lastFetchTimestamp: 0
@@ -277,10 +335,15 @@ Singleton {
                                 fetchWeather(loc.lat, loc.lon, loc.city);
                             } else {
                                 console.error("[WeatherService] ip-api failed:", loc.message);
+                                root.refreshFailed(`ip-api: ${loc.message}`);
                             }
                         } catch (e) {
                             console.error("[WeatherService] Failed to parse location:", e);
+                            root.refreshFailed(`ip-api parse: ${e}`);
                         }
+                    } else {
+                        console.error("[WeatherService] ip-api error:", xhr.status);
+                        root.refreshFailed(`ip-api HTTP ${xhr.status}`);
                     }
                 }
             };
@@ -307,10 +370,15 @@ Singleton {
                             fetchWeather(loc.latitude, loc.longitude, loc.name);
                         } else {
                             console.error("[WeatherService] Geocoding failed for:", cityName);
+                            root.refreshFailed(`no coordinates for ${cityName}`);
                         }
                     } catch (e) {
                         console.error("[WeatherService] Failed to parse geocoding:", e);
+                        root.refreshFailed(`geocoding parse: ${e}`);
                     }
+                } else {
+                    console.error("[WeatherService] Geocoding API error:", xhr.status);
+                    root.refreshFailed(`geocoding HTTP ${xhr.status}`);
                 }
             }
         };
@@ -332,10 +400,12 @@ Singleton {
                     } catch (e) {
                         console.error("[WeatherService] Failed to parse weather:", e);
                         root.forecastLoading = false;
+                        root.refreshFailed(`weather parse: ${e}`);
                     }
                 } else {
                     console.error("[WeatherService] Weather API error:", xhr.status);
                     root.forecastLoading = false;
+                    root.refreshFailed(`weather HTTP ${xhr.status}`);
                 }
             }
         };

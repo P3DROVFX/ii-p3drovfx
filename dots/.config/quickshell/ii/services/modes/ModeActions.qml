@@ -277,29 +277,30 @@ QtObject {
     }
 
     // ---- earbuds: whichever supported headset is connected right now.
-    readonly property var ancModes: ({ normal: "Normal", transparency: "Transparency", anc: "NoiseCanceling" })
+    readonly property var ancModes: ({ normal: "off", off: "off", transparency: "transparency", adaptive: "adaptive", anc: "anc" })
 
-    function earbudsService() {
-        if (SoundcoreService.isConnected)
-            return SoundcoreService;
-        if (BudsService.isConnected)
-            return BudsService;
-        return null;
+    function earbudsDevice() {
+        return EarbudsControlService.activeDevice;
     }
 
-    function ancKey(modeName) {
-        for (const key in root.ancModes) {
-            if (root.ancModes[key] === modeName)
-                return key;
-        }
-        return "normal";
+    function ancKey(semanticMode) {
+        if (!semanticMode || semanticMode === "off")
+            return "normal";
+        return semanticMode;
     }
 
     function setAnc(key) {
-        const service = root.earbudsService();
-        if (!service)
+        const dev = root.earbudsDevice();
+        if (!dev)
             throw new Error("no supported earbuds connected");
-        service.setMode(service.activeDevice.address, root.ancModes[key] ?? "Normal");
+        const normKey = (key === "normal" || key === "off") ? "off" : key;
+        const nc = EarbudsControlService.noiseControl(dev);
+        if (!nc || !nc.available)
+            throw new Error("noise control unavailable for connected device");
+        const supportedKeys = (nc.modes || []).map(m => m.key);
+        if (supportedKeys.length > 0 && !supportedKeys.includes(normKey))
+            throw new Error(`mode "${key}" is not supported by this device`);
+        EarbudsControlService.setNoiseMode(dev, normKey);
     }
 
     // ---- workspaces: a plain number, a relative step, "empty", "name:x",
@@ -811,19 +812,35 @@ QtObject {
         },
         earbudsAnc: {
             id: "earbudsAnc", category: "sound", label: "Earbuds noise control", icon: "noise_control_off",
-            editor: "segmented", choices: () => ["normal", "transparency", "anc"], volatile: false,
-            choiceLabel: v => v === "anc" ? "Noise cancelling" : (v === "transparency" ? "Transparency" : "Normal"),
-            // value: "normal" | "transparency" | "anc", on whichever supported
-            // earbuds are connected when the action runs
+            editor: "segmented", volatile: false,
+            choices: () => {
+                const dev = root.earbudsDevice();
+                const nc = EarbudsControlService.noiseControl(dev);
+                if (nc && nc.hasAdaptive)
+                    return ["normal", "transparency", "adaptive", "anc"];
+                return ["normal", "transparency", "anc"];
+            },
+            choiceLabel: v => {
+                if (v === "anc") return "Noise cancelling";
+                if (v === "transparency") return "Transparency";
+                if (v === "adaptive") return "Adaptive";
+                return "Off (Normal)";
+            },
+            // value: "normal" | "off" | "transparency" | "adaptive" | "anc"
             available: () => true,
             read: () => {
-                const service = root.earbudsService();
-                return service ? root.ancKey(service.currentMode) : null;
+                const dev = root.earbudsDevice();
+                return dev ? root.ancKey(EarbudsControlService.currentNoiseMode(dev)) : null;
             },
-            normalize: v => root.ancModes[v] ? v : "normal",
-            apply: v => { root.setAnc(root.ancModes[v] ? v : "normal"); },
+            normalize: v => {
+                const k = String(v).toLowerCase();
+                if (k === "off" || k === "normal") return "normal";
+                if (k === "transparency" || k === "adaptive" || k === "anc") return k;
+                return "normal";
+            },
+            apply: v => { root.setAnc(v); },
             revert: was => {
-                if (was && root.earbudsService())
+                if (was && root.earbudsDevice())
                     root.setAnc(was);
             }
         },

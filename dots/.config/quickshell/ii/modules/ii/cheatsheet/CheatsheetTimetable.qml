@@ -1,417 +1,258 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 import QtQuick
-import QtQuick.Layouts
-import QtQuick.Controls
-import QtQuick.Controls.Material
-import qs.modules.common.functions
-import "./timetable"
-import "timetable/TimetableHelpers.js" as H
+import "timetable"
 
+/**
+ * Host for the timetable calendar shapes.
+ *
+ * Owns the plate both views sit on, and nothing else: the week grid and the
+ * month grid are independent trees, and only the selected one exists. The
+ * selector itself lives in the cheatsheet header, so this file never has to
+ * know how the choice is made — it just follows the persisted state.
+ */
 Item {
     id: root
-    property real spacing: 8
 
-    readonly property bool eventPopupVisible: eventPopup.visible
+    focus: true
 
-    property int startHour: 0
-    property int startMinute: 0
-    property int endHour: 24
-    property int slotDuration: 60 // in minutes
-    property int slotHeight: 120 // in pixels
-    property int timeColumnWidth: 100
     property real maxContentWidth: 1600
-
-    readonly property int totalSlots: Math.floor(((endHour * 60) - (startHour * 60 + startMinute)) / slotDuration)
-    readonly property real pixelsPerMinute: slotHeight / slotDuration
-    readonly property int contentHeight: totalSlots * slotHeight
-
     property real maxHeight: 700
-    property real headerHeight: 64 + (hasAllDayEvents ? maxAllDayEventCount * (allDayChipHeight + allDayChipSpacing) + 8 : 0)
-    property real currentTimeY: -1
-    property bool initialScrollApplied: false
-    readonly property real dayColumnWidth: {
-        let availableWidth = root.width > 0 ? root.width : maxContentWidth;
-        return Math.max(80, (availableWidth - timeColumnWidth - days.length * spacing) / Math.max(1, days.length));
-    }
-    readonly property int currentDayIndex: Config.options.cheatsheet.timetableTodayFirst ? 0 : ((DateTime.clock.date.getDay() - Config.options.time.firstDayOfWeek + 6) % 7)
 
-    implicitWidth: maxContentWidth
-    implicitHeight: Math.min(headerHeight + contentHeight, maxHeight)
-    property var days: CalendarService.eventsInWeek
-    readonly property int allDayChipHeight: 36
-    readonly property int allDayChipSpacing: 6
-    readonly property int maxAllDayEventCount: {
-        if (!root.days || root.days.length === 0)
-            return 0;
-        let maxCount = 0;
-        for (let i = 0; i < root.days.length; i++) {
-            let count = H.getAllDayEvents(root.days[i]?.events).length;
-            if (count > maxCount)
-                maxCount = count;
-        }
-        return maxCount;
-    }
-    readonly property bool hasAllDayEvents: maxAllDayEventCount > 0
+    implicitWidth: root.maxContentWidth
+    implicitHeight: root.maxHeight
 
-    // ─── Theme Colors ───
-    readonly property color todayHighlightFill: H.withOpacity(Appearance.colors.colPrimary, 0.12)
-    readonly property color todayHighlightBorder: H.withOpacity(Appearance.colors.colPrimary, 0.28)
-    readonly property color dayBackgroundFill: H.withOpacity(Appearance.colors.colSecondary, 0.04)
-    readonly property color dayBackgroundFillVariant: H.withOpacity(Appearance.colors.colSecondary, 0.08)
+    readonly property var supportedModes: ["day", "threeDay", "week", "month"]
 
-    // ─── State ───
-    property var nextEventData: null
-    property real maxLogicalDistance: 1.0
+    // The persisted value reads back invalid for a moment whenever Persistent
+    // loads or reloads the file it watches — and opening this tab writes to
+    // that file. Treating the gap as a real mode change cost a whole fade out
+    // and back in for a value that never changed, twice over, which is the
+    // blink that went away once the state settled. The last valid mode stays.
+    readonly property string persistedMode: String(Persistent.states.cheatsheet?.timetableView ?? "")
+    property string requestedMode: "week"
+    property string activeMode: "week"
+    property bool viewInitialised: false
 
-    property bool ghostVisible: false
-    property int ghostDayIndex: -1
-    property real ghostTopY: 0
-    property real ghostHeight: 0
+    onPersistedModeChanged: root.adoptPersistedMode()
 
-    // ─── Helpers ───
-    function updateCurrentTimeLine() {
-        let time = DateTime.clock.date;
-        let currentTotalMinutes = time.getHours() * 60 + time.getMinutes();
-        let baseTotalMinutes = root.startHour * 60 + root.startMinute;
-        currentTimeY = (currentTotalMinutes - baseTotalMinutes) * root.pixelsPerMinute;
-    }
-
-    function updateNextEvent() {
-        if (!root.days || root.days.length === 0) {
-            root.nextEventData = null;
-            root.maxLogicalDistance = 1.0;
+    function adoptPersistedMode() {
+        if (!root.supportedModes.includes(root.persistedMode))
             return;
-        }
-
-        let now = DateTime.clock.date;
-        let currentDayIdx = root.currentDayIndex;
-        let nowTotalMins = currentDayIdx * 24 * 60 + (now.getHours() * 60 + now.getMinutes());
-
-        let bestDiff = Infinity;
-        let nextEvt = null;
-
-        for (let i = 0; i < root.days.length; i++) {
-            let events = H.getTimedEvents(root.days[i]?.events);
-            for (let evt of events) {
-                let startMins = H.parseTimeToMinutes(evt.start);
-                let endMins = H.parseTimeToMinutes(evt.end);
-                if (startMins === null)
-                    continue;
-                if (endMins === null || (endMins === 0 && startMins > 0))
-                    endMins = 24 * 60;
-
-                let evtStartTotal = i * 24 * 60 + startMins;
-                let evtEndTotal = i * 24 * 60 + endMins;
-
-                if (evtEndTotal > nowTotalMins) {
-                    let diff = Math.max(0, evtStartTotal - nowTotalMins);
-                    if (diff < bestDiff) {
-                        bestDiff = diff;
-                        nextEvt = {
-                            dayIndex: i,
-                            startMinutes: startMins,
-                            endMinutes: endMins
-                        };
-                    }
-                }
-            }
-        }
-
-        if (!nextEvt) {
-            let earliestTotal = Infinity;
-            for (let i = 0; i < root.days.length; i++) {
-                for (let evt of H.getTimedEvents(root.days[i]?.events)) {
-                    let startMins = H.parseTimeToMinutes(evt.start);
-                    if (startMins === null)
-                        continue;
-                    let evtStartTotal = i * 24 * 60 + startMins;
-                    if (evtStartTotal < earliestTotal) {
-                        earliestTotal = evtStartTotal;
-                        nextEvt = {
-                            dayIndex: i,
-                            startMinutes: startMins,
-                            endMinutes: H.parseTimeToMinutes(evt.end)
-                        };
-                    }
-                }
-            }
-        }
-
-        root.nextEventData = nextEvt;
-
-        let maxDist = 0;
-        if (nextEvt) {
-            for (let i = 0; i < root.days.length; i++) {
-                for (let evt of H.getTimedEvents(root.days[i]?.events)) {
-                    let startMins = H.parseTimeToMinutes(evt.start);
-                    if (startMins === null)
-                        continue;
-                    let dist = Math.sqrt(Math.pow(i - nextEvt.dayIndex, 2) + Math.pow((startMins - nextEvt.startMinutes) / 60.0, 2));
-                    if (dist > maxDist)
-                        maxDist = dist;
-                }
-            }
-        }
-        root.maxLogicalDistance = Math.max(1.0, maxDist);
+        root.requestedMode = root.persistedMode;
     }
 
-    function scrollToCurrentTime() {
-        if (!styledFlickable || styledFlickable.height <= 0) {
-            Qt.callLater(root.scrollToCurrentTime);
+    property bool sportsSubscriberAcquired: false
+    property bool sportsReady: false
+    readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents
+    readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
+    readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
+    readonly property bool timetableDragActive: root.activeViewItem?.timetableDragActive === true
+
+    Keys.priority: Keys.AfterItem
+    Keys.onPressed: event => {
+        if (!root.activeViewItem || typeof root.activeViewItem.handleNavigationKey !== "function")
             return;
-        }
-        let now = DateTime.clock.date;
-        let diff = Math.max(0, (now.getHours() * 60 + now.getMinutes()) - (root.startHour * 60 + root.startMinute));
-        let targetY = diff * root.pixelsPerMinute - (styledFlickable.height / 3);
-        styledFlickable.contentY = Math.min(Math.max(0, targetY), Math.max(0, styledFlickable.contentHeight - styledFlickable.height));
+        event.accepted = root.activeViewItem.handleNavigationKey(event);
     }
 
-    function maybeApplyInitialScroll() {
-        if (root.initialScrollApplied || !styledFlickable || styledFlickable.height <= 0 || !root.days || root.days.length === 0) {
-            Qt.callLater(root.maybeApplyInitialScroll);
+    function openRequestedDate() {
+        if (GlobalStates.timetableNavigationRequest <= 0)
             return;
-        }
-        root.scrollToCurrentTime();
-        root.initialScrollApplied = true;
+        // Opening a concrete date uses the month grid, where the selected day
+        // and its event rail are visible together. This is an explicit action,
+        // so persisting the mode also keeps the header selector truthful.
+        if (Persistent.states.cheatsheet.timetableView !== "month")
+            Persistent.states.cheatsheet.timetableView = "month";
     }
 
-    // ─── Actions ───
-    function openPopupForGhost() {
-        let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-        let eventDate = H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-        let colX = root.timeColumnWidth + (root.ghostDayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = root.ghostTopY + root.headerHeight - styledFlickable.contentY + 20;
-        eventPopup.open(H.minutesToTimeStr(topMin, Config.options?.time.format), H.minutesToTimeStr(botMin, Config.options?.time.format), eventDate, root.ghostDayIndex, colX, colY);
-    }
-
-    function openPopupForEdit(event, dayIndex) {
-        let startMin = H.parseTimeToMinutes(event.start);
-        let endMin = H.parseTimeToMinutes(event.end);
-        let eventDate = H.getDateForDayIndex(dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst);
-        let colX = root.timeColumnWidth + (dayIndex * (root.dayColumnWidth + root.spacing)) + root.dayColumnWidth;
-        let colY = H.minutesToY(startMin, root.startHour, root.startMinute, root.pixelsPerMinute) + root.headerHeight - styledFlickable.contentY + 20;
-        eventPopup.openForEdit(H.minutesToTimeStr(startMin, Config.options?.time.format), H.minutesToTimeStr(endMin, Config.options?.time.format), eventDate, dayIndex, colX, colY, event);
-    }
-
-    Connections {
-        target: DateTime.clock
-        function onDateChanged() {
-            root.updateCurrentTimeLine();
-            root.updateNextEvent();
-        }
-    }
-    Connections {
-        target: CalendarService
-        function onEventsInWeekChanged() {
-            root.updateNextEvent();
-            Qt.callLater(root.maybeApplyInitialScroll);
-        }
-    }
     Component.onCompleted: {
-        root.updateCurrentTimeLine();
-        root.updateNextEvent();
-        Qt.callLater(root.maybeApplyInitialScroll);
+        root.adoptPersistedMode();
+        root.activeMode = root.requestedMode;
+        root.openRequestedDate();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onTimetableNavigationRequestChanged() {
+            root.openRequestedDate();
+        }
+    }
+
+    function syncSportsSubscription() {
+        if (!root.sportsRequested) {
+            sportsActivationTimer.stop();
+            if (root.sportsSubscriberAcquired) {
+                SportsService.releaseTimetableSubscriber();
+                root.sportsSubscriberAcquired = false;
+            }
+            root.sportsReady = false;
+            return;
+        }
+
+        if (root.activeViewReady && !root.sportsSubscriberAcquired)
+            sportsActivationTimer.restart();
+    }
+
+    onActiveViewReadyChanged: {
+        if (!root.activeViewReady)
+            return;
+        // Google colours are cached on disk, so this only reaches the network
+        // once the cache is older than the configured window. It is independent
+        // from the optional ESPN projection below.
+        GoogleCalendarService.refreshColors();
+        root.syncSportsSubscription();
+    }
+
+    onSportsRequestedChanged: {
+        root.syncSportsSubscription();
+    }
+
+    Timer {
+        id: sportsActivationTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            if (!root.sportsRequested || !root.activeViewReady || root.sportsSubscriberAcquired)
+                return;
+            SportsService.acquireTimetableSubscriber();
+            root.sportsSubscriberAcquired = true;
+            root.sportsReady = true;
+        }
+    }
+
+    Component.onDestruction: {
+        sportsActivationTimer.stop();
+        if (root.sportsSubscriberAcquired)
+            SportsService.releaseTimetableSubscriber();
     }
 
     Rectangle {
         anchors.fill: parent
         color: Appearance.colors.colSurfaceContainer
         radius: Appearance.rounding.large
-        border.width: 1
-        border.color: Appearance.colors.colOutlineVariant
     }
 
-    ColumnLayout {
+    // Fade out, swap, fade in. Keeping both trees alive for a cross-fade would
+    // mean paying for a month grid while the week grid is on screen, and the
+    // cheatsheet already releases its whole tab tree on close for that reason.
+    //
+    // The fade in waits for the incoming Loader rather than following the fade
+    // out on a fixed schedule: both views incubate asynchronously, so a timed
+    // fade animates an empty host and the tree then appears at full opacity.
+    property bool awaitingViewReveal: false
+    readonly property Loader activeViewLoader: root.activeMode === "month" ? monthViewLoader : weekViewLoader
+
+    onRequestedModeChanged: {
+        if (root.requestedMode === root.activeMode)
+            return;
+        // Nothing has been shown yet, so there is no outgoing view to fade.
+        if (!root.viewInitialised) {
+            root.activeMode = root.requestedMode;
+            return;
+        }
+        revealWatchdog.stop();
+        fadeInAnim.stop();
+        fadeOutAnim.restart();
+    }
+
+    function handleViewLoaded() {
+        root.viewInitialised = true;
+        root.revealActiveView();
+    }
+
+    function commitModeSwap() {
+        root.activeMode = root.requestedMode;
+        // A small tree can incubate synchronously, in which case onLoaded has
+        // already fired and found nothing pending — hence the status check
+        // before arming the wait.
+        if (root.activeViewLoader.status === Loader.Ready) {
+            root.awaitingViewReveal = false;
+            fadeInAnim.start();
+            return;
+        }
+        root.awaitingViewReveal = true;
+        revealWatchdog.restart();
+    }
+
+    function revealActiveView() {
+        if (!root.awaitingViewReveal)
+            return;
+        root.awaitingViewReveal = false;
+        revealWatchdog.stop();
+        fadeInAnim.start();
+    }
+
+    NumberAnimation {
+        id: fadeOutAnim
+        target: viewHost
+        property: "switchProgress"
+        to: 0
+        duration: Appearance.animation.elementMoveExit.duration
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
+        onFinished: root.commitModeSwap()
+    }
+
+    NumberAnimation {
+        id: fadeInAnim
+        target: viewHost
+        property: "switchProgress"
+        to: 1
+        duration: Appearance.animation.elementMoveEnter.duration
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+    }
+
+    // A Loader that fails to instantiate would otherwise leave the host
+    // invisible for good; an unexplained pop is recoverable, a blank tab is not.
+    Timer {
+        id: revealWatchdog
+        interval: 900
+        repeat: false
+        onTriggered: root.revealActiveView()
+    }
+
+    Item {
+        id: viewHost
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: root.activeMode === "month" ? 16 : 0
 
-        TimetableHeader {
-            id: headerRow
-            Layout.fillWidth: true
-            headerHeight: root.headerHeight
-            itemSpacing: root.spacing
-            timeColumnWidth: root.timeColumnWidth
-            dayColumnWidth: root.dayColumnWidth
-            days: root.days
-            currentDayIndex: root.currentDayIndex
-            allDayChipHeight: root.allDayChipHeight
-            allDayChipSpacing: root.allDayChipSpacing
+        property real switchProgress: 1
+
+        opacity: viewHost.switchProgress
+        transform: Translate {
+            // Month sits "further in" than week, so the swap reads as depth
+            // rather than a sideways page flip.
+            y: (1 - viewHost.switchProgress) * (root.activeMode === "month" ? 18 : -18)
         }
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            color: Appearance.colors.colOutlineVariant
-            Layout.bottomMargin: 8
-        }
-
-        StyledFlickable {
-            id: styledFlickable
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            contentWidth: width
-            contentHeight: root.contentHeight
-            topMargin: 20
-            bottomMargin: 20
-
-            Row {
-                id: contentRow
-                spacing: root.spacing
-
-                TimetableTimeColumn {
-                    totalSlots: root.totalSlots
-                    slotHeight: root.slotHeight
-                    slotDuration: root.slotDuration
-                    startMinute: root.startMinute
-                    timeColumnWidth: root.timeColumnWidth
-                }
-
-                Row {
-                    id: eventsRow
-                    height: root.contentHeight
-                    spacing: root.spacing
-                    Repeater {
-                        model: root.days
-                        delegate: TimetableDayColumn {
-                            dayIdx: index
-                            dayData: modelData
-                            isToday: index === root.currentDayIndex
-                            dayColumnWidth: root.dayColumnWidth
-                            contentHeight: root.contentHeight
-                            pixelsPerMinute: root.pixelsPerMinute
-                            startHour: root.startHour
-                            startMinute: root.startMinute
-                            snapInterval: 15
-                            ghostVisible: root.ghostVisible
-                            ghostDayIndex: root.ghostDayIndex
-                            ghostTopY: root.ghostTopY
-                            ghostHeight: root.ghostHeight
-                            nextEventData: root.nextEventData
-                            maxLogicalDistance: root.maxLogicalDistance
-                            todayHighlightFill: root.todayHighlightFill
-                            todayHighlightBorder: root.todayHighlightBorder
-                            dayBackgroundFill: root.dayBackgroundFill
-                            dayBackgroundFillVariant: root.dayBackgroundFillVariant
-
-                            id: dayColDelegate
-                            opacity: 0
-                            transform: Translate { id: colTrans; y: 15 }
-
-                            Component.onCompleted: {
-                                animTimer.start();
-                            }
-
-                            Timer {
-                                id: animTimer
-                                interval: index * 70
-                                repeat: false
-                                onTriggered: {
-                                    colAnim.start();
-                                }
-                            }
-
-                            ParallelAnimation {
-                                id: colAnim
-                                NumberAnimation {
-                                    target: colTrans
-                                    property: "y"
-                                    to: 0
-                                    duration: 300
-                                    easing.type: Easing.OutCubic
-                                }
-                                NumberAnimation {
-                                    target: dayColDelegate
-                                    property: "opacity"
-                                    to: 1
-                                    duration: 300
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-
-                            onDragRequestInteractivity: i => styledFlickable.interactive = i
-                            onDragReleased: (dIdx, sY, cY) => {
-                                let dist = Math.abs(cY - sY);
-                                if (dist < 10) {
-                                    let clickMin = H.snapToGrid(H.yToMinutes(sY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    root.ghostTopY = H.minutesToY(clickMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                    root.ghostHeight = H.minutesToY(clickMin + 60, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                } else {
-                                    let topMin = H.snapToGrid(H.yToMinutes(Math.min(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    let botMin = H.snapToGrid(H.yToMinutes(Math.max(sY, cY), root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-                                    if (botMin - topMin < 15)
-                                        botMin = topMin + 15;
-                                    root.ghostTopY = H.minutesToY(topMin, root.startHour, root.startMinute, root.pixelsPerMinute);
-                                    root.ghostHeight = H.minutesToY(botMin, root.startHour, root.startMinute, root.pixelsPerMinute) - root.ghostTopY;
-                                }
-                                root.ghostDayIndex = dIdx;
-                                root.ghostVisible = true;
-                                Qt.callLater(root.openPopupForGhost);
-                            }
-                            onEditRequested: (evt, dIdx) => root.openPopupForEdit(evt, dIdx)
-                        }
-                    }
-                }
-            }
-
-            TimetableCurrentTime {
-                currentTimeY: root.currentTimeY
-                contentRowWidth: contentRow.width
-                timeColumnWidth: root.timeColumnWidth
-                visible: root.currentTimeY >= 0 && root.currentTimeY <= contentRow.height
+        Loader {
+            id: weekViewLoader
+            anchors.fill: parent
+            active: root.activeMode !== "month"
+            asynchronous: true
+            onLoaded: root.handleViewLoaded()
+            sourceComponent: WeekView {
+                maxHeight: root.maxHeight
+                maxContentWidth: root.maxContentWidth
+                sportsEnabled: root.sportsReady
+                viewMode: root.activeMode
             }
         }
-    }
 
-    TimetableNextEventFAB {
-        nextEventData: root.nextEventData
-        headerHeight: root.headerHeight
-        timeColumnWidth: root.timeColumnWidth
-        dayColumnWidth: root.dayColumnWidth
-        spacing: root.spacing
-        contentY: styledFlickable.contentY
-        flickableHeight: styledFlickable.height
-        flickableContentHeight: styledFlickable.contentHeight
-        pixelsPerMinute: root.pixelsPerMinute
-        startHour: root.startHour
-        startMinute: root.startMinute
-        onScrollRequested: y => styledFlickable.contentY = Math.min(y, Math.max(0, styledFlickable.contentHeight - styledFlickable.height))
-    }
-
-    EventCreationPopup {
-        id: eventPopup
-        anchors.fill: parent
-        z: 50
-        onEventCreated: (title, description) => {
-            let topMin = H.snapToGrid(H.yToMinutes(root.ghostTopY, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-            let botMin = H.snapToGrid(H.yToMinutes(root.ghostTopY + root.ghostHeight, root.startHour, root.startMinute, root.pixelsPerMinute), 15);
-            CalendarService.addEvent(H.getDateForDayIndex(root.ghostDayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(topMin), H.minutesToKhalTimeStr(botMin), title, description);
-            root.ghostVisible = false;
+        Loader {
+            id: monthViewLoader
+            anchors.fill: parent
+            active: root.activeMode === "month"
+            asynchronous: true
+            onLoaded: root.handleViewLoaded()
+            sourceComponent: MonthView {
+                showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
+                sportsEnabled: root.sportsReady
+            }
         }
-        onEventUpdated: (oldTitle, title, description) => {
-            let evt = eventPopup.editEventData;
-            if (!evt)
-                return;
-            let startMin = H.parseTimeToMinutes(evt.start);
-            let endMin = H.parseTimeToMinutes(evt.end);
-            if (endMin === 0 && startMin > 0)
-                endMin = 24 * 60;
-            if (evt.uid)
-                CalendarService.removeEventByUid(evt.uid);
-            else
-                CalendarService.removeEvent(oldTitle);
-            CalendarService.addEvent(H.getDateForDayIndex(eventPopup.dayIndex, Config.options.time.firstDayOfWeek, Config.options.cheatsheet.timetableTodayFirst), H.minutesToKhalTimeStr(startMin), H.minutesToKhalTimeStr(endMin), title, description);
-        }
-        onEventDeleted: title => {
-            if (eventPopup.editEventData?.uid)
-                CalendarService.removeEventByUid(eventPopup.editEventData.uid);
-            else
-                CalendarService.removeEvent(title);
-            root.ghostVisible = false;
-        }
-        onCancelled: root.ghostVisible = false
     }
 }

@@ -24,11 +24,14 @@ struct State {
     wl_display* display = nullptr;
     hyprland_ctm_control_manager_v1* manager = nullptr;
     std::vector<OutputState> outputs;
-    unsigned int temperature = 6000;
+    unsigned int temperature = 0;
     bool blocked = false;
 };
 
 std::array<double, 3> matrixForTemperature(unsigned int temperature) {
+    if (temperature == 0 || temperature == 6500)
+        return {1.0, 1.0, 1.0};
+
     double temp = std::max(1000u, std::min(20000u, temperature)) / 100.0;
     double red = 1.0;
     double green = 1.0;
@@ -171,12 +174,25 @@ void handleCommand(State& state, const std::string& line) {
         if (stream >> name >> gamma)
             setGamma(state, name, gamma);
     } else if (command == "temperature") {
-        unsigned int temperature = 6000;
-        if (stream >> temperature) {
-            state.temperature = std::max(1000u, std::min(20000u, temperature));
+        std::string tempStr;
+        if (stream >> tempStr) {
+            if (tempStr == "identity" || tempStr == "off" || tempStr == "none" || tempStr == "0") {
+                state.temperature = 0;
+            } else {
+                try {
+                    unsigned int temperature = std::stoul(tempStr);
+                    state.temperature = (temperature == 0 || temperature == 6500) ? 0 : std::max(1000u, std::min(20000u, temperature));
+                } catch (...) {
+                    state.temperature = 0;
+                }
+            }
             applyMatrices(state);
         }
+    } else if (command == "identity") {
+        state.temperature = 0;
+        applyMatrices(state);
     } else if (command == "reset") {
+        state.temperature = 0;
         for (auto& output : state.outputs)
             output.gamma = 1.0;
         applyMatrices(state);

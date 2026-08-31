@@ -46,24 +46,11 @@ Scope {
     }
 
     // The popup anchors like the bar popups (right side for horizontal bars,
-    // or the bar's own edge for vertical bars). Dismiss it only when the sidebar
-    // on the SAME side as the popup opens over it — never the opposite-side
-    // sidebar, never the overview (effectiveLeft/RightOpen reflect only real
-    // sidebars per Config.options.sidebar.position).
+    // or the bar's own edge for vertical bars). When the sidebar on that same
+    // edge opens, the popup follows the sidebar's animated width so both
+    // surfaces remain visible instead of dismissing the connection notice.
     readonly property bool popupOnLeftSide: Config.options.bar.vertical && !Config.options.bar.bottom
     readonly property bool popupOnRightSide: !Config.options.bar.vertical || Config.options.bar.bottom
-    readonly property bool sidebarOccludesPopup: (popupOnLeftSide && GlobalStates.effectiveLeftOpen)
-            || (popupOnRightSide && GlobalStates.effectiveRightOpen)
-
-    // Dismiss popup when the same-side sidebar opens (avoids input conflicts)
-    Connections {
-        target: root
-        function onSidebarOccludesPopupChanged() {
-            if (root.sidebarOccludesPopup) {
-                GlobalStates.bluetoothConnectionPopupOpen = false;
-            }
-        }
-    }
 
     LazyLoader {
         id: popupLoader
@@ -80,6 +67,14 @@ Scope {
 
             readonly property real screenWidth: popupWindow.screen?.width ?? 0
             readonly property real screenHeight: popupWindow.screen?.height ?? 0
+            readonly property real sidebarPush: {
+                const screenName = popupWindow.screen?.name ?? "";
+                if (root.popupOnLeftSide && screenName === GlobalStates.effectiveLeftMonitor)
+                    return GlobalStates.animatedLeftSidebarWidth;
+                if (root.popupOnRightSide && screenName === GlobalStates.effectiveRightMonitor)
+                    return GlobalStates.animatedRightSidebarWidth;
+                return 0;
+            }
 
             WlrLayershell.namespace: "quickshell:bluetoothConnectionPopup"
             WlrLayershell.layer: WlrLayer.Overlay
@@ -116,15 +111,15 @@ Scope {
                 }
                 left: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness;
+                        return (Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
                     }
-                    return leftFrameThickness;
+                    return leftFrameThickness + popupWindow.sidebarPush;
                 }
                 right: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness;
+                        return (Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
                     }
-                    return barGaps + 4 + rightFrameThickness;
+                    return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;
                 }
             }
 

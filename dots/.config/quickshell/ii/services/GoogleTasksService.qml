@@ -118,12 +118,36 @@ Singleton {
         root._ensureValidToken("fetchTaskLists", null);
     }
 
-    function createTask(title) {
+    function createTask(title, dueDate = "") {
         if (!root.available || !title || !title.trim())
             return;
-        root._enqueueMutation("create", {
-            "title": title.trim()
-        });
+        const body = { "title": title.trim() };
+        const due = root._normalizedDueDate(dueDate);
+        if (due)
+            body.due = due;
+        root._enqueueMutation("create", { "body": body });
+    }
+
+    function _normalizedDueDate(value) {
+        if (!value)
+            return "";
+        // Google Tasks stores a date-only due date as midnight UTC. Extract the
+        // calendar day before parsing so a west-of-UTC locale does not move a
+        // newly created task to the previous day.
+        const dateOnly = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+        if (dateOnly)
+            return dateOnly[1] + "T00:00:00.000Z";
+        const parsed = value instanceof Date ? value : new Date(value);
+        if (isNaN(parsed.getTime()))
+            return "";
+        return Qt.formatDate(parsed, "yyyy-MM-dd") + "T00:00:00.000Z";
+    }
+
+    function _localDueDate(value) {
+        const match = String(value ?? "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (!match)
+            return new Date(value);
+        return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
     }
 
     function setTaskDone(task, done) {
@@ -280,7 +304,7 @@ Singleton {
     }
 
     function _normalizeTask(raw) {
-        const due = raw && raw.due ? new Date(raw.due) : new Date();
+        const due = raw && raw.due ? root._localDueDate(raw.due) : new Date();
         return {
             "provider": "googleTasks",
             "id": String(raw?.id || ""),

@@ -28,7 +28,7 @@ ContentPage {
     property string seededText: ""
 
     readonly property var barEntry: page.findBarEntry()
-    readonly property bool barVisible: page.barEntry?.entry?.visible ?? false
+    readonly property bool barVisible: (page.barEntry && page.barEntry.entry && page.barEntry.entry.visible !== undefined) ? page.barEntry.entry.visible : false
 
     function findBarEntry() {
         const layouts = Config.options.bar.layouts;
@@ -45,7 +45,7 @@ ContentPage {
     // so the JsonAdapter sees the change.
     function setBarVisible(on) {
         const found = page.findBarEntry();
-        const section = found?.section ?? "left";
+        const section = (found && found.section) ? found.section : "left";
         const list = Array.from(Config.options.bar.layouts[section] ?? []).map(e => Object.assign({}, e));
         if (found) {
             list[found.index].visible = on;
@@ -81,55 +81,56 @@ ContentPage {
         }
     }
 
-    WarningBox {
+    ColumnLayout {
         Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        visible: page.opts.overlayEnabled && page.keybindChecked && !page.keybindFound
-        materialIcon: "keyboard_off"
-        text: Translation.tr("Hyprland has no binding for the manager, so Super + Y does nothing. "
-            + "Re-run the setup script with --hypr to install the Hyprland config, "
-            + "or bind quickshell:modesToggle yourself.")
-        isFirst: true
-        isLast: true
-    }
+        spacing: 2
 
-    KeyboardShortcutBox {
-        Layout.fillWidth: true
-        visible: page.opts.overlayEnabled
-        text: Translation.tr("Open the Modes & Routines manager")
-        keys: ["Super", "Y"]
-    }
-
-    NoticeBox {
-        Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        materialIcon: "tune"
-        text: {
-            const modes = Modes.modes.length;
-            const routines = Modes.routines.length;
-            const line = Translation.tr("%1 mode(s) and %2 routine(s) set up.").arg(modes).arg(routines);
-            if (Modes.active)
-                return line + " " + Translation.tr("%1 is on right now.").arg(Modes.activeMode?.name ?? "");
-            return line + " " + Translation.tr("Nothing is on right now.");
+        WarningBox {
+            Layout.fillWidth: true
+            visible: page.opts.overlayEnabled && page.keybindChecked && !page.keybindFound
+            materialIcon: "keyboard_off"
+            text: Translation.tr("Hyprland has no binding for the manager, so Super + Y does nothing. "
+                + "Re-run the setup script with --hypr to install the Hyprland config, "
+                + "or bind quickshell:modesToggle yourself.")
         }
 
-        RippleButton {
-            id: openButton
-            implicitHeight: 34
-            horizontalPadding: 16
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colPrimary
-            colBackgroundHover: Appearance.colors.colPrimaryHover
-            colRipple: Appearance.colors.colPrimaryActive
-            enabled: page.opts.overlayEnabled
-            opacity: enabled ? 1 : 0.5
-            onClicked: GlobalStates.modesOpen = true
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            visible: page.opts.overlayEnabled
+            text: Translation.tr("Open the Modes & Routines manager")
+            keys: ["Super", "Y"]
+        }
 
-            contentItem: StyledText {
-                text: Translation.tr("Open the manager")
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                color: Appearance.colors.colOnPrimary
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "tune"
+            text: {
+                const modes = Modes.modes.length;
+                const routines = Modes.routines.length;
+                const line = Translation.tr("%1 mode(s) and %2 routine(s) set up.").arg(modes).arg(routines);
+                if (Modes.active)
+                    return line + " " + Translation.tr("%1 is on right now.").arg((Modes.activeMode && Modes.activeMode.name) ? Modes.activeMode.name : "");
+                return line + " " + Translation.tr("Nothing is on right now.");
+            }
+
+            RippleButton {
+                id: openButton
+                implicitHeight: 34
+                horizontalPadding: 16
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                enabled: page.opts.overlayEnabled
+                opacity: enabled ? 1 : 0.5
+                onClicked: GlobalStates.modesOpen = true
+
+                contentItem: StyledText {
+                    text: Translation.tr("Open the manager")
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    color: Appearance.colors.colOnPrimary
+                }
             }
         }
     }
@@ -199,7 +200,10 @@ ContentPage {
                     onClicked: {
                         const added = Modes.seedPresets();
                         page.seededText = added.length === 0 ? Translation.tr("All presets are already there")
-                            : Translation.tr("Added: %1").arg(added.map(id => Modes.modeById(id)?.name ?? id).join(", "));
+                            : Translation.tr("Added: %1").arg(added.map(id => {
+                                const m = Modes.modeById(id);
+                                return (m && m.name) ? m.name : id;
+                            }).join(", "));
                     }
                 }
 

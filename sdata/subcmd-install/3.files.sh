@@ -183,7 +183,7 @@ for i in "$XDG_BIN_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"; 
 done
 case "${INSTALL_FIRSTRUN}" in
   # When specify --firstrun
-  true) sleep 0 ;;
+  true) true ;;
   # When not specify --firstrun
   *)
     if test -f "${FIRSTRUN_FILE}"; then

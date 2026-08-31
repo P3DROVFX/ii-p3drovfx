@@ -39,6 +39,10 @@ ListView {
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
 
+    readonly property real minY: root.originY - root.topMargin
+    readonly property real maxY: Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin)
+    readonly property real maxBounceOvershoot: Math.min(60, Math.max(30, root.height * 0.12))
+
     /**
      * The reader turned the wheel, and where that puts them. A list that moves
      * itself as well needs to tell the two apart, and this is the half nothing
@@ -54,6 +58,42 @@ ListView {
     function resetDrag() {
         root.dragIndex = -1;
         root.dragDistance = 0;
+    }
+
+    function triggerBounceRebound(targetBound) {
+        scrollAnim.stop();
+        bounceAnim.stop();
+        bounceAnim.to = targetBound;
+        root.scrollTargetY = targetBound;
+        bounceAnim.start();
+    }
+
+    Timer {
+        id: reboundTimer
+        interval: 90
+        repeat: false
+        onTriggered: {
+            if (root.dragging || root.flicking)
+                return;
+            if (root.contentY < root.minY) {
+                root.triggerBounceRebound(root.minY);
+            } else if (root.contentY > root.maxY) {
+                root.triggerBounceRebound(root.maxY);
+            }
+        }
+    }
+
+    NumberAnimation {
+        id: bounceAnim
+        target: root
+        property: "contentY"
+        duration: Math.round(350 * Appearance.animMultiplier)
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Appearance.animationCurves.expressiveDefaultSpatial
+        onStopped: {
+            root._wheelScrolling = false;
+            root.scrollTargetY = root.contentY;
+        }
     }
 
     // Suppress animated contentY during external resize (e.g. sidebar bottom group collapsing).
@@ -72,6 +112,8 @@ ListView {
     onDraggingChanged: {
         if (root.dragging) {
             scrollAnim.stop();
+            bounceAnim.stop();
+            reboundTimer.stop();
             root._wheelScrolling = false;
         }
     }
@@ -98,30 +140,58 @@ ListView {
             // The angleDelta.y of a touchpad is usually small and continuous,
             // while that of a mouse wheel is typically in multiples of ±120.
             var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
+            const step = delta * scrollFactor;
 
-            // Margins are part of the scrollable range: a list with a top
-            // margin starts at -topMargin, not at 0. Clamping to 0 left the
-            // first item permanently tucked under whatever the margin was
-            // making room for.
-            const minY = root.originY - root.topMargin;
-            const maxY = Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin);
-            const base = scrollAnim.running ? root.scrollTargetY : root.contentY;
-            var targetY = Math.max(minY, Math.min(base - delta * scrollFactor, maxY));
+            bounceAnim.stop();
+
+            const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;
+            const rawTarget = currentPos - step;
+            var targetY = rawTarget;
+            var isOvershooting = false;
+
+            if (rawTarget < root.minY) {
+                isOvershooting = true;
+                const currentOvershoot = Math.max(0, root.minY - currentPos);
+                const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
+                const effectiveStep = (currentPos <= root.minY) ? (step * resistance) : ((step - (currentPos - root.minY)) * resistance);
+                const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
+                targetY = root.minY - newOvershoot;
+            } else if (rawTarget > root.maxY) {
+                isOvershooting = true;
+                const stepDown = -step;
+                const currentOvershoot = Math.max(0, currentPos - root.maxY);
+                const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
+                const effectiveStep = (currentPos >= root.maxY) ? (stepDown * resistance) : ((stepDown - (root.maxY - currentPos)) * resistance);
+                const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
+                targetY = root.maxY + newOvershoot;
+            }
 
             root.scrollTargetY = targetY;
             root._wheelScrolling = true;
             root.contentY = targetY;
-            root.userScrolled(targetY, maxY);
+            root.userScrolled(targetY, root.maxY);
             wheelEvent.accepted = true;
+
+            if (isOvershooting || targetY < root.minY || targetY > root.maxY) {
+                reboundTimer.restart();
+            } else {
+                reboundTimer.stop();
+            }
         }
     }
 
     Behavior on contentY {
-        enabled: !root._suppressScrollAnim && root._wheelScrolling && !root.dragging && !root.flicking
+        enabled: !root._suppressScrollAnim && root._wheelScrolling && !bounceAnim.running && !root.dragging && !root.flicking
         NumberAnimation {
             id: scrollAnim
             alwaysRunToEnd: true
-            onStopped: root._wheelScrolling = false
+            onStopped: {
+                if (root.contentY < root.minY || root.contentY > root.maxY) {
+                    reboundTimer.restart();
+                } else {
+                    root._wheelScrolling = false;
+                }
+            }
             duration: Appearance.animation.scroll.duration
             easing.type: Appearance.animation.scroll.type
             easing.bezierCurve: Appearance.animation.scroll.bezierCurve
@@ -130,7 +200,7 @@ ListView {
 
     // Keep target synced when not animating (e.g., drag/flick or programmatic changes)
     onContentYChanged: {
-        if (!scrollAnim.running) {
+        if (!scrollAnim.running && !bounceAnim.running) {
             root.scrollTargetY = root.contentY;
         }
     }

@@ -11,20 +11,10 @@ import Quickshell.Hyprland
 Scope {
     id: root
 
-    // Dismiss popup when sidebar opens (avoids input conflicts)
-    Connections {
-        target: GlobalStates
-        function onDashboardPanelOpenChanged() {
-            if (GlobalStates.dashboardPanelOpen) {
-                GlobalStates.localSendPopupOpen = false;
-            }
-        }
-        function onPoliciesPanelOpenChanged() {
-            if (GlobalStates.policiesPanelOpen) {
-                GlobalStates.localSendPopupOpen = false;
-            }
-        }
-    }
+    // Keep the transfer popup visible while moving it away from a sidebar on
+    // the same edge. The opposite-side sidebar must not affect its position.
+    readonly property bool popupOnLeftSide: Config.options.bar.vertical && !Config.options.bar.bottom
+    readonly property bool popupOnRightSide: !Config.options.bar.vertical || Config.options.bar.bottom
 
     LazyLoader {
         id: popupLoader
@@ -38,6 +28,14 @@ Scope {
 
             readonly property real screenWidth: popupWindow.screen?.width ?? 0
             readonly property real screenHeight: popupWindow.screen?.height ?? 0
+            readonly property real sidebarPush: {
+                const screenName = popupWindow.screen?.name ?? "";
+                if (root.popupOnLeftSide && screenName === GlobalStates.effectiveLeftMonitor)
+                    return GlobalStates.animatedLeftSidebarWidth;
+                if (root.popupOnRightSide && screenName === GlobalStates.effectiveRightMonitor)
+                    return GlobalStates.animatedRightSidebarWidth;
+                return 0;
+            }
 
             WlrLayershell.namespace: "quickshell:localSendPopup"
             WlrLayershell.layer: WlrLayer.Overlay
@@ -74,15 +72,15 @@ Scope {
                 }
                 left: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness;
+                        return (Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
                     }
-                    return leftFrameThickness;
+                    return leftFrameThickness + popupWindow.sidebarPush;
                 }
                 right: {
                     if (Config.options.bar.vertical) {
-                        return Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness;
+                        return (Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
                     }
-                    return barGaps + 4 + rightFrameThickness;
+                    return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;
                 }
             }
 

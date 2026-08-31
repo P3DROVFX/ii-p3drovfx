@@ -408,6 +408,31 @@ Singleton {
         }
     }
 
+    // Shared gate for every OSD implementation (default, minimal/material, Waffle).
+    // Unknown indicator ids stay enabled so a new one is opt-out, not opt-in.
+    function osdIndicatorEnabled(indicatorId): bool {
+        if (!root.ready || !root.options.osd)
+            return true;
+        if (!root.options.osd.enable)
+            return false;
+        const indicators = root.options.osd.indicators;
+        if (!indicators)
+            return true;
+        switch (indicatorId) {
+        case "volume":
+            return indicators.volume;
+        case "brightness":
+            return indicators.brightness;
+        case "keyboardBrightness":
+            return indicators.keyboardBrightness;
+        case "playerVolume":
+            return indicators.playerVolume;
+        case "gamma":
+            return indicators.gamma;
+        }
+        return true;
+    }
+
     function isWidgetActive(widgetId) {
         let list = root.options.background.activeWidgets || [];
         for (let i = 0; i < list.length; i++) {
@@ -524,6 +549,21 @@ Singleton {
         }
     }
 
+    function updateWidgetScale(instanceId, newScale) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let found = false;
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].id === instanceId) {
+                cloned[i].scale = newScale;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            root.options.background.activeWidgets = cloned;
+        }
+    }
+
     function migrateRoundingConfig() {
         if (root.options.appearance.roundingValue >= 0)
             return;
@@ -581,7 +621,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 11
+    readonly property int currentConfigVersion: 15
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -830,6 +870,155 @@ Singleton {
             console.log(`[Config] Migrated screen recording bitrate ${oldBitrate} Mbps -> quality "${raw.screenRecord.quality}"`);
         }
 
+        // v9 -> v10: Search v2 keeps its lightweight content lists in a
+        // stable schema. Existing users get the new objects without changing
+        // their enabled modules, aliases, or prefix choices.
+        if (from < 10) {
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object")
+                raw.search = {};
+            if (raw.search.favorites === undefined)
+                raw.search.favorites = { enable: true };
+            if (raw.search.fallbacks === undefined)
+                raw.search.fallbacks = { enable: true, actions: ["ai", "web", "tasks", "calendar"] };
+            if (raw.search.history === undefined)
+                raw.search.history = { enable: true, maxItems: 50 };
+            if (raw.search.keybindings === undefined)
+                raw.search.keybindings = [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
+                ];
+            console.log("[Config] Added Search v2 content defaults");
+        }
+
+        // v10 -> v11: normal Search can index bookmarks and selected history
+        // from the default Mozilla-compatible browser profile. Existing result
+        // orders receive the new section exactly once; after this migration the
+        // stored v11 order is authoritative, so removing Sites stays removed.
+        if (from < 11) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            if (raw.search.browserSites === undefined) {
+                raw.search.browserSites = {
+                    enable: true,
+                    profilePath: "",
+                    maxIndexedSites: 300,
+                    maxResults: 6,
+                    includeHistory: true,
+                    useLocalFavicons: true,
+                    allowRemoteFavicons: false,
+                    refreshMinutes: 10
+                };
+            }
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSites = sectionOrder.some(entry => String(entry?.id ?? entry) === "sites");
+                if (!hasSites) {
+                    const appsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "apps");
+                    const settingsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "settings");
+                    const insertAt = appsIndex >= 0 ? appsIndex + 1
+                        : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
+                    sectionOrder.splice(insertAt, 0, { "id": "sites" });
+                }
+            }
+            console.log("[Config] Added Browser Sites search provider");
+        }
+
+        // v11 -> v12: aliases became an explicit result class. Existing orders
+        // predate the id and are otherwise authoritative, so without a one-time
+        // insertion every upgraded user would keep filtering aliases out. Put
+        // exact alias intent before every broader fuzzy result class.
+        if (from < 12) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasAliases = sectionOrder.some(entry => String(entry?.id ?? entry) === "aliases");
+                if (!hasAliases)
+                    sectionOrder.unshift({ "id": "aliases" });
+            }
+            console.log("[Config] Added Aliases search result group");
+        }
+
+        // v12 -> v13: the former Content result group mixed two independent
+        // user-owned providers. Replace it in place so the surrounding priority
+        // stays unchanged. If Content had been removed, both providers remain
+        // disabled and are merely offered by the Settings add selector.
+        if (from < 13) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const contentIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "content");
+                if (contentIndex >= 0) {
+                    const hasQuicklinks = sectionOrder.some(entry => String(entry?.id ?? entry) === "quicklinks");
+                    const hasTextSnippets = sectionOrder.some(entry => String(entry?.id ?? entry) === "textSnippets");
+                    if (!hasQuicklinks && !hasTextSnippets)
+                        sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" });
+                    else
+                        sectionOrder.splice(contentIndex, 1);
+                }
+            }
+            console.log("[Config] Split Content search results into Quick links and Text snippets");
+        }
+
+        // v13 -> v14: idle Search (empty query) grew a dedicated frecency-ranked
+        // "Suggestions" strip. It is idle-only — a typed query never populates
+        // it — but it shares the same reorder/on-off list as every other
+        // result class, so an upgraded order needs the id too.
+        if (from < 14) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSuggested = sectionOrder.some(entry => String(entry?.id ?? entry) === "suggested");
+                if (!hasSuggested)
+                    sectionOrder.unshift({ "id": "suggested" });
+            }
+            console.log("[Config] Added idle Suggestions search result group");
+        }
+
+        // v14 -> v15: the sidebar avatar shape split off from the general
+        // userProfile one. Existing configs kept a single shape for both, so
+        // seed the new key from it to leave the sidebar looking untouched.
+        if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
+            if (raw.sidebar === undefined || raw.sidebar === null
+                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+                raw.sidebar = {};
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
+                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+                raw.sidebar.dashboardHeader = {};
+            if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
+                raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
+                console.log(`[Config] Seeded sidebar.dashboardHeader.avatarShape from userProfile.avatarShape (${raw.userProfile.avatarShape})`);
+            }
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -968,6 +1157,11 @@ Singleton {
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
+            "search.typingTest.mode": ["time", "words", "zen"],
+            "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
+            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak"],
+            "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
+            "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -1780,6 +1974,18 @@ Singleton {
 
             property list<var> bluetoothDeviceImages: []
 
+            property JsonObject bluetooth: JsonObject {
+                property JsonObject budsLink: JsonObject {
+                    property bool enabled: true
+                    property bool preferBudsLink: true
+                    property bool showIntegrationNotices: true
+                    property bool showBatteryBreakdown: true
+                    property bool showControlsInBarPopup: true
+                    property bool showControlsInConnectionPopup: true
+                    property bool showEnhancedSettingsCard: true
+                }
+            }
+
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
@@ -2562,7 +2768,7 @@ Singleton {
                     property bool lockWidgetPositions: false
                 }
                 property list<var> activeWidgets: []
-                property bool scaleLargeWallpapers: true
+                property bool scaleLargeWallpapers: false
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
@@ -2661,8 +2867,8 @@ Singleton {
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
-                    property string clock: "expressive" // default, expressive, material
-                    property string media: "default"
+                    property string clock: "expressive" // default, material, expressive, neural, relief
+                    property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
                     property string utilButtons: "expressive"
                     property string workspaces: "default"
@@ -2676,6 +2882,10 @@ Singleton {
                     property string bluetooth: "expressive"
                     property string keyboard: "expressive"
                     property string sports: "expressive"
+                    property string portWatcher: "expressive"
+                    property string aiPlanUsage: "expressive"
+                    property string search: "default"
+                    property string date: "default"
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -2684,9 +2894,17 @@ Singleton {
                     property bool showOnAllMonitors: false
                 }
 
+                property JsonObject weatherWidget: JsonObject {
+                    property string horizonVariant: "balanced" // balanced | inverted | minimal
+                    property string tesseraVariant: "paired" // paired | contrast | bare
+                    property string colorMode: "tonal" // Material pairs: tonal | vibrant | neutral
+                }
+
                 property JsonObject autoHide: JsonObject {
                     property bool enable: false
+                    property string mode: "instant" // "instant" | "dwell" | "wide" | "cautious"
                     property int hoverRegionWidth: 2
+                    property int hoverDelay: 0
                     property bool pushWindows: false
                     property JsonObject showWhenPressingSuper: JsonObject {
                         property bool enable: true
@@ -2810,6 +3028,85 @@ Singleton {
                     property bool showDocker: true
                 }
 
+                property JsonObject aiPlanUsage: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 300000
+                    // Enabling a remote provider authorizes read-only quota
+                    // requests with credentials discovered from its client.
+                    // Tokens are never copied into config.json or the cache.
+                    property bool claudeNetworkEnabled: true
+                    property list<string> enabledProviders: ["chatgpt", "claude", "antigravity"]
+                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text
+                    property string percentMode: "remaining" // remaining | used
+                    property bool showWindowLabel: false
+                    property bool hideWhenUnavailable: false
+                    property int lowRemainingThreshold: 20
+                }
+
+                property JsonObject portWatcher: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 5000
+                    property bool showTcp: true
+                    property bool showUdp: true
+                    property bool showLoopback: true
+                    // Ports without an owning user process (system daemons, other
+                    // users) are noise for the widget's purpose, so they are off.
+                    property bool showSystem: false
+                    property bool exposedOnly: false
+                    property bool notifyNewExposed: false
+                    property bool hideWhenEmpty: false
+                    property int minPort: 1
+                    // Stop below the kernel's ephemeral range (32768+). Those are
+                    // an app's transient IPC sockets churning, never a port
+                    // anybody chose to serve on.
+                    property int maxPort: 32767
+                    // Comma separated ports or ranges, e.g. "3000, 5173, 8000-8999".
+                    property string watchPorts: ""
+                    property string ignorePorts: ""
+                    property string ignoreProcesses: ""
+                    property string sortMode: "port" // port | process | activity
+                }
+
+                property JsonObject privacyPill: JsonObject {
+                    property bool enabled: true
+                    property bool watchCamera: true
+                    property bool watchMicrophone: true
+                    property bool watchScreen: true
+                    // GeoClue keeps its client latched while anything holds a
+                    // position source — including this shell's own weather GPS —
+                    // so watching it would pin the pill on. Opt-in.
+                    property bool watchLocation: false
+                    property int pollInterval: 1200
+                    // How long the pill stays expanded before collapsing to the dot.
+                    property int expandDuration: 4000
+                    property bool collapseToDot: true
+                    property bool showAppNames: true
+                    property string ignoreApps: ""
+                }
+
+                property JsonObject searchWidget: JsonObject {
+                    property string sizeMode: "compact" // compact | balanced | extended
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showShortcutHint: true
+                }
+
+                property JsonObject dateWidget: JsonObject {
+                    property string expressiveVariant: "stack" // stack | badge | ribbon
+                    property string neuralVariant: "orbit" // orbit | glyph | inlay
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool uppercase: true
+                    property bool showYear: false
+                }
+
+                property JsonObject clockWidget: JsonObject {
+                    property string neuralVariant: "orbit" // orbit | bloom | dial
+                    property string reliefVariant: "split" // split | seam | outline
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showMeridiem: true
+                }
+
                 property JsonObject sports: JsonObject {
                     property bool enable: true
                     property bool showBRA: true
@@ -2912,6 +3209,7 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true
                     property bool showNetwork: true
@@ -2919,6 +3217,14 @@ Singleton {
                     property bool showVpn: true
                     property bool showTailscale: true
                     property bool showNotifications: true
+                    property bool showPomodoro: true
+                    property bool showStopwatch: true
+                    property bool showCountdowns: true
+                    property bool showEasyEffects: true
+                    property bool showDns: true
+                    property bool showGameMode: true
+                    property bool showMusicRecognition: true
+                    property bool showAlarms: true
                 }
                 property JsonObject layouts: JsonObject {
                     // Only storing id and layout-specific flags (visible, centered)
@@ -2938,11 +3244,6 @@ Singleton {
                                 "centered": false,
                                 "id": "record_indicator",
                                 "visible": false
-                            },
-                            {
-                                "centered": false,
-                                "id": "dictation_indicator",
-                                "visible": true
                             },
                             {
                                 "centered": false,
@@ -3025,6 +3326,80 @@ Singleton {
 
             property JsonObject calendar: JsonObject {
                 property string locale: "en-GB"
+                property JsonObject holidays: JsonObject {
+                    property bool enable: true
+                    // ISO 3166-1 alpha-2, or "auto" to derive it from the system locale
+                    property string countryCode: "auto"
+                    property bool showInMonthView: true
+                }
+                property JsonObject timetable: JsonObject {
+                    // New events start in khal's configured default calendar
+                    // until the user successfully creates one in another
+                    // writable calendar. The selected khal collection then
+                    // becomes the persistent Timetable default.
+                    property string defaultCalendar: ""
+                    property list<string> subscriptions: []
+                    property JsonObject imports: JsonObject {
+                        // Local ICS files and remote read-only subscriptions
+                        // are inactive until the user enables calendar sources.
+                        property bool enable: false
+                        property JsonObject gmailIcs: JsonObject {
+                            // Scans only calendar attachments from the active
+                            // Gmail account and imports through the same
+                            // deduplicating calendar bridge as local files.
+                            property bool enable: false
+                            property int maxMessages: 25
+                            property int scanIntervalMinutes: 60
+                        }
+                        property JsonObject outlook: JsonObject {
+                            // Direct Microsoft Graph calendar mirror. It is
+                            // registered as a local read-only khal collection.
+                            property bool enable: false
+                            property int syncIntervalMinutes: 60
+                            property JsonObject icsAttachments: JsonObject {
+                                // Mail.Read is used only to locate bounded
+                                // .ics/text-calendar files, never mail bodies.
+                                property bool enable: false
+                                property int maxMessages: 25
+                                property int scanIntervalMinutes: 60
+                            }
+                        }
+                    }
+                    // ESPN games stay outside khal and are displayed only when
+                    // explicitly requested in the Timetable.
+                    property bool sportsEvents: false
+                    // Number of dates summarized by the month view's agenda rail.
+                    property int upcomingHorizonDays: 14
+                    // Opt-in: timeline views may replace calendar colours with
+                    // a gradient centred on the next event.
+                    property bool proximityColorGradient: false
+                    property JsonObject moonPhases: JsonObject {
+                        // Moon phase badges in the month grid; computed locally,
+                        // never fetched from the network.
+                        property bool enable: false
+                    }
+                    property JsonObject birthdays: JsonObject {
+                        // Contact birthdays are a read-only projection; they
+                        // never create or mutate khal events.
+                        property bool enable: false
+                    }
+                    property JsonObject googleColors: JsonObject {
+                        // Per-event colour exists only in the Google Calendar API
+                        // (colorId); the synced .ics files carry no COLOR at all.
+                        // Opt-in because it needs the authorized account.
+                        property bool enable: false
+                        // Hours before the colour map is fetched again.
+                        property int refreshHours: 6
+                    }
+                    property JsonObject notifications: JsonObject {
+                        property bool enable: true
+                        property list<string> offsets: ["-15m"]
+                        property bool dailySummary: false
+                        property string dailySummaryTime: "08:00"
+                        property bool notifyAllDay: true
+                        property bool sound: false
+                    }
+                }
             }
 
             property JsonObject cheatsheet: JsonObject {
@@ -3048,6 +3423,10 @@ Singleton {
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false
+                // The typing test also lives in the Overview search. Off by
+                // default so the cheatsheet does not gain a tab nobody asked
+                // for; the two hosts share one surface either way.
+                property bool enableTypingTest: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
@@ -3124,6 +3503,7 @@ Singleton {
                 property string magnificationCurve: "cosine"
                 property string magnificationMotion: "balanced"
                 property bool magnificationDynamicSpacing: true
+                property string dockStyle: "floating"
                 property bool islandsStyle: false
                 property real islandSpacing: 8
                 property bool enableAppGroups: true
@@ -3284,6 +3664,12 @@ Singleton {
                     // With automatic mode on, a restored toggle still expires at the next start/end time.
                     property string persistManual: "always"
                 }
+                property JsonObject gamma: JsonObject {
+                    // Below the backlight minimum, brightness keys and the combined
+                    // gamma/brightness slider keep dimming by lowering gamma.
+                    // Turn off to drive the backlight only and leave gamma alone.
+                    property bool dimBelowMinimum: true
+                }
                 property JsonObject antiFlashbang: JsonObject {
                     property bool enable: false
                 }
@@ -3335,6 +3721,7 @@ Singleton {
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
                 property bool nowPlaying: true
+                property bool sports: true
                 property bool showAlarm: true
                 property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
@@ -3392,6 +3779,16 @@ Singleton {
                 property int timeout: 3000
                 property bool showValues: true
                 property bool hideWhenFullscreen: true
+
+                // Per-indicator popups. Turning one off keeps that OSD from showing
+                // on its own; the master `enable` switch above still wins over all.
+                property JsonObject indicators: JsonObject {
+                    property bool volume: true
+                    property bool brightness: true
+                    property bool keyboardBrightness: true
+                    property bool playerVolume: true
+                    property bool gamma: true
+                }
 
                 property JsonObject material: JsonObject {
                     property bool rotateShape: false
@@ -3569,7 +3966,7 @@ Singleton {
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
                 property bool replaceHyprConfig: true
                 // How often ShellUpdates probes the fork's remote for new
-                // commits: "disabled" | "hourly" | "daily" | "weekly".
+                // commits: "disabled" | "10min" | "hourly" | "daily" | "weekly".
                 property string autoCheckInterval: "daily"
                 // Epoch ms of the last completed automatic check. Persisted so a
                 // daily/weekly period is not restarted from zero on every shell
@@ -3593,9 +3990,117 @@ Singleton {
                 property bool sloppy: false
                 property bool levenshtein: false
                 property bool frecency: true
+                // fuzzysort matches any subsequence, so with no floor "file"
+                // reaches "OpenJDK 25 for x86_64 Monitoring & Management
+                // Console". Measured on this machine, the genuine hits for
+                // "file" score 0.82–0.94 and the noise 0.25–0.30, so 0.35 cuts
+                // the tail without emptying short queries.
+                property real fuzzyThreshold: 0.35
+                // And anything below this fraction of the best hit is noise
+                // *next to that hit*, whatever its absolute score.
+                property real fuzzyRelativeCutoff: 0.35
+                property JsonObject bestMatch: JsonObject {
+                    // Render the top result as one prominent row with its own
+                    // actions on it, and the rest as a single uniform list.
+                    // A launcher's promise is that the first thing on screen is
+                    // the thing you meant; showing it at the same weight as the
+                    // nine rows below makes you verify that promise every time.
+                    property bool enable: false
+                    // Actions shown inline on the row. Four fit without turning
+                    // it into a menu; the action panel still holds every one.
+                    property int secondaryActions: 4
+                    // Group captions are what the prominent row replaces: with
+                    // one answer at the top, the rest reads better as one list.
+                    property bool uniformList: true
+                }
+                property JsonObject typoTolerance: JsonObject {
+                    // Myers bit-parallel edit distance as a last tier: it runs
+                    // only when the exact and layout-corrected passes found
+                    // nothing, so a typo returns the app instead of an empty
+                    // list. Off by default — it changes what a miss looks like.
+                    property bool enable: true
+                    // 0.30 lands every case from the upstream PR's table on its
+                    // target while still rejecting a query that is simply not a
+                    // typo of anything. Lower widens the net.
+                    property real threshold: 0.30
+                    property int maxResults: 8
+                    // Query typed with the wrong keyboard layout active, mapped
+                    // back through the physical layout — and Cyrillic queries
+                    // transliterated to Latin. Unlike the typo tier these run
+                    // on every query, so they also fix a *partly* wrong query.
+                    property bool keyboardLayouts: true
+                }
+                property JsonObject browserSites: JsonObject {
+                    property bool enable: true
+                    property string profilePath: ""
+                    property int maxIndexedSites: 300
+                    property int maxResults: 6
+                    property bool includeHistory: true
+                    property bool useLocalFavicons: true
+                    property bool allowRemoteFavicons: false
+                    property int refreshMinutes: 10
+                }
                 property list<var> aliases: []
+                // Priority of the result groups, top to bottom. Removing an
+                // entry hides that group's results, so this list is both the
+                // order and the on/off switch. Reordered from Settings; the
+                // catalogue of ids lives in SearchResultSectionRegistry.
+                property list<var> sectionOrder: [
+                    { "id": "suggested" },
+                    { "id": "aliases" },
+                    { "id": "best" },
+                    { "id": "apps" },
+                    { "id": "sites" },
+                    { "id": "controls" },
+                    { "id": "tools" },
+                    { "id": "actions" },
+                    { "id": "quicklinks" },
+                    { "id": "textSnippets" },
+                    { "id": "other" },
+                    { "id": "settings" },
+                    { "id": "files" },
+                    { "id": "continue" }
+                ]
                 property string fileSearchDirectory: "/home"
+                // Image and vector hits draw themselves in the row's icon slot.
+                // Turning this on drops the thumbnail and leaves the file kind's
+                // symbol there instead — hiding the picture outright rather than
+                // blurring 32 pixels of it.
                 property bool blurFileSearchResultPreviews: false
+                property JsonObject fileSearch: JsonObject {
+                    // Show files and folders from the indexed directory for a
+                    // plain query, no prefix. Off by default: this is the one
+                    // search source that costs a process launch and a filesystem
+                    // walk, so turning it on is a deliberate trade.
+                    property bool inlineResults: false
+                    // One or two letters match a large share of a home directory.
+                    // The walk is only worth starting once the query narrows.
+                    property int minimumQueryLength: 3
+                    // This caps only Search's inline preview. Every matching
+                    // path is still ranked and can be opened in File Browser.
+                    property int maxResults: 8
+                    // Depth limits the complete traversal; 0 leaves it
+                    // unbounded inside the configured search directory.
+                    property int maxDepth: 0
+                    // fd saturates every core by default. On a 16-core machine
+                    // that measured 1351% CPU and 0.70s of CPU time for one
+                    // rare-query walk, against 388% and 0.28s at four threads —
+                    // a third of the work for 50ms more wall time. A background
+                    // helper should not take the machine hostage.
+                    property int threads: 4
+                    // fd skips dotfiles by default. Including them covers the
+                    // whole directory, at the cost of walking every cache and
+                    // state folder a home directory accumulates.
+                    property bool includeHidden: false
+                    property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
+                }
+                property JsonObject fileBrowser: JsonObject {
+                    // The explorer needs more room than the result-oriented
+                    // panels: its file list, preview and metadata are visible
+                    // at the same time. These values remain user-adjustable.
+                    property int panelWidth: 1120
+                    property int panelBodyHeight: 620
+                }
                 property JsonObject prefix: JsonObject {
                     property bool showDefaultActionsWithoutPrefix: true
                     property string action: "/"
@@ -3612,7 +4117,57 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string typingTest: "^"
                     property string ai: "&"
+                }
+                property JsonObject typingTest: JsonObject {
+                    property string language: "english_1k"
+                    property string mode: "time"
+                    // Zen without a target is free typing; guided zen keeps the
+                    // generated words but drops both limits, so the test only
+                    // ends when the user says so.
+                    property bool zenGuided: false
+                    property int time: 30
+                    property int words: 50
+                    property bool punctuation: false
+                    property bool numbers: false
+                    property bool showLiveWpm: false
+                    property bool showLiveAccuracy: false
+                    property bool smoothCaret: true
+                    // Typing surface. fontSize is the target text size in px:
+                    // the test is the hero of the panel, so it does not follow
+                    // the launcher's body scale.
+                    property int fontSize: 26
+                    property int visibleLines: 3
+                    property string caretStyle: "line" // line, block, underline, off
+                    // Highlight everything but the current word at reduced
+                    // emphasis, the way Monkeytype's word highlight does.
+                    property bool highlightCurrentWord: false
+                    property bool blindMode: false
+                    // Tab restarts the test, as on Monkeytype. Off by default
+                    // because Tab also walks the launcher's controls.
+                    property bool quickRestart: false
+                    // Finish a words/quote test on the last word without
+                    // needing a trailing space.
+                    property bool finishOnLastWord: true
+                    property JsonObject keyboard: JsonObject {
+                        property bool enable: true
+                        property string layout: "qwerty" // qwerty, qwertz, azerty, dvorak, colemak
+                        property bool highlightNextKey: true
+                    }
+                    property JsonObject sounds: JsonObject {
+                        property bool enable: true
+                        // Monkeytype pack ids, catalogued in
+                        // assets/typing/sounds-manifest.json.
+                        property string theme: "click1"
+                        property string errorTheme: "error1"
+                        property int volume: 55
+                        property bool errorSound: true
+                    }
+                    property JsonObject history: JsonObject {
+                        property bool enable: true
+                        property int maxEntries: 100
+                    }
                 }
                 property JsonObject ai: JsonObject {
                     // How the AI chat is triggered from the search:
@@ -3620,6 +4175,158 @@ Singleton {
                     // "suggest" — adds an "Ask AI" fallback row to the results
                     // "auto" — switches to the AI chat when the query matches nothing
                     property string trigger: "suggest"
+                }
+                // Search surfaces consume this module contract through
+                // SearchPanelRegistry. A panel cannot accidentally remain in
+                // aliases or prefix routing after its feature is disabled.
+                property JsonObject modules: JsonObject {
+                    property bool clipboard: true
+                    property bool bluetooth: true
+                    property bool translator: true
+                    property bool mediaDownloader: true
+                    property bool materialSymbols: true
+                    property JsonObject typingTest: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject emojis: JsonObject {
+                        property bool enable: true
+                        property string skinTone: "none"
+                        property int gridColumns: 8
+                        property bool showRecents: true
+                        property string defaultCategory: "all"
+                    }
+                    property bool windowSearch: true
+                    property bool fileBrowser: true
+                    property bool fileSearch: true
+                    property bool math: true
+                    property bool webSearch: true
+                    property bool shellCommand: true
+                    property bool systemControls: true
+                    property bool shellActions: true
+                    property JsonObject calendar: JsonObject {
+                        property bool enable: false
+                        property string source: "khal"
+                        property int lookaheadDays: 14
+                        property bool showDeclined: false
+                        property bool allowCreate: true
+                        property string defaultCalendarId: ""
+                        property int defaultDurationMin: 30
+                        property list<string> hiddenCalendars: []
+                    }
+                    property JsonObject tasks: JsonObject {
+                        property bool enable: true
+                        property bool showCompleted: false
+                        property bool allowCreate: true
+                        property string defaultList: ""
+                        property int lookaheadDays: 7
+                    }
+                    property JsonObject timers: JsonObject {
+                        property bool enable: true
+                        property bool showPomodoro: true
+                        property bool showStopwatch: true
+                        property bool showAlarms: true
+                        property list<int> quickPresets: [5, 10, 15, 25, 45, 60]
+                    }
+                    property JsonObject quicklinks: JsonObject {
+                        property bool enable: true
+                        property list<var> links: []
+                        property bool copyOnEnter: false
+                        property bool fetchFavicons: true
+                    }
+                    property JsonObject windowManagement: JsonObject {
+                        property bool enable: true
+                        property bool showTilingPresets: true
+                        property bool showWorkspaceMoves: true
+                        property bool showMonitorMoves: true
+                        property int columns: 3
+                    }
+                    property JsonObject screenshots: JsonObject {
+                        property bool enable: true
+                        property int maxItems: 60
+                        property bool blurPreviews: false
+                    }
+                    property JsonObject settingsToggles: JsonObject {
+                        property bool enable: true
+                        property bool showPages: true
+                        property int maxInlineResults: 0
+                    }
+                    property JsonObject quickToggles: JsonObject {
+                        property bool enable: true
+                        property list<string> hidden: []
+                    }
+                    property JsonObject keybinds: JsonObject {
+                        property bool enable: true
+                        property bool includeUserBinds: true
+                        property bool includeDefaultBinds: true
+                    }
+                    property JsonObject cheatsheet: JsonObject {
+                        property bool enable: true
+                        property bool commandsPanel: true
+                        property bool gmailPanel: true
+                    }
+                    property JsonObject sports: JsonObject {
+                        property bool enable: false
+                        property int lookaheadHours: 72
+                        property list<string> leagues: []
+                    }
+                    property JsonObject snippets: JsonObject { property bool enable: true; property list<var> items: [] }
+                    property JsonObject notes: JsonObject { property bool enable: true }
+                    property JsonObject processes: JsonObject { property bool enable: true }
+                    property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
+                    property JsonObject tools: JsonObject { property bool enable: true }
+                    property JsonObject generators: JsonObject { property bool enable: true }
+                }
+                property JsonObject frecencyData: JsonObject {
+                    property bool trackApps: true
+                    property bool trackPanels: true
+                    property bool trackActions: true
+                }
+                property JsonObject favorites: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject fallbacks: JsonObject {
+                    property bool enable: true
+                    property list<string> actions: ["ai", "web", "tasks", "calendar"]
+                }
+                property JsonObject history: JsonObject {
+                    property bool enable: true
+                    property int maxItems: 50
+                }
+                // Search-only bindings. They remain local to the focused Search
+                // field and therefore cannot collide with Hyprland global binds.
+                property list<var> keybindings: [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
+                ]
+                property JsonObject appearance: JsonObject {
+                    property bool accentPanels: true
+                    property real accentStrength: 0.12
+                    property bool showKeyHints: true
+                    property bool showKeyHintBar: true
+                    property int panelWidth: 860
+                    property int panelBodyHeight: 420
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="
@@ -3632,6 +4339,11 @@ Singleton {
                     property int imageHeight: 200
                     property int previewFontSize: 12
                     property bool enableSloppySearch: false
+                    property JsonObject autoDelete: JsonObject {
+                        property bool enable: false
+                        property int retentionDays: 30
+                        property bool wipeOnShutdown: false
+                    }
                     property JsonObject detectors: JsonObject {
                         property bool hexColor: true
                         property bool url: true
@@ -3644,7 +4356,13 @@ Singleton {
                         property bool multiline: true
                     }
                 }
-                property bool showNowPlayingBubble: false
+                property JsonObject nowPlaying: JsonObject {
+                    property bool enable: true          // hoje é `showNowPlayingBubble`
+                    property bool showInlineControls: true
+                    property bool tintFromArtwork: false
+                    property bool showPlayerName: true  // só quando há mais de um player
+                }
+                property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 580
                 property int baseHeight: 500
@@ -3652,11 +4370,17 @@ Singleton {
                 property real centerVerticalRatio: 0.3
                 property JsonObject suggestions: JsonObject {
                     property bool enable: false
+                    // Applies only to the "Suggestions" strip below — every
+                    // other idle category shows in full, the same way its
+                    // real-search counterpart does.
                     property int maxSuggestionsPerSection: 5
                     property bool showFrecency: true
                     property bool showCommands: false
                     property bool showApps: true
                     property bool showAliases: true
+                    property bool showToggles: true
+                    property bool showPanels: true
+                    property bool showQuicklinks: true
                 }
             }
 
@@ -3691,13 +4415,24 @@ Singleton {
                     // picture/uptime row, so this now matches "user_profile".
                     property string profileImageType: "user_profile" // "user_profile", "distro", "none"
                     property string profileImagePath: Directories.userProfileImagePath
+                    // Independent from userProfile.avatarShape: the sidebar avatar is
+                    // shaped on its own so the settings/general avatar can differ.
+                    property string avatarShape: "Cookie9Sided"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
+                    property string customText: ""
+                }
+                property bool enableBanner
+                property bool useCustomBanner
+                property string bannerImage: ""
+                property JsonObject dashboardSubHeader: JsonObject {
+                    property string greetingSubtextMode: "uptime"  // "uptime", "custom", "none"
                     property string customText: ""
                 }
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
                 property bool keepRightSidebarLoaded: true
                 property bool keepLeftSidebarLoaded: true
+                property bool dashboardEntranceAnimations: false
                 property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false

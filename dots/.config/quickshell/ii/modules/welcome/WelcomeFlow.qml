@@ -154,6 +154,8 @@ Item {
     }
 
     function goPrevious() {
+        if (root.currentPageLocksNavigation())
+            return;
         const index = root.pageIndex(root.currentPageId);
         if (index > 0)
             root.goToPage(WelcomePageRegistry.pages[index - 1].id);
@@ -183,12 +185,20 @@ Item {
     }
 
     function skipCurrentPage(): void {
+        if (root.currentPageLocksNavigation())
+            return;
         if (root.currentPageId !== "keyboard")
             return;
         const index = root.pageIndex(root.currentPageId);
         if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
             return;
         root.goToPage(WelcomePageRegistry.pages[index + 1].id);
+    }
+
+    function currentPageLocksNavigation(): bool {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.navigationLocked === true;
     }
 
     function openTutorial(tutorialId: string): void {
@@ -298,6 +308,14 @@ Item {
 
                 function onTrySearch() {
                     root.trySearch();
+                }
+
+                function onAdvanceRequested() {
+                    if (pageLayer.pageId !== root.currentPageId || root.transitionRunning)
+                        return;
+                    const index = root.pageIndex(root.currentPageId);
+                    if (index >= 0 && index < WelcomePageRegistry.pages.length - 1)
+                        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
                 }
             }
         }

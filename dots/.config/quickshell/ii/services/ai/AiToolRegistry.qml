@@ -428,6 +428,98 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "calendar_create_event",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Create calendar event"),
+            summary: Translation.tr("Shows the complete event before adding it to the local khal calendar."),
+            icon: "event_available",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 15000,
+            maxResultTokens: 220,
+            idempotent: false,
+            description: "Prepare one event for the local khal calendar. It is never written until the user approves the complete preview. Supply title and start. Timed events also require end, both as local ISO 8601 date-times such as 2026-08-25T14:00. For an all-day event set allDay true, give start as YYYY-MM-DD, and optionally give end as an exclusive YYYY-MM-DD end date. calendar is optional and defaults to khal's writable default. location, url and notes are optional.",
+            parameters: {
+                type: "object",
+                properties: {
+                    title: { type: "string", description: "Event title" },
+                    start: { type: "string", description: "Local ISO date-time, or YYYY-MM-DD when allDay is true" },
+                    end: { type: "string", description: "Required local ISO end date-time for timed events; optional exclusive end date for all-day events" },
+                    allDay: { type: "boolean", description: "Whether this is an all-day event" },
+                    calendar: { type: "string", description: "Optional exact khal calendar name" },
+                    location: { type: "string", description: "Optional location" },
+                    url: { type: "string", description: "Optional meeting URL" },
+                    notes: { type: "string", description: "Optional event notes" }
+                },
+                required: ["title", "start"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "calendar_move_event",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Move calendar event"),
+            summary: Translation.tr("Shows the new time and recurrence scope before changing a local khal event."),
+            icon: "edit_calendar",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 15000,
+            maxResultTokens: 220,
+            idempotent: false,
+            description: "Prepare moving a local khal event identified by uid returned from calendar_list_events. For timed events give local ISO start and end. For all-day events set allDay true and give YYYY-MM-DD start with an optional exclusive YYYY-MM-DD end. scope is one of all, this, or future. A recurring event defaults to all only when scope is omitted; the preview always says which occurrences will change. For this or future, recurrenceId is required and identifies the original occurrence as a local ISO date-time or YYYY-MM-DD.",
+            parameters: {
+                type: "object",
+                properties: {
+                    uid: { type: "string", description: "Exact event uid returned by calendar_list_events" },
+                    start: { type: "string", description: "New local ISO date-time, or YYYY-MM-DD for all-day" },
+                    end: { type: "string", description: "New local ISO end date-time, or exclusive end date for all-day" },
+                    allDay: { type: "boolean", description: "Whether the moved event is all-day" },
+                    scope: { type: "string", description: "all, this, or future; defaults to all with an explicit preview" },
+                    recurrenceId: { type: "string", description: "Original occurrence local ISO date-time/date when scope is this or future" }
+                },
+                required: ["uid", "start"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "calendar_delete_event",
+            version: 1,
+            domain: "time",
+            title: Translation.tr("Delete calendar event"),
+            summary: Translation.tr("Shows the event and recurrence scope before removing it from the local khal calendar."),
+            icon: "event_busy",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "personal",
+            requiredModelCapabilities: ["tools"],
+            defaultApproval: "ask",
+            timeoutMs: 15000,
+            maxResultTokens: 180,
+            idempotent: false,
+            description: "Prepare deleting a local khal event identified by uid returned from calendar_list_events. scope is all, this, or future. A recurring event defaults to all only when scope is omitted; the approval preview explicitly warns when every occurrence will be removed. For this or future, recurrenceId is required and identifies the original occurrence as a local ISO date-time or YYYY-MM-DD. The event is never deleted until the user approves.",
+            parameters: {
+                type: "object",
+                properties: {
+                    uid: { type: "string", description: "Exact event uid returned by calendar_list_events" },
+                    scope: { type: "string", description: "all, this, or future; defaults to all with an explicit preview" },
+                    recurrenceId: { type: "string", description: "Original occurrence local ISO date-time/date when scope is this or future" }
+                },
+                required: ["uid"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "weather_get",
             version: 1,
             domain: "time",
@@ -1764,6 +1856,11 @@ Singleton {
             return String(args.provider ?? "") + " · " + String(args.taskId ?? "");
         case "calendar_list_events":
             return [args.from ?? "", args.to ?? ""].filter(value => String(value).length > 0).join(" → ");
+        case "calendar_create_event":
+            return String(args.title ?? "") + " · " + String(args.start ?? "");
+        case "calendar_move_event":
+        case "calendar_delete_event":
+            return String(args.uid ?? "") + " · " + String(args.scope ?? "all");
         case "keybinds_search":
             return String(args.query ?? "");
         case "wallpaper_search":

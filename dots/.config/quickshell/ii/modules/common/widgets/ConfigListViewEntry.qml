@@ -10,7 +10,7 @@ Item {
     id: wrapper
     
     required property var modelData
-    readonly property var compInfo: BarComponentRegistry.getComponent(modelData.id)
+    readonly property var compInfo: root.componentInfo(modelData.id)
 
     property bool alternateColor: visualIndex % 2 == 0
     property color colBackground: alternateColor ? Appearance.colors.colLayer3 : Appearance.colors.colLayer2

@@ -95,6 +95,16 @@ class TestGoogleTasksApi(unittest.TestCase):
         self.assertEqual(sent_body.get("title"), special_title)
 
     @patch('urllib.request.urlopen')
+    def test_create_task_preserves_due_timestamp(self, mock_urlopen):
+        due = "2026-09-18T00:00:00.000Z"
+        mock_urlopen.return_value = make_mock_response(status=200, body_dict={"id": "due-task", "due": due})
+
+        res = api.create_task("dummy_token", "list1", {"title": "Pay rent", "due": due})
+        self.assertTrue(res.get("ok"))
+        req = mock_urlopen.call_args[0][0]
+        self.assertEqual(json.loads(req.data.decode("utf-8"))["due"], due)
+
+    @patch('urllib.request.urlopen')
     def test_patch_task_complete_and_uncomplete(self, mock_urlopen):
         resp1 = make_mock_response(status=200, body_dict={
             "id": "task1",

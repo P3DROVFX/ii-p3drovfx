@@ -120,10 +120,21 @@ Item {
                         text: root.searchQuery
                         onTextChanged: root.searchQuery = text
 
+                        StyledTextContextMenu {
+                            id: searchContextMenu
+                            targetField: searchField
+                        }
+
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.IBeamCursor
-                            acceptedButtons: Qt.NoButton
+                            acceptedButtons: Qt.RightButton
+                            onPressed: mouse => {
+                                if (mouse.button === Qt.RightButton) {
+                                    searchField.forceActiveFocus();
+                                    searchContextMenu.popup(mouse.x, mouse.y);
+                                }
+                            }
                         }
 
                         Keys.onPressed: event => {
@@ -213,8 +224,8 @@ Item {
                     required property var modelData
                     required property int index
                     anchors {
-                        left: parent?.left
-                        right: parent?.right
+                        left: parent ? parent.left : undefined
+                        right: parent ? parent.right : undefined
                         leftMargin: root.dialogPadding
                         rightMargin: root.dialogPadding
                     }

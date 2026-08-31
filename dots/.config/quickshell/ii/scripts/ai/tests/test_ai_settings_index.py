@@ -48,6 +48,8 @@ ContentSection {
         StyledToolTip { text: Translation.tr("Automatically suspends the system") }
     }
 
+    ConfigSwitch { buttonIcon: "bluetooth"; text: Translation.tr("Bluetooth"); description: Translation.tr("Nearby devices"); checked: Config.options.battery.bluetooth; onCheckedChanged: Config.options.battery.bluetooth = checked }
+
     ConfigSpinBox {
         enabled: Config.options.battery.automaticSuspend
         icon: "mode_standby"
@@ -87,6 +89,7 @@ class SettingsIndexTests(unittest.TestCase):
         self.config = self.root / "config.json"
         self.config.write_text(json.dumps({"battery": {
             "automaticSuspend": True,
+            "bluetooth": True,
             "suspend": 25,
             "headlessValue": "007",
         }}), encoding="utf-8")
@@ -105,6 +108,7 @@ class SettingsIndexTests(unittest.TestCase):
 
     def test_extracts_keys_types_ranges_dependencies_and_labels(self):
         index = self.build()
+        self.assertEqual(index["schema"], 6)
         entries = {entry["key"]: entry for entry in index["entries"]}
 
         automatic = entries["battery.automaticSuspend"]
@@ -119,6 +123,11 @@ class SettingsIndexTests(unittest.TestCase):
         self.assertEqual(automatic["pageId"], "power")
         self.assertEqual(automatic["currentValue"], True)
         self.assertEqual(automatic["alsoIn"], [{"pageId": "power", "subPage": "widgets/CorePowerConfig.qml"}])
+
+        bluetooth = entries["battery.bluetooth"]
+        self.assertEqual(bluetooth["label"], "Bluetooth")
+        self.assertEqual(bluetooth["description"], "Nearby devices")
+        self.assertEqual(bluetooth["icon"], "bluetooth")
 
         suspend = entries["battery.suspend"]
         self.assertEqual(suspend["type"], "int")
@@ -208,15 +217,49 @@ ContentPage {
             text: Config.options.usage.note
         }
 
+        ConfigSlider {
+            text: Translation.tr("Ratio (%)")
+            value: Config.options.usage.ratio * 100
+            from: 25
+            to: 60
+            onValueChanged: Config.options.usage.ratio = value / 100
+        }
+
+        ConfigSelectionArray {
+            title: Translation.tr("Conditional mode")
+            currentValue: Config.options.usage.mode
+            onSelected: newValue => Config.options.usage.mode = newValue
+            options: {
+                const locked = true;
+                return [
+                    { "displayName": Translation.tr("Safe"), "value": "safe" },
+                    { "displayName": Translation.tr("Advanced"), "value": "advanced", "enabled": !locked }
+                ];
+            }
+        }
+
+        ConfigSelectionArray {
+            title: Translation.tr("Literal conditional mode")
+            currentValue: Config.options.usage.literalMode
+            onSelected: newValue => Config.options.usage.literalMode = newValue
+            options: [
+                { "displayName": Translation.tr("Available"), "value": "available" },
+                { "displayName": Translation.tr("Unavailable"), "value": "unavailable", "enabled": root.providerAvailable }
+            ]
+        }
+
         ConfigSelectionArray {
             currentValue: (Config.options.usage.a ? 1 : 0) | (Config.options.usage.b ? 2 : 0)
             onSelected: newValue => {
                 Config.options.usage.a = (newValue & 1) !== 0;
                 Config.options.usage.b = (newValue & 2) !== 0;
             }
-            options: [
-                { "displayName": Translation.tr("Both"), "value": 3 }
-            ]
+            options: {
+                const locked = false;
+                return [
+                    { "displayName": Translation.tr("Both"), "value": 3, "enabled": !locked }
+                ];
+            }
         }
     }
 }
@@ -236,6 +279,9 @@ class SettingsWidgetCoverageTests(unittest.TestCase):
         self.config.write_text(json.dumps({"usage": {
             "granularity": "day",
             "note": "",
+            "ratio": 0.4,
+            "mode": "safe",
+            "literalMode": "available",
             "a": False,
             "b": False,
         }}), encoding="utf-8")
@@ -288,6 +334,24 @@ class SettingsWidgetCoverageTests(unittest.TestCase):
         self.assertEqual(composite["widget"], "ConfigSelectionArray")
         self.assertFalse(composite["hasUi"])
         self.assertEqual(composite["options"], [{"label": "Both", "value": 3}])
+
+    def test_a_transformed_display_value_is_never_writable_inline(self):
+        entries = {entry["key"]: entry for entry in self.build()["entries"]}
+        ratio = entries["usage.ratio"]
+        self.assertEqual(ratio["range"], {"from": 25, "to": 60, "step": None})
+        self.assertFalse(ratio["hasUi"])
+
+    def test_dynamic_option_availability_is_never_bypassed_inline(self):
+        entries = {entry["key"]: entry for entry in self.build()["entries"]}
+        mode = entries["usage.mode"]
+        self.assertEqual(mode["options"], [
+            {"label": "Safe", "value": "safe"},
+            {"label": "Advanced", "value": "advanced"},
+        ])
+        self.assertFalse(mode["hasUi"])
+        literal_mode = entries["usage.literalMode"]
+        self.assertEqual(len(literal_mode["options"]), 2)
+        self.assertFalse(literal_mode["hasUi"])
 
 
 if __name__ == "__main__":

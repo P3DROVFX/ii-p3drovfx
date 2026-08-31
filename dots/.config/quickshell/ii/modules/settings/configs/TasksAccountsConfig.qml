@@ -183,15 +183,24 @@ Item {
     readonly property string rcloneInstallFamily: root.rcloneInstallFamilyFor(SystemInfo.distroId)
     readonly property string rcloneInstallCommand: root.rcloneInstallCommandFor(SystemInfo.distroId)
 
+    function updateDriveOption(key, value) {
+        if (Persistent.ready && Persistent.states.googleDrive) {
+            Persistent.states.googleDrive[key] = value;
+        }
+        if (Config.ready && Config.options.googleDrive) {
+            Config.options.googleDrive[key] = value;
+        }
+    }
+
     function updateDriveList(key, transform) {
-        const current = (driveOptions[key] || []).slice();
+        const current = Array.from(root.driveOptions[key] || []);
         transform(current);
-        driveOptions[key] = current;
+        root.updateDriveOption(key, current);
     }
 
     function addBackupFolder(path) {
         const cleanPath = String(path || "").trim();
-        if (!cleanPath || driveOptions.backupFolders.indexOf(cleanPath) >= 0)
+        if (!cleanPath || (root.driveOptions.backupFolders && root.driveOptions.backupFolders.indexOf(cleanPath) >= 0))
             return;
         root.updateDriveList("backupFolders", values => values.push(cleanPath));
     }
@@ -204,7 +213,7 @@ Item {
         root.updateDriveList("excludePatterns", values => values.splice(index, 1));
     }
 
-    function addExcludePattern(pattern) {
+    function addExcludePattern(pattern: string) {
         const cleanPattern = String(pattern || "").trim();
         root.excludePatternError = "";
         if (!cleanPattern) {
@@ -215,7 +224,7 @@ Item {
             root.excludePatternError = Translation.tr("Use one rclone glob pattern (up to 256 characters) without line breaks.");
             return;
         }
-        if (driveOptions.excludePatterns.indexOf(cleanPattern) >= 0) {
+        if (root.driveOptions.excludePatterns && root.driveOptions.excludePatterns.indexOf(cleanPattern) >= 0) {
             root.excludePatternError = Translation.tr("That pattern is already excluded.");
             return;
         }
@@ -986,7 +995,7 @@ Item {
             configPage: Qt.resolvedUrl("widgets/GoogleDriveBackupConfig.qml")
             onCheckedChanged: {
                 if (checked !== Config.options.googleDrive.enabled)
-                    Config.options.googleDrive.enabled = checked;
+                    root.updateDriveOption("enabled", checked);
             }
         }
     }
@@ -2525,6 +2534,16 @@ Item {
             color: Appearance.colors.colSubtext
         }
 
+        ConfigSwitch {
+            buttonIcon: "cloud_done"
+            text: Translation.tr("Enable Google Drive backups")
+            checked: Config.options.googleDrive.enabled
+            onCheckedChanged: {
+                if (checked !== Config.options.googleDrive.enabled)
+                    root.updateDriveOption("enabled", checked);
+            }
+        }
+
         ConfigSelectionArray {
             Layout.fillWidth: true
             currentValue: Config.options.googleDrive.syncInterval
@@ -2535,7 +2554,7 @@ Item {
                 { displayName: Translation.tr("2 days"), value: "2d", icon: "date_range" },
                 { displayName: Translation.tr("3 days"), value: "3d", icon: "calendar_month" }
             ]
-            onSelected: value => Config.options.googleDrive.syncInterval = value
+            onSelected: value => root.updateDriveOption("syncInterval", value)
         }
 
         ConfigSwitch {
@@ -2544,7 +2563,7 @@ Item {
             checked: Config.options.googleDrive.syncOnBoot
             onCheckedChanged: {
                 if (checked !== Config.options.googleDrive.syncOnBoot)
-                    Config.options.googleDrive.syncOnBoot = checked;
+                    root.updateDriveOption("syncOnBoot", checked);
             }
         }
     }
@@ -2555,57 +2574,17 @@ Item {
         visible: root.driveSubPageMode
         icon: "tune"
         title: Translation.tr("Advanced Drive Settings")
+        tooltip: Translation.tr("Transfer limits, retention, network triggers and notifications.")
 
-        RippleButton {
-            id: advancedDriveButton
+        ColumnLayout {
             Layout.fillWidth: true
-            implicitHeight: advancedDriveRow.implicitHeight + 32
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colTertiaryContainer
-            colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-            colRipple: Appearance.colors.colTertiaryContainerActive
-            onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
+            spacing: Appearance.sizes.elevationMargin / 2
 
-            contentItem: RowLayout {
-                id: advancedDriveRow
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
-
-                MaterialShapeWrappedMaterialSymbol {
-                    text: "tune"
-                    shape: MaterialShape.Shape.Circle
-                    iconSize: Appearance.font.pixelSize.large
-                    padding: 8
-                    color: Appearance.colors.colTertiary
-                    colSymbol: Appearance.colors.colOnTertiary
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Advanced Drive Settings")
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnTertiaryContainer
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Transfer limits, retention, network triggers and notifications")
-                        color: Appearance.colors.colOnTertiaryContainer
-                        opacity: 0.82
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                MaterialSymbol {
-                    text: "arrow_forward"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnTertiaryContainer
-                }
+            ConfigSubpageRow {
+                buttonIcon: "tune"
+                title: Translation.tr("Advanced Drive Settings")
+                description: Translation.tr("Transfer limits, retention, network triggers and notifications")
+                onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
             }
         }
     }

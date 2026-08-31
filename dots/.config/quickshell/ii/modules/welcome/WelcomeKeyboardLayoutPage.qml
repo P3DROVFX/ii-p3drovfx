@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -28,6 +27,9 @@ Item {
     property bool manualEntry: false
     property bool statusIsError: false
     property string statusText: ""
+    property bool persistencePending: false
+    readonly property bool navigationLocked: root.persistencePending
+    signal advanceRequested()
 
     readonly property string desiredLayoutValue: root.manualEntry
         ? root.normalizeValue(manualLayoutField.text, false)
@@ -64,6 +66,9 @@ Item {
     }
 
     function applyKeyboardLayout(): bool {
+        if (root.persistencePending)
+            return false;
+
         const layoutValue = root.desiredLayoutValue;
         const variantValue = root.desiredVariantValue;
         if (layoutValue.length === 0) {
@@ -79,60 +84,14 @@ Item {
             return false;
         }
 
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layoutValue]);
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variantValue]);
-        root.persistLayout(layoutValue, variantValue);
+        if (!HyprlandConfig.persistWelcomeKeyboardLayout(layoutValue, variantValue))
+            return false;
 
+        root.persistencePending = true;
         root.statusIsError = false;
-        root.statusText = Translation.tr("Keyboard layout saved to Hyprland.");
+        root.statusText = Translation.tr("Applying and saving keyboard layout…");
         feedbackTimer.restart();
-        return true;
-    }
-
-    /**
-     * The permanent half of the change, into the managed block of custom/general.lua - the same
-     * place Settings -> Hyprland writes.
-     *
-     * It used to go into hyprland/shellOverrides/main.lua, which exists for the transient
-     * overrides Modes, Game Mode and the screen shader lay on top. That file loads after every
-     * custom file, so a permanent choice left in it shadowed the settings page from then on, and
-     * nothing ever took it out again.
-     *
-     * The store refuses edits until it has read the files, which on a cold first login it may
-     * still be doing, so this waits rather than dropping the choice on the floor.
-     */
-    function persistLayout(layoutValue: string, variantValue: string) {
-        if (!HyprlandGui.ready) {
-            persistRetry.layoutValue = layoutValue;
-            persistRetry.variantValue = variantValue;
-            persistRetry.restart();
-            return;
-        }
-        HyprlandGui.setKey("input:kb_layout", layoutValue);
-        HyprlandGui.setKey("input:kb_variant", variantValue);
-        HyprlandGui.save();
-    }
-
-    Timer {
-        id: persistRetry
-        property string layoutValue: ""
-        property string variantValue: ""
-        property int tries: 0
-
-        interval: 250
-        repeat: true
-        onRunningChanged: {
-            if (persistRetry.running) persistRetry.tries = 0;
-        }
-        onTriggered: {
-            if (HyprlandGui.ready) {
-                persistRetry.stop();
-                root.persistLayout(persistRetry.layoutValue, persistRetry.variantValue);
-                return;
-            }
-            persistRetry.tries += 1;
-            if (persistRetry.tries > 20) persistRetry.stop();
-        }
+        return false;
     }
 
     function prepareNext(): bool {
@@ -264,6 +223,23 @@ Item {
             }
         }
 
+    }
+
+    Connections {
+        target: HyprlandConfig
+        function onWelcomeKeyboardLayoutPersisted(success, message) {
+            if (!root.persistencePending)
+                return;
+
+            root.persistencePending = false;
+            root.statusIsError = !success;
+            root.statusText = success
+                ? Translation.tr("Keyboard layout saved to Hyprland.")
+                : Translation.tr("Could not save keyboard layout. %1").arg(message || Translation.tr("Try again."));
+            feedbackTimer.restart();
+            if (success)
+                root.advanceRequested();
+        }
     }
 
     Connections {

@@ -28,11 +28,15 @@ Scope {
     ]
 
     function triggerBrightnessOsd() {
+        if (!Config.osdIndicatorEnabled("brightness"))
+            return;
         root.currentIndicator = "brightness";
         GlobalStates.osdBrightnessOpen = true;
     }
 
     function triggerVolumeOSD() {
+        if (!Config.osdIndicatorEnabled("volume"))
+            return;
         root.currentIndicator = "volume";
         GlobalStates.osdVolumeOpen = true;
     }

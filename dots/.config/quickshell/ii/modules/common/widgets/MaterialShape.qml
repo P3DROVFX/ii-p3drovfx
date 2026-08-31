@@ -96,6 +96,48 @@ ShapeCanvas {
     implicitWidth: implicitSize
     polygonIsNormalized: true
 
+    /**
+     * Rotation pivot.
+     *
+     * `RoundedPolygon.normalized()` fits a shape's *bounding box* into the unit
+     * square, which is not the same as centring it on its rotational centre.
+     * Even-symmetry shapes land exactly on 0.5; odd-symmetry ones do not — a
+     * 7-sided cookie sits 1.2% of its size low, a gem 2%, a triangle 11%.
+     * `rotation` pivots on the item's centre, so those shapes orbit that point
+     * instead of spinning in place, and the whole silhouette sliding together
+     * reads as a wobble well below a pixel.
+     *
+     * Re-anchoring the *paint* instead would push the shape out of its box (a
+     * triangle would have to shrink by a tenth to fit again), changing how every
+     * static shape lays out. So the pivot moves and the picture does not: the
+     * item's own rotation is undone and re-applied about the polygon's real
+     * centre. Both angles are zero whenever `rotation` is, so every caller that
+     * never spins is untouched.
+     *
+     * This lives here rather than in ShapeCanvas because `shapes/` is a git
+     * submodule (end-4/rounded-polygon-qmljs) and a fix left in there would be
+     * lost on the next submodule update. It assumes the default
+     * `transformOrigin` (Item.Center), and a caller that assigns its own
+     * `transform` list replaces this one and opts out — which is what the two
+     * that do already wanted.
+     */
+    readonly property real paintScale: root.polygonIsNormalized ? Math.min(root.width, root.height) : 1
+    readonly property real pivotX: ((root.roundedPolygon?.centerX ?? 0.5) + root.xOffset) * root.paintScale
+    readonly property real pivotY: ((root.roundedPolygon?.centerY ?? 0.5) + root.yOffset) * root.paintScale
+
+    transform: [
+        Rotation {
+            origin.x: root.width / 2
+            origin.y: root.height / 2
+            angle: -root.rotation
+        },
+        Rotation {
+            origin.x: root.pivotX
+            origin.y: root.pivotY
+            angle: root.rotation
+        }
+    ]
+
     onShapeStringChanged: {
         if (!shapeString) return
         shape = getShape(shapeString)

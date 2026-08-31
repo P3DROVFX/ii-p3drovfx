@@ -96,8 +96,7 @@ WindowDialog {
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
             onClicked: {
-                Quickshell.execDetached(["bash", "-c",
-                    `${Network.ethernet ? Config.options.apps.networkEthernet : Config.options.apps.network}`]);
+                GlobalStates.openSettingsPage("network", "", Network.ethernet ? "Ethernet ports" : "Wi-Fi");
                 root.detailsRequested();
                 if (root.closeOwningSidebarOnDetails)
                     GlobalStates.sidebarRightOpen = false;

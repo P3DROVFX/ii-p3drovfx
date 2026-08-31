@@ -196,6 +196,9 @@ Item {
             title: Translation.tr("Wallpaper Variants")
             icon: "collections"
 
+            // The switch stays a direct child of the section, as everywhere else
+            // in Settings — ContentSubsection is for selectors and notices, not
+            // for switches. Only the row under each switch was rebuilt.
             ContentSubsectionLabel {
                 text: Translation.tr("Lockscreen wallpaper")
             }
@@ -217,17 +220,26 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.topMargin: 4
+                // Was 0: the preview and the buttons were touching.
+                spacing: 12
                 visible: Config.options.background.useSeparateLockscreenWallpaper
 
                 ConfigWallpaperSelector {
                     targetMode: "lockscreen"
-                    text: Translation.tr("Lockscreen Wallpaper Selector")
+                    // 360x220 by default, which dwarfed the two buttons beside it.
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 135
+                    Layout.alignment: Qt.AlignVCenter
                 }
 
                 ColumnLayout {
-                    Layout.fillHeight: true
                     Layout.fillWidth: true
-                    spacing: 8
+                    // Centred against the preview. It used to be fillHeight with
+                    // two buttons that do not stretch, so they sat pinned to the
+                    // top with an empty gap underneath.
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 6
 
                     RippleButtonWithIcon {
                         useDynamicRadius: true
@@ -278,17 +290,21 @@ Item {
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 12
                 visible: Config.options.background.useSeparateLightModeWallpaper
 
                 ConfigWallpaperSelector {
                     targetMode: "lightmode"
-                    text: Translation.tr("Light Mode Wallpaper Selector")
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 135
+                    Layout.alignment: Qt.AlignVCenter
                 }
 
                 ColumnLayout {
-                    Layout.fillHeight: true
                     Layout.fillWidth: true
-                    spacing: 8
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 6
 
                     RippleButtonWithIcon {
                         useDynamicRadius: true

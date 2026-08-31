@@ -564,6 +564,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 

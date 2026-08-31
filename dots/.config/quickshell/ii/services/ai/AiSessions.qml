@@ -394,7 +394,7 @@ Scope {
         opProc.op = op;
         opProc.payload = op.stdin ?? "";
         opProc.command = ["python3", root.scriptPath, ...op.args];
-        opProc.stdinEnabled = (op.stdin ?? "").length > 0;
+        opProc.stdinEnabled = false;
         opProc.running = true;
     }
 
@@ -498,10 +498,12 @@ Scope {
             if (opProc.running) {
                 opProc.outputSeen = false;
                 opProc.operationAcknowledged = false;
-                if (opProc.payload.length > 0) {
-                    opProc.write(opProc.payload);
-                    opProc.stdinEnabled = false; // Closing stdin is what makes it read
-                }
+                // Closing stdin is what makes the helper read: it blocks until
+                // the EOF arrives, so the channel is always opened and closed,
+                // payload or not. Leaving it shut on an empty one hangs it.
+                opProc.stdinEnabled = true;
+                opProc.write(opProc.payload);
+                opProc.stdinEnabled = false;
             }
         }
 

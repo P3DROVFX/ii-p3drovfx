@@ -242,7 +242,7 @@ Item {
             }
             function onActiveDeviceBatteryLow(devId, charge) {
                 const name = KdeConnectService.activeDevice
-                    ? KdeConnectService.activeDevice.name
+                    ? KdeConnectService.activeDeviceDisplayName
                     : Translation.tr("Phone")
                 Quickshell.execDetached([
                     "notify-send",
@@ -254,7 +254,7 @@ Item {
             }
             function onActiveDeviceBatteryRecovered(devId, charge) {
                 const name = KdeConnectService.activeDevice
-                    ? KdeConnectService.activeDevice.name
+                    ? KdeConnectService.activeDeviceDisplayName
                     : Translation.tr("Phone")
                 Quickshell.execDetached([
                     "notify-send",

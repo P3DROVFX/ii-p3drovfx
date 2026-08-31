@@ -123,18 +123,12 @@ MouseArea {
 
     Behavior on implicitWidth {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     RowLayout {

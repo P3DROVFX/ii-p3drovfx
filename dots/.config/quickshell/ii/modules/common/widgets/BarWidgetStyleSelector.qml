@@ -41,7 +41,19 @@ StyledComboBox {
     Binding {
         target: root
         property: "currentIndex"
-        value: Math.max(0, root.indexOfValue(root.selectedValue))
+        value: {
+            // `indexOfValue()` reads the ComboBox model internally. During
+            // Loader construction it can run before `styleOptions` has been
+            // assigned, leaving currentIndex at 0 (the Default option) for
+            // the lifetime of the selector. Read the options explicitly so
+            // the binding depends on the model supplied by the caller.
+            const selected = String(root.selectedValue ?? "default");
+            for (let i = 0; i < root.styleOptions.length; ++i) {
+                if (String(root.styleOptions[i]?.value ?? "default") === selected)
+                    return i;
+            }
+            return root.styleOptions.length > 0 ? 0 : -1;
+        }
         restoreMode: Binding.RestoreBindingOrValue
     }
 

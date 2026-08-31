@@ -62,16 +62,10 @@ Item {
     }
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: 450
-            easing.type: Easing.OutExpo
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: 450
-            easing.type: Easing.OutExpo
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Rectangle {

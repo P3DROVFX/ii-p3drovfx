@@ -116,8 +116,52 @@ Scope {
             });
         }
 
+        // ── Shell edge slide ─────────────────────────────────────────────
+        // Going fullscreen used to cut the bar and the frame to opacity 0 in a
+        // single frame. They now leave through their own edge instead: the bar
+        // slides out past it and the frame folds into the screen edges. The
+        // placement swap rides the same offset, so a bar that changes edge
+        // exits through the old one and enters through the new one — the
+        // direction flips on its own when the config does, halfway through.
+        property real fullscreenHide: barRoot.hasFullscreenWindowOnMonitor ? 1 : 0
+        Behavior on fullscreenHide {
+            animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
+        }
+        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress)
+        readonly property real shellSlideY: (Config.options.bar.bottom ? 1 : -1)
+            * shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
+        readonly property bool shellSeated: shellHide < 0.999
+        readonly property bool shellFullySeated: shellHide < 0.001
+
+        // ── Hover delay trigger ───────────────────────────────────────────────
+        property bool hoverTriggered: false
+        readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+        Timer {
+            id: hoverOpenTimer
+            interval: barRoot.hoverDelay
+            repeat: false
+            onTriggered: barRoot.hoverTriggered = true
+        }
+
+        Connections {
+            target: hoverRegion
+            function onContainsMouseChanged() {
+                if (hoverRegion.containsMouse) {
+                    if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) {
+                        barRoot.hoverTriggered = true;
+                    } else {
+                        hoverOpenTimer.restart();
+                    }
+                } else {
+                    hoverOpenTimer.stop();
+                    barRoot.hoverTriggered = false;
+                }
+            }
+        }
+
         property bool superShow: false
-        property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
+        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
         property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
@@ -130,9 +174,12 @@ Scope {
 
         // Mask extends only over bar content (plus autoHide hover region).
         // Shadow from MultiEffect is visual-only and outside the mask.
-        // In fullscreen, mask becomes empty to allow clicks through.
+        // Keep the mask empty until the translated shell is fully seated. Item-based
+        // regions can otherwise retain the geometry captured midway through the slide.
         mask: Region {
-            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive ? null : hoverMaskRegion
+            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive || !barRoot.shellFullySeated
+                ? null
+                : hoverMaskRegion
         }
         color: "transparent"
 
@@ -162,7 +209,8 @@ Scope {
         Loader {
             active: Config.options.appearance.fakeScreenRounding == 3
             anchors.fill: parent
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            visible: barRoot.shellSeated
+            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             sourceComponent: Component {
                 Item {
                     anchors.fill: parent
@@ -170,6 +218,7 @@ Scope {
                         showBarBackground: barRoot.showBarBackground
                         hBarHiddenAmount: barRoot.hiddenAmount
                         vBarHiddenAmount: 0
+                        hideProgress: barRoot.shellHide
                     }
                 }
             }
@@ -179,9 +228,10 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            visible: barRoot.shellSeated
+            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             transform: Translate {
-                y: root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress
+                y: (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress) + barRoot.shellSlideY
             }
             anchors {
                 left: parent.left

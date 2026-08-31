@@ -33,6 +33,9 @@ Item {
     required property var widgetSizes
     required property int widgetSizesVersion
     required property int staggerDelay
+    // Set by WidgetStateManager one animation before the model entry is dropped,
+    // so the widget has something to animate out with.
+    required property bool exiting
     readonly property var widgetComponentMap: ({
         "clock_cookie": component_clock_cookie,
         "clock_digital": component_clock_digital,
@@ -1307,6 +1310,18 @@ Item {
             property: "staggerDelay"
             value: delegateRoot.staggerDelay
             when: widgetLoader.status == Loader.Ready
+        }
+
+        Binding {
+            target: widgetLoader.item
+            property: "exiting"
+            value: delegateRoot.exiting
+            // A handful of entries map straight to a plain component rather than
+            // to an AbstractBackgroundWidget, and those have no lifecycle to
+            // drive — binding blindly just logs on every one of them.
+            when: widgetLoader.status == Loader.Ready
+                && widgetLoader.item !== null
+                && widgetLoader.item.hasOwnProperty("exiting")
         }
 
         Binding {

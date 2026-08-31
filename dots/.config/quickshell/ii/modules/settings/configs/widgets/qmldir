@@ -1,25 +1,27 @@
 module qs.modules.settings.configs.widgets
 
-DesktopPhotoWidgetConfig 1.0 DesktopPhotoWidgetConfig.qml
-
 BatteryOverview 1.0 BatteryOverview.qml
 BatteryUsageChart 1.0 BatteryUsageChart.qml
+ConfigBannerSelector 1.0 ConfigBannerSelector.qml
+CoreGoogleTasksConfig 1.0 CoreGoogleTasksConfig.qml
+CoreTickTickConfig 1.0 CoreTickTickConfig.qml
+DesktopPhotoWidgetConfig 1.0 DesktopPhotoWidgetConfig.qml
+DesktopWidgetVisualOptions 1.0 DesktopWidgetVisualOptions.qml
+FingerprintEnrollOverlay 1.0 FingerprintEnrollOverlay.qml
+FingerprintHandPicker 1.0 FingerprintHandPicker.qml
 LauncherPreview 1.0 LauncherPreview.qml
 NotificationPositionPicker 1.0 NotificationPositionPicker.qml
+OsdPositionPicker 1.0 OsdPositionPicker.qml
+OsdPreviewCard 1.0 OsdPreviewCard.qml
 OverviewGridPreview 1.0 OverviewGridPreview.qml
 OverviewPreviewButton 1.0 OverviewPreviewButton.qml
 PrivacyConnectionCards 1.0 PrivacyConnectionCards.qml
-TimeDatePreview 1.0 TimeDatePreview.qml
 SoundStatusHeader 1.0 SoundStatusHeader.qml
-TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
-WeekStartPicker 1.0 WeekStartPicker.qml
-WeatherLocationCard 1.0 WeatherLocationCard.qml
-TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml
+TimeDatePreview 1.0 TimeDatePreview.qml
+TimetableStatusCard 1.0 TimetableStatusCard.qml
 TouchGestureBindingCard 1.0 TouchGestureBindingCard.qml
 TouchGestureScreenPreview 1.0 TouchGestureScreenPreview.qml
-OsdPreviewCard 1.0 OsdPreviewCard.qml
-OsdPositionPicker 1.0 OsdPositionPicker.qml
-CoreGoogleTasksConfig 1.0 CoreGoogleTasksConfig.qml
-CoreTickTickConfig 1.0 CoreTickTickConfig.qml
-FingerprintHandPicker 1.0 FingerprintHandPicker.qml
-FingerprintEnrollOverlay 1.0 FingerprintEnrollOverlay.qml
+TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml
+TranslatorDefaultsPicker 1.0 TranslatorDefaultsPicker.qml
+WeatherLocationCard 1.0 WeatherLocationCard.qml
+WeekStartPicker 1.0 WeekStartPicker.qml

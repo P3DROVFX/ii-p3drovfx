@@ -165,7 +165,7 @@ Scope {
                 top: {
                     if (Config.options.bar.vertical) {
                         if (rect.height === 0)
-                            return 0;
+                            return Math.max(0, (screen.height - panelWindow.implicitHeight) / 2);
                         let targetY = rect.y + (rect.height / 2) - (panelWindow.implicitHeight / 2);
                         return Math.max(0, Math.min(targetY, screen.height - panelWindow.implicitHeight));
                     } else {
@@ -184,7 +184,7 @@ Scope {
                         return 0;
                     } else {
                         if (rect.width === 0)
-                            return 0;
+                            return Math.max(0, (screen.width - panelWindow.implicitWidth) / 2);
                         let targetX = rect.x + (rect.width / 2) - (panelWindow.implicitWidth / 2);
                         return Math.max(0, Math.min(targetX, screen.width - panelWindow.implicitWidth));
                     }

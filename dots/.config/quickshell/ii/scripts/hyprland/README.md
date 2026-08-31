@@ -88,15 +88,21 @@ workspaces are left untouched. Bound to `CTRL + SUPER + C`.
 The active workspace follows its own contents to their new number. If it was left empty, focus
 falls back to the nearest occupied workspace below it.
 
+**Scope:** only the block of workspaces you are currently in takes part — the page the bar is
+showing. With the default block size of 10, standing on workspace 12 compacts 11–20 into 11..N and
+leaves 1–10 exactly where they are; windows never migrate between pages.
+
 **Multi-monitor:** only the focused monitor's workspaces are touched, and the "1..N" range is
 relative to that monitor, not global — compacting monitor 2 lands its windows in its own range
-instead of monitor 1's. It works out the monitor's range the same way the bar does: if
+instead of monitor 1's. It works out the range the same way the bar does: if
 `bar.workspaces.useWorkspaceMap` is enabled (Settings → Bar → Workspaces → Display Options), it
 reads `workspaceMap`/`shown` from `~/.config/illogical-impulse/config.json` directly, so it always
 agrees with what the bar shows. Otherwise it falls back to the `workspace_in_group()` block
 convention from `~/.config/hypr/hyprland/lib/init.lua` (fixed-size blocks of `workspaceGroupSize`
-per monitor, 10 by default) — pass a different block size as the first argument to the binary if
-you've changed `workspaceGroupSize` away from 10 (see keybind below).
+per monitor, 10 by default), reading `workspaceGroupSize` out of
+`~/.config/hypr/custom/variables.lua` (or the shipped `hyprland/variables.lua`) so a changed block
+size is picked up on its own. Passing a block size as the first argument to the binary still
+overrides it (see keybind below).
 
 **Source:** `~/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src/`
 
@@ -126,8 +132,8 @@ hl.bind("CTRL + SUPER + C", hl.dsp.exec_cmd(qsScripts .. "/hyprland/workspace_co
 `qsScripts` is already declared at the top of that file — you only need that line if you put the
 bind somewhere else, like `~/.config/hypr/custom/keybinds.lua`.
 
-If you've changed `workspaceGroupSize` in `~/.config/hypr/custom/variables.lua` away from its
-default of 10, pass the same number as an argument (only used as a fallback when
+`workspaceGroupSize` is read from your Hyprland config automatically, so a changed block size
+needs no keybind edit. Pass it as an argument only to override that (and only when
 `useWorkspaceMap` is off — see above):
 
 ```lua

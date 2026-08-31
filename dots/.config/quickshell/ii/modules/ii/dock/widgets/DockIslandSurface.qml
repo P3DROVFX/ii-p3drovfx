@@ -22,16 +22,17 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
+    StyledRectangularShadow {
+        target: surface
+        visible: root.visible && root.opacity > 0.01
+        z: -1
+    }
+
     Rectangle {
         id: surface
         anchors.fill: parent
         color: root.surfaceColor
         radius: root.cornerRadius
         antialiasing: true
-    }
-
-    StyledRectangularShadow {
-        target: surface
-        visible: root.visible && root.opacity > 0.01
     }
 }
