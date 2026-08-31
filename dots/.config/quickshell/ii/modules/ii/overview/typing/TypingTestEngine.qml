@@ -16,12 +16,16 @@ QtObject {
     property int wordLimit: 50
     property bool punctuation: false
     property bool numbers: false
+    property bool finishOnLastWord: true
     property var languagePack: null
 
     property int seed: 1
     property int _randomState: 1
     property var targetWords: []
     property string targetText: ""
+    // The target as code points, kept alongside the string so the per-key path
+    // never re-splits a 1500-character target on every insertion.
+    property var targetChars: []
     property string inputText: ""
     property string previousInputText: ""
     property int currentWordIndex: 0
@@ -32,6 +36,7 @@ QtObject {
     property real elapsedSeconds: 0
     property var samples: []
     property int _lastSampleSecond: -1
+    property int _lastSampleChars: 0
 
     readonly property bool isReady: root.state === "ready"
     readonly property bool isRunning: root.state === "running"
@@ -52,16 +57,54 @@ QtObject {
         const words = root.inputText.split(" ");
         return words.length > 0 ? words[words.length - 1] : "";
     }
+    /** The glyph the keyboard preview should point at next. */
+    readonly property string nextExpectedChar: {
+        if (!root.hasTarget)
+            return "";
+        const index = root.codePointCount(root.inputText);
+        return index < root.targetChars.length ? root.targetChars[index] : "";
+    }
+    /** How far a finite test has come, 0–1. Time mode uses the clock instead. */
+    readonly property real progress: {
+        if (root.mode === "time")
+            return root.timeLimitSeconds > 0 ? Math.min(1, root.elapsedSeconds / root.timeLimitSeconds) : 0;
+        if (root.mode === "words")
+            return root.wordLimit > 0 ? Math.min(1, root.completedWords() / root.wordLimit) : 0;
+        return 0;
+    }
 
-    signal resetRequested()
-    signal finished()
+    signal resetRequested
+    signal finished
+    /**
+     * One committed code point, carried with the signal rather than read back
+     * from `inputText`: the text property is only assigned once the whole edit
+     * has been accounted for, so a listener reading it here would be a
+     * character behind.
+     */
+    signal charTyped(string character, bool correct)
+    signal charDeleted
 
     onLanguagePackChanged: {
         if (languagePack?.words?.length > 0)
             root.reset(false);
-        else
+        else if (root.mode !== "zen")
             root.state = "loading";
     }
+
+    // Every structural parameter re-rolls the test the moment it changes, no
+    // matter who changed it — the toolbar, the panel's own settings page, or
+    // the Settings window with the panel already open. A running test is left
+    // alone so a result stays the test the user actually took.
+    function reapply() {
+        if (!root.isRunning)
+            root.reset(false);
+    }
+
+    onModeChanged: root.reapply()
+    onTimeLimitSecondsChanged: root.reapply()
+    onWordLimitChanged: root.reapply()
+    onPunctuationChanged: root.reapply()
+    onNumbersChanged: root.reapply()
 
     function now() {
         return Date.now();
@@ -120,6 +163,12 @@ QtObject {
         return generated;
     }
 
+    function applyTarget(words) {
+        root.targetWords = words;
+        root.targetText = words.join(" ");
+        root.targetChars = root.codePoints(root.targetText);
+    }
+
     function reset(reuseSeed) {
         if (root.mode !== "zen" && !(root.languagePack?.words?.length > 0)) {
             root.state = "loading";
@@ -127,9 +176,7 @@ QtObject {
         }
         root.seed = reuseSeed ? root.seed : root.normalizeSeed(Math.floor(root.now()));
         root._randomState = root.seed;
-        root.targetWords = root.mode === "zen" ? [] : root.makeTarget(root.mode === "words"
-            ? root.wordLimit : 220, 0);
-        root.targetText = root.targetWords.join(" ");
+        root.applyTarget(root.mode === "zen" ? [] : root.makeTarget(root.mode === "words" ? root.wordLimit : 220, 0));
         root.inputText = "";
         root.previousInputText = "";
         root.currentWordIndex = 0;
@@ -140,6 +187,7 @@ QtObject {
         root.elapsedSeconds = 0;
         root.samples = [];
         root._lastSampleSecond = -1;
+        root._lastSampleChars = 0;
         root.state = "ready";
         root.resetRequested();
     }
@@ -148,6 +196,11 @@ QtObject {
         if (!root.isReady)
             return;
         root.startedAt = root.now();
+        // Sampling begins at the one-second mark. A sample taken a few
+        // milliseconds in reports a meaningless four-digit speed, and one
+        // outlier is enough to flatten an entire result graph.
+        root._lastSampleSecond = 0;
+        root._lastSampleChars = 0;
         root.state = "running";
     }
 
@@ -172,31 +225,49 @@ QtObject {
                 && before[before.length - suffix - 1] === after[after.length - suffix - 1])
             suffix++;
         const inserted = after.slice(prefix, after.length - suffix);
-        const target = root.codePoints(root.targetText);
         for (let offset = 0; offset < inserted.length; offset++) {
-            if (!root.hasTarget || inserted[offset] === target[prefix + offset])
+            const correct = !root.hasTarget || inserted[offset] === root.targetChars[prefix + offset];
+            if (correct)
                 root.correctInputEvents++;
             else
                 root.incorrectInputEvents++;
+            root.charTyped(inserted[offset], correct);
         }
+        if (inserted.length === 0 && after.length < before.length)
+            root.charDeleted();
 
         root.inputText = next;
         root.previousInputText = next;
-        root.currentWordIndex = root.hasTarget ? Math.min(root.targetWords.length - 1,
+        root.currentWordIndex = root.hasTarget ? Math.min(Math.max(0, root.targetWords.length - 1),
             Math.max(0, next.split(" ").length - 1)) : 0;
         root.tick();
         if (root.isFinished)
             return;
         root.extendTimeTargetIfNeeded();
-        if (root.mode === "words" && root.completedWords() >= root.wordLimit)
+        if (root.mode === "words" && root.reachedWordLimit(next))
             root.finish();
+    }
+
+    /**
+     * Monkeytype ends a words test the moment the final word is complete, so a
+     * trailing space is never part of the score. A word committed with a space
+     * still ends the test even when it was mistyped.
+     */
+    function reachedWordLimit(text) {
+        if (root.completedWords() >= root.wordLimit)
+            return true;
+        if (!root.finishOnLastWord)
+            return false;
+        const words = String(text ?? "").split(" ");
+        if (words.length !== root.wordLimit || root.targetWords.length < root.wordLimit)
+            return false;
+        return words[words.length - 1] === root.targetWords[root.wordLimit - 1];
     }
 
     function extendTimeTargetIfNeeded() {
         if (root.mode !== "time" || root.currentWordIndex < root.targetWords.length - 30)
             return;
-        root.targetWords = root.targetWords.concat(root.makeTarget(100, root.targetWords.length));
-        root.targetText = root.targetWords.join(" ");
+        root.applyTarget(root.targetWords.concat(root.makeTarget(100, root.targetWords.length)));
     }
 
     function completedWords() {
@@ -216,13 +287,19 @@ QtObject {
         }
         const sampleSecond = Math.floor(root.elapsedSeconds);
         if (sampleSecond > root._lastSampleSecond) {
+            const chars = root.rawCharacterCount;
+            const seconds = Math.max(1, sampleSecond - root._lastSampleSecond);
             root._lastSampleSecond = sampleSecond;
             root.samples = root.samples.concat([{
                 t: sampleSecond,
                 wpm: root.wpm,
                 raw: root.rawWpm,
+                // Speed within this second alone — what consistency is measured
+                // from, and what a result graph should plot.
+                burst: (chars - root._lastSampleChars) / 5 / (seconds / 60),
                 errors: root.incorrectInputEvents
             }]);
+            root._lastSampleChars = chars;
         }
     }
 
@@ -240,6 +317,41 @@ QtObject {
 
     function calculateWpm(characters, seconds) {
         return seconds > 0 ? characters / 5 / (seconds / 60) : 0;
+    }
+
+    /**
+     * How even the pace was, as a percentage: the coefficient of variation of
+     * the per-second speed, inverted. A test too short to have two samples has
+     * nothing to compare and reports 0.
+     */
+    function consistency() {
+        const bursts = Array.from(root.samples ?? []).map(sample => sample.burst ?? 0);
+        if (bursts.length < 2)
+            return 0;
+        const mean = bursts.reduce((total, value) => total + value, 0) / bursts.length;
+        if (mean <= 0)
+            return 0;
+        const variance = bursts.reduce((total, value) => total + Math.pow(value - mean, 2), 0) / bursts.length;
+        return Math.max(0, Math.min(100, 100 * (1 - Math.sqrt(variance) / mean)));
+    }
+
+    /** Compact, aggregate-only record for the local history. */
+    function resultPayload() {
+        const breakdown = root.characterBreakdown;
+        return {
+            timestamp: Math.round(root.finishedAt > 0 ? root.finishedAt : root.now()),
+            mode: root.mode,
+            modeValue: root.mode === "time" ? root.timeLimitSeconds : (root.mode === "words" ? root.wordLimit : 0),
+            language: String(root.languagePack?.id ?? ""),
+            punctuation: root.punctuation,
+            numbers: root.numbers,
+            wpm: Math.round(root.wpm * 10) / 10,
+            raw: Math.round(root.rawWpm * 10) / 10,
+            accuracy: Math.round(root.accuracy * 10) / 10,
+            consistency: Math.round(root.consistency() * 10) / 10,
+            duration: Math.round(root.elapsedSeconds * 10) / 10,
+            chars: [breakdown.correct, breakdown.incorrect, breakdown.extra, breakdown.missed]
+        };
     }
 
     function countCharacterBreakdown(): var {

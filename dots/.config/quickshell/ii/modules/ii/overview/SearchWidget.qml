@@ -219,6 +219,23 @@ Item {
             && key !== "mpris:now-playing" && !r.isFallback && !key.startsWith("fallback:");
     }).length
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
+    /**
+     * Publish "a panel owns the search" for consumers that live outside any
+     * PanelWindow (the Super shortcut, the workspace grid).
+     *
+     * Only the surface on the active search monitor may publish: a hosted panel
+     * latches through `requestedPanelId`, which is per-surface, so the idle
+     * SearchWidget of a second monitor would otherwise clear the flag the
+     * moment the prefix is stripped out of the shared query.
+     */
+    function publishPanelOwnership() {
+        if (GlobalStates.activeSearchMonitor !== "" && root.surfaceMonitorName !== ""
+                && root.surfaceMonitorName !== GlobalStates.activeSearchMonitor)
+            return;
+        GlobalStates.searchPanelActive = root.isAnySpecialMode || root.isAiMode;
+    }
+
+    onIsAnySpecialModeChanged: root.publishPanelOwnership()
     readonly property string activePanelQuery: {
         if (!root.activePanel)
             return "";
@@ -264,6 +281,7 @@ Item {
     // auto detection), it stays on until back/Esc — deleting the text must
     // not yank the panel away mid-conversation.
     onIsAiModeChanged: {
+        root.publishPanelOwnership();
         if (root.isAiMode) {
             if (!root.aiDraftHydrated) {
                 root.aiDraftHydrated = true;

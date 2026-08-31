@@ -46,6 +46,11 @@ Singleton {
 
     property bool hyprshadeAvailable: true
     property string errorMessage: ""
+    property list<string> baseShaderPaths: []
+    property bool baseShaderEnabled: false
+    property bool optionReady: false
+    property bool baseRefreshPending: false
+    property string lastBaseRefreshTarget: ""
 
     property list<var> hyprshadeShaders: []
     property list<var> scannedShaders: []
@@ -82,8 +87,10 @@ Singleton {
         const trimmed = String(raw).trim();
         return (trimmed.length === 0 || trimmed === "[[EMPTY]]") ? "" : trimmed;
     }
-    readonly property string activeName: root.activePath.length === 0 ? "" : root.stripExtension(root.activePath.split("/").pop())
+    readonly property bool baseShaderApplied: root.isBaseShaderPath(root.activePath)
+    readonly property string activeName: root.activePath.length === 0 || root.baseShaderApplied ? "" : root.stripExtension(root.activePath.split("/").pop())
     readonly property bool active: root.activeName.length > 0
+    readonly property bool baseShaderSuspended: root.baseShaderEnabled && root.active
     readonly property string statusText: root.active ? root.displayName(root.activeName) : Translation.tr("Off")
 
     // What a left click turns on: the last shader used, falling back to a sane
@@ -136,6 +143,60 @@ Singleton {
         return Array.from(root.shaders).find(shader => shader.name === name) ?? null;
     }
 
+    function isBaseShaderPath(path: string): bool {
+        return path.length > 0 && Array.from(root.baseShaderPaths).indexOf(path) !== -1;
+    }
+
+    function setBaseShader(paths: var, enabled: bool): void {
+        const previousPaths = Array.from(root.baseShaderPaths);
+        const wasBaseApplied = root.activePath.length > 0 && previousPaths.indexOf(root.activePath) !== -1;
+        const hadNoShader = root.activePath.length === 0;
+        root.baseShaderPaths = Array.from(paths ?? []).filter(path => String(path).length > 0);
+        root.baseShaderEnabled = enabled && root.baseShaderPaths.length > 0;
+
+        if (!root.optionReady)
+            return;
+        if (root.active && !wasBaseApplied)
+            return;
+        if (!root.baseShaderEnabled) {
+            if (wasBaseApplied || root.baseShaderApplied)
+                HyprlandConfig.resetMany(["decoration:screen_shader", "debug:damage_tracking"]);
+            return;
+        }
+        if (wasBaseApplied || root.baseShaderApplied) {
+            root.refreshBaseShader();
+            return;
+        }
+        if (hadNoShader)
+            root._writeShader(root.baseShaderPaths[0], "");
+    }
+
+    function reconcileBaseShader(): void {
+        if (!root.optionReady || root.active)
+            return;
+        if (root.baseShaderEnabled && !root.baseShaderApplied) {
+            root._writeShader(root.baseShaderPaths[0], "");
+        } else if (!root.baseShaderEnabled && root.baseShaderApplied) {
+            HyprlandConfig.resetMany(["decoration:screen_shader", "debug:damage_tracking"]);
+        }
+    }
+
+    function refreshBaseShader(): void {
+        if (!root.baseShaderEnabled || !root.baseShaderApplied || root.baseShaderPaths.length < 2)
+            return;
+        if (baseRefreshProc.running || shaderOption.fetching) {
+            root.baseRefreshPending = true;
+            return;
+        }
+
+        const avoidPath = root.lastBaseRefreshTarget.length > 0 ? root.lastBaseRefreshTarget : root.activePath;
+        const targetPath = Array.from(root.baseShaderPaths).find(path => path !== avoidPath) ?? root.baseShaderPaths[0];
+        root.lastBaseRefreshTarget = targetPath;
+        baseRefreshProc.targetPath = targetPath;
+        baseRefreshProc.command = ["hyprctl", "keyword", "decoration:screen_shader", targetPath];
+        baseRefreshProc.running = true;
+    }
+
     function needsFullDamage(name: string): bool {
         return Array.from(root.fullDamageShaders).indexOf(name) !== -1;
     }
@@ -179,7 +240,10 @@ Singleton {
 
     function clear(): void {
         root.errorMessage = "";
-        HyprlandConfig.resetMany(["decoration:screen_shader", "debug:damage_tracking"]);
+        if (root.baseShaderEnabled && root.baseShaderPaths.length > 0)
+            root._writeShader(root.baseShaderPaths[0], "");
+        else
+            HyprlandConfig.resetMany(["decoration:screen_shader", "debug:damage_tracking"]);
     }
 
     function toggle(): void {
@@ -255,6 +319,24 @@ Singleton {
     HyprlandConfigOption {
         id: shaderOption
         key: "decoration:screen_shader"
+        onFetchingChanged: {
+            if (shaderOption.fetching)
+                return;
+            root.optionReady = true;
+            root.reconcileBaseShader();
+            if (root.baseRefreshPending) {
+                root.baseRefreshPending = false;
+                Qt.callLater(root.refreshBaseShader);
+            }
+        }
+    }
+
+    Process {
+        id: baseRefreshProc
+        property string targetPath: ""
+        onExited: {
+            shaderOption.fetch();
+        }
     }
 
     Process {

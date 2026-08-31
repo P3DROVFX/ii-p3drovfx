@@ -48,6 +48,19 @@ class TypingTestContractTests(unittest.TestCase):
         self.assertIn("property bool activePanelOwnsInput: false", bar)
         self.assertIn("readOnly: root.activePanelOwnsInput", bar)
         self.assertIn("!root.syncingSearchText && !root.activePanelOwnsInput", bar)
+        overview = source("modules/ii/overview/Overview.qml")
+        states = source("GlobalStates.qml")
+        self.assertIn("property bool searchPanelActive: false", states)
+        self.assertIn("onIsAnySpecialModeChanged: root.publishPanelOwnership()", widget)
+        self.assertIn("exitActivePanelRequested", overview)
+        self.assertIn("function publishPanelOwnership()", widget)
+        self.assertIn("GlobalStates.activeSearchMonitor", widget)
+        # A panel owning the search unloads the workspace grid outright, the way
+        # AI mode already did. Fading it and leaving it loaded is what let the
+        # workspaces stay on screen behind every hosted panel.
+        self.assertIn("readonly property bool searchPanelOwned:", overview)
+        self.assertEqual(overview.count("&& !root.searchPanelOwned"), 2)
+        self.assertNotIn("visible: root.overviewShouldShow && root.overviewFadeProgress", overview)
 
     def test_config_and_settings_expose_the_feature(self) -> None:
         config = source("modules/common/Config.qml")
@@ -58,6 +71,111 @@ class TypingTestContractTests(unittest.TestCase):
             self.assertIn("typingTest", text)
         self.assertIn('property string typingTest: "^"', config)
         self.assertIn('property bool enable: true', config)
+        # Every preference the in-panel settings page writes has to exist as a
+        # real Config key, or it silently stops persisting.
+        for key in (
+            "property int fontSize:",
+            "property int visibleLines:",
+            "property string caretStyle:",
+            "property bool highlightCurrentWord:",
+            "property bool blindMode:",
+            "property bool quickRestart:",
+            "property bool finishOnLastWord:",
+            "property JsonObject keyboard:",
+            "property JsonObject sounds:",
+            "property JsonObject history:",
+        ):
+            self.assertIn(key, config, key)
+        for path in (
+            '"search.typingTest.caretStyle"',
+            '"search.typingTest.keyboard.layout"',
+            '"search.typingTest.sounds.theme"',
+            '"search.typingTest.sounds.errorTheme"',
+        ):
+            self.assertIn(path, config, path)
+        # The enum must list exactly the packs the assets ship.
+        manifest = json.loads(
+            (ROOT / "assets" / "typing" / "sounds-manifest.json").read_text(encoding="utf-8"))
+        for pack in manifest["clickPacks"]:
+            self.assertIn(f'"{pack["id"]}"', config, pack["id"])
+
+    def test_history_is_bounded_local_and_aggregate_only(self) -> None:
+        persistent = source("modules/common/Persistent.qml")
+        history = source("modules/ii/overview/typing/TypingHistory.qml")
+        self.assertIn("property JsonObject typingTest: JsonObject {", persistent)
+        self.assertIn("property list<var> recentResults: []", persistent)
+        self.assertIn("property list<var> personalBests: []", persistent)
+        # Bounded, opt-out, and never storing what was typed.
+        self.assertIn("Config.options.search.typingTest.history.enable", history)
+        self.assertIn("maxEntries", history)
+        engine = source("modules/ii/overview/typing/TypingTestEngine.qml")
+        payload = engine.split("function resultPayload()", 1)[1].split("function ", 1)[0]
+        for banned in ("inputText", "targetText", "targetWords"):
+            self.assertNotIn(banned, payload, banned)
+
+    def test_panel_owns_every_documented_shortcut(self) -> None:
+        panel = source("modules/ii/overview/TypingTestPanel.qml")
+        for key in (
+            "Qt.Key_R",
+            "Qt.Key_Comma",
+            "Qt.Key_H",
+            "Qt.Key_L",
+            "Qt.Key_Backspace",
+            "Qt.Key_BracketLeft",
+            "Qt.Key_BracketRight",
+            "Qt.Key_P",
+            "Qt.Key_N",
+            "Qt.Key_Tab",
+        ):
+            self.assertIn(key, panel, key)
+        # Tab points at restart and Enter presses it.
+        self.assertIn("restartArmed", panel)
+        # Escape closes an in-panel page before it leaves the panel.
+        self.assertIn("function handleEscape()", panel)
+        self.assertIn('root.page !== "test"', panel)
+
+    def test_keyboard_preview_rows_are_complete(self) -> None:
+        layouts = source("modules/ii/overview/typing/TypingKeyboardLayouts.qml")
+        for layout in ("qwerty", "qwertz", "azerty", "dvorak", "colemak"):
+            self.assertIn(f"{layout}: [", layouts)
+
+    def test_vendored_sounds_are_attributed_and_checksummed(self) -> None:
+        assets = ROOT / "assets" / "typing"
+        manifest = json.loads((assets / "sounds-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["source"], "monkeytypegame/monkeytype")
+        self.assertEqual(manifest["license"], "GPL-3.0-only")
+        # A pinned, immutable commit — never a branch name.
+        self.assertRegex(manifest["upstreamCommit"], r"^[0-9a-f]{40}$")
+        self.assertGreaterEqual(len(manifest["clickPacks"]), 4)
+        self.assertGreaterEqual(len(manifest["errorPacks"]), 1)
+        for pack in manifest["clickPacks"] + manifest["errorPacks"]:
+            self.assertTrue(pack["label"], pack["id"])
+            self.assertEqual(len(pack["files"]), len(pack["sha256"]), pack["id"])
+            for name, digest in pack["sha256"].items():
+                path = assets / "sounds" / pack["id"] / name
+                self.assertTrue(path.is_file(), str(path))
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest, str(path))
+                self.assertEqual(path.read_bytes()[0:4], b"RIFF", str(path))
+
+    def test_sound_sync_script_is_development_only_and_pinned(self) -> None:
+        script = source("scripts/typing/sync_monkeytype_sounds.py")
+        self.assertIn("--commit", script)
+        self.assertIn("--check", script)
+        self.assertIn("raw.githubusercontent.com/monkeytypegame/monkeytype", script)
+        self.assertIn("sha256", script)
+        self.assertNotIn("import Quickshell", script)
+        # It writes assets; it must never run what it downloaded.
+        for banned in ("subprocess", "os.system", "eval("):
+            self.assertNotIn(banned, script, banned)
+
+    def test_sound_playback_is_local_and_manifest_driven(self) -> None:
+        packs = source("services/TypingSoundPacks.qml")
+        player = source("modules/ii/overview/typing/TypingSounds.qml")
+        self.assertIn("sounds-manifest.json", packs)
+        self.assertNotIn("https://", packs)
+        # The pool costs an audio thread, so it only exists once enabled.
+        self.assertIn("active: root.soundEnabled", player)
+        self.assertIn("SoundEffect", player)
 
     def test_runtime_is_local_and_input_path_has_no_process(self) -> None:
         runtime = "\n".join(
@@ -65,6 +183,9 @@ class TypingTestContractTests(unittest.TestCase):
             for path in (
                 "modules/ii/overview/TypingTestPanel.qml",
                 "modules/ii/overview/typing/TypingTestEngine.qml",
+                "modules/ii/overview/typing/TypingWordViewport.qml",
+                "modules/ii/overview/typing/TypingSounds.qml",
+                "modules/ii/overview/typing/TypingHistory.qml",
                 "services/TypingLanguages.qml",
             )
         )

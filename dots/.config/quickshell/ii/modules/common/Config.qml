@@ -1142,6 +1142,10 @@ Singleton {
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
             "search.typingTest.mode": ["time", "words", "zen"],
+            "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
+            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak"],
+            "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
+            "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -4128,6 +4132,40 @@ Singleton {
                     property bool showLiveWpm: false
                     property bool showLiveAccuracy: false
                     property bool smoothCaret: true
+                    // Typing surface. fontSize is the target text size in px:
+                    // the test is the hero of the panel, so it does not follow
+                    // the launcher's body scale.
+                    property int fontSize: 26
+                    property int visibleLines: 3
+                    property string caretStyle: "line" // line, block, underline, off
+                    // Highlight everything but the current word at reduced
+                    // emphasis, the way Monkeytype's word highlight does.
+                    property bool highlightCurrentWord: false
+                    property bool blindMode: false
+                    // Tab restarts the test, as on Monkeytype. Off by default
+                    // because Tab also walks the launcher's controls.
+                    property bool quickRestart: false
+                    // Finish a words/quote test on the last word without
+                    // needing a trailing space.
+                    property bool finishOnLastWord: true
+                    property JsonObject keyboard: JsonObject {
+                        property bool enable: true
+                        property string layout: "qwerty" // qwerty, qwertz, azerty, dvorak, colemak
+                        property bool highlightNextKey: true
+                    }
+                    property JsonObject sounds: JsonObject {
+                        property bool enable: true
+                        // Monkeytype pack ids, catalogued in
+                        // assets/typing/sounds-manifest.json.
+                        property string theme: "click1"
+                        property string errorTheme: "error1"
+                        property int volume: 55
+                        property bool errorSound: true
+                    }
+                    property JsonObject history: JsonObject {
+                        property bool enable: true
+                        property int maxEntries: 100
+                    }
                 }
                 property JsonObject ai: JsonObject {
                     // How the AI chat is triggered from the search:

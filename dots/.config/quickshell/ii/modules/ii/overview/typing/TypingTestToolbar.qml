@@ -4,31 +4,39 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
-ColumnLayout {
+/**
+ * One row of grouped pills over the typing stage: modifiers, mode, and the
+ * presets for the selected mode, with the panel's own settings and history
+ * entries kept apart on the right so the mode controls stay centred.
+ *
+ * The whole row de-emphasises while a test runs — the words are the hero and
+ * changing a parameter mid-test is not allowed anyway.
+ */
+Item {
     id: root
 
-    property var engine: null
-    property var languages: []
-    property bool controlsEnabled: engine?.state === "ready" || engine?.state === "finished"
+    required property var engine
+    property bool settingsOpen: false
+    property bool historyOpen: false
+    readonly property bool controlsEnabled: root.engine?.state !== "running"
+
     signal requestMode(string mode)
     signal requestTime(int seconds)
     signal requestWords(int count)
-    signal requestLanguage(string languageId)
-    signal requestTogglePunctuation()
-    signal requestToggleNumbers()
+    signal requestTogglePunctuation
+    signal requestToggleNumbers
+    signal requestSettings
+    signal requestHistory
 
-    function cycleLanguage() {
-        if (root.languages.length === 0)
-            return;
-        const current = root.languages.findIndex(language => language.id === root.engine?.languagePack?.id);
-        const next = root.languages[(current + 1 + root.languages.length) % root.languages.length];
-        root.requestLanguage(next.id);
-    }
+    readonly property real pillHeight: 36
+    /** Gap between the group track and the shape sitting inside it. */
+    readonly property real trackPadding: 4
+    readonly property var presets: root.engine?.mode === "time" ? [15, 30, 60, 120] : [10, 25, 50, 100]
 
-    Layout.fillWidth: true
-    spacing: Appearance.sizes.elevationMargin / 2
-    opacity: engine?.state === "running" ? 0.58 : 1
+    implicitHeight: root.pillHeight
+    opacity: root.engine?.state === "running" ? 0.4 : 1
 
     Behavior on opacity {
         NumberAnimation {
@@ -38,146 +46,163 @@ ColumnLayout {
         }
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: Appearance.sizes.elevationMargin / 2
+    // Two surfaces, the way a tab bar reads: a tonal track for the whole group
+    // and a filled shape on the one that is selected. Colouring the label alone
+    // was not enough to tell the active mode apart at a glance.
+    component PillGroup: Rectangle {
+        id: pillGroup
+        default property alias groupContent: pillRow.data
+        implicitWidth: pillRow.implicitWidth + root.trackPadding * 2
+        implicitHeight: root.pillHeight
+        radius: Appearance.rounding.full
+        color: Appearance.colors.colSurfaceContainerHigh
 
-        Repeater {
-            model: [
-                { id: "time", label: qsTr("time") },
-                { id: "words", label: qsTr("words") },
-                { id: "zen", label: qsTr("zen") }
-            ]
-
-            delegate: RippleButton {
-                id: modeBtn
-                required property var modelData
-                enabled: root.controlsEnabled
-                implicitWidth: modeLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3
-                buttonRadius: Appearance.rounding.full
-                colBackground: root.engine?.mode === modeBtn.modelData.id
-                    ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: root.engine?.mode === modeBtn.modelData.id
-                    ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
-                colRipple: root.engine?.mode === modeBtn.modelData.id
-                    ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
-                onClicked: root.requestMode(modeBtn.modelData.id)
-
-                StyledText {
-                    id: modeLabel
-                    anchors.centerIn: parent
-                    text: modeBtn.modelData.label
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: root.engine?.mode === modeBtn.modelData.id ? Font.DemiBold : Font.Normal
-                    color: root.engine?.mode === modeBtn.modelData.id
-                        ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
-                }
-            }
+        RowLayout {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 2
         }
+    }
 
-        Item { Layout.fillWidth: true }
+    component PillButton: RippleButton {
+        id: pillButton
+        property string pillIcon: ""
+        property string pillLabel: ""
+        property bool active: false
+        readonly property color contentColor: pillButton.active
+            ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
 
-        Repeater {
-            model: [
-                { property: "punctuation", icon: "format_quote", label: qsTr("Punctuation") },
-                { property: "numbers", icon: "123", label: qsTr("Numbers") }
-            ]
+        implicitWidth: pillContent.implicitWidth + (pillButton.pillLabel.length > 0 ? 22 : 14)
+        implicitHeight: root.pillHeight - root.trackPadding * 2
+        buttonRadius: Appearance.rounding.full
+        colBackground: pillButton.active ? Appearance.colors.colPrimary : "transparent"
+        colBackgroundHover: pillButton.active
+            ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
+        colRipple: pillButton.active
+            ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive
 
-            delegate: RippleButton {
-                id: toggleBtn
-                required property var modelData
-                readonly property bool active: Boolean(root.engine?.[toggleBtn.modelData.property])
-                enabled: root.controlsEnabled
-                implicitWidth: Appearance.sizes.elevationMargin * 3
-                implicitHeight: implicitWidth
-                buttonRadius: Appearance.rounding.full
-                colBackground: toggleBtn.active ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: toggleBtn.active ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
-                colRipple: toggleBtn.active ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
-                onClicked: toggleBtn.modelData.property === "punctuation"
-                    ? root.requestTogglePunctuation() : root.requestToggleNumbers()
+        RowLayout {
+            id: pillContent
+            anchors.centerIn: parent
+            spacing: 5
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: toggleBtn.modelData.icon
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: toggleBtn.active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
-                }
-                StyledToolTip { text: toggleBtn.modelData.label }
-            }
-        }
+            MaterialSymbol {
+                visible: pillButton.pillIcon.length > 0
+                text: pillButton.pillIcon
+                iconSize: Appearance.font.pixelSize.normal
+                fill: pillButton.active ? 1 : 0
+                color: pillButton.contentColor
 
-        RippleButton {
-            id: languageButton
-            enabled: root.controlsEnabled
-            implicitWidth: languageText.implicitWidth + Appearance.sizes.elevationMargin * 2
-            implicitHeight: Appearance.sizes.elevationMargin * 3
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colSurfaceContainerHigh
-            colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-            colRipple: Appearance.colors.colSurfaceContainerHighestActive
-            onClicked: root.cycleLanguage()
-
-            RowLayout {
-                anchors.centerIn: parent
-                spacing: Appearance.sizes.elevationMargin / 3
-                MaterialSymbol {
-                    text: "language"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                StyledText {
-                    id: languageText
-                    text: root.languages.find(language => language.id === root.engine?.languagePack?.id)?.label
-                        ?? root.engine?.languagePack?.name ?? qsTr("Language")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
             }
 
-            StyledToolTip { text: qsTr("Change language") }
+            StyledText {
+                visible: pillButton.pillLabel.length > 0
+                text: pillButton.pillLabel
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: pillButton.active ? Font.DemiBold : Font.Normal
+                color: pillButton.contentColor
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+            }
         }
     }
 
     RowLayout {
-        Layout.fillWidth: true
-        visible: root.engine?.mode !== "zen"
-        spacing: Appearance.sizes.elevationMargin / 3
+        anchors.centerIn: parent
+        spacing: 10
 
-        Repeater {
-            model: root.engine?.mode === "time" ? [15, 30, 60, 120] : [10, 25, 50, 100]
+        PillGroup {
+            // Neither modifier has anything to change in zen: there is no
+            // generated target to decorate.
+            visible: root.engine?.mode !== "zen"
 
-            delegate: RippleButton {
-                id: presetBtn
-                required property int modelData
-                readonly property bool selected: root.engine?.mode === "time"
-                    ? root.engine?.timeLimitSeconds === presetBtn.modelData
-                    : root.engine?.wordLimit === presetBtn.modelData
+            PillButton {
+                pillIcon: "format_quote"
+                pillLabel: Translation.tr("punctuation")
+                active: Boolean(root.engine?.punctuation)
                 enabled: root.controlsEnabled
-                implicitWidth: presetText.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3
-                buttonRadius: Appearance.rounding.full
-                colBackground: selected ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerLow
-                colBackgroundHover: selected ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colSurfaceContainerHigh
-                colRipple: selected ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
-                onClicked: root.engine?.mode === "time"
-                    ? root.requestTime(presetBtn.modelData) : root.requestWords(presetBtn.modelData)
-                StyledText {
-                    id: presetText
-                    anchors.centerIn: parent
-                    text: root.engine?.mode === "time" ? presetBtn.modelData + "s" : String(presetBtn.modelData)
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: presetBtn.selected ? Font.DemiBold : Font.Normal
-                    color: presetBtn.selected ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurfaceVariant
+                onClicked: root.requestTogglePunctuation()
+            }
+            PillButton {
+                pillIcon: "tag"
+                pillLabel: Translation.tr("numbers")
+                active: Boolean(root.engine?.numbers)
+                enabled: root.controlsEnabled
+                onClicked: root.requestToggleNumbers()
+            }
+        }
+
+        PillGroup {
+            Repeater {
+                model: [
+                    { id: "time", icon: "schedule", label: Translation.tr("time") },
+                    { id: "words", icon: "text_fields", label: Translation.tr("words") },
+                    { id: "zen", icon: "air", label: Translation.tr("zen") }
+                ]
+
+                delegate: PillButton {
+                    required property var modelData
+                    pillIcon: modelData.icon
+                    pillLabel: modelData.label
+                    active: root.engine?.mode === modelData.id
+                    enabled: root.controlsEnabled
+                    onClicked: root.requestMode(modelData.id)
                 }
             }
         }
-        Item { Layout.fillWidth: true }
-        StyledText {
-            text: root.engine?.mode === "zen" ? qsTr("Shift+Enter to finish") : qsTr("Ctrl+R to restart")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colSubtext
+
+        PillGroup {
+            visible: root.engine?.mode !== "zen"
+
+            Repeater {
+                model: root.presets
+
+                delegate: PillButton {
+                    required property int modelData
+                    pillLabel: String(modelData)
+                    active: root.engine?.mode === "time"
+                        ? root.engine?.timeLimitSeconds === modelData
+                        : root.engine?.wordLimit === modelData
+                    enabled: root.controlsEnabled
+                    onClicked: root.engine?.mode === "time"
+                        ? root.requestTime(modelData) : root.requestWords(modelData)
+                }
+            }
+        }
+
+        // Panel-level entries rather than test parameters, so they get their
+        // own group at the end instead of sitting among the presets.
+        PillGroup {
+            Repeater {
+                model: [
+                    { id: "history", icon: "history", tip: Translation.tr("Score history") },
+                    { id: "settings", icon: "tune", tip: Translation.tr("Typing test settings") }
+                ]
+
+                delegate: PillButton {
+                    id: circleButton
+                    required property var modelData
+
+                    pillIcon: circleButton.modelData.icon
+                    active: circleButton.modelData.id === "settings" ? root.settingsOpen : root.historyOpen
+                    onClicked: circleButton.modelData.id === "settings" ? root.requestSettings() : root.requestHistory()
+
+                    StyledToolTip { text: circleButton.modelData.tip }
+                }
+            }
         }
     }
 }

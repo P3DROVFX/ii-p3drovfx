@@ -306,6 +306,11 @@ Singleton {
     property bool modeFlashActive: false
     property var modeFlashPayload: null
     property bool superReleaseMightTrigger: true
+    // Whether a hosted panel (or the AI chat) currently owns the Search
+    // surface. The Super shortcut lives outside any PanelWindow, so it cannot
+    // ask a SearchWidget directly, and closing the whole Overview from inside
+    // a panel loses a level of navigation the user expects Super to walk back.
+    property bool searchPanelActive: false
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
@@ -1114,6 +1119,10 @@ Singleton {
             }
         } else {
             root.activeSearchMonitor = "";
+            // A panel cannot outlive the surface that hosted it, and a flag
+            // left set would make the next Super press try to leave a panel
+            // that is not there instead of opening the launcher.
+            root.searchPanelActive = false;
             resetSearchOnlyModeTimer.start();
         }
     }

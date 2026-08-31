@@ -240,6 +240,13 @@ Singleton {
                 property list<var> panelUsage: []
             }
 
+            // Typing test scores. Only aggregate metrics are kept — never the
+            // target text and never the keys that were actually pressed.
+            property JsonObject typingTest: JsonObject {
+                property list<var> recentResults: []
+                property list<var> personalBests: []
+            }
+
             property JsonObject googleDrive: JsonObject {
                 property bool enabled: false
                 property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"
@@ -395,6 +402,10 @@ Singleton {
                 property int gamma: 100
                 property string gammaByMonitorJson: "{}"
                 property string sessionId: ""
+            }
+
+            property JsonObject displayColorFilter: JsonObject {
+                property string profilesJson: "{}"
             }
 
             // Runtime state of services/Modes.qml: what is running and what

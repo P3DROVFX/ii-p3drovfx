@@ -117,7 +117,7 @@ ContentPage {
                 currentValue: Config.options.background.widgets.photo_1x1.backgroundShape ?? "Cookie9Sided"
                 onSelected: value => Config.options.background.widgets.photo_1x1.backgroundShape = value
                 options: ([
-                    "Cookie9Sided", "Cookie12Sided", "Circle", "Clover4Leaf", "Burst",
+                    "Cookie9Sided", "Cookie12Sided", "Circle", "Rectangle", "Clover4Leaf", "Burst",
                     "Heart", "Bun", "Flower", "Puffy", "PuffyDiamond", "Sunny",
                     "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Ghostish",
                     "Clover8Leaf", "SoftBurst", "Boom", "SoftBoom", "Gem", "Diamond",

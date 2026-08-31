@@ -190,6 +190,12 @@ ContentPage {
             Layout.fillWidth: true
             spacing: Appearance.sizes.elevationMargin / 2
 
+            TipBox {
+                Layout.fillWidth: true
+                materialIcon: "tune"
+                text: Translation.tr("Caret style, text size, keyboard preview, key sounds, shortcuts and score history live in the test itself — press Ctrl+, while it is open. They write these same settings.")
+            }
+
             ConfigSelectionArray {
                 Layout.fillWidth: true
                 currentValue: Config.options.search.typingTest.language
