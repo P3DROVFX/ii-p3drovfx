@@ -2846,8 +2846,8 @@ Singleton {
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
-                    property string clock: "expressive" // default, expressive, material
-                    property string media: "default"
+                    property string clock: "expressive" // default, material, expressive, neural, relief
+                    property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
                     property string utilButtons: "expressive"
                     property string workspaces: "default"
@@ -2863,12 +2863,20 @@ Singleton {
                     property string sports: "expressive"
                     property string portWatcher: "expressive"
                     property string aiPlanUsage: "expressive"
+                    property string search: "default"
+                    property string date: "default"
                 }
 
                 property JsonObject activeWindow: JsonObject {
                     property bool fixedSize: false
                     property int customSize: 225
                     property bool showOnAllMonitors: false
+                }
+
+                property JsonObject weatherWidget: JsonObject {
+                    property string horizonVariant: "balanced" // balanced | inverted | minimal
+                    property string tesseraVariant: "paired" // paired | contrast | bare
+                    property string colorMode: "tonal" // Material pairs: tonal | vibrant | neutral
                 }
 
                 property JsonObject autoHide: JsonObject {
@@ -3057,6 +3065,27 @@ Singleton {
                     property string ignoreApps: ""
                 }
 
+                property JsonObject searchWidget: JsonObject {
+                    property string sizeMode: "compact" // compact | balanced | extended
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showShortcutHint: true
+                }
+
+                property JsonObject dateWidget: JsonObject {
+                    property string expressiveVariant: "stack" // stack | badge | ribbon
+                    property string neuralVariant: "orbit" // orbit | glyph | inlay
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool uppercase: true
+                    property bool showYear: false
+                }
+
+                property JsonObject clockWidget: JsonObject {
+                    property string neuralVariant: "orbit" // orbit | bloom | dial
+                    property string reliefVariant: "split" // split | seam | outline
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showMeridiem: true
+                }
+
                 property JsonObject sports: JsonObject {
                     property bool enable: true
                     property bool showBRA: true
@@ -3188,6 +3217,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "workspaces",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "search",
                                 "visible": true
                             },
                             {

@@ -32,6 +32,8 @@ import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
 import qs.modules.ii.bar.widgets.privacy
 import qs.modules.ii.bar.widgets.aiPlanUsage
+import "widgets/search"
+import "widgets/date"
 
 import qs.modules.ii.verticalBar as Vertical
 
@@ -484,13 +486,15 @@ Item {
     readonly property bool isExpressive: {
         if (modelData.id === "clock" && Config.options.bar.styles.clock === "expressive")
             return true;
-        if (modelData.id === "music_player" && (Config.options.bar.styles.media === "expressive" || Config.options.bar.styles.media === "neural"))
+        if (modelData.id === "music_player" && ["expressive", "neural", "ring", "tonal"].includes(Config.options.bar.styles.media))
             return true;
         if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
             return true;
         if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons === "expressive")
             return true;
-        if (modelData.id === "weather" && Config.options.bar.styles.weather === "expressive")
+        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive"
+                || Config.options.bar.styles.weather === "horizon"
+                || Config.options.bar.styles.weather === "tessera"))
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard === "expressive")
             return true;
@@ -525,6 +529,12 @@ Item {
         if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
             return true;
         if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
+            return true;
+        if (modelData.id === "search" && (Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "neural"))
+            return true;
+        if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
+            return true;
+        if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
             return true;
         // Bare indicator: no group chip, no padding around it.
         if (modelData.id === "privacy_pill")
@@ -661,6 +671,10 @@ Item {
                 return musicPlayerCompExpressive;
             if (style === "neural")
                 return isVert ? neuralMediaCompVert : neuralMediaComp;
+            if (style === "ring")
+                return ringMediaComp;
+            if (style === "tonal")
+                return tonalMediaComp;
             return isVert ? musicPlayerCompVert : musicPlayerComp;
         case "system_monitor":
             if (isExp)
@@ -669,6 +683,10 @@ Item {
         case "clock":
             if (isExp)
                 return clockCompExpressive;
+            if (style === "neural")
+                return clockCompNeural;
+            if (style === "relief")
+                return clockCompRelief;
             return isVert ? clockCompVert : clockComp;
         case "battery":
             if (isExp)
@@ -693,6 +711,10 @@ Item {
         case "weather":
             if (isExp)
                 return weatherCompExpressive;
+            if (style === "horizon")
+                return weatherCompHorizon;
+            if (style === "tessera")
+                return weatherCompTessera;
             return weatherComp;
         case "policies_panel_button":
             if (isExp)
@@ -715,7 +737,11 @@ Item {
                 return powerCompExpressive;
             return powerComp;
         case "date":
-            return dateCompVert;
+            if (isExp)
+                return dateCompExpressive;
+            if (style === "neural")
+                return dateCompNeural;
+            return dateComp;
         case "timer":
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
@@ -742,6 +768,12 @@ Item {
             return aiPlanUsageComp;
         case "privacy_pill":
             return privacyPillComp;
+        case "search":
+            if (isExp)
+                return searchCompExpressive;
+            if (style === "neural")
+                return searchCompNeural;
+            return searchComp;
         default:
             return null;
         }
@@ -869,6 +901,18 @@ Item {
         Vertical.VerticalNeuralMedia {}
     }
     Component {
+        id: ringMediaComp
+        RingMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: tonalMediaComp
+        TonalMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
         id: utilityButtonsComp
         UtilButtons {
             vertical: rootItem.vertical
@@ -897,8 +941,22 @@ Item {
         }
     }
     Component {
-        id: dateCompVert
-        Vertical.VerticalDateWidget {}
+        id: dateComp
+        DateWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dateCompExpressive
+        ExpressiveDateWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dateCompNeural
+        NeuralDateWidget {
+            vertical: rootItem.vertical
+        }
     }
     Component {
         id: workspaceComp
@@ -995,11 +1053,41 @@ Item {
             vertical: rootItem.vertical
         }
     }
+    Component {
+        id: searchComp
+        SearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: searchCompExpressive
+        ExpressiveSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: searchCompNeural
+        NeuralSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
 
     // Expressive variants
     Component {
         id: weatherCompExpressive
         ExpressiveWeatherBar {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompHorizon
+        HorizonWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompTessera
+        TesseraWeatherWidget {
             vertical: rootItem.vertical
         }
     }
@@ -1018,6 +1106,18 @@ Item {
     Component {
         id: clockCompExpressive
         ExpressiveClockWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: clockCompNeural
+        NeuralClockWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: clockCompRelief
+        ReliefClockWidget {
             vertical: rootItem.vertical
         }
     }

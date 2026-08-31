@@ -585,12 +585,7 @@ Scope {
         }
         function searchOnlyToggle() {
             GlobalStates.superReleaseMightTrigger = false;
-            if (GlobalStates.overviewOpen) {
-                GlobalStates.overviewOpen = false;
-            } else {
-                GlobalStates.searchOnlyMode = true;
-                GlobalStates.overviewOpen = true;
-            }
+            GlobalStates.toggleSearchOnly();
         }
     }
 
@@ -623,12 +618,7 @@ Scope {
         description: "Toggles search only mode on press"
 
         onPressed: {
-            if (GlobalStates.overviewOpen) {
-                GlobalStates.overviewOpen = false;
-            } else {
-                GlobalStates.searchOnlyMode = true;
-                GlobalStates.overviewOpen = true;
-            }
+            GlobalStates.toggleSearchOnly();
         }
     }
     GlobalShortcut {

@@ -1025,6 +1025,21 @@ Singleton {
         root.overviewOpen = true;
     }
 
+    function toggleSearchOnly(monitorName) {
+        const requestedMonitor = monitorName || "";
+        const sameMonitor = requestedMonitor === ""
+            || root.activeSearchMonitor === ""
+            || root.activeSearchMonitor === requestedMonitor;
+
+        if (root.overviewOpen && root.searchOnlyMode && sameMonitor) {
+            root.overviewOpen = false;
+            return;
+        }
+
+        root.searchOnlyMode = true;
+        root.openSearch(monitorName);
+    }
+
     function openSearchPanel(panelId, monitorName, initialQuery) {
         const requested = String(panelId ?? "").trim();
         if (requested.length === 0)
