@@ -146,6 +146,7 @@ Item {
     function dragMoved(scenePoint) {
         if (!root.dragActive)
             return;
+        root.rearmPreview();
         root.dropTarget = root.targetAt(scenePoint);
         const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
         ghost.x = local.x - ghost.width / 2;
@@ -169,6 +170,7 @@ Item {
         if (!root.externalActive)
             root.dragExtent = root.vertical ? 44 : 76;
         root.externalId = componentId;
+        root.rearmPreview();
         GlobalStates.clearEditBarHover(null);
         GlobalStates.editBarDragActive = true;
         root.dropTarget = root.targetAt(Qt.point(sceneX, sceneY));
@@ -249,9 +251,20 @@ Item {
 
     // The placeholder that fills that gap. Re-placed on a tick rather than on
     // pointer events alone: the room it sits in opens over an animation, and
-    // between two moves of the pointer the layout is still catching up.
+    // between two moves of the pointer the layout is still catching up. The
+    // tick stops once the geometry it computes stops changing, so a pointer
+    // held still over one spot costs nothing; anything that can move the
+    // placeholder rearms it.
+    property int settledTicks: 0
+    readonly property int settleAfter: 8
+    function rearmPreview() {
+        root.settledTicks = 0;
+    }
+    onDropTargetChanged: root.rearmPreview()
+    onPreviewActiveChanged: root.rearmPreview()
+
     Timer {
-        running: root.previewActive
+        running: root.previewActive && root.settledTicks < root.settleAfter
         interval: 16
         repeat: true
         onTriggered: root.placeIndicator(root.dropTarget)
@@ -260,6 +273,7 @@ Item {
     function placeIndicator(target) {
         if (!target) {
             indicator.shown = false;
+            root.settledTicks = root.settledTicks + 1;
             return;
         }
         const extent = Math.max(12, root.dragExtent - 4);
@@ -285,17 +299,19 @@ Item {
             crossCentre = root.vertical ? tl.x + ref.width / 2 : tl.y + ref.height / 2;
             crossSize = root.vertical ? ref.width : ref.height;
         }
-        if (root.vertical) {
-            indicator.width = crossSize;
-            indicator.height = extent;
-            indicator.x = crossCentre - crossSize / 2;
-            indicator.y = along;
-        } else {
-            indicator.width = extent;
-            indicator.height = crossSize;
-            indicator.x = along;
-            indicator.y = crossCentre - crossSize / 2;
-        }
+        const width = root.vertical ? crossSize : extent;
+        const height = root.vertical ? extent : crossSize;
+        const x = root.vertical ? crossCentre - crossSize / 2 : along;
+        const y = root.vertical ? along : crossCentre - crossSize / 2;
+        // A tick that computed the same rectangle as the last one is the
+        // layout having settled; a few of those in a row stop the timer.
+        const still = indicator.width === width && indicator.height === height
+            && indicator.x === x && indicator.y === y && indicator.shown;
+        root.settledTicks = still ? root.settledTicks + 1 : 0;
+        indicator.width = width;
+        indicator.height = height;
+        indicator.x = x;
+        indicator.y = y;
         indicator.shown = true;
     }
 
