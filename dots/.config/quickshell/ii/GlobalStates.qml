@@ -458,6 +458,43 @@ Singleton {
         root.editBarMenuController = null;
     }
 
+    // ── Bar widget name on hover ──────────────────────────────────────────
+    // Several bar widgets are a bare icon, and while Edit Mode is on the idle
+    // ones are standing in for something that is not happening, so the name is
+    // worth having under the pointer. It cannot be a tooltip drawn in the bar:
+    // Edit Mode's toolbar sits right under the bar on a surface of its own and
+    // covers it. The bar reports which widget is hovered and where, and the
+    // chrome draws the label on the surface that is on top.
+    property var editBarHoverSlot: null
+    property string editBarHoverName: ""
+    property string editBarHoverScreenName: ""
+    property real editBarHoverX: 0
+    property real editBarHoverY: 0
+    property real editBarHoverWindowWidth: 0
+    property real editBarHoverWindowHeight: 0
+    readonly property bool editBarHoverShown: root.editBarHoverSlot !== null && root.editBarHoverName.length > 0
+
+    function showEditBarHover(slot, screenName, name, x, y, windowWidth, windowHeight) {
+        if (!root.editMode || root.editBarDragActive)
+            return;
+        root.editBarHoverName = name;
+        root.editBarHoverScreenName = screenName;
+        root.editBarHoverX = x;
+        root.editBarHoverY = y;
+        root.editBarHoverWindowWidth = windowWidth;
+        root.editBarHoverWindowHeight = windowHeight;
+        root.editBarHoverSlot = slot;
+    }
+
+    function clearEditBarHover(slot) {
+        // Only whoever put the label up may take it down: crossing from one
+        // widget straight onto the next fires the arrival before the departure,
+        // and the departure would otherwise clear the label just raised.
+        if (slot !== null && root.editBarHoverSlot !== slot)
+            return;
+        root.editBarHoverSlot = null;
+    }
+
     function openEditWidgetMenu(canvas, instanceId, screenName, x, y) {
         if (!root.editMode)
             return;
@@ -557,6 +594,7 @@ Singleton {
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
         root.closeDesktopMenu();
+        root.clearEditBarHover(null);
         root.editBarDragActive = false;
         // The drawer and its drop hint are the mode's: one left open would
         // greet the next entry mid-slide.

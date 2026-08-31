@@ -5,6 +5,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.common.widgets
 import qs.modules.ii.editMode
 
 /**
@@ -74,17 +75,26 @@ PanelWindow {
     readonly property bool menuOpenHere: GlobalStates.editWidgetMenuOpen && GlobalStates.editWidgetMenuScreenName === root.screenName
     readonly property bool barMenuOpenHere: GlobalStates.editBarMenuOpen && GlobalStates.editBarMenuScreenName === root.screenName
 
-    // The bar menu's point arrives in the bar window's coordinates; the bar
-    // sits flush with one screen edge, so the far edges translate by the
-    // window's own size.
-    function barMenuPoint() {
-        let x = GlobalStates.editBarMenuX;
-        let y = GlobalStates.editBarMenuY;
+    readonly property bool barHoverHere: GlobalStates.editBarHoverShown && GlobalStates.editBarHoverScreenName === root.screenName
+
+    // A point in the bar window's coordinates, in this surface's. The bar sits
+    // flush with one screen edge, so the far edges translate by the window's
+    // own size.
+    function fromBarWindow(x, y, windowWidth, windowHeight) {
         const side = EditModeInsets.barSide;
         if (side === "bottom")
-            y += root.height - GlobalStates.editBarMenuWindowHeight;
-        else if (side === "right")
-            x += root.width - GlobalStates.editBarMenuWindowWidth;
+            return Qt.point(x, y + root.height - windowHeight);
+        if (side === "right")
+            return Qt.point(x + root.width - windowWidth, y);
+        return Qt.point(x, y);
+    }
+
+    function barMenuPoint() {
+        const from = root.fromBarWindow(GlobalStates.editBarMenuX, GlobalStates.editBarMenuY,
+            GlobalStates.editBarMenuWindowWidth, GlobalStates.editBarMenuWindowHeight);
+        let x = from.x;
+        let y = from.y;
+        const side = EditModeInsets.barSide;
         // Off the bar's body, so the card never covers the widgets it is about.
         const clear = EditModeInsets.barThickness + 4;
         if (side === "top")
@@ -219,6 +229,59 @@ PanelWindow {
         id: menuCloser
         width: (root.menuOpenHere || root.barMenuOpenHere) ? root.width : 0
         height: (root.menuOpenHere || root.barMenuOpenHere) ? root.height : 0
+    }
+
+    // The hovered widget's name, off the bar's body on whichever edge it sits.
+    // Drawn here rather than in the bar because the toolbar covers the strip
+    // just past the bar, and this has to sit on top of it.
+    Loader {
+        anchors.fill: parent
+        active: root.barHoverHere
+        z: 11
+        // Wrapped in a filling Item: a Loader with a size resizes whatever it
+        // loads to match, and a chip that has been stretched over the whole
+        // screen is not obviously a chip.
+        sourceComponent: Item {
+            Rectangle {
+                readonly property real clear: EditModeInsets.barThickness + 6
+                readonly property string side: EditModeInsets.barSide
+                readonly property point at: root.fromBarWindow(GlobalStates.editBarHoverX, GlobalStates.editBarHoverY,
+                    GlobalStates.editBarHoverWindowWidth, GlobalStates.editBarHoverWindowHeight)
+
+                width: hoverLabel.implicitWidth + 20
+                height: 26
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSecondaryContainer
+
+                x: {
+                    const wanted = side === "left" ? clear
+                        : side === "right" ? root.width - clear - width
+                        : at.x - width / 2;
+                    return Math.min(Math.max(wanted, 8), root.width - width - 8);
+                }
+                y: {
+                    const wanted = side === "bottom" ? root.height - clear - height
+                        : side === "top" ? clear
+                        : at.y - height / 2;
+                    return Math.min(Math.max(wanted, 8), root.height - height - 8);
+                }
+
+                StyledText {
+                    id: hoverLabel
+                    anchors.centerIn: parent
+                    text: GlobalStates.editBarHoverName
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+
+                opacity: 0
+                Component.onCompleted: opacity = 1
+                Behavior on opacity {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                }
+            }
+        }
     }
 
     Loader {

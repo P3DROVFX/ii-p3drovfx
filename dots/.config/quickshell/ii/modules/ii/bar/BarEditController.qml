@@ -90,6 +90,7 @@ Item {
             return;
         root.dragSlot = slot;
         root.dropTarget = null;
+        GlobalStates.clearEditBarHover(null);
         GlobalStates.editBarDragActive = true;
     }
 
@@ -224,6 +225,21 @@ Item {
         GlobalStates.openEditBarMenu(root.screenName, root, slot.bucket, slot.storedIndex,
             !!(entry && entry.centered), scenePoint.x, scenePoint.y,
             window ? window.width : 0, window ? window.height : 0);
+    }
+
+    // The hovered widget's name, handed to the chrome the same way the menu's
+    // anchor is: in this window's coordinates, for it to translate. It is drawn
+    // over there because Edit Mode's toolbar sits on top of the bar's own
+    // surface, so a label drawn here would end up underneath it.
+    function showHoverName(slot) {
+        const window = root.QsWindow.window;
+        const at = slot.sceneCentre();
+        GlobalStates.showEditBarHover(slot, root.screenName, root.widgetName(slot.widgetId), at.x, at.y,
+            window ? window.width : 0, window ? window.height : 0);
+    }
+
+    function clearHoverName(slot) {
+        GlobalStates.clearEditBarHover(slot);
     }
 
     function widgetName(widgetId) {

@@ -24,7 +24,11 @@ Item {
     }
 
     Component.onCompleted: if (root.controller) root.controller.registerSlot(root)
-    Component.onDestruction: if (root.controller) root.controller.unregisterSlot(root)
+    Component.onDestruction: {
+        GlobalStates.clearEditBarHover(root);
+        if (root.controller)
+            root.controller.unregisterSlot(root);
+    }
 
     MouseArea {
         id: eater
@@ -67,6 +71,17 @@ Item {
             }
             if (mouse.button === Qt.RightButton)
                 root.controller.openMenu(root, root.mapToItem(null, mouse.x, mouse.y));
+        }
+
+        // Naming what is under the pointer. The label itself belongs to the
+        // chrome; all that happens here is saying which widget it is.
+        onContainsMouseChanged: {
+            if (!root.controller)
+                return;
+            if (eater.containsMouse)
+                root.controller.showHoverName(root);
+            else
+                root.controller.clearHoverName(root);
         }
     }
 
