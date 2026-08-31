@@ -885,6 +885,19 @@ def _generate_locked():
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
 
+    # Point every copy of the icon theme setting at DynamicTheme and tell running apps to
+    # re-read it. This used to set gsettings alone, which left kdeglobals naming whatever pack
+    # was picked before themed icons were turned on - and since that is the copy Qt reads, the
+    # first refresh after a wallpaper change dropped the whole desktop back onto that old pack,
+    # uncoloured. The same script does this for the pack picker, so the two cannot drift.
+    #
+    # It also has to run before the hash file below: the shell watches that file and redraws
+    # every icon on screen when it changes, and a redraw that happens before the loader has
+    # been pointed at the new theme draws the old one.
+    subprocess.run(["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "apply_icon_theme.sh"), "DynamicTheme"],
+                   capture_output=True)
+
     # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:
         with open(hash_file, 'w') as f:
@@ -896,14 +909,6 @@ def _generate_locked():
             f.write(base_fingerprint)
     except Exception:
         pass
-
-    # Notify system
-    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DynamicTheme"], capture_output=True)
-    # KIconLoader (KDE platform theme, used by Quickshell) caches the parsed
-    # theme per-process; this signal makes running apps drop it and re-read.
-    for group in range(7):
-        subprocess.run(["dbus-send", "--session", "--type=signal", "/KIconLoader",
-                        "org.kde.KIconLoader.iconChanged", f"int32:{group}"], capture_output=True)
 
     total = base_count + svg_count + raster_count
     print(f"Generation complete. {total} total icons in DynamicTheme.")

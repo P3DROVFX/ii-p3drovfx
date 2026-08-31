@@ -145,45 +145,12 @@ Singleton {
     }
 
     /// Write one theme name into every copy of the setting a toolkit reads, and tell running
-    /// apps to drop their cached theme.
+    /// apps to drop their cached theme. The script is shared with recolor_icons.py, which has
+    /// to leave the same five copies agreeing when it rebuilds the recolored theme.
     function _pushName(name: string) {
-        packApplyProcess.command = ["bash", "-c", root._applyPackScript, "icon-pack", name];
+        packApplyProcess.command = ["bash", Directories.scriptPath + "/colors/apply_icon_theme.sh", name];
         packApplyProcess.running = true;
     }
-
-    readonly property string _applyPackScript: `
-        pack="$1"
-        gsettings set org.gnome.desktop.interface icon-theme "$pack" || true
-        if command -v kwriteconfig6 >/dev/null 2>&1; then
-            kwriteconfig6 --file kdeglobals --group Icons --key Theme "$pack"
-        fi
-        set_ini() {
-            file="$1"
-            mkdir -p "\${file%/*}"
-            [ -f "$file" ] || printf '[Settings]\\n' > "$file"
-            grep -v '^gtk-icon-theme-name=' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
-            printf 'gtk-icon-theme-name=%s\\n' "$pack" >> "$file"
-        }
-        conf="\${XDG_CONFIG_HOME:-$HOME/.config}"
-        set_ini "$conf/gtk-3.0/settings.ini"
-        set_ini "$conf/gtk-4.0/settings.ini"
-        if command -v xsettingsd >/dev/null 2>&1 && [ -n "\${DISPLAY:-}" ]; then
-            xconf="$conf/xsettingsd/xsettingsd.conf"
-            mkdir -p "\${xconf%/*}"
-            touch "$xconf"
-            grep -v '^Net/IconThemeName ' "$xconf" > "$xconf.tmp" && mv "$xconf.tmp" "$xconf"
-            printf 'Net/IconThemeName "%s"\\n' "$pack" >> "$xconf"
-            if pgrep -x xsettingsd >/dev/null 2>&1; then
-                pkill -HUP -x xsettingsd || true
-            else
-                setsid -f xsettingsd >/dev/null 2>&1 || true
-            fi
-        fi
-        for group in 0 1 2 3 4 5 6; do
-            dbus-send --session --type=signal /KIconLoader \\
-                org.kde.KIconLoader.iconChanged "int32:$group" || true
-        done
-    `
 
     Process {
         id: packApplyProcess
