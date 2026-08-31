@@ -12,6 +12,8 @@ QtObject {
 
     property string state: "loading" // loading, ready, running, finished
     property string mode: "time" // time, words, zen
+    /** Zen against generated words instead of free typing. */
+    property bool zenGuided: false
     property int timeLimitSeconds: 30
     property int wordLimit: 50
     property bool punctuation: false
@@ -41,7 +43,28 @@ QtObject {
     readonly property bool isReady: root.state === "ready"
     readonly property bool isRunning: root.state === "running"
     readonly property bool isFinished: root.state === "finished"
-    readonly property bool hasTarget: root.mode !== "zen"
+    /**
+     * Both of these are also the backing functions of the properties below,
+     * because a handler for one of their inputs runs before the properties
+     * have re-evaluated: reading `hasTarget` from `onZenGuidedChanged` gets
+     * the value from before the change, and the reset it triggers then builds
+     * the wrong target. Anything reacting to a parameter change calls the
+     * function; everything else reads the property.
+     */
+    function targetRequired() {
+        return root.mode !== "zen" || root.zenGuided;
+    }
+    /**
+     * Whether the target has no end: the generator keeps topping it up as the
+     * cursor approaches the tail, and nothing after the typed text counts as
+     * missed because it was never asked for.
+     */
+    function targetIsEndless() {
+        return root.mode === "time" || (root.mode === "zen" && root.zenGuided);
+    }
+
+    readonly property bool hasTarget: root.targetRequired()
+    readonly property bool endlessTarget: root.targetIsEndless()
     readonly property int rawCharacterCount: root.codePointCount(root.inputText)
     readonly property int correctCharacterCount: root.hasTarget
         ? root.countCharacterBreakdown().correct
@@ -89,7 +112,7 @@ QtObject {
     onLanguagePackChanged: {
         if (languagePack?.words?.length > 0)
             root.reset(false);
-        else if (root.mode !== "zen")
+        else if (root.targetRequired())
             root.state = "loading";
     }
 
@@ -103,6 +126,12 @@ QtObject {
     }
 
     onModeChanged: root.reapply()
+    // Only zen reads it, so flipping it from another mode must not re-roll a
+    // test the change cannot affect.
+    onZenGuidedChanged: {
+        if (root.mode === "zen")
+            root.reapply();
+    }
     onTimeLimitSecondsChanged: root.reapply()
     onWordLimitChanged: root.reapply()
     onPunctuationChanged: root.reapply()
@@ -172,13 +201,14 @@ QtObject {
     }
 
     function reset(reuseSeed) {
-        if (root.mode !== "zen" && !(root.languagePack?.words?.length > 0)) {
+        if (root.targetRequired() && !(root.languagePack?.words?.length > 0)) {
             root.state = "loading";
             return;
         }
         root.seed = reuseSeed ? root.seed : root.normalizeSeed(Math.floor(root.now()));
         root._randomState = root.seed;
-        root.applyTarget(root.mode === "zen" ? [] : root.makeTarget(root.mode === "words" ? root.wordLimit : 220, 0));
+        root.applyTarget(root.targetRequired()
+            ? root.makeTarget(root.mode === "words" ? root.wordLimit : 220, 0) : []);
         root.inputText = "";
         root.previousInputText = "";
         root.currentWordIndex = 0;
@@ -246,7 +276,7 @@ QtObject {
         root.tick();
         if (root.isFinished)
             return;
-        root.extendTimeTargetIfNeeded();
+        root.extendTargetIfNeeded();
         if (root.mode === "words" && root.reachedWordLimit(next))
             root.finish();
     }
@@ -267,8 +297,8 @@ QtObject {
         return words[words.length - 1] === root.targetWords[root.wordLimit - 1];
     }
 
-    function extendTimeTargetIfNeeded() {
-        if (root.mode !== "time" || root.currentWordIndex < root.targetWords.length - 30)
+    function extendTargetIfNeeded() {
+        if (!root.targetIsEndless() || root.currentWordIndex < root.targetWords.length - 30)
             return;
         root.applyTarget(root.targetWords.concat(root.makeTarget(100, root.targetWords.length)));
     }
@@ -358,7 +388,7 @@ QtObject {
     }
 
     function countCharacterBreakdown(): var {
-        if (root.mode === "zen") {
+        if (!root.hasTarget) {
             const raw = root.rawCharacterCount;
             return { correct: raw, incorrect: 0, extra: 0, missed: 0 };
         }
@@ -372,7 +402,7 @@ QtObject {
 
         const evaluatedWordCount = inputWords.length;
         for (let i = 0; i < evaluatedWordCount; i++) {
-            if (i >= targets.length && root.mode !== "time")
+            if (i >= targets.length && !root.endlessTarget)
                 break;
             const typed = root.codePoints(inputWords[i]);
             const target = i < targets.length ? root.codePoints(targets[i]) : [];

@@ -93,6 +93,23 @@ Item {
         root.options.mode = String(value);
     }
 
+    function setZenGuided(value) {
+        if (engine.isRunning)
+            return;
+        root.options.zenGuided = Boolean(value);
+    }
+
+    function toggleZenGuided() {
+        if (engine.isRunning)
+            return;
+        if (engine.mode !== "zen") {
+            root.setZenGuided(true);
+            root.setMode("zen");
+            return;
+        }
+        root.setZenGuided(!root.options.zenGuided);
+    }
+
     function setTime(value) {
         if (engine.isRunning)
             return;
@@ -192,6 +209,8 @@ Item {
             root.togglePunctuation();
         else if (control && key === Qt.Key_N)
             root.toggleNumbers();
+        else if (control && key === Qt.Key_G)
+            root.toggleZenGuided();
         else {
             // Anything else means the user moved on; the armed restart is not
             // allowed to sit there and swallow a later Enter.
@@ -220,6 +239,7 @@ Item {
     TypingTestEngine {
         id: engine
         mode: root.options.mode
+        zenGuided: root.options.zenGuided
         timeLimitSeconds: root.options.time
         wordLimit: root.options.words
         punctuation: root.options.punctuation
@@ -297,6 +317,7 @@ Item {
                 historyOpen: root.page === "history"
                 statsOpen: root.page === "stats"
                 onRequestMode: mode => root.setMode(mode)
+                onRequestZenGuided: guided => root.setZenGuided(guided)
                 onRequestTime: seconds => root.setTime(seconds)
                 onRequestWords: count => root.setWords(count)
                 onRequestTogglePunctuation: root.togglePunctuation()
@@ -330,6 +351,7 @@ Item {
                         spacing: Appearance.sizes.elevationMargin
 
                         StyledText {
+                            visible: !engine.zenGuided || engine.mode !== "zen"
                             text: engine.mode === "time"
                                 ? String(Math.max(0, Math.ceil(engine.timeLimitSeconds - engine.elapsedSeconds))) + "s"
                                 : (engine.mode === "words"
@@ -386,7 +408,7 @@ Item {
                             color: Appearance.colors.colOnSurfaceVariant
                         }
                         StyledText {
-                            visible: root.options.showLiveAccuracy && engine.isRunning && engine.mode !== "zen"
+                            visible: root.options.showLiveAccuracy && engine.isRunning && engine.hasTarget
                             text: String(Math.round(engine.accuracy)) + "%"
                             font.family: Appearance.font.family.monospace
                             font.pixelSize: Appearance.font.pixelSize.small
@@ -398,14 +420,14 @@ Item {
                         id: viewport
                         Layout.fillWidth: true
                         Layout.preferredHeight: implicitHeight
-                        visible: engine.mode !== "zen" && engine.state !== "loading"
+                        visible: engine.hasTarget && engine.state !== "loading"
                         engine: engine
                     }
 
                     StyledText {
                         Layout.fillWidth: true
                         Layout.preferredHeight: viewport.implicitHeight
-                        visible: engine.mode === "zen"
+                        visible: !engine.hasTarget
                         text: engine.inputText.length > 0 ? engine.inputText : Translation.tr("Start typing freely…")
                         wrapMode: Text.Wrap
                         verticalAlignment: Text.AlignTop

@@ -4145,6 +4145,10 @@ Singleton {
                 property JsonObject typingTest: JsonObject {
                     property string language: "english_1k"
                     property string mode: "time"
+                    // Zen without a target is free typing; guided zen keeps the
+                    // generated words but drops both limits, so the test only
+                    // ends when the user says so.
+                    property bool zenGuided: false
                     property int time: 30
                     property int words: 50
                     property bool punctuation: false

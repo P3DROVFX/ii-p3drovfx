@@ -22,7 +22,7 @@ Item {
 
     readonly property var samples: root.engine?.samples ?? []
     readonly property var breakdown: root.engine?.characterBreakdown ?? ({ correct: 0, incorrect: 0, extra: 0, missed: 0 })
-    readonly property bool hasTarget: root.engine?.mode !== "zen"
+    readonly property bool hasTarget: Boolean(root.engine?.hasTarget)
     // A zero-based axis turns a steady 106 wpm into a solid block. The band is
     // fitted around the run instead, so the shape shows the pace, not the
     // distance from standing still.
@@ -215,7 +215,9 @@ Item {
                 label: Translation.tr("test")
                 value: root.engine?.mode === "time"
                     ? String(root.engine?.timeLimitSeconds) + "s"
-                    : (root.engine?.mode === "words" ? String(root.engine?.wordLimit) + " " + Translation.tr("words") : Translation.tr("zen"))
+                    : (root.engine?.mode === "words"
+                        ? String(root.engine?.wordLimit) + " " + Translation.tr("words")
+                        : (root.engine?.zenGuided ? Translation.tr("guided zen") : Translation.tr("zen")))
             }
             StatChip {
                 label: Translation.tr("language")

@@ -216,6 +216,16 @@ Item {
                 }
             }
 
+            OptionRow {
+                label: Translation.tr("Guided zen")
+                description: Translation.tr("Zen types generated words instead of your own, with no limit")
+
+                StyledSwitch {
+                    checked: root.options.zenGuided
+                    onToggled: root.options.zenGuided = checked
+                }
+            }
+
             // ── Typing surface ────────────────────────────────────────
             SectionTitle {
                 Layout.columnSpan: 2
@@ -463,6 +473,7 @@ Item {
                         { keys: ["Shift", "↵"], label: Translation.tr("Finish zen, or start the next test") },
                         { keys: ["Ctrl", "⌫"], label: Translation.tr("Erase the current word") },
                         { keys: ["Ctrl", "1-3"], label: Translation.tr("Time, words or zen") },
+                        { keys: ["Ctrl", "G"], label: Translation.tr("Free or guided zen") },
                         { keys: ["Ctrl", "[", "]"], label: Translation.tr("Previous or next length") },
                         { keys: ["Ctrl", "P"], label: Translation.tr("Punctuation") },
                         { keys: ["Ctrl", "N"], label: Translation.tr("Numbers") },

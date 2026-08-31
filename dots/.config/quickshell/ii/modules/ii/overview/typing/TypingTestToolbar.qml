@@ -24,6 +24,7 @@ Item {
     readonly property bool controlsEnabled: root.engine?.state !== "running"
 
     signal requestMode(string mode)
+    signal requestZenGuided(bool guided)
     signal requestTime(int seconds)
     signal requestWords(int count)
     signal requestTogglePunctuation
@@ -127,9 +128,10 @@ Item {
         spacing: 10
 
         PillGroup {
-            // Neither modifier has anything to change in zen: there is no
-            // generated target to decorate.
-            visible: root.engine?.mode !== "zen"
+            // Both modifiers decorate the generated target, so they follow the
+            // target rather than the mode: free zen has nothing to decorate,
+            // guided zen has exactly what the other modes have.
+            visible: Boolean(root.engine?.hasTarget)
 
             PillButton {
                 pillIcon: "format_quote"
@@ -163,6 +165,27 @@ Item {
                     enabled: root.controlsEnabled
                     onClicked: root.requestMode(modelData.id)
                 }
+            }
+        }
+
+        // Zen's own pair, standing in for the presets the other modes get:
+        // free typing, or the same generated words with no limit on them.
+        PillGroup {
+            visible: root.engine?.mode === "zen"
+
+            PillButton {
+                pillIcon: "air"
+                pillLabel: Translation.tr("free")
+                active: !root.engine?.zenGuided
+                enabled: root.controlsEnabled
+                onClicked: root.requestZenGuided(false)
+            }
+            PillButton {
+                pillIcon: "match_case"
+                pillLabel: Translation.tr("guided")
+                active: Boolean(root.engine?.zenGuided)
+                enabled: root.controlsEnabled
+                onClicked: root.requestZenGuided(true)
             }
         }
 
