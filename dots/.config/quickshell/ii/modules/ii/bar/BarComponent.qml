@@ -39,6 +39,13 @@ Item {
 
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
+    // Edit Mode's drop preview: the room this widget stands aside to open.
+    // Margins rather than width, so the space belongs to the gap and not to
+    // the widget - nothing inside it moves or restyles while the row parts.
+    Layout.leftMargin: rootItem.vertical ? 0 : rootItem.editGapBefore
+    Layout.rightMargin: rootItem.vertical ? 0 : rootItem.editGapAfter
+    Layout.topMargin: rootItem.vertical ? rootItem.editGapBefore : 0
+    Layout.bottomMargin: rootItem.vertical ? rootItem.editGapAfter : 0
 
     property int barSection // 0: left, 1: center, 2: right
     property var list
@@ -373,7 +380,8 @@ Item {
     onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
     onIsNotchModeChanged: rootItem.beginBoxResize()
 
-    implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
+    implicitWidth: rootItem.editLifted ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth)
     Behavior on implicitWidth {
         enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -383,7 +391,8 @@ Item {
         }
     }
 
-    implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
+    implicitHeight: (rootItem.editLifted && rootItem.vertical) ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight)
     Behavior on implicitHeight {
         enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -393,7 +402,9 @@ Item {
         }
     }
 
-    opacity: targetWidth > 0 ? 1.0 : 0.0
+    // Transparent, not hidden: the drag's own MouseArea is inside this widget
+    // and has the pointer grab, so it has to stay alive until the release.
+    opacity: rootItem.editLifted ? 0.0 : (targetWidth > 0 ? 1.0 : 0.0)
     visible: !rootItem.layoutReady || (hasLayoutContent && (!isNotchMode || opacity > 0.01))
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
@@ -781,6 +792,31 @@ Item {
             p = p.parent;
         }
         return null;
+    }
+
+    // ── Edit Mode drop preview ─────────────────────────────────────────────
+    // Answered by the bar's controller in pixels. Dependency capture reaches
+    // inside a called function, so these re-run whenever the carried widget or
+    // its landing place changes.
+    readonly property real editGapBeforeTarget: rootItem.editController
+        ? rootItem.editController.gapBefore(rootItem.barSection, rootItem.originalIndex) : 0
+    readonly property real editGapAfterTarget: rootItem.editController
+        ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
+    // This is the widget being carried: it leaves its place, and the row
+    // closes over it, so what the bar is worth stays what it was.
+    readonly property bool editLifted: rootItem.editController
+        ? rootItem.editController.isLifted(rootItem.barSection, rootItem.originalIndex) : false
+    onEditLiftedChanged: rootItem.beginBoxResize()
+
+    property real editGapBefore: rootItem.editGapBeforeTarget
+    Behavior on editGapBefore {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rootItem)
+    }
+    property real editGapAfter: rootItem.editGapAfterTarget
+    Behavior on editGapAfter {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rootItem)
     }
 
     Loader {
