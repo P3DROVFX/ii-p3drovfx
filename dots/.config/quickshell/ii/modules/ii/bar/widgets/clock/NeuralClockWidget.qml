@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.bar.popups.clock
 
 /**
  * Neural Expressive clock.
@@ -251,13 +252,11 @@ Item {
     MouseArea {
         id: clockMouseArea
         anchors.fill: parent
-        hoverEnabled: true
-    }
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-    StyledToolTip {
-        text: DateTime.collapsedCalendarFormat
-        alternativeVisibleCondition: clockMouseArea.containsMouse
-        extraVisibleCondition: false
-        requireOverlay: false
+        ClockWidgetPopup {
+            compact: Config.options.bar.tooltips.compactPopups
+            hoverTarget: clockMouseArea
+        }
     }
 }

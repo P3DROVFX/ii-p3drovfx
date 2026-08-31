@@ -19,6 +19,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
     readonly property var kinds: Privacy.activeKinds
     readonly property string kindSignature: root.kinds.join(",")
@@ -88,7 +89,6 @@ MouseArea {
     // frame of the animation.
     implicitWidth: !root.shown ? 0 : (root.vertical ? Appearance.sizes.verticalBarWidth : root.pillLength + 8)
     implicitHeight: !root.shown ? 0 : (root.vertical ? root.pillLength + 8 : Appearance.sizes.baseBarHeight)
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
     Rectangle {
         id: pill

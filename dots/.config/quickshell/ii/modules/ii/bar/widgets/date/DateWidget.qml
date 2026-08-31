@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.bar.popups.clock
 
 /**
  * Default date widget — the classic fraction mark: day above the diagonal,
@@ -81,13 +82,11 @@ Item {
     MouseArea {
         id: dateMouseArea
         anchors.fill: parent
-        hoverEnabled: true
-    }
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-    StyledToolTip {
-        text: DateTime.collapsedCalendarFormat
-        alternativeVisibleCondition: dateMouseArea.containsMouse
-        extraVisibleCondition: false
-        requireOverlay: false
+        ClockWidgetPopup {
+            compact: Config.options.bar.tooltips.compactPopups
+            hoverTarget: dateMouseArea
+        }
     }
 }

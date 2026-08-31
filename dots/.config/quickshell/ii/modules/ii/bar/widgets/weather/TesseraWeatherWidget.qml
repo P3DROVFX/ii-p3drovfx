@@ -41,7 +41,13 @@ MouseArea {
     implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : root.animatedLength
     implicitHeight: root.vertical ? root.animatedLength : Appearance.sizes.baseBarHeight
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
     clip: true
+
+    onPressed: mouse => {
+        if (mouse.button === Qt.RightButton)
+            Weather.refreshManually();
+    }
 
     Behavior on animatedLength {
         animation: Appearance.animation.barResize.numberAnimation.createObject(root)
@@ -50,12 +56,6 @@ MouseArea {
     BarWidgetPalette {
         id: palette
         colorMode: root.colorMode
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.RightButton
-        onPressed: Weather.refreshManually()
     }
 
     GridLayout {

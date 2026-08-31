@@ -5,6 +5,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.bar.popups.clock
 
 /**
  * Relief clock — a family built entirely out of one idea: **what is removed**.
@@ -106,13 +107,11 @@ Item {
     MouseArea {
         id: clockMouseArea
         anchors.fill: parent
-        hoverEnabled: true
-    }
+        hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
-    StyledToolTip {
-        text: DateTime.collapsedCalendarFormat
-        alternativeVisibleCondition: clockMouseArea.containsMouse
-        extraVisibleCondition: false
-        requireOverlay: false
+        ClockWidgetPopup {
+            compact: Config.options.bar.tooltips.compactPopups
+            hoverTarget: clockMouseArea
+        }
     }
 }
