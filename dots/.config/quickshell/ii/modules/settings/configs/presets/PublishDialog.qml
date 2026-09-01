@@ -32,6 +32,10 @@ WindowDialog {
     readonly property string shotDirectory:
         FileUtils.trimFileProtocol(`${Directories.state}/preset-screenshots`)
 
+    // Hosted next to this dialog rather than inside it: a WindowDialog placed
+    // in another one's content becomes a row in its column.
+    signal previewRequested(string name)
+
     preferredDialogWidth: 620
     // What is left for the scrolling middle once the title, the buttons and
     // the dialog's own padding have taken their share.
@@ -281,8 +285,8 @@ WindowDialog {
                         { "ok": true, "label": Translation.tr("Your settings, with keys, tokens, folders and monitor names stripped out") },
                         { "ok": true, "label": Translation.tr("The wallpaper and the sidebar banner, if this preset has them") },
                         { "ok": true, "label": Translation.tr("The screenshots you took above") },
-                        { "ok": false, "label": Translation.tr("Your profile picture, name and greeting — never") },
-                        { "ok": false, "label": Translation.tr("API keys, saved networks, paired devices and contacts — never") }
+                        { "ok": false, "label": Translation.tr("Your profile picture, name, greeting and weather location — never") },
+                        { "ok": false, "label": Translation.tr("API keys, saved networks, paired devices, phone addresses and contacts — never") }
                     ]
 
                     delegate: RowLayout {
@@ -305,6 +309,16 @@ WindowDialog {
                             color: Appearance.colors.colOnSurfaceVariant
                         }
                     }
+                }
+
+                // Saying what is stripped is a promise. This is the promise
+                // made checkable, while nothing public exists yet.
+                RippleButtonWithIcon {
+                    Layout.topMargin: 4
+                    materialIcon: "search"
+                    mainText: Translation.tr("Review what will be published")
+                    implicitHeight: 36
+                    onClicked: dialog.previewRequested(dialog.presetName)
                 }
             }
 

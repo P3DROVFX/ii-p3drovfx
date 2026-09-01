@@ -22,6 +22,7 @@ Commands:
   check-updates
   pull <name>
   diff <name> [--incoming]
+  preview <name>
   publish <name> [--repo NAME] [--description TEXT] [--notes TEXT] [--private]
   push-update <name> [--version V | --bump major|minor|patch] [--notes TEXT]
   links
@@ -866,6 +867,74 @@ def cmd_diff(name, incoming=False):
 
 
 # ---------------------------------------------------------------------------
+# preview
+#
+# Publishing creates a public repository, and a repository is public the
+# moment the topic lands on it. The list of stripped paths is a promise, and
+# a promise that has been wrong before, so this is the promise made checkable
+# before anything exists: every value that would be uploaded, what the
+# sanitiser took out, and the warning an installer will be shown.
+# ---------------------------------------------------------------------------
+
+# Values worth a second look wherever they turn up. A key named innocently can
+# still hold an address, and the sanitiser only knows the keys it was told.
+IDENTITY_VALUE_RE = re.compile(
+    r'\b\d{1,3}(?:\.\d{1,3}){3}\b'                    # an address on a network
+    r'|\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\b'         # a MAC
+    r'|[\w.+-]+@[\w-]+\.[\w.]+'                         # an email
+    r'|/home/[^/\s]+'                                    # a path still naming its owner
+    r'|\bhttps?://'                                      # anything that phones somewhere
+)
+
+
+def cmd_preview(name):
+    name = check_name(name)
+    source = os.path.join(presets_dir(), '%s.json' % name)
+    if not os.path.exists(source):
+        raise StoreError('"%s" is no longer in your presets.' % name)
+
+    raw = read_json(source)
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as handle:
+        staged = handle.name
+    try:
+        presets_helper.sanitize(source, staged)
+        sanitized = read_json(staged)
+        config_bytes = os.path.getsize(staged)
+        try:
+            risks = presets_helper.scan(staged)
+        except Exception:
+            # A preview that cannot say "and here is the warning" is still
+            # worth showing; it must not be the reason publishing stops.
+            risks = {}
+    finally:
+        os.unlink(staged)
+
+    kept = dict(flatten(sanitized))
+    entries = []
+    for path in sorted(kept):
+        value = kept[path]
+        text = presets_helper._preview(value)
+        flagged = isinstance(value, str) and bool(
+            IDENTITY_VALUE_RE.search(value) or presets_helper.COMMAND_HINT_RE.search(value))
+        entries.append({'path': '.'.join(path), 'value': text, 'flagged': flagged})
+
+    dropped = sorted('.'.join(path) for path in set(dict(flatten(raw))) - set(kept))
+
+    files = [{'name': CONFIG_NAME, 'bytes': config_bytes, 'kind': 'config'}]
+    for kind, asset in (('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name)),
+                        ('banner', presets_helper.find_banner_fallback(presets_dir(), name))):
+        if not asset or not image_ext(asset) or not os.path.isfile(asset):
+            continue
+        files.append({'name': '%s%s' % (kind, image_ext(asset)),
+                      'bytes': os.path.getsize(asset), 'kind': kind})
+
+    return {'ok': True, 'name': name, 'total': len(entries),
+            'entries': entries, 'flagged': [e for e in entries if e['flagged']],
+            'dropped': dropped, 'files': files,
+            'risks': risks.get('groups', []) if isinstance(risks, dict) else []}
+
+
+# ---------------------------------------------------------------------------
 # publish / push-update
 # ---------------------------------------------------------------------------
 
@@ -1240,6 +1309,8 @@ def dispatch(argv):
     if command == 'diff':
         incoming = take_flag(rest, '--incoming')
         return cmd_diff(rest[0] if rest else '', incoming)
+    if command == 'preview':
+        return cmd_preview(rest[0] if rest else '')
     if command == 'publish':
         private = take_flag(rest, '--private')
         repo = take_option(rest, '--repo')

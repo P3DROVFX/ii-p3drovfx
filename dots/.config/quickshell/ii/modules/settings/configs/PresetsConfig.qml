@@ -546,6 +546,15 @@ ContentPage {
         anchors.fill: parent
         show: false
         z: 100000
+        onPreviewRequested: name => previewDialog.openFor(name)
+    }
+
+    PublishPreviewDialog {
+        id: previewDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        z: 100001
     }
 
     PushUpdateDialog {

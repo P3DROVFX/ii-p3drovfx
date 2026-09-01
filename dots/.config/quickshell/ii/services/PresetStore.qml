@@ -74,6 +74,7 @@ Singleton {
     signal updatesChecked(int count)
     signal pullFinished(string name, bool ok, bool changed, string error)
     signal diffReady(string name, var result)
+    signal previewReady(string name, var result)
     signal publishFinished(string name, bool ok, string repoUrl, string error)
     signal pushFinished(string name, bool ok, bool changed, string error)
     signal removeFinished(string name, bool ok, string error)
@@ -174,6 +175,13 @@ Singleton {
     }
 
     // incoming: what an update would change. Otherwise: what publishing would.
+    // Everything publishing would upload, read before a repository exists.
+    function preview(name) {
+        if (!name || root._pending("preview", name))
+            return;
+        root._run("preview", name, ["preview", name]);
+    }
+
     function diff(name, incoming) {
         if (!name)
             return;
@@ -500,6 +508,10 @@ Singleton {
         }
         if (job.action === "diff") {
             root.diffReady(job.name, result);
+            return;
+        }
+        if (job.action === "preview") {
+            root.previewReady(job.name, result);
             return;
         }
         if (job.action === "publish") {

