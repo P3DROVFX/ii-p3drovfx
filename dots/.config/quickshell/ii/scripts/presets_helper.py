@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+import copy
 import json
 import os
 import sys
 import glob
 import re
+import tempfile
 
 SENSITIVE_KEY_NAMES = {
     "password", "passwd", "secret", "clientsecret", "token", "accesstoken",
@@ -42,6 +44,248 @@ DOCK_BLACKLIST_KEYS = {
     "showOverviewButton",
     "showPinButton",
 }
+
+# ---------------------------------------------------------------------------
+# Machine-local and personal config paths
+#
+# A preset is a whole config.json, so everything the author's machine knows
+# about rides along with it: paired-device MAC addresses, contact ids, the
+# folder they save recordings to, the name on their profile card. None of it
+# means anything on another machine and some of it is nobody else's business,
+# so it is stripped when a preset is written and taken from the importer's own
+# config when one is applied.
+#
+# Paths are dotted; "*" matches any dict key or list index.
+# ---------------------------------------------------------------------------
+
+# Blanked rather than removed. Presets published before merge() existed carry
+# these keys, and a neutral value is what those presets expect to find.
+MONITOR_BINDING_PATHS = (
+    "bar.onlyShowOnSingleMonitor",
+    "bar.singleMonitorName",
+    "bar.screenList",
+    "bar.floatingNotch.onlyShowOnSingleMonitor",
+    "bar.floatingNotch.singleMonitorName",
+    "background.widgets.showOnlyOnSingleMonitor",
+    "background.widgets.targetMonitor",
+    "interactions.touchGestures.targetMonitor",
+    "notifications.monitor.enable",
+    "notifications.monitor.name",
+)
+
+# Identity and paired hardware. Removed outright: there is no neutral value
+# worth shipping, and these travel no better than they anonymize.
+PERSONAL_PATHS = (
+    "userProfile.customName",
+    "userProfile.customBio",
+    "userProfile.customGreeting",
+    "userProfile.imagePath",
+    "sidebar.dashboardHeader.profileImagePath",
+    "background.widgets.*.imagePath",
+    "background.thumbnailPath",
+    "bluetoothDeviceImages",
+    "soundcore.macAddress",
+    "phone.contacts.favoriteIds",
+    "phone.microphone.wifiIp",
+    "todo.googleTasks.taskListId",
+    "todo.googleTasks.taskListTitle",
+    "tailscale.exitNode",
+    "tailscale.advertiseRoutes",
+    "vpn.defaultProfile",
+    "vpn.defaultLocation",
+    "vpn.recentProvider",
+    "update.lastAutoCheck",
+    "update.scriptPath",
+)
+
+# Folders that exist on the author's disk and probably nowhere else.
+LOCAL_FOLDER_PATHS = (
+    "screenRecord.savePath",
+    "screenSnip.savePath",
+    "localsend.downloadPath",
+    "mediaDownloader.downloadPath",
+    "wallpapers.paths",
+    "wallpaperSelector.customDefaultPath",
+    "wallpaperSelector.directories",
+)
+
+# Choices a theme has no business overriding.
+LOCAL_PREFERENCE_PATHS = (
+    "appearance.iconTheme",
+    "appearance.icons.enableThemed",
+    "language",
+    "policies",
+    "workSafety",
+)
+
+# Everything merge() hands back to the importer.
+LOCAL_ONLY_PATHS = (
+    MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
+)
+
+# Path fields a preset is meant to bring with it. Each falls back to a bundled
+# asset, then to whatever the importer already had, so applying a preset never
+# leaves a dead path behind. A kind of None skips the bundled-asset step.
+ASSET_PATHS = (
+    ("background.wallpaperPath", "wallpaper"),
+    ("background.lightModeWallpaperPath", None),
+    ("sidebar.bannerImage", "banner"),
+)
+
+_MISSING = object()
+
+
+def user_home():
+    home = os.environ.get('HOME', '')
+    return home[:-1] if home.endswith('/') else home
+
+
+def plain_path(value):
+    """Strip the file:// scheme and any ?query from a path-ish string."""
+    if not isinstance(value, str):
+        return ''
+    path = value.strip()
+    if path.startswith('file://'):
+        path = path[7:]
+    return path.split('?', 1)[0]
+
+
+def _match_children(node, token):
+    """Yield the keys of `node` that one path token selects."""
+    if isinstance(node, dict):
+        if token == '*':
+            for key in list(node.keys()):
+                yield key
+        elif token in node:
+            yield token
+    elif isinstance(node, list):
+        if token == '*':
+            for index in range(len(node)):
+                yield index
+        elif token.lstrip('-').isdigit() and -len(node) <= int(token) < len(node):
+            yield int(token)
+
+
+def find_paths(data, pattern):
+    """Every concrete path in `data` matching a dotted pattern."""
+    results = [[]]
+    for token in pattern.split('.'):
+        matches = []
+        for path in results:
+            node = get_path(data, path, _MISSING)
+            if node is _MISSING:
+                continue
+            for key in _match_children(node, token):
+                matches.append(path + [key])
+        results = matches
+        if not results:
+            break
+    return results
+
+
+def get_path(data, path, default=None):
+    node = data
+    for key in path:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        elif isinstance(node, list) and isinstance(key, int) and -len(node) <= key < len(node):
+            node = node[key]
+        else:
+            return default
+    return node
+
+
+def set_path(data, path, value):
+    node = data
+    for key in path[:-1]:
+        if isinstance(node, list):
+            node = node[key]
+            continue
+        if not isinstance(node.get(key), (dict, list)):
+            node[key] = {}
+        node = node[key]
+    node[path[-1]] = value
+
+
+def del_path(data, path):
+    parent = get_path(data, path[:-1], _MISSING)
+    if parent is _MISSING:
+        return
+    key = path[-1]
+    if isinstance(parent, dict):
+        parent.pop(key, None)
+    elif isinstance(parent, list) and isinstance(key, int) and -len(parent) <= key < len(parent):
+        del parent[key]
+
+
+def strip_paths(data, patterns):
+    for pattern in patterns:
+        # Deepest first, so deleting a parent never invalidates a pending path.
+        for path in sorted(find_paths(data, pattern), key=len, reverse=True):
+            del_path(data, path)
+
+
+def deep_merge(base, overlay):
+    """Overlay wins for scalars and lists; dicts merge key by key.
+
+    Merging rather than overwriting is what lets a preset omit the importer's
+    API keys, search aliases and dock pins instead of erasing them.
+    """
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return copy.deepcopy(overlay)
+    merged = copy.deepcopy(base)
+    for key, value in overlay.items():
+        merged[key] = deep_merge(merged[key], value) if key in merged else copy.deepcopy(value)
+    return merged
+
+
+def restore_local_only(merged, current):
+    """Put the importer's machine-local values back over the preset's."""
+    for pattern in LOCAL_ONLY_PATHS:
+        strip_paths(merged, (pattern,))
+        for path in find_paths(current, pattern):
+            set_path(merged, path, copy.deepcopy(get_path(current, path)))
+
+
+def resolve_asset_paths(merged, current, presets_dir, preset_name):
+    """Point each shipped asset field at something that actually exists."""
+    finders = {'wallpaper': find_wallpaper_fallback, 'banner': find_banner_fallback}
+    for dotted, kind in ASSET_PATHS:
+        path = dotted.split('.')
+        value = plain_path(get_path(merged, path))
+        if value and os.path.exists(value):
+            continue
+        bundled = None
+        if kind and presets_dir and preset_name:
+            bundled = finders[kind](presets_dir, preset_name)
+        if bundled:
+            set_path(merged, path, bundled)
+            continue
+        local = get_path(current, path)
+        if isinstance(local, str) and local:
+            set_path(merged, path, local)
+
+
+def atomic_write_json(path, data):
+    """Write via a temp file in the same directory, then rename over the target.
+
+    config.json is watched; a partial read of a half-written file would be
+    reported as malformed and block every subsequent save.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or '.'
+    os.makedirs(directory, exist_ok=True)
+    handle, tmp_path = tempfile.mkstemp(dir=directory, prefix='.preset-', suffix='.json')
+    try:
+        with os.fdopen(handle, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
 
 def remove_secrets_and_userdata(data):
     if isinstance(data, dict):
@@ -149,6 +393,11 @@ def reset_monitor_bindings(data):
 
 def sanitize_data(data, home_dir):
     data = remove_secrets_and_userdata(data)
+
+    # Identity and paired hardware never travel with a preset. These are
+    # dropped rather than blanked so that applying the preset falls through to
+    # whatever the importer already had.
+    strip_paths(data, PERSONAL_PATHS)
 
     if 'appearance' in data and isinstance(data['appearance'], dict):
         icons = data['appearance'].get('icons')
@@ -262,6 +511,45 @@ def expand(input_path, output_path, presets_dir, preset_name):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
+def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None):
+    """Apply a preset onto an existing config without destroying what is local.
+
+    The preset is layered over the current config rather than replacing it, so
+    keys a preset legitimately does not carry -- API keys, search aliases, dock
+    pins -- survive untouched. Whatever the preset does carry but should not
+    (monitor names, save folders, the author's profile card) is handed back
+    from the current config afterwards.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    if not isinstance(preset, dict):
+        raise ValueError('preset is not a JSON object')
+
+    current = {}
+    if os.path.exists(config_path):
+        # A config that no longer parses is the only source of truth for the
+        # user's settings, so refuse rather than merge onto an empty dict and
+        # silently reset everything the file still held.
+        with open(config_path, 'r', encoding='utf-8') as f:
+            current = json.load(f)
+        if not isinstance(current, dict):
+            raise ValueError('existing config is not a JSON object')
+
+    preset = expand_val(preset, user_home())
+    merged = deep_merge(current, preset)
+    restore_local_only(merged, current)
+    resolve_asset_paths(merged, current, presets_dir, preset_name)
+
+    # migrateRaw() in Config.qml only runs when the file still says which
+    # version it was written for, so the preset's version has to survive the
+    # merge. Stamping the current version here would skip every migration the
+    # preset needs and leave retyped keys to be mangled by JsonAdapter.
+    if 'configVersion' in preset:
+        merged['configVersion'] = preset['configVersion']
+
+    atomic_write_json(out_path, merged)
+
+
 def find_wallpaper_fallback(presets_dir, preset_name):
     pattern = os.path.join(presets_dir, f"{preset_name}.*")
     for filepath in glob.glob(pattern):
@@ -333,6 +621,16 @@ def main():
         if len(sys.argv) < 6:
             sys.exit(1)
         expand(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+    elif action == 'merge':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        presets_dir = sys.argv[5] if len(sys.argv) > 5 else None
+        preset_name = sys.argv[6] if len(sys.argv) > 6 else None
+        try:
+            merge(sys.argv[2], sys.argv[3], sys.argv[4], presets_dir, preset_name)
+        except Exception as exc:
+            print(f'merge failed: {exc}', file=sys.stderr)
+            sys.exit(1)
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)

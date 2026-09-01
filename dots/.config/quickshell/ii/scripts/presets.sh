@@ -3,6 +3,8 @@
 PRESETS_DIR="$HOME/.config/illogical-impulse/presets"
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ii/preset-backups"
+BACKUP_KEEP=10
 mkdir -p "$PRESETS_DIR"
 
 notify_export() {
@@ -21,13 +23,50 @@ fail_export() {
     exit 1
 }
 
+# Snapshot config.json before anything rewrites it. Applying a preset is the
+# one action here the user cannot undo by hand, so every apply leaves a way
+# back.
+backup_config() {
+    [[ -f "$CONFIG_FILE" ]] || return 0
+    mkdir -p "$BACKUP_DIR" || return 1
+    local stamp
+    # Nanoseconds, not seconds: two applies in the same second would otherwise
+    # write the same filename and the older config would be lost.
+    stamp=$(date +%Y%m%d-%H%M%S%N)
+    cp -- "$CONFIG_FILE" "$BACKUP_DIR/$stamp-config.json" || return 1
+    local old_backup
+    while IFS= read -r old_backup; do
+        [[ -n "$old_backup" ]] && rm -f -- "$old_backup"
+    done < <(newest_backups | tail -n +$((BACKUP_KEEP + 1)))
+}
+
+# Newest first. Sorted by name rather than mtime because the name is the
+# timestamp, which survives copying, restoring and touching the files.
+newest_backups() {
+    ls -1 "$BACKUP_DIR"/*-config.json 2>/dev/null | sort -r
+}
+
+# Re-run the colour pipeline against whatever config.json now says.
+apply_colors() {
+    local color_engine switch_script
+    color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
+    switch_script="switchwall.sh"
+    if [[ "$color_engine" == "fork" ]]; then
+        switch_script="switchwall_vynx.sh"
+    fi
+    env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
+        "$SCRIPTS_DIR/colors/$switch_script" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+}
+
 action=$1
 name=$2
 
 case $action in
     save)
         if [[ -z "$name" ]]; then exit 1; fi
-        cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
+        # Sanitize on the way in, not just on export: a preset that never holds
+        # a token or a MAC address cannot leak one later.
+        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
         
         # Also copy the wallpaper if configured
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
@@ -65,7 +104,7 @@ case $action in
                 rm -f "$file"
             fi
         done
-        cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
+        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
 
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
         wall_path="${wall_path#file://}"
@@ -93,20 +132,34 @@ case $action in
         ;;
     load)
         if [[ -z "$name" ]]; then exit 1; fi
-        if [[ -f "$PRESETS_DIR/$name.json" ]]; then
-            # Use python helper to expand paths and fallbacks
-            python3 "$SCRIPTS_DIR/presets_helper.py" expand "$PRESETS_DIR/$name.json" "$CONFIG_FILE" "$PRESETS_DIR" "$name"
-            
-            # Read colorEngine from the newly expanded config.json to run the correct script
-            color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
-            switch_script="switchwall.sh"
-            if [[ "$color_engine" == "fork" ]]; then
-                switch_script="switchwall_vynx.sh"
-            fi
-            
-            # Apply wallpaper and colors from the newly loaded config
-            env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" "$SCRIPTS_DIR/colors/$switch_script" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        if ! backup_config; then
+            notify_export critical "Preset not applied" "Could not back up the current config."
+            exit 1
         fi
+        # Layer the preset over the current config instead of replacing it, so
+        # API keys, search aliases and dock pins the preset does not carry are
+        # left alone rather than erased.
+        if ! python3 "$SCRIPTS_DIR/presets_helper.py" merge "$PRESETS_DIR/$name.json" "$CONFIG_FILE" "$CONFIG_FILE" "$PRESETS_DIR" "$name"; then
+            notify_export critical "Preset not applied" "Could not merge preset: $name"
+            exit 1
+        fi
+        apply_colors
+        ;;
+    revert)
+        # Pops the newest snapshot, so pressing revert twice steps back twice.
+        latest=$(newest_backups | head -n1)
+        if [[ -z "$latest" || ! -f "$latest" ]]; then
+            notify_export normal "Nothing to revert" "No preset has been applied yet."
+            exit 1
+        fi
+        if ! cp -- "$latest" "$CONFIG_FILE"; then
+            notify_export critical "Revert failed" "Could not restore: $latest"
+            exit 1
+        fi
+        rm -f -- "$latest"
+        apply_colors
+        notify_export normal "Settings restored" "Reverted to the config from before the last preset."
         ;;
     delete)
         if [[ -z "$name" ]]; then exit 1; fi
@@ -189,26 +242,9 @@ case $action in
                 fi
             fi
 
-            # 2. Find and copy profile picture if it exists
-            for file in "$PRESETS_DIR/${name}_profile".*; do
-                if [[ -f "$file" ]]; then
-                    ext="${file##*.}"
-                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
-                        cp "$file" "$TMP_DIR/profile.$ext"
-                        break
-                    fi
-                fi
-            done
-            # Fallback if profile is not in PRESETS_DIR but local path exists
-            if ! ls "$TMP_DIR"/profile.* >/dev/null 2>&1; then
-                profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
-                profile_path="${profile_path#file://}"
-                profile_path="${profile_path%%\?*}"
-                if [[ -f "$profile_path" ]]; then
-                    ext="${profile_path##*.}"
-                    cp "$profile_path" "$TMP_DIR/profile.$ext"
-                fi
-            fi
+            # 2. The profile picture is deliberately not exported. It is the
+            #    user's own avatar, it says nothing about the theme, and an
+            #    exported preset is meant to be handed to other people.
 
             # 3. Find and copy sidebar dashboard banner image if it exists
             for file in "$PRESETS_DIR/${name}_banner".*; do

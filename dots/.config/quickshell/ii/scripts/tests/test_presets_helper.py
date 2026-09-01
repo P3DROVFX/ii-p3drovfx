@@ -2,8 +2,10 @@
 """Tests for preset sanitization and expansion in presets_helper.py."""
 
 import copy
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 # Add scripts directory to sys.path
@@ -320,7 +322,7 @@ class TestPresetsHelper(unittest.TestCase):
             self.assertTrue(expanded["dock"]["showTrashButton"])
 
     def test_user_profile_and_banner_path_normalization(self):
-        """Teste 9: Verify userProfile and sidebar banner paths are normalized to $HOME."""
+        """Teste 9: Banner path is normalized to $HOME; profile picture paths are dropped."""
         input_data = {
             "userProfile": {
                 "imageStyle": "custom",
@@ -335,9 +337,12 @@ class TestPresetsHelper(unittest.TestCase):
             }
         }
         sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
-        self.assertEqual(sanitized["userProfile"]["imagePath"], "$HOME/Pictures/avatars/user.gif")
+        # The banner ships with the preset, so its path stays portable.
         self.assertEqual(sanitized["sidebar"]["bannerImage"], "$HOME/Pictures/banner.png")
-        self.assertEqual(sanitized["sidebar"]["dashboardHeader"]["profileImagePath"], "$HOME/Pictures/avatars/user.gif")
+        # The profile picture never does: it is the author's own avatar.
+        self.assertNotIn("imagePath", sanitized["userProfile"])
+        self.assertNotIn("profileImagePath", sanitized["sidebar"]["dashboardHeader"])
+        self.assertEqual(sanitized["userProfile"]["imageStyle"], "custom")
 
     def test_user_profile_and_banner_fallback_on_expand(self):
         """Teste 10: Verify expand falls back to {name}_profile and {name}_banner when original paths do not exist."""
@@ -385,6 +390,168 @@ class TestPresetsHelper(unittest.TestCase):
             self.assertEqual(expanded["userProfile"]["imagePath"], profile_asset)
             self.assertEqual(expanded["sidebar"]["dashboardHeader"]["profileImagePath"], profile_asset)
             self.assertEqual(expanded["sidebar"]["bannerImage"], banner_asset)
+
+
+def populate(patterns, value):
+    """Build a config with every dotted pattern present, '*' as a literal key."""
+    data = {}
+    for pattern in patterns:
+        concrete = ["w1" if part == "*" else part for part in pattern.split(".")]
+        presets_helper.set_path(data, concrete, value)
+    return data
+
+
+class TestPersonalDataStripping(unittest.TestCase):
+    """Nothing in PERSONAL_PATHS may survive into a saved preset."""
+
+    def setUp(self):
+        self.home_dir = "/home/testuser"
+
+    def test_every_personal_path_is_stripped(self):
+        data = populate(presets_helper.PERSONAL_PATHS, "LEAK")
+        sanitized = presets_helper.sanitize_data(data, self.home_dir)
+        for pattern in presets_helper.PERSONAL_PATHS:
+            self.assertEqual(
+                presets_helper.find_paths(sanitized, pattern), [],
+                f"{pattern} survived sanitization")
+
+    def test_personal_paths_are_all_restored_on_apply(self):
+        """Drift guard: anything stripped on save must be handed back on load."""
+        for pattern in presets_helper.PERSONAL_PATHS:
+            self.assertIn(pattern, presets_helper.LOCAL_ONLY_PATHS)
+
+    def test_bluetooth_macs_and_contacts_do_not_travel(self):
+        data = {
+            "bluetoothDeviceImages": [{"mac": "34:E3:FB:8D:1C:AC", "image": "device.png"}],
+            "soundcore": {"macAddress": "E8:EE:CC:96:31:3A", "enableEqualizer": True},
+            "phone": {"contacts": {"favoriteIds": ["86r812-4D472D3B45"], "showAvatars": True}},
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+        self.assertNotIn("bluetoothDeviceImages", sanitized)
+        self.assertNotIn("macAddress", sanitized["soundcore"])
+        self.assertNotIn("favoriteIds", sanitized["phone"]["contacts"])
+        # Styling next to the stripped keys is untouched.
+        self.assertTrue(sanitized["soundcore"]["enableEqualizer"])
+        self.assertTrue(sanitized["phone"]["contacts"]["showAvatars"])
+
+    def test_desktop_widget_photos_do_not_travel(self):
+        data = {"background": {"widgets": {
+            "photo_pill_2x1": {"imagePath": "/home/testuser/Downloads/me.png", "radius": 12},
+            "showOnlyOnSingleMonitor": True,
+        }}}
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+        widget = sanitized["background"]["widgets"]["photo_pill_2x1"]
+        self.assertNotIn("imagePath", widget)
+        self.assertEqual(widget["radius"], 12)
+
+
+class TestPresetMerge(unittest.TestCase):
+    """merge() layers a preset over a config instead of replacing it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.preset_path = os.path.join(self.tmp.name, "Theme.json")
+        self.config_path = os.path.join(self.tmp.name, "config.json")
+
+    def write(self, path, data):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def merge(self, preset, config, preset_name="Theme"):
+        self.write(self.preset_path, preset)
+        self.write(self.config_path, config)
+        presets_helper.merge(self.preset_path, self.config_path, self.config_path,
+                             self.tmp.name, preset_name)
+        with open(self.config_path, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_secrets_and_user_data_survive(self):
+        """The bug this replaces: applying a shared preset wiped these."""
+        merged = self.merge(
+            preset={"appearance": {"palette": "catppuccin"}},
+            config={
+                "ai": {"apiKey": "sk-live-secret"},
+                "googleDrive": {"enabled": True, "refreshToken": "ya29.token"},
+                "search": {"aliases": [{"trigger": "g", "command": "google"}]},
+                "dock": {"pinnedApps": ["firefox"]},
+                "appearance": {"palette": "nord"},
+            })
+        self.assertEqual(merged["ai"]["apiKey"], "sk-live-secret")
+        self.assertEqual(merged["googleDrive"]["refreshToken"], "ya29.token")
+        self.assertEqual(merged["search"]["aliases"][0]["trigger"], "g")
+        self.assertEqual(merged["dock"]["pinnedApps"], ["firefox"])
+        self.assertEqual(merged["appearance"]["palette"], "catppuccin")
+
+    def test_preset_values_actually_apply(self):
+        """Guard against protecting so much that nothing lands."""
+        merged = self.merge(
+            preset={"bar": {"height": 48, "cornerStyle": 1}, "dock": {"dockStyle": "islands"}},
+            config={"bar": {"height": 32, "cornerStyle": 0, "screenList": ["DP-1"]},
+                    "dock": {"dockStyle": "floating", "pinnedApps": ["kitty"]}})
+        self.assertEqual(merged["bar"]["height"], 48)
+        self.assertEqual(merged["bar"]["cornerStyle"], 1)
+        self.assertEqual(merged["dock"]["dockStyle"], "islands")
+        self.assertEqual(merged["dock"]["pinnedApps"], ["kitty"])
+
+    def test_every_local_only_path_comes_from_the_importer(self):
+        merged = self.merge(
+            preset=populate(presets_helper.LOCAL_ONLY_PATHS, "THEIRS"),
+            config=populate(presets_helper.LOCAL_ONLY_PATHS, "MINE"))
+        for pattern in presets_helper.LOCAL_ONLY_PATHS:
+            for path in presets_helper.find_paths(merged, pattern):
+                self.assertEqual(presets_helper.get_path(merged, path), "MINE",
+                                 f"{pattern} came from the preset")
+
+    def test_local_only_path_absent_locally_is_not_inherited(self):
+        """A legacy preset carrying a monitor name must not impose it."""
+        merged = self.merge(
+            preset={"bar": {"singleMonitorName": "DP-3", "height": 40}},
+            config={"bar": {"height": 32}})
+        self.assertNotIn("singleMonitorName", merged["bar"])
+        self.assertEqual(merged["bar"]["height"], 40)
+
+    def test_preset_config_version_survives(self):
+        """migrateRaw() only runs if the file still says which version it is."""
+        merged = self.merge(preset={"configVersion": 9, "bar": {"height": 40}},
+                            config={"configVersion": 16, "bar": {"height": 32}})
+        self.assertEqual(merged["configVersion"], 9)
+
+    def test_wallpaper_falls_back_to_bundled_asset(self):
+        bundled = os.path.join(self.tmp.name, "Theme.png")
+        open(bundled, "w").close()
+        merged = self.merge(
+            preset={"background": {"wallpaperPath": "/home/author/gone.png"}},
+            config={"background": {"wallpaperPath": "/home/testuser/mine.png"}})
+        self.assertEqual(merged["background"]["wallpaperPath"], bundled)
+
+    def test_dead_asset_path_falls_back_to_the_local_one(self):
+        """No bundled light-mode wallpaper ships, so the importer keeps theirs."""
+        existing = os.path.join(self.tmp.name, "local-light.png")
+        open(existing, "w").close()
+        merged = self.merge(
+            preset={"background": {"lightModeWallpaperPath": "/home/author/gone.png"}},
+            config={"background": {"lightModeWallpaperPath": existing}})
+        self.assertEqual(merged["background"]["lightModeWallpaperPath"], existing)
+
+    def test_home_placeholder_is_expanded(self):
+        merged = self.merge(preset={"apps": {"note": "$HOME/notes"}}, config={})
+        self.assertEqual(merged["apps"]["note"], presets_helper.user_home() + "/notes")
+
+    def test_malformed_config_is_refused(self):
+        """Never merge onto an empty dict: the broken file is the only truth."""
+        self.write(self.preset_path, {"bar": {"height": 40}})
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            f.write("{ not json")
+        with self.assertRaises(ValueError):
+            presets_helper.merge(self.preset_path, self.config_path, self.config_path)
+
+    def test_missing_config_is_treated_as_empty(self):
+        self.write(self.preset_path, {"bar": {"height": 40}})
+        presets_helper.merge(self.preset_path, os.path.join(self.tmp.name, "none.json"),
+                             self.config_path)
+        with open(self.config_path, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["bar"]["height"], 40)
 
 
 if __name__ == "__main__":
