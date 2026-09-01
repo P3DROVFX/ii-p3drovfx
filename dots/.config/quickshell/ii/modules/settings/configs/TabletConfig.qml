@@ -328,6 +328,13 @@ Item {
             }
 
             ConfigSubpageRow {
+                buttonIcon: "swipe"
+                title: Translation.tr("Multi-finger swipes")
+                description: Translation.tr("Three fingers across the screen: workspaces sideways, the app drawer up, the shade down")
+                configPage: Qt.resolvedUrl("widgets/TabletMultiFingerConfig.qml")
+            }
+
+            ConfigSubpageRow {
                 buttonIcon: "touch_app"
                 title: Translation.tr("Edge and corner bindings")
                 description: Translation.tr("What the remaining edges and the four corners do")

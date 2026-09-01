@@ -235,6 +235,45 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("hl.dsp.focus({ workspace = 'r+1' })", dock)
         self.assertIn("workspacePrevRegion", dock)
 
+    def test_multi_finger_touch_swipes_replace_the_touchpads_scratchpad_bindings(self):
+        service = read("services/TouchGestureService.qml")
+        config = read("modules/common/Config.qml")
+        registry = read("modules/common/TouchGestureActionRegistry.qml")
+
+        # The hand's other fingers are not the active contact, so they have to be tracked
+        # before the single-contact filter the edge recogniser runs on.
+        self.assertIn("function multiCentroid()", service)
+        self.assertIn("function multiEvaluate()", service)
+        # Exactly the configured count: a further finger is a different gesture.
+        self.assertIn("centroid.count !== root.multiFingerCount", service)
+        # One action per hand-down, or a long swipe fires on every frame past the threshold.
+        self.assertIn("root.multiFired = true;", service)
+        # A binding this family cannot perform would commit and do nothing, which reads as
+        # the touchscreen being broken rather than as a setting being wrong.
+        self.assertIn("TouchGestureActionRegistry.availableForFamily(action, PanelFamily.current)", service)
+
+        # The touchpad's three fingers do scratchpad in and scratchpad out. A tablet has no
+        # touchpad and no use for a scratchpad; these are what a phone does instead.
+        self.assertIn('property string swipeLeft: "workspaceNext"', config)
+        self.assertIn('property string swipeRight: "workspacePrev"', config)
+        self.assertIn('property string swipeUp: "appDrawer"', config)
+        self.assertIn('property string swipeDown: "sidebarRight"', config)
+
+        for action in ('id: "appDrawer"', 'id: "recents"', 'id: "home"',
+                       'id: "workspaceNext"', 'id: "workspacePrev"'):
+            self.assertIn(action, registry)
+
+    def test_back_is_installed_by_the_family_that_knows_what_it_means(self):
+        states = read("GlobalStates.qml")
+        keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
+        registry = read("modules/common/TouchGestureActionRegistry.qml")
+
+        self.assertIn("property var navigateBackHandler: null", states)
+        self.assertIn("GlobalStates.navigateBackHandler = () => TabletNavigation.back()", keybinds)
+        self.assertIn("if (GlobalStates.navigateBackHandler)", registry)
+        # Shared code must not import a family to find out what back means there.
+        self.assertNotIn("qs.modules.tablet", registry)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

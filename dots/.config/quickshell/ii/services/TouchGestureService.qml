@@ -32,6 +32,27 @@ Singleton {
 
     property int gestureState: root.stateIdle
 
+    // ── Multi-finger swipes ─────────────────────────────────────────────────
+    // The touchpad's three-finger gestures, for a device that has no touchpad. The
+    // single-contact recogniser above owns the edges and cancels itself the moment a second
+    // finger lands, so the two never compete for the same touch.
+    readonly property var multiOpts: (root.opts && root.opts.multiFinger) ? root.opts.multiFinger : null
+    readonly property bool multiEnabled: root.enabled && Boolean(root.multiOpts && root.multiOpts.enable)
+    readonly property int multiFingerCount: (root.multiOpts && root.multiOpts.fingers) ? root.multiOpts.fingers : 3
+    readonly property real multiCommitDistance: (root.multiOpts && root.multiOpts.distance) ? root.multiOpts.distance : 90
+
+    /// contactId -> { x, y }. Every allowed contact, whatever the recogniser is doing.
+    property var multiPoints: ({})
+    property bool multiArmed: false
+    /// One action per hand-down. Without this a long swipe fires on every frame past the
+    /// threshold, and a workspace change becomes ten.
+    property bool multiFired: false
+    property real multiStartX: 0
+    property real multiStartY: 0
+    property string multiScreenName: ""
+
+    signal multiFingerSwipe(string direction, string actionId, string screenName)
+
     // Active Gesture Data
     property string activeDeviceId: ""
     property int activeContactId: -1
@@ -662,6 +683,102 @@ Singleton {
         return (last.distance - first.distance) / dt;
     }
 
+    function multiActionFor(direction) {
+        if (!root.multiOpts)
+            return "none";
+        if (direction === "left")
+            return root.multiOpts.swipeLeft ?? "none";
+        if (direction === "right")
+            return root.multiOpts.swipeRight ?? "none";
+        if (direction === "up")
+            return root.multiOpts.swipeUp ?? "none";
+        return root.multiOpts.swipeDown ?? "none";
+    }
+
+    function multiCentroid() {
+        var sx = 0, sy = 0, n = 0;
+        for (var key in root.multiPoints) {
+            sx += root.multiPoints[key].x;
+            sy += root.multiPoints[key].y;
+            n++;
+        }
+        return n === 0 ? null : { x: sx / n, y: sy / n, count: n };
+    }
+
+    function multiReset() {
+        root.multiPoints = ({});
+        root.multiArmed = false;
+        root.multiFired = false;
+        root.multiScreenName = "";
+    }
+
+    function multiTrack(contactId, px, py, screenName) {
+        root.multiPoints[contactId] = { x: px, y: py };
+        if (screenName)
+            root.multiScreenName = screenName;
+    }
+
+    function multiEvaluate() {
+        if (!root.multiEnabled || root.multiFired)
+            return;
+
+        var centroid = root.multiCentroid();
+        if (!centroid)
+            return;
+
+        // Exactly the configured number of fingers. A fourth landing mid-swipe is a
+        // different gesture, not more of this one.
+        if (centroid.count !== root.multiFingerCount) {
+            if (root.multiArmed && centroid.count > root.multiFingerCount)
+                root.multiFired = true;
+            root.multiArmed = false;
+            return;
+        }
+
+        if (!root.multiArmed) {
+            root.multiArmed = true;
+            root.multiStartX = centroid.x;
+            root.multiStartY = centroid.y;
+            return;
+        }
+
+        var dx = centroid.x - root.multiStartX;
+        var dy = centroid.y - root.multiStartY;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < root.multiCommitDistance)
+            return;
+
+        var direction = Math.abs(dx) > Math.abs(dy)
+            ? (dx < 0 ? "left" : "right")
+            : (dy < 0 ? "up" : "down");
+        root.multiFired = true;
+        root.multiCommit(direction);
+    }
+
+    function multiCommit(direction) {
+        var actionId = root.multiActionFor(direction);
+        if (!actionId || actionId === "none")
+            return;
+        if (gesturesBlocked) {
+            console.log("[TouchGestures] Multi-finger swipe blocked by active modal/lockscreen");
+            return;
+        }
+
+        // A binding pointing at a surface this family does not load would be recognised,
+        // commit, and do nothing — which reads as the touchscreen being broken.
+        var action = TouchGestureActionRegistry.actionById(actionId);
+        if (!TouchGestureActionRegistry.availableForFamily(action, PanelFamily.current)) {
+            console.log("[TouchGestures] Multi-finger", direction, "->", actionId,
+                        "is not available on the", PanelFamily.current, "family");
+            return;
+        }
+
+        var screenName = root.multiScreenName ? root.multiScreenName : root.resolveScreenName();
+        console.log("[TouchGestures]", root.multiFingerCount + "-finger", direction,
+                    "-> action:", actionId, "on screen:", screenName);
+        root.multiFingerSwipe(direction, actionId, screenName);
+        TouchGestureActionRegistry.trigger(actionId, screenName);
+    }
+
     function onTouchDown(event) {
         // Filtered devices must not reach the contact counter either, or their unpaired
         // ups and downs would drift it away from the real number of fingers down.
@@ -669,6 +786,12 @@ Singleton {
             return;
 
         activeContactCount++;
+
+        var multiResolved = root.multiEnabled ? resolveScreenAndCoords(event.deviceId, event.x, event.y) : null;
+        if (multiResolved) {
+            root.multiTrack(event.contactId, multiResolved.px, multiResolved.py, multiResolved.screenName);
+            root.multiEvaluate();
+        }
 
         if (activeContactCount > 1) {
             waitForAllContactsUp = true;
@@ -738,6 +861,16 @@ Singleton {
     }
 
     function onTouchMove(event) {
+        // Before the single-contact filter: the hand's other fingers are not the active
+        // contact and their movement is the whole gesture.
+        if (root.multiEnabled && root.multiPoints[event.contactId] !== undefined) {
+            var multiResolved = resolveScreenAndCoords(event.deviceId, event.x, event.y);
+            if (multiResolved) {
+                root.multiTrack(event.contactId, multiResolved.px, multiResolved.py, multiResolved.screenName);
+                root.multiEvaluate();
+            }
+        }
+
         if (event.deviceId !== activeDeviceId || event.contactId !== activeContactId)
             return;
 
@@ -795,6 +928,11 @@ Singleton {
             return;
 
         activeContactCount = Math.max(0, activeContactCount - 1);
+        delete root.multiPoints[event.contactId];
+        if (Object.keys(root.multiPoints).length === 0)
+            root.multiReset();
+        else
+            root.multiArmed = false;
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;
         }
@@ -833,6 +971,11 @@ Singleton {
             return;
 
         activeContactCount = Math.max(0, activeContactCount - 1);
+        delete root.multiPoints[event.contactId];
+        if (Object.keys(root.multiPoints).length === 0)
+            root.multiReset();
+        else
+            root.multiArmed = false;
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;
         }

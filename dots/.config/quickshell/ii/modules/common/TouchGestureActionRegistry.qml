@@ -18,6 +18,12 @@ Singleton {
         { id: "overviewEmoji", name: "Emoji Picker", icon: "mood", families: ["ii", "waffle"] },
         { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open", families: ["ii", "waffle"] },
         { id: "sidebarRight", name: "Right Sidebar", icon: "right_panel_open" },
+        { id: "back", name: "Back", icon: "arrow_back", families: ["tablet"] },
+        { id: "appDrawer", name: "App Drawer", icon: "apps", families: ["tablet"] },
+        { id: "recents", name: "Recent Apps", icon: "overview", families: ["tablet"] },
+        { id: "home", name: "Home Screen", icon: "home", families: ["tablet"] },
+        { id: "workspaceNext", name: "Next Workspace", icon: "chevron_right" },
+        { id: "workspacePrev", name: "Previous Workspace", icon: "chevron_left" },
         { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
         { id: "osk", name: "On-screen Keyboard", icon: "keyboard_alt" },
         // Tablet: the game/widget overlay is a desktop surface, permanently out.
@@ -109,6 +115,36 @@ Singleton {
                 GlobalStates.overviewOpen = false;
             else
                 GlobalStates.openSearch(screenName);
+            break;
+
+        case "back":
+            // The family installs what back means here; shared code cannot import one to
+            // ask. Doing nothing is correct on a family that never installed a handler.
+            if (GlobalStates.navigateBackHandler)
+                GlobalStates.navigateBackHandler();
+            break;
+
+        case "appDrawer":
+            GlobalStates.toggleAppDrawer(screenName);
+            break;
+
+        case "recents":
+            GlobalStates.toggleRecents(screenName);
+            break;
+
+        case "home":
+            // The family's home screen is an empty workspace, not a surface to open.
+            GlobalStates.appDrawerOpen = false;
+            GlobalStates.recentsOpen = false;
+            Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+            break;
+
+        case "workspaceNext":
+            Hyprland.dispatch("hl.dsp.focus({ workspace = 'r+1' })");
+            break;
+
+        case "workspacePrev":
+            Hyprland.dispatch("hl.dsp.focus({ workspace = 'r-1' })");
             break;
 
         case "overviewClipboard":

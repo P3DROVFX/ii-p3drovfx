@@ -54,12 +54,20 @@ Scope {
     // does not have. GlobalStates owns the shortcut — it is shared by every family — so the
     // redirect is installed as a handler rather than by registering a second shortcut of
     // the same name.
-    Component.onCompleted: GlobalStates.leftSidebarHandler = () => {
-        const first = TabletSystemApps.available.find(app => app.id.startsWith("policies."));
-        if (first)
-            GlobalStates.toggleTabletApp(first.id);
+    Component.onCompleted: {
+        GlobalStates.leftSidebarHandler = () => {
+            const first = TabletSystemApps.available.find(app => app.id.startsWith("policies."));
+            if (first)
+                GlobalStates.toggleTabletApp(first.id);
+        };
+        // Back is the gesture a phone user reaches for most, so it has to be bindable like
+        // any other. TabletNavigation knows the order to unwind in; GlobalStates does not.
+        GlobalStates.navigateBackHandler = () => TabletNavigation.back();
     }
-    Component.onDestruction: GlobalStates.leftSidebarHandler = null
+    Component.onDestruction: {
+        GlobalStates.leftSidebarHandler = null;
+        GlobalStates.navigateBackHandler = null;
+    }
 
     GlobalShortcut {
         name: "cheatsheetToggle"

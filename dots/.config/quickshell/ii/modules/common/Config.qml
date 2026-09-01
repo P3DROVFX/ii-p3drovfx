@@ -3685,6 +3685,27 @@ Singleton {
                     property bool disableInFullscreen: false
                     property bool disableInMediaMode: true
 
+                    /**
+                     * Whole-hand swipes anywhere on the screen, the touchpad gestures'
+                     * counterpart for a touchscreen.
+                     *
+                     * A tablet has no touchpad, so the compositor's three-finger bindings
+                     * are unreachable there — and the two they ship with, scratchpad in and
+                     * out, are a desktop window-management idea that a tablet has no use
+                     * for. These defaults put the same fingers on the things a phone puts
+                     * them on instead.
+                     */
+                    property JsonObject multiFinger: JsonObject {
+                        property bool enable: true
+                        property int fingers: 3
+                        /// How far the hand travels before the swipe commits.
+                        property int distance: 90
+                        property string swipeLeft: "workspaceNext"
+                        property string swipeRight: "workspacePrev"
+                        property string swipeUp: "appDrawer"
+                        property string swipeDown: "sidebarRight"
+                    }
+
                     property JsonObject bindings: JsonObject {
                         property string leftEdge: "sidebarLeft"
                         property string rightEdge: "sidebarRight"

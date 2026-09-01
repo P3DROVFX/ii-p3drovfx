@@ -1016,6 +1016,9 @@ Singleton {
     /// Without it, a family with native app windows simply swallowed the keybind, which
     /// left the shortcut dead rather than redirected.
     property var leftSidebarHandler: null
+    /// Android's back, installed by whichever family knows what "back" means there. Shared
+    /// code cannot: modules/common must not import a family to find out.
+    property var navigateBackHandler: null
 
     function toggleLeftSidebar(monitorName) {
         if (PanelFamily.nativeAppWindows) {
