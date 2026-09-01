@@ -1611,17 +1611,21 @@ remove_cli() {
 backup_hyprland_config() {
     local dest="$XDG_CONFIG_HOME/hypr"
     [[ -d "$dest" ]] || return 0
+    [[ "$OPT_BACKUP" == true ]] || return 0
 
-    local stamp backup_dir entry
-    stamp="$(date +%Y%m%d_%H%M%S)"
-    backup_dir="$dest/hyprland_backup_$stamp"
+    local backup_dir entry
+    # Its own family under the shared backup dir, next to the ii ones, so the
+    # snapshots are pruned like every other family instead of piling up inside
+    # ~/.config/hypr forever. The prefix must not be matched by the "hypr_"
+    # glob, or pruning replaced files would age these out too.
+    backup_dir="$(next_backup_dir "hyprland_")"
     mkdir -p "$backup_dir" || {
         ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
         return 1
     }
 
-    # Keep the backup inside ~/.config/hypr without recursively copying older
-    # backups into the new one.
+    # Snapshots older versions of this script left in place are skipped: they
+    # are backups themselves, and copying them would nest one inside the next.
     while IFS= read -r -d '' entry; do
         cp -a "$entry" "$backup_dir/" || {
             ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
@@ -1631,6 +1635,7 @@ backup_hyprland_config() {
         [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
     done)
 
+    prune_backups "hyprland_"
     ui_note "Hyprland backup: $(tilde "$backup_dir")"
 }
 

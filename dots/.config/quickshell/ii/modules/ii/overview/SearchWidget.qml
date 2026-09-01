@@ -177,6 +177,10 @@ Item {
     // declared panel width remains the usable width, not the clipped width.
     readonly property real hostedPanelSideMargin: Appearance.sizes.elevationMargin
     readonly property bool activePanelUsesHost: root.activePanel?.hosted === true
+    // Panels normally share SearchBar as their local filter. A panel can
+    // explicitly own the primary TextInput (Typing Test) without requiring a
+    // panel-id branch in focus or keyboard routing.
+    readonly property bool activePanelOwnsInput: root.activePanel?.inputOwner === "panel"
     readonly property bool isClipboardMode: root.activePanelId === "clipboard"
     readonly property bool isBluetoothMode: root.activePanelId === "bluetooth"
     readonly property bool isTranslatorMode: root.activePanelId === "translator"
@@ -215,6 +219,23 @@ Item {
             && key !== "mpris:now-playing" && !r.isFallback && !key.startsWith("fallback:");
     }).length
     readonly property bool isAnySpecialMode: root.activePanelId.length > 0
+    /**
+     * Publish "a panel owns the search" for consumers that live outside any
+     * PanelWindow (the Super shortcut, the workspace grid).
+     *
+     * Only the surface on the active search monitor may publish: a hosted panel
+     * latches through `requestedPanelId`, which is per-surface, so the idle
+     * SearchWidget of a second monitor would otherwise clear the flag the
+     * moment the prefix is stripped out of the shared query.
+     */
+    function publishPanelOwnership() {
+        if (GlobalStates.activeSearchMonitor !== "" && root.surfaceMonitorName !== ""
+                && root.surfaceMonitorName !== GlobalStates.activeSearchMonitor)
+            return;
+        GlobalStates.searchPanelActive = root.isAnySpecialMode || root.isAiMode;
+    }
+
+    onIsAnySpecialModeChanged: root.publishPanelOwnership()
     readonly property string activePanelQuery: {
         if (!root.activePanel)
             return "";
@@ -228,6 +249,11 @@ Item {
         if (root.activePanelUsesHost)
             return registeredPanelHostLoader.item?.activeItem ?? null;
         return root.activePanelId === "ai" ? aiPanelLoader.item : null;
+    }
+
+    onActivePanelItemChanged: {
+        if (root.activePanelOwnsInput && root.activePanelItem)
+            Qt.callLater(root.focusPrimaryInput);
     }
 
     // Legacy panels previously had bespoke Loaders and signal wiring. Hosted
@@ -255,6 +281,7 @@ Item {
     // auto detection), it stays on until back/Esc — deleting the text must
     // not yank the panel away mid-conversation.
     onIsAiModeChanged: {
+        root.publishPanelOwnership();
         if (root.isAiMode) {
             if (!root.aiDraftHydrated) {
                 root.aiDraftHydrated = true;
@@ -268,7 +295,7 @@ Item {
             // `aiModeLocked`, so writing it back from this handler made the
             // binding depend on its own result — Qt broke the loop by
             // freezing the property, and Escape then had nothing to change.
-            Qt.callLater(root.focusSearchInput);
+            Qt.callLater(root.focusPrimaryInput);
         } else {
             root.aiDraftHydrated = false;
         }
@@ -555,13 +582,22 @@ Item {
     readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
 
     function focusFirstItem() {
-        if (root.isAiMode) {
-            root.focusSearchInput();
+        if (root.isAiMode || root.activePanelOwnsInput) {
+            root.focusPrimaryInput();
         } else if (root.activePanelItem && typeof root.activePanelItem.focusInput === "function") {
             root.activePanelItem.focusInput();
         } else {
             appResults.selectFirst();
         }
+    }
+
+    function focusPrimaryInput() {
+        if (root.activePanelOwnsInput && root.activePanelItem
+                && typeof root.activePanelItem.focusInput === "function") {
+            root.activePanelItem.focusInput();
+            return;
+        }
+        root.focusSearchInput();
     }
 
     function focusSearchInput() {
@@ -860,7 +896,6 @@ Item {
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
         { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
-        { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
         { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
         { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
     ]
@@ -1211,6 +1246,8 @@ Item {
 
         // Handle Backspace: focus and delete character if not focused
         if (event.key === Qt.Key_Backspace) {
+            if (root.activePanelOwnsInput)
+                return;
             if (root.isAiMode) {
                 root.focusSearchInput();
                 return;
@@ -1252,6 +1289,8 @@ Item {
         // Only handle visible printable characters (ignore control chars, arrows, etc.)
         if (event.text && event.text.length === 1 && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Return && event.key !== Qt.Key_Delete && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backtab && event.text.charCodeAt(0) >= 0x20)
         {
+            if (root.activePanelOwnsInput)
+                return;
             if (root.isAiMode) {
                 root.focusSearchInput();
                 const input = searchBar.searchInput;
@@ -1422,6 +1461,7 @@ Item {
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
                 activePanel: root.activePanel
+                activePanelOwnsInput: root.activePanelOwnsInput
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true
                 clipboardWidth: 830
@@ -1886,10 +1926,24 @@ Item {
                         }
                     }
 
+                    /**
+                     * The result object written into each model row, mirrored
+                     * on the JS side.
+                     *
+                     * `dynamicRoles` does not round-trip object identity: two
+                     * reads of one slot hand back two different wrappers of the
+                     * same object, so comparing `get(i).modelRef` against the
+                     * incoming ref was always unequal and every row was rewritten
+                     * on every pass. Comparing against what was actually written
+                     * is the only reliable test.
+                     */
+                    property var rowRefs: []
+
                     function applyResultDiffUnguarded(rows) {
                         if (rows.length === 0) {
                             if (resultModel.count > 0)
                                 resultModel.clear();
+                            appResults.rowRefs = [];
                             return;
                         }
 
@@ -1902,6 +1956,13 @@ Item {
                         for (let i = 0; i < resultModel.count; i++)
                             currentKeys.push(resultModel.get(i).key);
 
+                        // Anything that emptied or resized the model behind this
+                        // mirror makes it untrustworthy; a fresh one of nulls
+                        // simply treats every row as changed.
+                        let currentRefs = appResults.rowRefs.length === currentKeys.length
+                            ? appResults.rowRefs.slice()
+                            : currentKeys.map(() => null);
+
                         const newKeySet = new Set();
                         for (let i = 0; i < rows.length; i++)
                             newKeySet.add(rows[i].key);
@@ -1911,6 +1972,7 @@ Item {
                             if (!newKeySet.has(currentKeys[i])) {
                                 resultModel.remove(i);
                                 currentKeys.splice(i, 1);
+                                currentRefs.splice(i, 1);
                             }
                         }
 
@@ -1931,6 +1993,7 @@ Item {
                                     modelRef: rowData.ref
                                 });
                                 currentKeys.splice(newIndex, 0, rowData.key);
+                                currentRefs.splice(newIndex, 0, rowData.ref);
                                 continue;
                             }
 
@@ -1938,6 +2001,8 @@ Item {
                                 resultModel.move(currentIndex, newIndex, 1);
                                 const movedKey = currentKeys.splice(currentIndex, 1)[0];
                                 currentKeys.splice(newIndex, 0, movedKey);
+                                const movedRef = currentRefs.splice(currentIndex, 1)[0];
+                                currentRefs.splice(newIndex, 0, movedRef);
                             }
 
                             // Rows reference the original result object, so an
@@ -1952,16 +2017,21 @@ Item {
                                 resultModel.setProperty(newIndex, "isFirst", rowData.isFirst);
                             if (row.isLast !== rowData.isLast)
                                 resultModel.setProperty(newIndex, "isLast", rowData.isLast);
-                            if (row.modelRef !== rowData.ref)
+                            if (currentRefs[newIndex] !== rowData.ref) {
                                 resultModel.setProperty(newIndex, "modelRef", rowData.ref);
+                                currentRefs[newIndex] = rowData.ref;
+                            }
                         }
 
                         // Whatever the passes above did, the model must end up
                         // exactly as long as `rows`. Anything past that length is a
                         // row the diff failed to account for, and it would stay
                         // visible and clickable.
-                        while (resultModel.count > rows.length)
+                        while (resultModel.count > rows.length) {
                             resultModel.remove(resultModel.count - 1);
+                            currentRefs.pop();
+                        }
+                        appResults.rowRefs = currentRefs;
                     }
 
                     Connections {

@@ -319,7 +319,7 @@ AbstractBackgroundWidget {
 
                             Text {
                                 visible: root.showTimeInfo
-                                text: StringUtils.friendlyTimeForSeconds(root.player?.position ?? 0)
+                                text: StringUtils.friendlyTimeForSeconds(Math.min(root.player?.position ?? 0, root.player?.length ?? Infinity))
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
                                 font.weight: Font.ExtraBold
@@ -368,7 +368,7 @@ AbstractBackgroundWidget {
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
-                                    value: root.player?.position / root.player?.length
+                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                     onMoved: root.player.position = value * root.player.length
                                 }
                             }
@@ -385,7 +385,7 @@ AbstractBackgroundWidget {
                                     wavy: root.player?.isPlaying
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
-                                    value: root.player?.position / root.player?.length
+                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                 }
                             }
                         }

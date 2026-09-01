@@ -266,6 +266,21 @@ Button {
         easing.bezierCurve: Appearance?.animationCurves.standardDecel
     }
 
+    // The cursor belongs to the topmost item under the pointer, and a caller's
+    // label or icon lands in `data` after this component's own children — so it
+    // outranks the MouseArea below and the button kept the arrow. This claims
+    // the hand by z instead. `Qt.NoButton` keeps it out of the way of every
+    // real click, and it stays out of hover so the button's own hover, ripple
+    // and tooltip are untouched.
+    MouseArea {
+        z: 9999
+        anchors.fill: parent
+        enabled: root.pointingHandCursor && root.enabled
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: false
+        cursorShape: Qt.PointingHandCursor
+    }
+
     MouseArea {
         anchors.fill: parent
         hoverEnabled: root.hoverEnabled

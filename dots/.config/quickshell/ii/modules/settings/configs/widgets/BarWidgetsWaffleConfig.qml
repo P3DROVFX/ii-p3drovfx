@@ -96,6 +96,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "search"
+                cardShape: "SoftBurst"
+                cardHue: 210
+                title: Translation.tr("Search")
+                description: Translation.tr("Launcher button style, width, colour treatment, and shortcut hint")
+                onOpenCard: root.openComponentPage("search")
+            }
+
+            ServiceCard {
                 cardIcon: "label"
                 cardShape: "Circle"
                 cardHue: 210
@@ -158,19 +167,19 @@ ContentPage {
 
             ServiceCard {
                 cardIcon: "nest_clock_farsight_analog"
-                cardShape: "Circle"
+                cardShape: "Sunny"
                 cardHue: 35
                 title: Translation.tr("Clock")
-                description: Translation.tr("Clock format, timezones, analog/digital styles, and font sizes")
+                description: Translation.tr("Neural and Relief clock designs, die-cut variants, and colour treatment")
                 onOpenCard: root.openComponentPage("clock")
             }
 
             ServiceCard {
                 cardIcon: "date_range"
-                cardShape: "Circle"
+                cardShape: "Cookie9Sided"
                 cardHue: 35
                 title: Translation.tr("Date")
-                description: Translation.tr("Date formatting, calendar popup triggers, and layout")
+                description: Translation.tr("Expressive and Neural date designs, variants, colour treatment, and capitals")
                 onOpenCard: root.openComponentPage("date")
             }
 
@@ -188,7 +197,7 @@ ContentPage {
                 cardShape: "Circle"
                 cardHue: 35
                 title: Translation.tr("Weather")
-                description: Translation.tr("Weather location, provider settings, and forecast details")
+                description: Translation.tr("Compact Horizon and Tessera designs, visual variants, colours, and weather service")
                 onOpenCard: root.openComponentPage("weather")
             }
         }
@@ -233,6 +242,15 @@ ContentPage {
                 title: Translation.tr("System Monitor")
                 description: Translation.tr("CPU, RAM, disk, and network usage gauges and graphs")
                 onOpenCard: root.openComponentPage("system_monitor")
+            }
+
+            ServiceCard {
+                cardIcon: "neurology"
+                cardShape: "Circle"
+                cardHue: 165
+                title: Translation.tr("AI Plan Usage")
+                description: Translation.tr("ChatGPT, Claude, and Antigravity plan quotas and bar gauges")
+                onOpenCard: root.openComponentPage("ai_plan_usage")
             }
 
             ServiceCard {

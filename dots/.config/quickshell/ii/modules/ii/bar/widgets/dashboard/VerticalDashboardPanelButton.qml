@@ -5,6 +5,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.bar.widgets.dashboard.icons
 
 RippleButton { // Right sidebar button
     id: rightSidebarButton
@@ -19,7 +20,7 @@ RippleButton { // Right sidebar button
     bottomLeftRadius: endRadius
     bottomRightRadius: endRadius
 
-    implicitHeight: indicatorsColumnLayout.implicitHeight + 8 * 2
+    implicitHeight: Math.max(0, indicatorsColumnLayout.implicitHeight - indicatorsColumnLayout.realSpacing) + 8 * 2
     implicitWidth: Math.max(indicatorsColumnLayout.implicitWidth, Appearance.font.pixelSize.larger) + 12
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -38,64 +39,97 @@ RippleButton { // Right sidebar button
         GlobalStates.sidebarRightOpen = !GlobalStates.sidebarRightOpen;
     }
 
+    readonly property real iconPixelSize: {
+        const size = Appearance.font.pixelSize.larger;
+        return (typeof size === "number" && size > 0) ? size : 18;
+    }
+
+    DashboardIconDriver {
+        id: iconDriver
+        wifiIcon: wifiIcon
+        bluetoothIcon: bluetoothIcon
+        volumeIcon: volumeIcon
+        micIcon: micIcon
+        caffeineIcon: caffeineIcon
+        vpnIcon: vpnIcon
+        tailscaleIcon: tailscaleIcon
+        alarmIcon: alarmIcon
+        countdownIcon: countdownIcon
+    }
+
     ColumnLayout {
         id: indicatorsColumnLayout
         anchors.centerIn: parent
         property real realSpacing: 6
         spacing: 0
 
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
-            reveal: Idle.inhibit ?? false
+            reveal: Config.options.bar.dashboardButton.showCaffeine && (Idle.inhibit ?? false)
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillHeight: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-            MaterialSymbol {
-                text: "coffee"
-                iconSize: Appearance.font.pixelSize.larger
+            CoffeeIcon {
+                id: caffeineIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
+                active: Idle.inhibit ?? false
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Audio.sink?.audio?.muted ?? false
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-            MaterialSymbol {
-                text: "volume_off"
-                iconSize: Appearance.font.pixelSize.larger
+            VolumeIcon {
+                id: volumeIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Audio.source?.audio?.muted ?? false
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.topMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-            MaterialSymbol {
-                text: "mic_off"
-                iconSize: Appearance.font.pixelSize.larger
+            MicIcon {
+                id: micIcon
+                iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
+                muted: Audio.source?.audio?.muted ?? false
             }
         }
-        Revealer {
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            Layout.fillWidth: true
+            HourglassIcon {
+                id: countdownIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                running: iconDriver.countdownRunning
+                paused: iconDriver.countdownPaused
+                finished: iconDriver.countdownFinished
+            }
+        }
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showAlarms && iconDriver.alarmVisible
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            Layout.fillWidth: true
+            AlarmIcon {
+                id: alarmIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                scheduled: iconDriver.alarmCount > 0
+                ringing: iconDriver.alarmRinging
+            }
+        }
+        DashboardIconRevealer {
             vertical: true
             reveal: Notifications.silent || Notifications.unread > 0
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            implicitHeight: reveal ? notificationUnreadCount.implicitHeight : 0
-            implicitWidth: reveal ? notificationUnreadCount.implicitWidth : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             Loader {
                 id: notificationUnreadCount
                 sourceComponent: (Config.options.bar.styles.dashboard === "expressive") ? expressiveNotificationComp : defaultNotificationComp
@@ -109,31 +143,73 @@ RippleButton { // Right sidebar button
                 ExpressiveNotificationUnreadCount {}
             }
         }
-        MaterialSymbol {
-            text: Network.materialSymbol
-            iconSize: Appearance.font.pixelSize.larger
-            color: rightSidebarButton.colText
+        DashboardIconRevealer {
+            vertical: true
+            reveal: true
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+
+            Item {
+                implicitWidth: rightSidebarButton.iconPixelSize
+                implicitHeight: rightSidebarButton.iconPixelSize
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
+                    text: "lan"
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                }
+
+                WifiIcon {
+                    id: wifiIcon
+                    anchors.centerIn: parent
+                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                    bars: {
+                        if (!Network.ready || Network.wifiStatus !== "connected")
+                            return 0;
+                        const strength = Number(Network.networkStrength);
+                        if (isNaN(strength))
+                            return 1;
+                        return strength > 67 ? 3 : strength > 33 ? 2 : 1;
+                    }
+                }
+            }
         }
-        MaterialSymbol {
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: BluetoothStatus.available
-            text: BluetoothStatus.connected ? "bluetooth_connected" : BluetoothStatus.enabled ? "bluetooth" : "bluetooth_disabled"
-            iconSize: Appearance.font.pixelSize.larger
-            color: rightSidebarButton.colText
+        DashboardIconRevealer {
+            vertical: true
+            reveal: BluetoothStatus.available
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            BluetoothIcon {
+                id: bluetoothIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: BluetoothStatus.connected
+                poweredOff: !BluetoothStatus.enabled
+            }
         }
-        MaterialSymbol {
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: Config.options.bar.dashboardButton.showVpn && VpnService.active
-            text: "key"
-            iconSize: Appearance.font.pixelSize.larger
-            color: rightSidebarButton.colText
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            VpnKeyIcon {
+                id: vpnIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: VpnService.active
+            }
         }
-        MaterialSymbol {
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
-            text: "hub"
-            iconSize: Appearance.font.pixelSize.larger
-            color: rightSidebarButton.colText
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            TailscaleIcon {
+                id: tailscaleIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: TailscaleService.active
+            }
         }
     }
 }

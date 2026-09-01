@@ -17,6 +17,8 @@ Item {
     property alias contentY: flickable.contentY
     property alias atYBeginning: flickable.atYBeginning
     property alias atYEnd: flickable.atYEnd
+    /// For anything that has to scroll the page itself, such as a drag reaching its edge.
+    readonly property alias flickable: flickable
 
     default property alias contentData: contentColumn.data
 

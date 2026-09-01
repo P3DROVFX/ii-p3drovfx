@@ -234,6 +234,19 @@ Item {
         }
     }
 
+    // The Translator tab owns keyboard shortcuts that live on its root ("type /
+    // to translate" and Ctrl+Enter to swap languages). Keys only reach that root
+    // while it (or its input) holds active focus, so hand it focus the same way
+    // the AI tab gets its composer focused.
+    function focusTranslatorInput() {
+        console.log("[TranslatorTest] focusTranslatorInput, tab icon:", root.activeTabs[swipeView.currentIndex]?.icon);
+        if (!GlobalStates.sidebarLeftOpen) return;
+        if (!root.activeTabs[swipeView.currentIndex] || root.activeTabs[swipeView.currentIndex].icon !== "translate") return;
+        if (swipeView.currentItem && swipeView.currentItem.item) {
+            swipeView.currentItem.item.forceActiveFocus();
+        }
+    }
+
     // Consume a sidebar deep-link only after the AI tab is the visible
     // SwipeView item. A requested session is selected first; until the session
     // store confirms that selection the router intent remains pending.
@@ -289,7 +302,10 @@ Item {
     Connections {
         target: GlobalStates
         function onSidebarLeftOpenChanged() {
-            if (GlobalStates.sidebarLeftOpen) Qt.callLater(root.focusAiInput);
+            if (GlobalStates.sidebarLeftOpen) {
+                Qt.callLater(root.focusAiInput);
+                Qt.callLater(root.focusTranslatorInput);
+            }
             root.tryConsumeSurfaceIntent();
         }
     }
@@ -443,6 +459,7 @@ Item {
                                         }
                                     });
                                     Qt.callLater(root.focusAiInput);
+                                    Qt.callLater(root.focusTranslatorInput);
                                 }
                             }
                         }
@@ -465,6 +482,7 @@ Item {
                                         tabDelegate.item.triggerContentEntrance();
                                     }
                                 });
+                                Qt.callLater(root.focusTranslatorInput);
                             } else {
                                 tabDelegate.opacity = 1;
                                 trans.x = 0;

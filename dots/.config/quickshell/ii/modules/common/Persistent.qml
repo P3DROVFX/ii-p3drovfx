@@ -240,6 +240,23 @@ Singleton {
                 property list<var> panelUsage: []
             }
 
+            // Typing test scores. Only aggregate metrics are kept — never the
+            // target text and never the keys that were actually pressed.
+            property JsonObject typingTest: JsonObject {
+                property list<var> recentResults: []
+                property list<var> personalBests: []
+                // Lifetime tallies. They outlive `recentResults`, which is
+                // capped, so "tests completed" stays true after the oldest
+                // results have been pruned away.
+                property int testsStarted: 0
+                property int testsCompleted: 0
+                property real secondsTyping: 0
+                // [{ d: "YYYY-MM-DD", n: tests }], one entry per active day,
+                // bounded to roughly a year — enough for the activity map and
+                // far smaller than keeping every result to derive it.
+                property list<var> activity: []
+            }
+
             property JsonObject googleDrive: JsonObject {
                 property bool enabled: false
                 property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"
@@ -397,6 +414,10 @@ Singleton {
                 property string sessionId: ""
             }
 
+            property JsonObject displayColorFilter: JsonObject {
+                property string profilesJson: "{}"
+            }
+
             // Runtime state of services/Modes.qml: what is running and what
             // to put back when it ends. Definitions are in Config.
             property JsonObject modes: JsonObject {
@@ -546,6 +567,12 @@ Singleton {
                     property list<var> laps: []
                 }
                 property list<var> countdowns: []
+                // Last duration dialled into the sidebar's timer picker.
+                property JsonObject countdownDraft: JsonObject {
+                    property int hours: 0
+                    property int minutes: 5
+                    property int seconds: 0
+                }
             }
             property list<var> alarms: []
             property JsonObject water: JsonObject {

@@ -490,7 +490,11 @@ Singleton {
             root.faviconFailures = failures;
         }
         root.faviconActive = null;
-        root.revision++;
+        // One icon arriving is not a reason to rebuild every launcher result.
+        // Typing surfaces a handful of new sites at once, and each fetch used
+        // to publish a revision of its own — so a single keystroke bought a
+        // second full recomputation of the result set, and then a third.
+        faviconSettleTimer.restart();
         Qt.callLater(root.startNextFavicon);
     }
 
@@ -524,6 +528,15 @@ Singleton {
     }
 
     onConfigSignatureChanged: root.invalidateForConfigChange()
+    // Long enough to collect the burst a keystroke sets off, short enough that
+    // an icon still lands while the row that wants it is on screen.
+    readonly property Timer faviconSettleTimer: Timer {
+        id: faviconSettleTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.revision++
+    }
+
     onAllowRemoteFaviconsChanged: root.revision++
     onRefreshMinutesChanged: {
         if (refreshTimer.running)

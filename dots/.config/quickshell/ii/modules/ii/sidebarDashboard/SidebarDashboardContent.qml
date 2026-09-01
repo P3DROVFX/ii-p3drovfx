@@ -48,6 +48,25 @@ Item {
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showModesDialog: false
+    property bool wifiDialogStatePublished: false
+    property bool bluetoothDialogStatePublished: false
+
+    function publishWifiDialogState(open: bool): void {
+        if (root.wifiDialogStatePublished === open)
+            return;
+        root.wifiDialogStatePublished = open;
+        GlobalStates.adjustDashboardWifiDialogOpenCount(open ? 1 : -1);
+    }
+
+    function publishBluetoothDialogState(open: bool): void {
+        if (root.bluetoothDialogStatePublished === open)
+            return;
+        root.bluetoothDialogStatePublished = open;
+        GlobalStates.adjustDashboardBluetoothDialogOpenCount(open ? 1 : -1);
+    }
+
+    onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
+    onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
@@ -148,6 +167,11 @@ Item {
             root.queueContentEntrance();
     }
 
+    Component.onDestruction: {
+        root.publishWifiDialogState(false);
+        root.publishBluetoothDialogState(false);
+    }
+
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
@@ -169,6 +193,7 @@ Item {
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
+                pomodoroTimePicker.close();
             }
         }
     }
@@ -509,6 +534,22 @@ Item {
         dialog: ModesDialog {}
     }
 
+    TimePickerPopup {
+        id: pomodoroTimePicker
+        anchors.fill: parent
+        z: 999
+        onAccepted: (pickedHour, pickedMinute) => {
+            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        }
+    }
+
+    Connections {
+        target: TimerService
+        function onCustomTimeRequested(currentHour, currentMinute, title) {
+            pomodoroTimePicker.open(currentHour, currentMinute, title);
+        }
+    }
+
     component SidebarBanner: Item {
         id: headerRoot
         property bool editMode: false
@@ -665,8 +706,11 @@ Item {
                     anchors.fill: parent
                     active: GlobalStates.dashboardPanelOpen
                     visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                    avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     fontPixelSize: 32
                     fontWeight: Font.Black
+                    borderWidth: 4
+                    borderColor: Appearance.colors.colLayer1
                 }
             }
 
@@ -692,7 +736,7 @@ Item {
 
                     text: {
                         const mode = Config.options.sidebar.dashboardHeader.textMode;
-                        const hour = new Date().getHours();
+                        const hour = (DateTime.clock?.date ?? new Date()).getHours();
                         const timeGreeting = hour < 5 ? Translation.tr("Good Night,")
                             : hour < 12 ? Translation.tr("Good Morning,")
                                 : hour < 18 ? Translation.tr("Good Afternoon,")
@@ -952,6 +996,7 @@ Item {
                         anchors.fill: parent
                         active: GlobalStates.dashboardPanelOpen
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                        avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
                 }
 

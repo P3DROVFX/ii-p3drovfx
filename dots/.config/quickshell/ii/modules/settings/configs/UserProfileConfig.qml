@@ -15,6 +15,21 @@ Item {
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
 
+    readonly property var avatarShapeOptions: ([
+        "Cookie9Sided", "Cookie12Sided", "Circle", "Rectangle", "Clover4Leaf", "Burst",
+        "Heart", "Bun", "Flower", "Puffy", "PuffyDiamond", "Sunny",
+        "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Ghostish",
+        "Clover8Leaf", "SoftBurst", "Boom", "SoftBoom", "Gem", "Diamond",
+        "Pentagon", "Square", "Arch", "Fan", "Arrow", "SemiCircle",
+        "Oval", "Pill", "Triangle", "Slanted", "ClamShell", "PixelCircle", "PixelTriangle"
+    ]).map((shapeName) => {
+        return ({
+            "displayName": "",
+            "shape": shapeName,
+            "value": shapeName
+        });
+    })
+
     Process {
         id: pickImageProc
 
@@ -175,6 +190,7 @@ Item {
             ContentSubsection {
                 title: Translation.tr("Shape")
                 icon: "category"
+                tooltip: Translation.tr("Applies everywhere except the right sidebar header, which has its own shape setting.")
                 Layout.fillWidth: true
 
                 ConfigSelectionArray {
@@ -182,20 +198,7 @@ Item {
                     onSelected: (v) => {
                         return Config.options.userProfile.avatarShape = v;
                     }
-                    options: ([
-                        "Cookie9Sided", "Cookie12Sided", "Circle", "Clover4Leaf", "Burst",
-                        "Heart", "Bun", "Flower", "Puffy", "PuffyDiamond", "Sunny",
-                        "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Ghostish",
-                        "Clover8Leaf", "SoftBurst", "Boom", "SoftBoom", "Gem", "Diamond",
-                        "Pentagon", "Square", "Arch", "Fan", "Arrow", "SemiCircle",
-                        "Oval", "Pill", "Triangle", "Slanted", "ClamShell", "PixelCircle", "PixelTriangle"
-                    ]).map((s) => {
-                        return ({
-                            "displayName": "",
-                            "shape": s,
-                            "value": s
-                        });
-                    })
+                    options: backgroundRoot.avatarShapeOptions
                 }
             }
         }
@@ -227,6 +230,22 @@ Item {
                         "icon": "do_not_disturb",
                         "value": "none"
                     }]
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Avatar shape")
+                icon: "category"
+                tooltip: Translation.tr("Shape of the sidebar avatar only, independent from the general avatar shape.")
+                visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.dashboardHeader.avatarShape
+                    onSelected: (v) => {
+                        return Config.options.sidebar.dashboardHeader.avatarShape = v;
+                    }
+                    options: backgroundRoot.avatarShapeOptions
                 }
             }
 

@@ -83,9 +83,9 @@ Item {
         for (const countdown of root.countdowns) {
             output.push({
                 id: String(countdown.id), kind: "countdown", countdown: countdown,
-                icon: countdown.notified ? "notifications_off" : "hourglass_top",
+                icon: countdown.notified ? "notifications_off" : countdown.paused ? "pause_circle" : "hourglass_top",
                 title: String(countdown.label ?? Translation.tr("Timer")),
-                subtitle: countdown.notified ? Translation.tr("Finished") : Translation.tr("Countdown"),
+                subtitle: countdown.notified ? Translation.tr("Finished") : countdown.paused ? Translation.tr("Paused") : Translation.tr("Countdown"),
                 action: countdown.notified ? Translation.tr("Dismiss") : Translation.tr("Cancel"),
                 searchable: String(countdown.label ?? "") + " countdown timer"
             });

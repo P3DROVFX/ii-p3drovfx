@@ -7,6 +7,11 @@ function integerAtLeastOne(value, fallback) {
     return Math.max(1, Math.floor(number));
 }
 
+function finiteOrZero(value) {
+    var number = Number(value);
+    return isFinite(number) ? number : 0;
+}
+
 function toArray(value) {
     if (value === null || value === undefined)
         return [];
@@ -247,6 +252,150 @@ function validateNoOverlap(packed, columns) {
         }
     }
     return true;
+}
+
+// --- Drag stability -------------------------------------------------------
+//
+// A pointer parked on the seam between two cells used to make the grid
+// oscillate: rounding the drag rectangle to the nearest cell flipped on
+// sub-pixel jitter, and every flip swapped two toggles. Two guards make the
+// decision sticky, and both live here so the policy stays pure and testable.
+//
+//   * hysteresis — the cell a drag already owns only concedes once the pointer
+//     travels past the midpoint by `hysteresis` of a cell, which turns the
+//     boundary into a dead band 2 * hysteresis wide;
+//   * a settle lock — right after a swap the reflow is still animating, so a
+//     further swap waits out `settleMs` unless the pointer covers a whole cell,
+//     which only a deliberate drag does.
+//
+// The state object belongs to the caller (the edit controller owns one per
+// gesture); resolveDragCell only reads it, acceptDragCell writes it.
+
+function createDragCellState() {
+    return resetDragCellState({});
+}
+
+function resetDragCellState(state) {
+    var target = state || {};
+    target.valid = false;
+    target.row = 0;
+    target.column = 0;
+    target.changed = false;
+    target.changedAt = 0;
+    target.changedX = 0;
+    target.changedY = 0;
+    target.pendingValid = false;
+    target.pendingRow = 0;
+    target.pendingColumn = 0;
+    return target;
+}
+
+// Round to a cell index, but let `previous` keep the cell it owns until the
+// pointer has travelled past the midpoint by `hysteresis` of a cell.
+function quantizeWithHysteresis(value, previous, hysteresis) {
+    var position = Number(value);
+    if (!isFinite(position))
+        position = 0;
+    var rounded = Math.round(position);
+    if (previous === null || previous === undefined || !isFinite(previous))
+        return rounded;
+    if (rounded === previous)
+        return previous;
+    var band = 0.5 + Math.max(0, Math.min(0.49, Number(hysteresis) || 0));
+    return Math.abs(position - previous) < band ? previous : rounded;
+}
+
+// `geometry.pointerX/pointerY` is the centre of the dragged rectangle in grid
+// coordinates. Returns the top-left cell it should occupy plus whether that is
+// a new decision worth repacking for: `accepted` false means "nothing to do",
+// either because the cell did not change or because the settle lock refused it.
+function resolveDragCell(geometry, state, options) {
+    var source = geometry || {};
+    var config = options || {};
+    var columns = integerAtLeastOne(source.columns, 1);
+    var columnSpan = Math.min(integerAtLeastOne(source.columnSpan, 1), columns);
+    var rowSpan = integerAtLeastOne(source.rowSpan, 1);
+    var cellWidth = finiteOrZero(source.cellWidth);
+    var cellHeight = finiteOrZero(source.cellHeight);
+    var spacing = finiteOrZero(source.spacing);
+    var stepX = Math.max(1, cellWidth + spacing);
+    var stepY = Math.max(1, cellHeight + spacing);
+    var pixelWidth = columnSpan * cellWidth + Math.max(0, columnSpan - 1) * spacing;
+    var pixelHeight = rowSpan * cellHeight + Math.max(0, rowSpan - 1) * spacing;
+    var centerX = finiteOrZero(source.pointerX);
+    var centerY = finiteOrZero(source.pointerY);
+
+    var anchored = !!(state && state.valid);
+    var column = Math.max(0, Math.min(columns - columnSpan, quantizeWithHysteresis(
+        (centerX - pixelWidth / 2) / stepX,
+        anchored ? state.column : null,
+        config.hysteresis
+    )));
+    var row = Math.max(0, quantizeWithHysteresis(
+        (centerY - pixelHeight / 2) / stepY,
+        anchored ? state.row : null,
+        config.hysteresis
+    ));
+
+    // `row`/`column` is what the caller should act on; the candidate survives a
+    // refusal so a gesture that ends inside the settle window can still be
+    // flushed instead of silently dropping the user's last aim.
+    var result = {
+        row: row, column: column,
+        candidateRow: row, candidateColumn: column,
+        accepted: true, locked: false
+    };
+    if (!anchored)
+        return result;
+    if (row === state.row && column === state.column) {
+        result.accepted = false;
+        return result;
+    }
+
+    var settleMs = Math.max(0, finiteOrZero(config.settleMs));
+    if (settleMs > 0 && state.changed && finiteOrZero(config.now) - state.changedAt < settleMs) {
+        var travelCells = Math.max(
+            Math.abs(centerX - state.changedX) / stepX,
+            Math.abs(centerY - state.changedY) / stepY
+        );
+        var requiredTravel = Number(config.settleTravel);
+        if (!isFinite(requiredTravel) || requiredTravel < 0)
+            requiredTravel = 1;
+        if (travelCells < requiredTravel) {
+            result.row = state.row;
+            result.column = state.column;
+            result.accepted = false;
+            result.locked = true;
+        }
+    }
+    return result;
+}
+
+// Park a resolution the settle lock refused. The gesture may end before the
+// window closes, and the placement the pointer last aimed at must still win.
+function deferDragCell(state, cell) {
+    var target = state || createDragCellState();
+    target.pendingValid = true;
+    target.pendingRow = cell.candidateRow;
+    target.pendingColumn = cell.candidateColumn;
+    return target;
+}
+
+// Only a resolution that actually moved something arms the settle lock: an
+// accepted cell that packs back to the same order must not freeze the grid.
+function acceptDragCell(state, cell, pointerX, pointerY, now, layoutChanged) {
+    var target = state || createDragCellState();
+    target.valid = true;
+    target.row = cell.row;
+    target.column = cell.column;
+    target.pendingValid = false;
+    if (layoutChanged) {
+        target.changed = true;
+        target.changedAt = finiteOrZero(now);
+        target.changedX = finiteOrZero(pointerX);
+        target.changedY = finiteOrZero(pointerY);
+    }
+    return target;
 }
 
 function findInsertionIndex(packedItems, row, column, draggedId, columns) {

@@ -16,6 +16,7 @@ Scope {
     property bool dontAutoCancelSearch: false
 
     signal setSearchingTextRequested(string text)
+    signal exitActivePanelRequested
 
     Loader {
         id: overviewVariantsLoader
@@ -68,9 +69,25 @@ Scope {
                         property int animDurationExit: Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
-                        readonly property bool overviewShouldShow: LauncherSearch.query === ""
-                            && !(searchWidget?.isAiMode ?? false)
-                            && !(searchWidget?.isAnySpecialMode ?? false)
+                        /**
+                         * Whether a panel (AI or hosted) owns the search surface.
+                         * `GlobalStates` is read first on purpose: it is a singleton,
+                         * so the binding always records a dependency on it, while an
+                         * `id` that is not yet constructed when the binding is first
+                         * evaluated records none at all.
+                         */
+                        readonly property bool searchPanelOwned: GlobalStates.searchPanelActive
+                            || (searchWidget?.isAiMode ?? false)
+                            || (searchWidget?.isAnySpecialMode ?? false)
+                        /**
+                         * Panel ownership plus an ordinary query. Only the panel half
+                         * unloads the grid: destroying it for every keystroke would
+                         * rebuild every window thumbnail as soon as the query cleared.
+                         */
+                        readonly property bool searchSurfaceOwned: root.searchPanelOwned
+                            || GlobalStates.activeSearchQuery !== ""
+                            || LauncherSearch.query !== ""
+                        readonly property bool overviewShouldShow: !root.searchSurfaceOwned
                             && !GlobalStates.searchOnlyMode
                             && !GlobalStates.searchCenterMode
                             && !Config.options.search.suggestions.enable
@@ -144,6 +161,25 @@ Scope {
                             target: searchWidget
                             function onIsAnySpecialModeChanged() {
                                 root.syncOverviewReveal();
+                            }
+                            function onIsAiModeChanged() {
+                                root.syncOverviewReveal();
+                            }
+                        }
+
+                        Connections {
+                            target: GlobalStates
+                            function onSearchPanelActiveChanged() {
+                                root.syncOverviewReveal();
+                            }
+                            function onActiveSearchQueryChanged() {
+                                root.syncOverviewReveal();
+                            }
+                            function onOverviewOpenChanged() {
+                                // The reveal is decided while the surface is open;
+                                // every change that led up to the open was rejected
+                                // by the guard at the top of syncOverviewReveal.
+                                Qt.callLater(root.syncOverviewReveal);
                             }
                         }
 
@@ -238,6 +274,9 @@ Scope {
                             target: overviewScope
                             function onSetSearchingTextRequested(text) {
                                 root.setSearchingText(text);
+                            }
+                            function onExitActivePanelRequested() {
+                                searchWidget.handleEscape();
                             }
                         }
 
@@ -425,8 +464,17 @@ Scope {
                                 anchors.bottom: root.isBottomBar ? searchWidgetWrapper.top : undefined
                                 anchors.top: root.isBottomBar ? undefined : searchWidgetWrapper.bottom
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !(searchWidget?.isAiMode ?? false)
-                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
+                                // A panel owning the search destroys the grid rather
+                                // than merely fading it: AI mode was already handled
+                                // this way, and leaving every other hosted panel to
+                                // opacity alone is what let the workspaces stay on
+                                // screen behind them.
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && !root.isScrollingLayout && !root.searchPanelOwned
+                                // Driven by the reveal progress alone. Gating this on
+                                // `overviewShouldShow` too meant a panel that opened
+                                // without ever changing the query could leave the grid
+                                // on screen behind it.
+                                opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
 
                                 layer.enabled: overviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
@@ -449,7 +497,7 @@ Scope {
 
                                 sourceComponent: OverviewWidget {
                                     panelWindow: root
-                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
+                                    visible: root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -457,8 +505,8 @@ Scope {
                             Loader { // Scrolling overview
                                 id: scrollingOverviewLoader
                                 anchors.fill: parent
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout
-                                opacity: root.overviewShouldShow ? searchWidgetWrapper.slideOpacity * root.overviewFadeProgress : 0.0
+                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
+                                opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
 
                                 layer.enabled: scrollingOverviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
@@ -482,7 +530,7 @@ Scope {
                                 sourceComponent: ScrollingOverviewWidget {
                                     anchors.fill: parent
                                     panelWindow: root
-                                    visible: root.overviewShouldShow && root.overviewFadeProgress > 0.001
+                                    visible: root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
                                 }
                             }
@@ -536,6 +584,10 @@ Scope {
         togglePrefixedSearch(Config.options.search.prefix.translator);
     }
 
+    function toggleTypingTest() {
+        togglePrefixedSearch(Config.options.search.prefix.typingTest);
+    }
+
     function toggleAi() {
         if (!Ai.enabled)
             return;
@@ -579,18 +631,17 @@ Scope {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleTranslator();
         }
+        function typingTestToggle() {
+            GlobalStates.superReleaseMightTrigger = false;
+            overviewScope.toggleTypingTest();
+        }
         function aiToggle() {
             GlobalStates.superReleaseMightTrigger = false;
             overviewScope.toggleAi();
         }
         function searchOnlyToggle() {
             GlobalStates.superReleaseMightTrigger = false;
-            if (GlobalStates.overviewOpen) {
-                GlobalStates.overviewOpen = false;
-            } else {
-                GlobalStates.searchOnlyMode = true;
-                GlobalStates.overviewOpen = true;
-            }
+            GlobalStates.toggleSearchOnly();
         }
     }
 
@@ -623,12 +674,7 @@ Scope {
         description: "Toggles search only mode on press"
 
         onPressed: {
-            if (GlobalStates.overviewOpen) {
-                GlobalStates.overviewOpen = false;
-            } else {
-                GlobalStates.searchOnlyMode = true;
-                GlobalStates.overviewOpen = true;
-            }
+            GlobalStates.toggleSearchOnly();
         }
     }
     GlobalShortcut {
@@ -655,6 +701,15 @@ Scope {
             if (!GlobalStates.superReleaseMightTrigger) {
                 GlobalStates.superReleaseMightTrigger = true;
                 return;
+            }
+            // Inside a panel, Super is a step back to the plain search rather
+            // than a step out of the launcher entirely. Leaving the panel clears
+            // the flag synchronously, so a flag that survives the request was
+            // stale and the press still belongs to the Overview.
+            if (GlobalStates.overviewOpen && GlobalStates.searchPanelActive) {
+                overviewScope.exitActivePanelRequested();
+                if (!GlobalStates.searchPanelActive)
+                    return;
             }
             GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }

@@ -142,6 +142,19 @@ Item {
                         text: Translation.tr("Interactive periodic table of chemical elements with atomic properties.")
                     }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "speed"
+                    text: Translation.tr("Enable Typing test")
+                    checked: Config.options.cheatsheet.enableTypingTest
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableTypingTest = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("The same offline typing test the Overview search hosts, as a full-size page. Its own settings and score history live inside it.")
+                    }
+                }
             }
         }
     }

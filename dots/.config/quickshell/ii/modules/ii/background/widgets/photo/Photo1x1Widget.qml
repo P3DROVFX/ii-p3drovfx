@@ -33,6 +33,7 @@ AbstractBackgroundWidget {
 
     readonly property var options: Config.options.background.widgets.photo_1x1
     readonly property string shapeName: options?.backgroundShape ?? "Cookie9Sided"
+    readonly property bool isRectangle: root.shapeName === "Rectangle"
     readonly property var chosenShape: MaterialShape.Shape[shapeName] !== undefined
                                         ? MaterialShape.Shape[shapeName]
                                         : MaterialShape.Shape.Cookie9Sided
@@ -66,7 +67,7 @@ AbstractBackgroundWidget {
     }
 
     StyledDropShadow {
-        target: shapeBg
+        target: root.isRectangle ? shapeBgRect : shapeBg
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
@@ -74,11 +75,20 @@ AbstractBackgroundWidget {
         anchors.fill: parent
 
         // 1. Background shape fill
+        Rectangle {
+            id: shapeBgRect
+            anchors.fill: parent
+            radius: Appearance.rounding.windowRounding
+            color: WidgetColorScheme.cardBgColor
+            visible: root.isRectangle
+        }
+
         MaterialShape {
             id: shapeBg
             anchors.fill: parent
             shape: root.chosenShape
             color: WidgetColorScheme.cardBgColor
+            visible: !root.isRectangle
         }
 
         // Static Image loader (hardware-accelerated, zero QMovie overhead)
@@ -92,10 +102,21 @@ AbstractBackgroundWidget {
 
             layer.enabled: true
             layer.effect: OpacityMask {
-                maskSource: MaterialShape {
+                maskSource: Item {
                     width: staticImg.width
                     height: staticImg.height
-                    shape: root.chosenShape
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.windowRounding
+                        visible: root.isRectangle
+                    }
+
+                    MaterialShape {
+                        anchors.fill: parent
+                        shape: root.chosenShape
+                        visible: !root.isRectangle
+                    }
                 }
             }
         }
@@ -114,10 +135,21 @@ AbstractBackgroundWidget {
 
             layer.enabled: true
             layer.effect: OpacityMask {
-                maskSource: MaterialShape {
+                maskSource: Item {
                     width: photoImg.width
                     height: photoImg.height
-                    shape: root.chosenShape
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Appearance.rounding.windowRounding
+                        visible: root.isRectangle
+                    }
+
+                    MaterialShape {
+                        anchors.fill: parent
+                        shape: root.chosenShape
+                        visible: !root.isRectangle
+                    }
                 }
             }
         }

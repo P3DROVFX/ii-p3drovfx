@@ -166,6 +166,129 @@ TestCase {
         compare(Layout.resizeSpanFromDelta(1, 85, 50, 6, 4), 3);
     }
 
+    // --- Drag stability ---------------------------------------------------
+
+    function test_hysteresis_keeps_the_cell_it_owns_until_the_pointer_commits() {
+        // No anchor yet: plain rounding.
+        compare(Layout.quantizeWithHysteresis(0.6, null, 0.3), 1);
+        // Owning cell 0, the pointer must reach 0.8 of a cell to concede it.
+        compare(Layout.quantizeWithHysteresis(0.6, 0, 0.3), 0);
+        compare(Layout.quantizeWithHysteresis(0.79, 0, 0.3), 0);
+        compare(Layout.quantizeWithHysteresis(0.81, 0, 0.3), 1);
+        // Symmetric on the way back.
+        compare(Layout.quantizeWithHysteresis(0.4, 1, 0.3), 1);
+        compare(Layout.quantizeWithHysteresis(0.21, 1, 0.3), 1);
+        compare(Layout.quantizeWithHysteresis(0.19, 1, 0.3), 0);
+        // A flick past several cells is never damped.
+        compare(Layout.quantizeWithHysteresis(3.1, 0, 0.3), 3);
+    }
+
+    function dragGeometry(centerX, centerY) {
+        return {
+            pointerX: centerX, pointerY: centerY,
+            cellWidth: 50, cellHeight: 56, spacing: 6,
+            columns: 4, columnSpan: 1, rowSpan: 1
+        };
+    }
+
+    function test_pointer_parked_on_a_seam_never_flips_the_cell() {
+        var state = Layout.createDragCellState();
+        // Column 1 of a 56px grid step, i.e. the item's own home cell.
+        var first = Layout.resolveDragCell(dragGeometry(81, 28), state, { hysteresis: 0.3 });
+        compare(first.column, 1);
+        compare(first.row, 0);
+        verify(first.accepted);
+        Layout.acceptDragCell(state, first, 81, 28, 0, true);
+
+        // Sit exactly on the 0/1 seam and shiver. Rounding alone would toggle
+        // the column on every sample; the dead band swallows all of it.
+        var seam = 53;
+        for (var i = 0; i < 40; i++) {
+            var jitter = seam + ((i % 2 === 0) ? -2 : 2);
+            var sample = Layout.resolveDragCell(dragGeometry(jitter, 28 + (i % 3) - 1), state, { hysteresis: 0.3 });
+            verify(!sample.accepted);
+            compare(sample.column, 1);
+            compare(sample.row, 0);
+        }
+
+        // A deliberate move still lands.
+        var committed = Layout.resolveDragCell(dragGeometry(25, 28), state, { hysteresis: 0.3 });
+        verify(committed.accepted);
+        compare(committed.column, 0);
+    }
+
+    function test_settle_lock_holds_a_fresh_swap_until_the_reflow_ends() {
+        var state = Layout.createDragCellState();
+        var options = { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1000 };
+        var first = Layout.resolveDragCell(dragGeometry(25, 28), state, options);
+        verify(first.accepted);
+        Layout.acceptDragCell(state, first, 25, 28, 1000, true);
+
+        // Barely past the dead band, 45px of travel, 40ms after the swap: the
+        // grid is still animating, so the placement is held.
+        var early = Layout.resolveDragCell(dragGeometry(70, 28), state,
+            { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1040 });
+        verify(!early.accepted);
+        verify(early.locked);
+        compare(early.column, 0);
+
+        // The same sample once the window has passed.
+        var late = Layout.resolveDragCell(dragGeometry(70, 28), state,
+            { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1240 });
+        verify(late.accepted);
+        compare(late.column, 1);
+
+        // A decisive drag is never held: a full cell of travel overrides it.
+        var decisive = Layout.resolveDragCell(dragGeometry(137, 28), state,
+            { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1040 });
+        verify(decisive.accepted);
+        compare(decisive.column, 2);
+    }
+
+    function test_a_resolution_that_moves_nothing_does_not_arm_the_settle_lock() {
+        var state = Layout.createDragCellState();
+        var first = Layout.resolveDragCell(dragGeometry(25, 28), state,
+            { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1000 });
+        Layout.acceptDragCell(state, first, 25, 28, 1000, false);
+        var next = Layout.resolveDragCell(dragGeometry(70, 28), state,
+            { hysteresis: 0.3, settleMs: 200, settleTravel: 1, now: 1010 });
+        verify(next.accepted);
+        compare(next.column, 1);
+    }
+
+    function test_drag_cell_state_resets_between_gestures() {
+        var state = Layout.createDragCellState();
+        var first = Layout.resolveDragCell(dragGeometry(81, 28), state, { hysteresis: 0.3 });
+        Layout.acceptDragCell(state, first, 81, 28, 0, true);
+        Layout.resetDragCellState(state);
+        verify(!state.valid);
+        verify(!state.changed);
+        // With no anchor the seam rounds freely again instead of inheriting
+        // the previous gesture's column.
+        var fresh = Layout.resolveDragCell(dragGeometry(52, 28), state, { hysteresis: 0.3 });
+        verify(fresh.accepted);
+        compare(fresh.column, 0);
+    }
+
+    function test_wide_items_resolve_from_their_own_footprint() {
+        var state = Layout.createDragCellState();
+        var geometry = {
+            pointerX: 2 * 56, pointerY: 28,
+            cellWidth: 50, cellHeight: 56, spacing: 6,
+            columns: 4, columnSpan: 4, rowSpan: 1
+        };
+        // A 4-wide slider can only ever start at column 0, whatever the pointer
+        // says, and the clamp must not leak into the hysteresis anchor.
+        var resolved = Layout.resolveDragCell(geometry, state, { hysteresis: 0.3 });
+        compare(resolved.column, 0);
+        Layout.acceptDragCell(state, resolved, geometry.pointerX, geometry.pointerY, 0, true);
+        geometry.pointerY = 28 + 62;
+        var down = Layout.resolveDragCell(geometry, state, { hysteresis: 0.3 });
+        verify(down.accepted);
+        compare(down.row, 1);
+        compare(down.column, 0);
+    }
+
     function test_deterministic_stress_never_overlaps() {
         var source = [];
         for (var i = 0; i < 120; i++) {

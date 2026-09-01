@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -803,6 +804,20 @@ Item {
                 duration: 350
                 easing.type: Easing.OutBack
                 easing.overshoot: 1.3
+            }
+        }
+
+        // This list is where you find out a shortcut is wrong. The page that changes it is
+        // several clicks away otherwise, and the cheatsheet has to be dismissed to get there.
+        IconToolbarButton {
+            implicitWidth: height
+            text: "edit"
+            onClicked: {
+                GlobalStates.closeCheatsheet();
+                HyprlandGui.openTab("shortcuts");
+            }
+            StyledToolTip {
+                text: Translation.tr("Edit shortcuts")
             }
         }
 

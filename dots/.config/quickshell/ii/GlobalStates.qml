@@ -309,6 +309,11 @@ Singleton {
     property bool modeFlashActive: false
     property var modeFlashPayload: null
     property bool superReleaseMightTrigger: true
+    // Whether a hosted panel (or the AI chat) currently owns the Search
+    // surface. The Super shortcut lives outside any PanelWindow, so it cannot
+    // ask a SearchWidget directly, and closing the whole Overview from inside
+    // a panel loses a level of navigation the user expects Super to walk back.
+    property bool searchPanelActive: false
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
@@ -1300,6 +1305,8 @@ Singleton {
     readonly property bool floatingNotchOwnsSearch: {
         if (!Config.ready || !root.overviewOpen)
             return false;
+        if (root.searchCenterMode)
+            return false;
 
         const notch = Config.options.bar.floatingNotch;
         if (!notch || !notch.enable || notch.centerInBar)
@@ -1499,6 +1506,18 @@ Singleton {
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
+    property int dashboardWifiDialogOpenCount: 0
+    property int dashboardBluetoothDialogOpenCount: 0
+    readonly property bool dashboardWifiDialogOpen: dashboardWifiDialogOpenCount > 0
+    readonly property bool dashboardBluetoothDialogOpen: dashboardBluetoothDialogOpenCount > 0
+
+    function adjustDashboardWifiDialogOpenCount(delta: int): void {
+        root.dashboardWifiDialogOpenCount = Math.max(0, root.dashboardWifiDialogOpenCount + delta);
+    }
+
+    function adjustDashboardBluetoothDialogOpenCount(delta: int): void {
+        root.dashboardBluetoothDialogOpenCount = Math.max(0, root.dashboardBluetoothDialogOpenCount + delta);
+    }
 
     /**
      * Held above zero while something the left sidebar itself started — a file
@@ -1588,6 +1607,21 @@ Singleton {
         root.overviewOpen = true;
     }
 
+    function toggleSearchOnly(monitorName) {
+        const requestedMonitor = monitorName || "";
+        const sameMonitor = requestedMonitor === ""
+            || root.activeSearchMonitor === ""
+            || root.activeSearchMonitor === requestedMonitor;
+
+        if (root.overviewOpen && root.searchOnlyMode && sameMonitor) {
+            root.overviewOpen = false;
+            return;
+        }
+
+        root.searchOnlyMode = true;
+        root.openSearch(monitorName);
+    }
+
     function openSearchPanel(panelId, monitorName, initialQuery) {
         const requested = String(panelId ?? "").trim();
         if (requested.length === 0)
@@ -1662,6 +1696,10 @@ Singleton {
             }
         } else {
             root.activeSearchMonitor = "";
+            // A panel cannot outlive the surface that hosted it, and a flag
+            // left set would make the next Super press try to leave a panel
+            // that is not there instead of opening the launcher.
+            root.searchPanelActive = false;
             resetSearchOnlyModeTimer.start();
         }
     }

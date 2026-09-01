@@ -714,7 +714,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 14
+    readonly property int currentConfigVersion: 16
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1096,6 +1096,41 @@ Singleton {
             console.log("[Config] Added idle Suggestions search result group");
         }
 
+        // v14 -> v15: the sidebar avatar shape split off from the general
+        // userProfile one. Existing configs kept a single shape for both, so
+        // seed the new key from it to leave the sidebar looking untouched.
+        if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
+            if (raw.sidebar === undefined || raw.sidebar === null
+                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+                raw.sidebar = {};
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
+                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+                raw.sidebar.dashboardHeader = {};
+            if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
+                raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
+                console.log(`[Config] Seeded sidebar.dashboardHeader.avatarShape from userProfile.avatarShape (${raw.userProfile.avatarShape})`);
+            }
+        }
+
+        // v15 -> v16: the idle now-playing row moved out of "More results" into
+        // its own "Now playing" group. Every stored order predates that id, and
+        // a section missing from the order is a section that never renders — so
+        // without this the row silently disappeared the moment it was reclassed.
+        if (from < 16) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasMedia = sectionOrder.some(entry => String(entry?.id ?? entry) === "media");
+                if (!hasMedia) {
+                    const aliasesIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "aliases");
+                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, { "id": "media" });
+                }
+            }
+            console.log("[Config] Added Now playing search result group");
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -1234,6 +1269,11 @@ Singleton {
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
+            "search.typingTest.mode": ["time", "words", "zen"],
+            "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
+            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak"],
+            "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
+            "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -2939,8 +2979,8 @@ Singleton {
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
-                    property string clock: "expressive" // default, expressive, material
-                    property string media: "default"
+                    property string clock: "expressive" // default, material, expressive, neural, relief
+                    property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
                     property string utilButtons: "expressive"
                     property string workspaces: "default"
@@ -2955,12 +2995,21 @@ Singleton {
                     property string keyboard: "expressive"
                     property string sports: "expressive"
                     property string portWatcher: "expressive"
+                    property string aiPlanUsage: "expressive"
+                    property string search: "default"
+                    property string date: "default"
                 }
 
                 property JsonObject activeWindow: JsonObject {
                     property bool fixedSize: false
                     property int customSize: 225
                     property bool showOnAllMonitors: false
+                }
+
+                property JsonObject weatherWidget: JsonObject {
+                    property string horizonVariant: "balanced" // balanced | inverted | minimal
+                    property string tesseraVariant: "paired" // paired | contrast | bare
+                    property string colorMode: "tonal" // Material pairs: tonal | vibrant | neutral
                 }
 
                 property JsonObject autoHide: JsonObject {
@@ -3091,6 +3140,22 @@ Singleton {
                     property bool showDocker: true
                 }
 
+                property JsonObject aiPlanUsage: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 300000
+                    // Enabling a remote provider authorizes read-only quota
+                    // requests with credentials discovered from its client.
+                    // Tokens are never copied into config.json or the cache.
+                    property bool claudeNetworkEnabled: true
+                    property list<string> enabledProviders: ["chatgpt", "claude", "antigravity"]
+                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text
+                    property string percentMode: "remaining" // remaining | used
+                    property bool showWindowLabel: false
+                    property bool hideWhenUnavailable: false
+                    property int lowRemainingThreshold: 20
+                }
+
                 property JsonObject portWatcher: JsonObject {
                     property bool enabled: true
                     property bool autoRefresh: true
@@ -3131,6 +3196,27 @@ Singleton {
                     property bool collapseToDot: true
                     property bool showAppNames: true
                     property string ignoreApps: ""
+                }
+
+                property JsonObject searchWidget: JsonObject {
+                    property string sizeMode: "compact" // compact | balanced | extended
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showShortcutHint: true
+                }
+
+                property JsonObject dateWidget: JsonObject {
+                    property string expressiveVariant: "stack" // stack | badge | ribbon
+                    property string neuralVariant: "orbit" // orbit | glyph | inlay
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool uppercase: true
+                    property bool showYear: false
+                }
+
+                property JsonObject clockWidget: JsonObject {
+                    property string neuralVariant: "orbit" // orbit | bloom | dial
+                    property string reliefVariant: "split" // split | seam | outline
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showMeridiem: true
                 }
 
                 property JsonObject sports: JsonObject {
@@ -3235,6 +3321,7 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true
                     property bool showNetwork: true
@@ -3242,6 +3329,14 @@ Singleton {
                     property bool showVpn: true
                     property bool showTailscale: true
                     property bool showNotifications: true
+                    property bool showPomodoro: true
+                    property bool showStopwatch: true
+                    property bool showCountdowns: true
+                    property bool showEasyEffects: true
+                    property bool showDns: true
+                    property bool showGameMode: true
+                    property bool showMusicRecognition: true
+                    property bool showAlarms: true
                 }
                 property JsonObject layouts: JsonObject {
                     // Only storing id and layout-specific flags (visible, centered)
@@ -3261,11 +3356,6 @@ Singleton {
                                 "centered": false,
                                 "id": "record_indicator",
                                 "visible": false
-                            },
-                            {
-                                "centered": false,
-                                "id": "dictation_indicator",
-                                "visible": true
                             },
                             {
                                 "centered": false,
@@ -3289,16 +3379,6 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "system_tray",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "privacy_pill",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "port_watcher",
                                 "visible": true
                             },
                             {
@@ -3455,6 +3535,10 @@ Singleton {
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false
+                // The typing test also lives in the Overview search. Off by
+                // default so the cheatsheet does not gain a tab nobody asked
+                // for; the two hosts share one surface either way.
+                property bool enableTypingTest: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
@@ -3565,6 +3649,11 @@ Singleton {
                 // Each entry is { id: string, apps: list<string> } and is
                 // rendered as one dock item while app groups are enabled.
                 property list<var> appGroups: []
+                // Order keys the user has dragged into place by hand. Smart
+                // grouping treats these as anchors and auto-arranges only what
+                // is left, so turning the feature on no longer makes the dock
+                // undo every reorder.
+                property list<string> manualOrder: []
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "livePreview", "phone", "trash", "overview"]
             }
 
@@ -3582,6 +3671,9 @@ Singleton {
 
             property JsonObject hyprland: JsonObject {
                 property string defaultHyprlandLayout: "default" // Options: dwindle, monocle, master // It's best to not use scrolling
+                // Settings -> Hyprland shows only what a normal desktop needs until this is on.
+                // Everything the compositor can be told, and the prose explaining why, is behind it.
+                property bool advancedSettings: false
             }
 
             property JsonObject idle: JsonObject {
@@ -4079,6 +4171,7 @@ Singleton {
                 property list<var> sectionOrder: [
                     { "id": "suggested" },
                     { "id": "aliases" },
+                    { "id": "media" },
                     { "id": "best" },
                     { "id": "apps" },
                     { "id": "sites" },
@@ -4148,7 +4241,57 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string typingTest: "^"
                     property string ai: "&"
+                }
+                property JsonObject typingTest: JsonObject {
+                    property string language: "english_1k"
+                    property string mode: "time"
+                    // Zen without a target is free typing; guided zen keeps the
+                    // generated words but drops both limits, so the test only
+                    // ends when the user says so.
+                    property bool zenGuided: false
+                    property int time: 30
+                    property int words: 50
+                    property bool punctuation: false
+                    property bool numbers: false
+                    property bool showLiveWpm: false
+                    property bool showLiveAccuracy: false
+                    property bool smoothCaret: true
+                    // Typing surface. fontSize is the target text size in px:
+                    // the test is the hero of the panel, so it does not follow
+                    // the launcher's body scale.
+                    property int fontSize: 26
+                    property int visibleLines: 3
+                    property string caretStyle: "line" // line, block, underline, off
+                    // Highlight everything but the current word at reduced
+                    // emphasis, the way Monkeytype's word highlight does.
+                    property bool highlightCurrentWord: false
+                    property bool blindMode: false
+                    // Tab restarts the test, as on Monkeytype. Off by default
+                    // because Tab also walks the launcher's controls.
+                    property bool quickRestart: false
+                    // Finish a words/quote test on the last word without
+                    // needing a trailing space.
+                    property bool finishOnLastWord: true
+                    property JsonObject keyboard: JsonObject {
+                        property bool enable: true
+                        property string layout: "qwerty" // qwerty, qwertz, azerty, dvorak, colemak
+                        property bool highlightNextKey: true
+                    }
+                    property JsonObject sounds: JsonObject {
+                        property bool enable: true
+                        // Monkeytype pack ids, catalogued in
+                        // assets/typing/sounds-manifest.json.
+                        property string theme: "click1"
+                        property string errorTheme: "error1"
+                        property int volume: 55
+                        property bool errorSound: true
+                    }
+                    property JsonObject history: JsonObject {
+                        property bool enable: true
+                        property int maxEntries: 100
+                    }
                 }
                 property JsonObject ai: JsonObject {
                     // How the AI chat is triggered from the search:
@@ -4166,6 +4309,9 @@ Singleton {
                     property bool translator: true
                     property bool mediaDownloader: true
                     property bool materialSymbols: true
+                    property JsonObject typingTest: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject emojis: JsonObject {
                         property bool enable: true
                         property string skinTone: "none"
@@ -4393,6 +4539,9 @@ Singleton {
                     // picture/uptime row, so this now matches "user_profile".
                     property string profileImageType: "user_profile" // "user_profile", "distro", "none"
                     property string profileImagePath: Directories.userProfileImagePath
+                    // Independent from userProfile.avatarShape: the sidebar avatar is
+                    // shaped on its own so the settings/general avatar can differ.
+                    property string avatarShape: "Cookie9Sided"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
                 }

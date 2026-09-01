@@ -19,6 +19,18 @@ terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
 # shell silently stuck on the previous colors.
 report_matugen_failure() {
     local script_name="$1"
+    local exit_code="${2:-1}"
+    local flag_file="$STATE_DIR/matugen_error_notified"
+    local extra_flags=()
+
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+    if [[ -f "$flag_file" ]]; then
+        extra_flags+=(-t 0 -h boolean:suppress-sound:true)
+    else
+        touch "$flag_file" 2>/dev/null || true
+    fi
+
     local cfg="$MATUGEN_DIR/config.toml"
     local missing=()
     local p
@@ -31,15 +43,15 @@ report_matugen_failure() {
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "[$script_name] matugen aborted; missing template inputs: ${missing[*]}" >&2
-        notify-send -a "Wallpaper switcher" -c "im.error" \
-            "Color generation failed" \
-            "matugen aborted because these templates are missing: ${missing[*]} - fix or remove them in $cfg" 2>/dev/null || true
+        echo "[$script_name] matugen aborted (exit code $exit_code); missing template inputs: ${missing[*]}" >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" "${extra_flags[@]}" \
+            "Color generation failed (code $exit_code)" \
+            "matugen aborted with error code $exit_code because these templates are missing: ${missing[*]} - fix or remove them in $cfg" 2>/dev/null || true
     else
-        echo "[$script_name] matugen failed; keeping the previous palette." >&2
-        notify-send -a "Wallpaper switcher" -c "im.error" \
-            "Color generation failed" \
-            "matugen exited with an error, so the shell kept its previous palette." 2>/dev/null || true
+        echo "[$script_name] matugen failed (exit code $exit_code); keeping the previous palette." >&2
+        notify-send -a "Wallpaper switcher" -c "im.error" "${extra_flags[@]}" \
+            "Color generation failed (code $exit_code)" \
+            "matugen exited with error code $exit_code, so the shell kept its previous palette." 2>/dev/null || true
     fi
 }
 
@@ -706,12 +718,17 @@ done"
     if [[ -n "$theme_file" ]]; then
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
+        rm -f "$STATE_DIR/matugen_error_notified"
         echo "[switchwall_vynx.sh] Applied theme: $type_flag"
         if [[ "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor_vynx.sh
     else
+        matugen_exit_code=0
         if ! matugen "${matugen_args[@]}"; then
-            report_matugen_failure "switchwall_vynx.sh"
+            matugen_exit_code=$?
+            report_matugen_failure "switchwall_vynx.sh" "$matugen_exit_code"
+        else
+            rm -f "$STATE_DIR/matugen_error_notified"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall_vynx.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2

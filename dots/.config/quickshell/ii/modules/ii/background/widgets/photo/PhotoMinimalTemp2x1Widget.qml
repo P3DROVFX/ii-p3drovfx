@@ -117,42 +117,11 @@ AbstractBackgroundWidget {
                     return entry && entry.showOverlay !== undefined ? entry.showOverlay : true;
                 }
 
-                // Blur layer (using technique from BarGradientOverlay.qml)
-                Item {
-                    anchors.fill: parent
-                    layer.enabled: (!root.isAnimated && staticImg.status === Image.Ready) || (root.isAnimated && photoImage.status === Image.Ready)
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: tempBadgeContainer.width
-                            height: tempBadgeContainer.height
-                            radius: Appearance.rounding.windowRounding
-                        }
-                    }
-
-                    ShaderEffectSource {
-                        id: tempShaderSource
-                        anchors.fill: parent
-                        sourceItem: !root.isAnimated ? staticImg : photoImage
-                        sourceRect: Qt.rect(tempBadgeContainer.x, tempBadgeContainer.y, tempBadgeContainer.width, tempBadgeContainer.height)
-                        live: false
-                        hideSource: false
-                        visible: false
-                    }
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: tempShaderSource
-                        blurEnabled: true
-                        blurMax: 64
-                        blur: 0.65
-                    }
-                }
-
-                // Semi-transparent color overlay over the blurred region
+                // Semi-transparent color overlay
                 Rectangle {
                     anchors.fill: parent
-                    radius: 16
-                    color: Qt.rgba(WidgetColorScheme.cardBgColor.r, WidgetColorScheme.cardBgColor.g, WidgetColorScheme.cardBgColor.b, 0.55)
+                    radius: Appearance.rounding.full
+                    color: ColorUtils.applyAlpha(WidgetColorScheme.cardBgColor, 0.75)
                 }
 
                 RowLayout {

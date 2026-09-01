@@ -24,6 +24,11 @@ Item {
     property int fontWeight: Font.DemiBold
     property int cursorShape: interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
 
+    property real borderWidth: 0
+    property color borderColor: "transparent"
+
+    readonly property bool isRectangle: root.avatarShape === "Rectangle" || root.avatarShape === "windowRounding"
+
     signal clicked()
 
     function resolveShape(s) {
@@ -131,12 +136,36 @@ Item {
 
     readonly property bool hasVisibleImage: (!root.isAnimated && staticImg.visible) || (root.isAnimated && avatarImg.visible)
 
-    // Base shape with solid color and fallback initial text
+    // Outer border shape matching avatar shape / rectangle if borderWidth is set
+    Rectangle {
+        id: borderRect
+        anchors.centerIn: parent
+        width: parent.width + root.borderWidth * 2
+        height: parent.height + root.borderWidth * 2
+        radius: Math.max(0, Appearance.rounding.windowRounding + root.borderWidth)
+        color: root.borderColor
+        visible: root.borderWidth > 0 && root.isRectangle
+        z: -1
+    }
+
     MaterialShape {
-        id: baseShape
-        anchors.fill: parent
+        id: borderShape
+        anchors.centerIn: parent
+        width: parent.width + root.borderWidth * 2
+        height: parent.height + root.borderWidth * 2
         shape: root.resolveShape(root.avatarShape)
+        color: root.borderColor
+        visible: root.borderWidth > 0 && !root.isRectangle
+        z: -1
+    }
+
+    // Base shape with solid color and fallback initial text
+    Rectangle {
+        id: baseRect
+        anchors.fill: parent
+        radius: Appearance.rounding.windowRounding
         color: root.resolvedColor
+        visible: root.isRectangle
 
         StyledText {
             anchors.centerIn: parent
@@ -149,21 +178,54 @@ Item {
         }
     }
 
-    // Static Image loader (hardware-accelerated, zero QMovie overhead)
+    MaterialShape {
+        id: baseShape
+        anchors.fill: parent
+        shape: root.resolveShape(root.avatarShape)
+        color: root.resolvedColor
+        visible: !root.isRectangle
+
+        StyledText {
+            anchors.centerIn: parent
+            text: root.initialLetter
+            color: root.resolvedOnColor
+            font.pixelSize: root.fontPixelSize
+            font.weight: root.fontWeight
+            font.family: Appearance.font.family.expressive
+            visible: !root.hasVisibleImage
+        }
+    }
+
+    // Static Image loader (hardware-accelerated, zero QMovie overhead, crisp downsampling)
     Image {
         id: staticImg
         anchors.fill: parent
         source: !root.isAnimated ? root.resolvedImageSource : ""
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
+        smooth: true
+        mipmap: true
+        sourceSize: Qt.size(Math.max(256, Math.ceil(root.width * 2)), Math.max(256, Math.ceil(root.height * 2)))
         visible: !root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true
+        layer.smooth: true
         layer.effect: OpacityMask {
-            maskSource: MaterialShape {
+            maskSource: Item {
                 width: staticImg.width
                 height: staticImg.height
-                shape: root.resolveShape(root.avatarShape)
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Appearance.rounding.windowRounding
+                    visible: root.isRectangle
+                }
+
+                MaterialShape {
+                    anchors.fill: parent
+                    shape: root.resolveShape(root.avatarShape)
+                    visible: !root.isRectangle
+                }
             }
         }
     }
@@ -177,15 +239,29 @@ Item {
         playing: root.shouldPlay
         paused: !root.shouldPlay
         asynchronous: true
+        smooth: true
+        mipmap: true
         cache: false
         visible: root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true
+        layer.smooth: true
         layer.effect: OpacityMask {
-            maskSource: MaterialShape {
+            maskSource: Item {
                 width: avatarImg.width
                 height: avatarImg.height
-                shape: root.resolveShape(root.avatarShape)
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Appearance.rounding.windowRounding
+                    visible: root.isRectangle
+                }
+
+                MaterialShape {
+                    anchors.fill: parent
+                    shape: root.resolveShape(root.avatarShape)
+                    visible: !root.isRectangle
+                }
             }
         }
     }

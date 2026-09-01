@@ -109,7 +109,7 @@ MouseArea {
         implicitSize: 20
 
         lineWidth: Appearance.rounding.unsharpen
-        value: activePlayer?.position / activePlayer?.length
+        value: (activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length)) : 0
         colPrimary: Appearance.colors.colOnSecondaryContainer
         enableAnimation: false
 

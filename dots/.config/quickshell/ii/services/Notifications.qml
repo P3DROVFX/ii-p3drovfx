@@ -297,7 +297,7 @@ Singleton {
     function playNotificationSound(notification) {
         if (root.effectiveSilent) return;
         const hints = notification.hints ?? {};
-        if (hints["suppress-sound"]) return;
+        if (hints["suppress-sound"] || notification.expireTimeout === 0) return;
         if (root.soundPolicyFor(notification.appName) === "mute") return;
 
         if (hints["sound-file"]) {

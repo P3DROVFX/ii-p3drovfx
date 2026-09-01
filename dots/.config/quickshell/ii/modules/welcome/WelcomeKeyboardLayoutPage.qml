@@ -10,36 +10,14 @@ Item {
     property bool nextButtonHovered: false
 
     readonly property var layoutOptions: {
-        const options = [
-            { code: "us", label: "English (US)" },
-            { code: "gb", label: "English (UK)" },
-            { code: "br", label: "Português (Brasil)" },
-            { code: "de", label: "Deutsch" },
-            { code: "fr", label: "Français" },
-            { code: "es", label: "Español" },
-            { code: "it", label: "Italiano" },
-            { code: "pt", label: "Português" },
-            { code: "ru", label: "Русский" },
-            { code: "uk", label: "Українська" },
-            { code: "tr", label: "Türkçe" },
-            { code: "pl", label: "Polski" },
-            { code: "cz", label: "Čeština" },
-            { code: "hu", label: "Magyar" },
-            { code: "se", label: "Svenska" },
-            { code: "no", label: "Norsk" },
-            { code: "dk", label: "Dansk" },
-            { code: "fi", label: "Suomi" },
-            { code: "gr", label: "Ελληνικά" },
-            { code: "il", label: "עברית" },
-            { code: "jp", label: "日本語" },
-            { code: "kr", label: "한국어" },
-            { code: "cn", label: "简体中文" },
-            { code: "in", label: "English (India)" },
-            { code: "latam", label: "Español (Latinoamérica)" }
-        ];
+        // The same shortlist the Hyprland settings page offers, kept in XkbCatalog so the two
+        // cannot drift apart.
+        const options = Array.from(XkbCatalog.commonLayouts).map(entry => ({
+            "code": entry.code, "label": entry.label
+        }));
         const current = HyprlandXkb.layoutCodes.length > 0 ? HyprlandXkb.layoutCodes[0] : "";
         if (current.length > 0 && options.findIndex(option => option.code === current) < 0)
-            options.unshift({ code: current, label: Translation.tr("Current (%1)").arg(current) });
+            options.unshift({ "code": current, "label": Translation.tr("Current (%1)").arg(current) });
         return options;
     }
 

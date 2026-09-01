@@ -69,7 +69,7 @@ Item {
     property bool leftSidebarActiveOnMonitor: false
     property bool rightSidebarActiveOnMonitor: false
 
-    readonly property bool isOpen: GlobalStates.overviewOpen && screen.name === GlobalStates.activeSearchMonitor
+    readonly property bool isOpen: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor
     readonly property bool isWidgetActive: isOpen || openProgress > 0.001
     readonly property string mode: isWidgetActive ? "launcher" : "idle"
 
@@ -282,7 +282,7 @@ Item {
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
-            if (GlobalStates.overviewOpen && root.screen.name === GlobalStates.activeSearchMonitor) {
+            if (root.isOpen) {
                 GlobalFocusGrab.addDismissable(root);
                 if (root.searchWidgetRef) {
                     Qt.callLater(() => root.searchWidgetRef.focusSearchInput());
@@ -309,7 +309,7 @@ Item {
         target: GlobalStates
         ignoreUnknownSignals: true
         function onActiveSearchQueryChanged() {
-            if (GlobalStates.activeSearchQuery && root.searchWidgetRef) {
+            if (root.isOpen && GlobalStates.activeSearchQuery && root.searchWidgetRef) {
                 root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery);
                 GlobalStates.activeSearchQuery = "";
             }

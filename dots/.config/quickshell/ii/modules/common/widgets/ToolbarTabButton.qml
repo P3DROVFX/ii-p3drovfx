@@ -12,7 +12,11 @@ RippleButton {
     required property bool current
     property int shortcutIndex: 0
     property bool showShortcut: false
-    horizontalPadding: 14
+    // Opt-in for crowded bars: inactive tabs shrink to their icon so three
+    // labelled tabs still fit a sidebar-width toolbar.
+    property bool collapseInactiveLabel: false
+    readonly property bool labelCollapsed: root.collapseInactiveLabel && !root.current
+    horizontalPadding: root.labelCollapsed ? 10 : 14
 
     implicitHeight: 40
     implicitWidth: implicitContentWidth + horizontalPadding * 2
@@ -25,7 +29,11 @@ RippleButton {
     contentItem: Row {
         id: contentRow
         anchors.centerIn: parent
-        spacing: 6
+        spacing: root.labelCollapsed ? 0 : 6
+
+        Behavior on spacing {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
 
         Item {
             id: iconContainer
@@ -99,6 +107,16 @@ RippleButton {
             id: label
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
+            clip: true
+            width: root.labelCollapsed ? 0 : implicitWidth
+            opacity: root.labelCollapsed ? 0 : 1
+
+            Behavior on width {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
     }
 }

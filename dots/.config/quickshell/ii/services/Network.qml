@@ -9,6 +9,7 @@ import Quickshell.Io
 import Quickshell.Networking as QNet
 import qs.modules.common.functions
 import qs.services.network
+import "network/NetworkConnectionSelection.js" as ConnectionSelection
 
 /**
  * Wi-Fi and wired status.
@@ -84,13 +85,21 @@ Singleton {
     readonly property string networkName: {
         if (!root.ready)
             return root.seedNetworkName;
-        if (NetworkState.wifiConnected)
-            return NetworkState.activeWifiNetwork?.name ?? "";
-        if (NetworkState.wiredConnected)
-            return NetworkState.wiredNetwork?.name ?? "";
-        return "";
+        return ConnectionSelection.preferredConnectionName(
+            NetworkState.wiredConnected,
+            NetworkState.wiredNetwork?.name ?? "",
+            NetworkState.wifiConnected,
+            NetworkState.activeWifiNetwork?.name ?? ""
+        );
     }
     readonly property string activeConnectionName: root.networkName
+    readonly property string activeInterface: root.ready
+        ? ConnectionSelection.preferredInterface(
+            NetworkState.wiredConnected,
+            NetworkState.wiredInterface,
+            NetworkState.wifiConnected,
+            NetworkState.wifiInterface
+        ) : ""
     readonly property int networkStrength: root.active?.strength ?? 0
     readonly property string materialSymbol: root.ethernet ? "lan" : (root.wifiEnabled && root.wifiStatus === "connected") ? ((root.active?.strength ?? 0) > 83 ? "android_wifi_4_bar" : (root.active?.strength ?? 0) > 67 ? "android_wifi_3_bar" : (root.active?.strength ?? 0) > 50 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 33 ? "wifi_2_bar" : (root.active?.strength ?? 0) > 17 ? "wifi_1_bar" : "signal_wifi_0_bar") : (root.wifiStatus === "connecting") ? "signal_wifi_statusbar_not_connected" : (root.wifiStatus === "disconnected") ? "wifi_find" : (root.wifiStatus === "disabled") ? "signal_wifi_off" : "signal_wifi_bad"
 
@@ -277,6 +286,7 @@ Singleton {
     // already been and gone.
     readonly property var liveNetworks: NetworkState.wifiNetworks
     readonly property bool wifiConnected: NetworkState.wifiConnected
+    readonly property bool wiredConnected: NetworkState.wiredConnected
     readonly property var activeBackendNetwork: NetworkState.activeWifiNetwork
 
     onWifiNetworksChanged: root.applyDetails()
@@ -285,9 +295,10 @@ Singleton {
         root.refreshDetails();
     }
     onWifiConnectedChanged: {
-        root.refreshAddresses();
         root.refreshSaved();
     }
+    onWiredConnectedChanged: root.refreshSaved()
+    onActiveInterfaceChanged: root.refreshAddresses()
     onActiveBackendNetworkChanged: root.refreshAddresses()
     onReadyChanged: {
         root.syncNetworks();
@@ -334,7 +345,7 @@ Singleton {
         id: addressDebounce
         interval: 250
         onTriggered: {
-            if (!NetworkState.wifiConnected) {
+            if (root.activeInterface.length === 0) {
                 root.ipAddress = "";
                 root.ipAddress6 = "";
                 root.gateway = "";
@@ -342,7 +353,7 @@ Singleton {
                 root.subnetMask = "";
                 return;
             }
-            NetworkCommands.readIpConfig(NetworkState.wifiInterface, config => {
+            NetworkCommands.readIpConfig(root.activeInterface, config => {
                 root.ipAddress = config.address ?? "";
                 root.ipAddress6 = config.address6 ?? "";
                 root.gateway = config.gateway ?? "";
@@ -400,8 +411,8 @@ Singleton {
                 root.seedWifiEnabled = (blocks[1] ?? "").trim() === "enabled";
                 root.seedEthernet = wired;
                 root.seedStatus = root.seedWifiEnabled ? status : "disabled";
-                const active = (blocks[2] ?? "").trim().split("\n").find(l => l.includes(":802-11-wireless"));
-                root.seedNetworkName = active ? active.split(":")[0] : "";
+                const activeRows = (blocks[2] ?? "").trim().split("\n").filter(row => row.length > 0);
+                root.seedNetworkName = ConnectionSelection.seededConnectionName(activeRows);
             }
         }
     }

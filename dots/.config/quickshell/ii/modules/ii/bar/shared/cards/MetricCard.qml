@@ -9,9 +9,10 @@ Rectangle {
 
     radius: Appearance.rounding.normal
     color: Appearance.colors.colSurfaceContainerHigh
-    implicitWidth: rowLayout.implicitWidth + 24
+    implicitWidth: root.elideText ? 0 : rowLayout.implicitWidth + 24
     implicitHeight: rowLayout.implicitHeight + 20
     Layout.fillWidth: true
+    Layout.minimumWidth: root.elideText ? 0 : root.implicitWidth
 
     property alias title: title.text
     property alias value: value.text
@@ -19,6 +20,7 @@ Rectangle {
     property string shapeString: "Slanted"
     property color accentColor: Appearance.colors.colPrimaryContainer
     property color symbolColor: Appearance.colors.colOnPrimaryContainer
+    property bool elideText: false
     
     // Internal animation control
     property bool startAnim: false
@@ -45,8 +47,10 @@ Rectangle {
         spacing: 12
         anchors {
             left: parent.left
+            right: parent.right
             verticalCenter: parent.verticalCenter
             leftMargin: 12
+            rightMargin: 12
         }
 
         MaterialShape {
@@ -76,9 +80,14 @@ Rectangle {
 
         ColumnLayout {
             spacing: -2
+            Layout.fillWidth: root.elideText
+            Layout.minimumWidth: 0
 
             StyledText {
                 id: title
+                Layout.fillWidth: root.elideText
+                Layout.minimumWidth: 0
+                elide: root.elideText ? Text.ElideRight : Text.ElideNone
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colOnSurfaceVariant
                 font.weight: Font.DemiBold
@@ -92,6 +101,9 @@ Rectangle {
 
             StyledText {
                 id: value
+                Layout.fillWidth: root.elideText
+                Layout.minimumWidth: 0
+                elide: root.elideText ? Text.ElideRight : Text.ElideNone
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurface
                 font.weight: Font.Bold

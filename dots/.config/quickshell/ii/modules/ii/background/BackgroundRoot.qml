@@ -638,6 +638,16 @@ PanelWindow {
             }
         }
 
+        // This composition layer must stay in the screen coordinate space.
+        // WallpaperImage is transformed by the Gnome-like overview, but the
+        // transparent-bar fade must remain anchored below the real bar. Sampling
+        // WallpaperImage keeps the blur in sync with its rendered wallpaper.
+        BarGradientOverlay {
+            sourceItem: wallpaperImage
+            screenWidth: bgRoot.screen.width
+            screenHeight: bgRoot.screen.height
+        }
+
         GlobalShortcut {
             name: "mediaModeToggle"
             description: "Toggles media mode on press"

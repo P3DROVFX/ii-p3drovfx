@@ -36,6 +36,7 @@ ShellRoot {
         }
         MaterialThemeLoader.reapplyTheme();
         Hyprsunset.load();
+        DisplayColorFilter.load();
         ConflictKiller.load();
         Cliphist.refresh();
         Wallpapers.load();

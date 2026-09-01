@@ -116,7 +116,7 @@ Item {
                         Config.options.dock.smartGrouping = checked;
                     }
                     StyledToolTip {
-                        text: Translation.tr("Automatically groups matching or related application instances in the dock.")
+                        text: Translation.tr("Arranges the dock by app category. Anything you drag into place by hand stays where you put it and is left out of the arrangement.")
                     }
                 }
             }

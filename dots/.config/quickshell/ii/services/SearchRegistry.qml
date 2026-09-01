@@ -359,6 +359,12 @@ Item {
                 if (sub.title) searchStrings.push(sub.title);
             }
 
+            // A section whose title is computed - one a Repeater builds per group, say - has no
+            // title in the source to find. Indexing it as "Unknown" put a heading in the results
+            // that exists on no page, under which its widgets could not be recognised either.
+            if (!title)
+                continue;
+
             // The registry's page name and aliases describe everything on the
             // page, so they belong to each of its sections. They were indexed
             // nowhere before, which left a page findable only under the words
@@ -372,7 +378,7 @@ Item {
             registerSection({
                 pageId: pageId,
                 subPage: subPage || "",
-                title: title || "Unknown",
+                title: title,
                 icon: icon || "",
                 searchStrings: searchStrings,
                 items: sectionItems,

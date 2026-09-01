@@ -16,6 +16,8 @@ BG_ROOT = (ROOT / "modules/ii/background/BackgroundRoot.qml").read_text()
 WALLPAPER_IMAGE = (ROOT / "modules/ii/background/wallpaper/WallpaperImage.qml").read_text()
 OVERVIEW_BG_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewBackgroundController.qml").read_text()
 OVERVIEW_ZOOM_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewZoomController.qml").read_text()
+OVERVIEW_WINDOW_TRANSITION = (ROOT / "modules/ii/overview/OverviewWindowTransition.qml").read_text()
+BAR_GRADIENT_OVERLAY = (ROOT / "modules/ii/background/blur/BarGradientOverlay.qml").read_text()
 
 
 class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
@@ -61,8 +63,18 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         self.assertIn("scaleProgress: overviewController ? overviewController.scaleProgress : 0.0", BG_ROOT)
 
     def test_wallpaper_clip_radius_animates_from_overview_controller(self):
-        """WallpaperImage smoothly derives clip radius from overviewController.cornerRadius."""
-        self.assertIn("property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0", WALLPAPER_IMAGE)
+        """The controller's progress is the only animation clock for clip radius."""
+        self.assertIn("readonly property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0", WALLPAPER_IMAGE)
+        self.assertNotIn("Behavior on wallpaperClipRadius", WALLPAPER_IMAGE)
+
+    def test_bar_gradient_stays_in_the_screen_fixed_composition_layer(self):
+        """The transparent-bar fade must not inherit the wallpaper overview transform."""
+        self.assertNotIn("BarGradientOverlay {", WALLPAPER_IMAGE)
+        self.assertIn("BarGradientOverlay {", BG_ROOT)
+        self.assertIn("sourceItem: wallpaperImage", BG_ROOT)
+        self.assertNotIn("parallaxX", BAR_GRADIENT_OVERLAY)
+        self.assertNotIn("parallaxY", BAR_GRADIENT_OVERLAY)
+        self.assertIn("sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY,", BAR_GRADIENT_OVERLAY)
 
     def test_overview_controller_gnome_preset_decreases_scale(self):
         """Gnome preset must shrink (zoom out < 1.0) and include followWidgetsScale."""
@@ -73,6 +85,38 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         """Legacy OverviewZoomController must not return 1.15 on zoomOutStyle 2."""
         self.assertNotIn("if (Config.options.background.zoomOutStyle === 2)", OVERVIEW_ZOOM_CONTROLLER)
         self.assertNotIn("return 1.15;", OVERVIEW_ZOOM_CONTROLLER)
+
+    def test_gnome_window_handoff_owns_and_disables_one_named_rule(self):
+        """Closing Overview must disable the same no_anim rule used to hide windows."""
+        self.assertIn("quickshell-overview-window-handoff", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("_G.__ii_overview_window_handoff_rule", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("rule:set_enabled(true)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("rule:set_enabled(false)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn(
+            "Component.onDestruction: transitionScope.forceWindowHandoffInactive()",
+            OVERVIEW_WINDOW_TRANSITION,
+        )
+        self.assertIn("id: windowHandoffProcess", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("if (windowHandoffProcess.running)", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("windowHandoffCommandQueued = true", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("transitionScope.runWindowHandoffCommand()", OVERVIEW_WINDOW_TRANSITION)
+        self.assertIn("windowHandoffProcess.running = false;", OVERVIEW_WINDOW_TRANSITION)
+        self.assertGreaterEqual(
+            OVERVIEW_WINDOW_TRANSITION.count("transitionScope.setWindowHandoffActive(false)"),
+            4,
+        )
+
+        # Entering the Gnome preset while Overview is already open must adopt
+        # the live state before scheduling the handoff capture.
+        self.assertIn("tRoot.isOverviewActive = true;", OVERVIEW_WINDOW_TRANSITION)
+
+        # A second anonymous opacity rule restores visibility but leaves the
+        # first rule's no_anim=true active for every future window.
+        self.assertNotIn("opacity = '1.0 1.0'", OVERVIEW_WINDOW_TRANSITION)
+        self.assertNotIn(
+            "hl.window_rule({ match = { class = '.*' }, opacity = '0.0 0.0', no_anim = true })",
+            OVERVIEW_WINDOW_TRANSITION,
+        )
 
 
 if __name__ == "__main__":

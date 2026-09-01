@@ -1,3 +1,5 @@
+import qs
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -266,6 +268,24 @@ LazyLoader {
             }
         }
 
+        // Other shell modules (sidebars, cheatsheet, usage stats) run a HyprlandFocusGrab
+        // that routes ALL pointer input to their grabbed windows. With such a grab active,
+        // hover and clicks aimed at this popup were silently denied. Joining the shared
+        // grab as persistent lets the compositor deliver input here while a module is
+        // open — the same mechanism BarWindow.qml already uses for the bar itself.
+        // Click-to-show popups are excluded: they run their own dismissGrab above.
+        readonly property bool joinsSharedGrab: !(root.selfDismiss
+            && (Config.options.bar.tooltips.clickToShow || root.forceClick))
+
+        function updateSharedGrabMembership() {
+            if (popupWindow.joinsSharedGrab && root.active)
+                GlobalFocusGrab.addPersistent(popupWindow);
+            else
+                GlobalFocusGrab.removePersistent(popupWindow);
+        }
+
+        Component.onDestruction: GlobalFocusGrab.removePersistent(popupWindow)
+
         property real animProgress: 0.0
         readonly property real popupOpenProgress: animProgress
         property var childDelays: []
@@ -373,6 +393,7 @@ LazyLoader {
                 } else {
                     popupWindow.animProgress = 0.0;
                 }
+                popupWindow.updateSharedGrabMembership();
             }
             function on_IsClosingChanged() {
                 if (root._isClosing) {
@@ -403,6 +424,7 @@ LazyLoader {
             }
             popupWindow.animProgress = 0.0;
             openAnimSeq.start();
+            popupWindow.updateSharedGrabMembership();
         }
 
         Timer {
