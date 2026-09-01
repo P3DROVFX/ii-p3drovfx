@@ -106,6 +106,8 @@ StyledFlickable {
             Layout.bottomMargin: 12
         }
 
+        WiredConnectionSection {}
+
         // ── Section: connected ────────────────────────────
         StyledText {
             Layout.fillWidth: true
