@@ -417,8 +417,13 @@ Singleton {
         };
         let ok = result.ok === true;
         let error = ok ? "" : (result.error || Translation.tr("Something went wrong."));
-        if (!ok && job.action !== "discover")
-            root.lastError = error;
+        // Background reads (links, auth, the update check) must not clear an
+        // error the user has not seen yet, and their own failures are not
+        // worth interrupting anyone over. What a person pressed a button for
+        // is: it either reports, or it clears the last report.
+        let volunteered = ["links", "auth", "check-updates", "discover"].indexOf(job.action) === -1;
+        if (volunteered)
+            root.lastError = ok ? "" : error;
 
         if (job.action === "links") {
             root.installed = ok ? (result.links || []) : [];

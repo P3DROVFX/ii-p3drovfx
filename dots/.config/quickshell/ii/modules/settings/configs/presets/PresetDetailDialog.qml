@@ -25,8 +25,16 @@ WindowDialog {
     readonly property string repo: dialog.entry ? (dialog.entry.repo ?? "") : ""
     readonly property string installedAs: dialog.entry ? (dialog.entry.installedAs ?? "") : ""
     readonly property bool blocked: dialog.compatibility !== null && dialog.compatibility.ok === false
+    // The card that opened this dialog offers an update; the dialog has to be
+    // able to act on it, or the store advertises something with no way to take
+    // it. `updateFor` reads git, so it stays right even while the raw manifest
+    // GitHub serves is still a few minutes out of date.
+    readonly property var pending: dialog.installedAs.length > 0
+        ? PresetStore.updateFor(dialog.installedAs) : null
+    readonly property bool hasUpdate: dialog.pending !== null
 
     signal installRequested(string repo)
+    signal updateRequested(string name)
 
     preferredDialogWidth: 620
     onDismiss: dialog.show = false
@@ -59,7 +67,10 @@ WindowDialog {
 
     WindowDialogTitle {
         Layout.fillWidth: true
-        text: dialog.entry ? (dialog.entry.name ?? "") : ""
+        // The manifest names the preset; the search result only knows what the
+        // repository is called. Prefer the name once it has been read.
+        text: (dialog.manifest && (dialog.manifest.name ?? "").length > 0)
+            ? dialog.manifest.name : (dialog.entry ? (dialog.entry.name ?? "") : "")
     }
 
     RowLayout {
@@ -74,7 +85,11 @@ WindowDialog {
 
         StyledText {
             visible: dialog.manifest !== null
-            text: dialog.manifest ? Translation.tr("version %1").arg(dialog.manifest.version) : ""
+            // The manifest comes from GitHub's raw CDN, which lags a few minutes
+            // behind a fresh release; the pending entry was read from git.
+            text: dialog.hasUpdate
+                ? Translation.tr("version %1").arg(dialog.pending.availableVersion ?? "")
+                : (dialog.manifest ? Translation.tr("version %1").arg(dialog.manifest.version) : "")
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnSurfaceVariant
         }
@@ -180,7 +195,10 @@ WindowDialog {
         }
 
         Repeater {
-            model: dialog.manifest ? (dialog.manifest.changelog ?? []).slice(0, 3) : []
+            // What is actually coming, when something is: the pending entry
+            // holds only the releases newer than the installed one.
+            model: dialog.hasUpdate ? (dialog.pending.changelog ?? []).slice(0, 3)
+                : (dialog.manifest ? (dialog.manifest.changelog ?? []).slice(0, 3) : [])
 
             delegate: StyledText {
                 required property var modelData
@@ -222,11 +240,16 @@ WindowDialog {
         }
 
         DialogButton {
-            buttonText: dialog.installedAs.length > 0 ? Translation.tr("Installed") : Translation.tr("Install")
-            enabled: !dialog.blocked && dialog.installedAs.length === 0
-                && !PresetStore.busyFor(dialog.repo)
+            buttonText: dialog.hasUpdate ? Translation.tr("Update")
+                : (dialog.installedAs.length > 0 ? Translation.tr("Installed") : Translation.tr("Install"))
+            enabled: !dialog.blocked && !PresetStore.busyFor(dialog.repo)
+                && !PresetStore.busyFor(dialog.installedAs)
+                && (dialog.installedAs.length === 0 || dialog.hasUpdate)
             onClicked: {
-                dialog.installRequested(dialog.repo);
+                if (dialog.hasUpdate)
+                    dialog.updateRequested(dialog.installedAs);
+                else
+                    dialog.installRequested(dialog.repo);
                 dialog.show = false;
             }
         }

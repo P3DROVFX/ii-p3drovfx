@@ -150,6 +150,13 @@ class TestPureHelpers(unittest.TestCase):
             with self.assertRaises(self.store.StoreError):
                 self.store.check_name(bad)
 
+    def test_a_generated_collision_name_is_accepted_back(self):
+        import preset_store
+        # install() renames a colliding preset to "Name (2)". If check_name
+        # refused that, every command afterwards -- pull, diff, uninstall --
+        # would refuse the preset the store itself had just created.
+        self.assertEqual(preset_store.check_name("Midnight Slate (2)"), "Midnight Slate (2)")
+
     def test_preset_name_allows_spaces_and_dashes(self):
         self.assertEqual(self.store.check_name("Nord Deep-2"), "Nord Deep-2")
 
@@ -530,6 +537,18 @@ class TestScreenshotStaging(StoreTestCase):
         import preset_store
         with self.assertRaises(preset_store.StoreError):
             self.stage([self.shot("%d.png" % i) for i in range(preset_store.MAX_SCREENSHOTS + 1)])
+
+    def test_an_oversized_wallpaper_is_refused_before_anything_is_created(self):
+        import preset_store
+        # A 100 MB wallpaper is not exotic -- GitHub refuses it at the push,
+        # by which time `gh repo create` has already made a public repository.
+        big = os.path.join(self.presets_dir, "Mine.png")
+        with open(big, "wb") as handle:
+            handle.write(b"0" * (preset_store.MAX_ASSET_BYTES + 1))
+        with self.assertRaises(preset_store.StoreError) as caught:
+            self.stage([])
+        self.assertIn("wallpaper", str(caught.exception))
+        self.assertEqual(os.listdir(self.staging), [preset_store.CONFIG_NAME])
 
     def test_an_oversized_screenshot_is_refused(self):
         import preset_store

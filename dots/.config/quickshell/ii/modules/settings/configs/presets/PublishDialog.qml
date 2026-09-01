@@ -33,7 +33,11 @@ WindowDialog {
         FileUtils.trimFileProtocol(`${Directories.state}/preset-screenshots`)
 
     preferredDialogWidth: 620
+    // What is left for the scrolling middle once the title, the buttons and
+    // the dialog's own padding have taken their share.
+    readonly property real availableBodyHeight: Math.max(160, dialog.height - 220)
     onDismiss: dialog.show = false
+
 
     function openFor(name) {
         dialog.presetName = name;
@@ -109,200 +113,218 @@ WindowDialog {
         text: Translation.tr('Publish "%1"').arg(dialog.presetName)
     }
 
-    WindowDialogParagraph {
+    // The dialog is taller than the settings window on a short screen, and
+    // an overflowing dialog does not merely look wrong: Publish and Cancel
+    // sit below the edge, where nothing can reach them. Everything between
+    // the title and the buttons scrolls instead.
+    StyledFlickable {
         Layout.fillWidth: true
-        text: Translation.tr("This creates a repository on your GitHub account, tags it so the store can find it, and pushes the preset. Anyone will be able to install it.")
-    }
+        Layout.preferredHeight: Math.min(publishBody.implicitHeight, dialog.availableBodyHeight)
+        contentWidth: width
+        contentHeight: publishBody.implicitHeight
+        clip: true
 
-    GithubSignInPanel {
-        Layout.fillWidth: true
-    }
+        ColumnLayout {
+            id: publishBody
+            width: parent.width
+            spacing: 16
 
-    MaterialTextField {
-        id: repoField
-        Layout.fillWidth: true
-        visible: dialog.signedIn
-        placeholderText: Translation.tr("Repository name")
-        error: repoField.text.length > 0 && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repoField.text)
-    }
-
-    MaterialTextField {
-        id: descriptionField
-        Layout.fillWidth: true
-        visible: dialog.signedIn
-        placeholderText: Translation.tr("What does it look like? (optional)")
-    }
-
-    MaterialTextField {
-        id: notesField
-        Layout.fillWidth: true
-        visible: dialog.signedIn
-        placeholderText: Translation.tr("Release notes (optional)")
-    }
-
-    // ── Screenshots ──────────────────────────────────────────────────────────
-
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: 8
-        visible: dialog.signedIn
-
-        WindowDialogSectionHeader {
-            Layout.fillWidth: true
-            text: Translation.tr("Screenshots")
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Taking one hides this window, photographs your screen and brings it back. They are the only pictures people see before installing.")
-            wrapMode: Text.Wrap
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colOnSurfaceVariant
-        }
-
-        Row {
-            Layout.fillWidth: true
-            spacing: 8
-            visible: dialog.shots.length > 0
-
-            Repeater {
-                model: dialog.shots
-
-                delegate: Rectangle {
-                    id: shotFrame
-                    required property string modelData
-                    required property int index
-
-                    width: 120
-                    height: 72
-                    radius: Appearance.rounding.small
-                    color: Appearance.colors.colSurfaceContainerHigh
-
-                    StyledImage {
-                        id: shotImage
-                        anchors.fill: parent
-                        source: `file://${shotFrame.modelData}`
-                        fillMode: Image.PreserveAspectCrop
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: shotImage.width
-                                height: shotImage.height
-                                radius: Appearance.rounding.small
-                            }
-                        }
-                    }
-
-                    RippleButton {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 4
-                        implicitWidth: 22
-                        implicitHeight: 22
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: Appearance.colors.colError
-                        colBackgroundHover: Appearance.colors.colErrorHover
-                        colRipple: Appearance.colors.colErrorActive
-
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "close"
-                            iconSize: 14
-                            color: Appearance.colors.colOnError
-                        }
-
-                        onClicked: dialog.shots = dialog.shots.filter((path, i) => i !== shotFrame.index)
-                    }
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            RippleButtonWithIcon {
-                materialIcon: "photo_camera"
-                mainText: dialog.capturing ? Translation.tr("Hold still…")
-                    : (dialog.shots.length === 0 ? Translation.tr("Take a screenshot")
-                        : Translation.tr("Take another"))
-                enabled: !dialog.capturing && dialog.shots.length < 6
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: dialog.capture()
-            }
-
-            StyledText {
+            WindowDialogParagraph {
                 Layout.fillWidth: true
-                visible: dialog.captureError.length > 0
-                text: dialog.captureError
-                wrapMode: Text.Wrap
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colError
+                text: Translation.tr("This creates a repository on your GitHub account, tags it so the store can find it, and pushes the preset. Anyone will be able to install it.")
             }
-        }
-    }
 
-    // ── What actually leaves this machine ────────────────────────────────────
-
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: 4
-        visible: dialog.signedIn
-
-        WindowDialogSectionHeader {
-            Layout.fillWidth: true
-            text: Translation.tr("What gets published")
-        }
-
-        Repeater {
-            model: [
-                { "ok": true, "label": Translation.tr("Your settings, with keys, tokens, folders and monitor names stripped out") },
-                { "ok": true, "label": Translation.tr("The wallpaper and the sidebar banner, if this preset has them") },
-                { "ok": true, "label": Translation.tr("The screenshots you took above") },
-                { "ok": false, "label": Translation.tr("Your profile picture, name and greeting — never") },
-                { "ok": false, "label": Translation.tr("API keys, saved networks, paired devices and contacts — never") }
-            ]
-
-            delegate: RowLayout {
-                required property var modelData
-
+            GithubSignInPanel {
                 Layout.fillWidth: true
-                spacing: 6
+            }
 
-                MaterialSymbol {
-                    text: modelData.ok ? "check" : "block"
-                    iconSize: 15
-                    color: modelData.ok ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+            MaterialTextField {
+                id: repoField
+                Layout.fillWidth: true
+                visible: dialog.signedIn
+                placeholderText: Translation.tr("Repository name")
+                error: repoField.text.length > 0 && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repoField.text)
+            }
+
+            MaterialTextField {
+                id: descriptionField
+                Layout.fillWidth: true
+                visible: dialog.signedIn
+                placeholderText: Translation.tr("What does it look like? (optional)")
+            }
+
+            MaterialTextField {
+                id: notesField
+                Layout.fillWidth: true
+                visible: dialog.signedIn
+                placeholderText: Translation.tr("Release notes (optional)")
+            }
+
+            // ── Screenshots ──────────────────────────────────────────────────────────
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                visible: dialog.signedIn
+
+                WindowDialogSectionHeader {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Screenshots")
                 }
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: modelData.label
+                    text: Translation.tr("Taking one hides this window, photographs your screen and brings it back. They are the only pictures people see before installing.")
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+
+                Row {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: dialog.shots.length > 0
+
+                    Repeater {
+                        model: dialog.shots
+
+                        delegate: Rectangle {
+                            id: shotFrame
+                            required property string modelData
+                            required property int index
+
+                            width: 120
+                            height: 72
+                            radius: Appearance.rounding.small
+                            color: Appearance.colors.colSurfaceContainerHigh
+
+                            StyledImage {
+                                id: shotImage
+                                anchors.fill: parent
+                                source: `file://${shotFrame.modelData}`
+                                fillMode: Image.PreserveAspectCrop
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: shotImage.width
+                                        height: shotImage.height
+                                        radius: Appearance.rounding.small
+                                    }
+                                }
+                            }
+
+                            RippleButton {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.margins: 4
+                                implicitWidth: 22
+                                implicitHeight: 22
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colError
+                                colBackgroundHover: Appearance.colors.colErrorHover
+                                colRipple: Appearance.colors.colErrorActive
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "close"
+                                    iconSize: 14
+                                    color: Appearance.colors.colOnError
+                                }
+
+                                onClicked: dialog.shots = dialog.shots.filter((path, i) => i !== shotFrame.index)
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    RippleButtonWithIcon {
+                        materialIcon: "photo_camera"
+                        mainText: dialog.capturing ? Translation.tr("Hold still…")
+                            : (dialog.shots.length === 0 ? Translation.tr("Take a screenshot")
+                                : Translation.tr("Take another"))
+                        enabled: !dialog.capturing && dialog.shots.length < 6
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colRipple: Appearance.colors.colSecondaryContainerActive
+                        onClicked: dialog.capture()
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        visible: dialog.captureError.length > 0
+                        text: dialog.captureError
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colError
+                    }
+                }
+            }
+
+            // ── What actually leaves this machine ────────────────────────────────────
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: dialog.signedIn
+
+                WindowDialogSectionHeader {
+                    Layout.fillWidth: true
+                    text: Translation.tr("What gets published")
+                }
+
+                Repeater {
+                    model: [
+                        { "ok": true, "label": Translation.tr("Your settings, with keys, tokens, folders and monitor names stripped out") },
+                        { "ok": true, "label": Translation.tr("The wallpaper and the sidebar banner, if this preset has them") },
+                        { "ok": true, "label": Translation.tr("The screenshots you took above") },
+                        { "ok": false, "label": Translation.tr("Your profile picture, name and greeting — never") },
+                        { "ok": false, "label": Translation.tr("API keys, saved networks, paired devices and contacts — never") }
+                    ]
+
+                    delegate: RowLayout {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        MaterialSymbol {
+                            text: modelData.ok ? "check" : "block"
+                            iconSize: 15
+                            color: modelData.ok ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: modelData.label
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: dialog.signedIn
+                spacing: 8
+
+                StyledSwitch {
+                    id: privateSwitch
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Keep the repository private. Nobody can install it, including you on another machine.")
                     wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colOnSurfaceVariant
                 }
             }
-        }
-    }
-
-    RowLayout {
-        Layout.fillWidth: true
-        visible: dialog.signedIn
-        spacing: 8
-
-        StyledSwitch {
-            id: privateSwitch
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: Translation.tr("Keep the repository private. Nobody can install it, including you on another machine.")
-            wrapMode: Text.Wrap
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colOnSurfaceVariant
         }
     }
 

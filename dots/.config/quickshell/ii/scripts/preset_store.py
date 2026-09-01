@@ -73,8 +73,15 @@ SCREENSHOT_DIR = 'screenshots'
 # large captures on every patch release grows a clone nobody wants to pull.
 MAX_SCREENSHOTS = 6
 MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
+# The wallpaper and the banner get the same treatment for the same reason,
+# with more room because a wallpaper is the whole point of most presets.
+# GitHub refuses a file over 100 MB outright, and it would refuse it at the
+# push -- after the repository already exists -- so the size is checked here.
+MAX_ASSET_BYTES = 25 * 1024 * 1024
 
-NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _.-]*$')
+# Parentheses belong here: a name collision on install produces "Name (2)",
+# and a name this program generates itself has to be one it accepts back.
+NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 ()_.-]*$')
 REPO_NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$')
 SLUG_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$')
 IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp')
@@ -149,7 +156,8 @@ def check_name(name):
     if '/' in name or '\\' in name or '..' in name or name.startswith('.'):
         raise StoreError('That preset name cannot be used as a file name.')
     if not NAME_RE.match(name):
-        raise StoreError('Preset names may only hold letters, numbers, spaces, dots, dashes and underscores.')
+        raise StoreError('Preset names may only hold letters, numbers, spaces, brackets, '
+                         'dots, dashes and underscores.')
     return name
 
 
@@ -904,6 +912,21 @@ def stage_screenshots(directory, manifest, screenshots):
     return manifest
 
 
+def check_asset_size(path, what):
+    """Refuse an image too big to publish, while nothing has been created yet.
+
+    Git keeps every version of a binary forever, so an enormous wallpaper is
+    not only a push that fails: it is a clone everyone who installs the preset
+    pays for, on every release, for good.
+    """
+    size = os.path.getsize(path)
+    if size <= MAX_ASSET_BYTES:
+        return
+    raise StoreError('The %s is %d MB, and a preset may ship at most %d MB. '
+                     'Shrink it and save the preset again.'
+                     % (what, size // (1024 * 1024), MAX_ASSET_BYTES // (1024 * 1024)))
+
+
 def stage_payload(directory, name, manifest, screenshots=None):
     """Write the preset and its assets into the repo working tree."""
     source = os.path.join(presets_dir(), '%s.json' % name)
@@ -919,16 +942,14 @@ def stage_payload(directory, name, manifest, screenshots=None):
 
     # The profile picture is never shipped. It is the author's own face, it
     # says nothing about the theme, and a published preset is public.
-    wallpaper = presets_helper.find_wallpaper_fallback(presets_dir(), name)
-    if wallpaper and image_ext(wallpaper):
-        target = 'wallpaper%s' % image_ext(wallpaper)
-        shutil.copy2(wallpaper, os.path.join(directory, target))
-        manifest['wallpaper'] = target
-    banner = presets_helper.find_banner_fallback(presets_dir(), name)
-    if banner and image_ext(banner):
-        target = 'banner%s' % image_ext(banner)
-        shutil.copy2(banner, os.path.join(directory, target))
-        manifest['banner'] = target
+    for key, source in (('wallpaper', presets_helper.find_wallpaper_fallback(presets_dir(), name)),
+                        ('banner', presets_helper.find_banner_fallback(presets_dir(), name))):
+        if not source or not image_ext(source):
+            continue
+        check_asset_size(source, key)
+        target = '%s%s' % (key, image_ext(source))
+        shutil.copy2(source, os.path.join(directory, target))
+        manifest[key] = target
     return stage_screenshots(directory, manifest, screenshots)
 
 

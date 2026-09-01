@@ -134,8 +134,17 @@ case $action in
         fi
         ;;
     load)
-        if [[ -z "$name" ]]; then exit 1; fi
-        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        # Said out loud, not just returned: the shell shows whatever comes back
+        # on stderr, and "it did not answer" is a poor thing to tell someone
+        # whose preset file simply is not there any more.
+        if [[ -z "$name" ]]; then
+            printf '[presets.sh] No preset name was given.\n' >&2
+            exit 1
+        fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then
+            printf '[presets.sh] There is no preset called "%s".\n' "$name" >&2
+            exit 1
+        fi
         # Migrate up, block newer. An older preset is carried forward by the
         # shell's own migrations; a newer one names settings this build has
         # never heard of, and merging it in would mangle them silently.

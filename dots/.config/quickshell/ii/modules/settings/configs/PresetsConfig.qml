@@ -96,6 +96,23 @@ ContentPage {
         }
     }
 
+    // Anything the store refused, wherever it was pressed. Without this a
+    // failed install or update is simply a button that did nothing.
+    NoticeBox {
+        Layout.fillWidth: true
+        Layout.topMargin: -20
+        visible: PresetStore.lastError.length > 0
+        materialIcon: "error"
+        text: PresetStore.lastError
+
+        RippleButtonWithIcon {
+            buttonRadius: Appearance.rounding.small
+            materialIcon: "close"
+            mainText: Translation.tr("Dismiss")
+            onClicked: PresetStore.lastError = ""
+        }
+    }
+
     NoticeBox {
         Layout.fillWidth: true
         Layout.topMargin: -20
@@ -520,6 +537,7 @@ ContentPage {
         show: false
         z: 100000
         onInstallRequested: repo => PresetStore.install(repo, "", false)
+        onUpdateRequested: name => PresetStore.pull(name, false)
     }
 
     PublishDialog {
