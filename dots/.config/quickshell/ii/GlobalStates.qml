@@ -742,6 +742,8 @@ Singleton {
     readonly property bool floatingNotchOwnsSearch: {
         if (!Config.ready || !root.overviewOpen)
             return false;
+        if (root.searchCenterMode)
+            return false;
 
         const notch = Config.options.bar.floatingNotch;
         if (!notch || !notch.enable || notch.centerInBar)
