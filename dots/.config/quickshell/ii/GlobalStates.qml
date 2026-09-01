@@ -1012,9 +1012,17 @@ Singleton {
         }
     }
 
+    /// Set by a family that presents the policies panel as something other than a sidebar.
+    /// Without it, a family with native app windows simply swallowed the keybind, which
+    /// left the shortcut dead rather than redirected.
+    property var leftSidebarHandler: null
+
     function toggleLeftSidebar(monitorName) {
-        if (PanelFamily.nativeAppWindows)
+        if (PanelFamily.nativeAppWindows) {
+            if (root.leftSidebarHandler)
+                root.leftSidebarHandler(monitorName);
             return;
+        }
         if (root.policiesPanelOpen) {
             root.policiesPanelOpen = false;
         } else {

@@ -1,8 +1,11 @@
+import QtQuick
 import Quickshell
+import qs
 import Quickshell.Hyprland
 import Quickshell.Wayland
 
 import qs.modules.common
+import qs.modules.tablet.appWindow
 
 /**
  * Global shortcuts whose meaning changes with the Tablet Family.
@@ -46,6 +49,17 @@ Scope {
         description: "Opens tablet recents"
         onPressed: GlobalStates.toggleRecents("")
     }
+
+    // The policies keybind opens the first policies app instead of a sidebar this family
+    // does not have. GlobalStates owns the shortcut — it is shared by every family — so the
+    // redirect is installed as a handler rather than by registering a second shortcut of
+    // the same name.
+    Component.onCompleted: GlobalStates.leftSidebarHandler = () => {
+        const first = TabletSystemApps.available.find(app => app.id.startsWith("policies."));
+        if (first)
+            GlobalStates.toggleTabletApp(first.id);
+    }
+    Component.onDestruction: GlobalStates.leftSidebarHandler = null
 
     GlobalShortcut {
         name: "cheatsheetToggle"
