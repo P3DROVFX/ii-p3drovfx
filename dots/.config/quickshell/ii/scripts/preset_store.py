@@ -335,6 +335,7 @@ def cmd_auth_status():
         return {
             'ok': True, 'hasGh': False, 'authenticated': False, 'login': '',
             'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
+            'deviceFlow': bool(GITHUB_CLIENT_ID),
             'hint': 'Publishing needs the GitHub CLI. Install the "github-cli" package.',
         }
     # -i so the granted scopes come back in the response headers; `gh auth
@@ -344,6 +345,7 @@ def cmd_auth_status():
         return {
             'ok': True, 'hasGh': True, 'authenticated': False, 'login': '',
             'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
+            'deviceFlow': bool(GITHUB_CLIENT_ID),
             'hint': err or 'Not signed in to GitHub.',
         }
     scopes = []
@@ -364,6 +366,10 @@ def cmd_auth_status():
     return {
         'ok': True, 'hasGh': True, 'authenticated': True, 'login': login,
         'scopes': scopes, 'missingScopes': missing,
+        # Whether the in-shell device code can work at all. With no OAuth app
+        # registered the panel has to offer the terminal instead of a button
+        # that can only ever fail.
+        'deviceFlow': bool(GITHUB_CLIENT_ID),
         'hint': 'The token cannot create repositories. Sign in again with the "repo" scope.' if missing else '',
     }
 
@@ -935,10 +941,11 @@ def write_readme(directory, manifest):
         '## Install',
         '',
         'Open **Settings → Presets → Store** in the shell and search for this preset,',
-        'or install it by name:',
+        'or install it from a terminal:',
         '',
         '```',
-        'ii preset install %s' % manifest.get('_repo', ''),
+        'python3 ~/.config/quickshell/ii/scripts/preset_store.py install %s'
+        % manifest.get('_repo', ''),
         '```',
         '',
         '## What it ships',

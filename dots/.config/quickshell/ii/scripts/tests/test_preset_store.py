@@ -562,5 +562,33 @@ class TestRepeatableOptions(unittest.TestCase):
         self.assertEqual(argv, ["publish", "Mine"])
 
 
+class TestSignInSetup(unittest.TestCase):
+    """The terminal path exists and says whether the in-shell one can work."""
+
+    SCRIPT = os.path.join(SCRIPTS_DIR, "preset_store_signin.sh")
+
+    def test_auth_status_says_whether_the_device_flow_is_possible(self):
+        import preset_store
+        status = preset_store.cmd_auth_status()
+        # No OAuth app is registered for this build, so the panel has to be
+        # told rather than left offering a button that can only ever fail.
+        self.assertIn("deviceFlow", status)
+        self.assertEqual(status["deviceFlow"], bool(preset_store.GITHUB_CLIENT_ID))
+
+    def test_the_setup_script_is_there_and_runnable(self):
+        self.assertTrue(os.path.isfile(self.SCRIPT))
+        self.assertTrue(os.access(self.SCRIPT, os.X_OK))
+        result = subprocess.run(["bash", "-n", self.SCRIPT], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_setup_script_asks_for_the_scope_publishing_needs(self):
+        # Without "repo" the token reads GitHub perfectly well and then fails
+        # at the one moment that matters, which is the repository creation.
+        with open(self.SCRIPT, encoding="utf-8") as handle:
+            body = handle.read()
+        self.assertIn("--scopes repo", body)
+        self.assertIn("github-cli", body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
