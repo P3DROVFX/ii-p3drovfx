@@ -21,7 +21,7 @@
 | **4** | Gestos: múltiplos handlers + ações por família | ✅ **concluída** (arrasto fora das bordas entregue na Fase 3) |
 | **3** | Tela inicial: gaveta, dock, workspaces, ícones, recentes | ✅ **concluída** (2 polimentos adiados, ver 3a/3b) |
 | **5** | Application windows + layout de módulos | 🟡 **parcial** — app windows prontos; layout dos módulos a fazer |
-| **6** | Settings adaptado para toque | ⬜ a fazer |
+| **6** | Settings adaptado para toque | 🟡 **parcial** — página Tablet e alvos de toque prontos |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
 
 > Ordem de execução: **1 → 2 → 4 → 3 → 5 → 6 → 7**.
@@ -627,14 +627,30 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.
 - [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
 
-### Fase 6 — Settings adaptado para toque
+### Fase 6 — Settings adaptado para toque 🟡
 
-- [ ] Layout master-detail em duas colunas, como o Settings do Android.
-- [ ] Alvos de 48dp em `ConfigSwitch`, `ConfigSpinBox`, `ConfigSelectionArray`.
-- [ ] `ConfigSpinBox` é hostil a dedo — trocar por slider ou stepper grande.
+- [x] **Página Tablet** nova: shade, dock, home screen e gestos. Listada só para a família
+      que ela configura. Os controles estavam espalhados por qualquer página de desktop que
+      o recurso da tablet lembrasse — a borda de arrasto da shade morava em "Sidebars" —
+      então achar um exigia saber de qual recurso da ii a tablet tinha emprestado.
+- [x] **Passo do grid virou preferência de verdade** (`background.widgets.gridStep`, 0 =
+      deixa a família decidir). Era constante no `Appearance`.
+- [x] **Alvos de toque** nos controles compartilhados, com **piso** e não altura fixa, e
+      só em família touch-first (a ii foi verificada lado a lado e não mudou):
+      `StyledSpinBox` (os quadrados +/- eram 35px e são a área de toque inteira),
+      `StyledSwitch` (voltou ao tamanho M3 — o 0.75 serve a ponteiro, mas este controle é
+      *arrastado*, não só tocado), e as linhas de `ConfigSwitch`, `ConfigSpinBox`,
+      `ConfigSubpageRow` e `ConfigSlider`.
+- [ ] Layout master-detail em duas colunas, como o Settings do Android. Hoje já é
+      sidebar + conteúdo, que é master-detail; falta avaliar se vale mudar.
 - [ ] Rolagem com física de fling.
-- [ ] Página **Tablet** nova: shade, home screen, dock, gaveta, gestos. Move para lá os
-      controles hoje espalhados em `SidebarsConfig.qml`.
+
+> ⚠️ **Armadilha que custou tempo:** a página nova renderizou **completamente vazia**, com
+> um único aviso no log — *binding loop*. O spin box do passo do grid lia
+> `Appearance.sizes.widgetGridStep` como fallback, e essa propriedade resolve através da
+> mesma chave de config que o controle escreve. `Appearance` agora expõe
+> `familyWidgetGridStep` (o default da família, independente do valor guardado) para
+> exatamente esse caso. **Um loop de binding aqui não degrada: apaga a página.**
 
 ### Fase 7 — Restrição de customização + simplificação
 
