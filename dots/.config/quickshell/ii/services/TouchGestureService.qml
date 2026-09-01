@@ -574,6 +574,18 @@ Singleton {
         var bindings = root.opts ? root.opts.bindings : null;
         if (!bindings) return "none";
 
+        const bound = root.boundActionForOrigin(bindings, origin);
+        // A binding pointing at a surface this family does not load would recognise the
+        // swipe, commit it, and do nothing — which reads as a broken touchscreen rather
+        // than a wrong setting. Treat it as unbound instead.
+        if (!TouchGestureActionRegistry.availableForFamily(
+                TouchGestureActionRegistry.actionById(bound), PanelFamily.current))
+            return "none";
+        return bound;
+    }
+
+    function boundActionForOrigin(bindings, origin) {
+
         switch (origin) {
         case "leftEdge": return bindings.leftEdge ? bindings.leftEdge : "none";
         case "rightEdge": return bindings.rightEdge ? bindings.rightEdge : "none";

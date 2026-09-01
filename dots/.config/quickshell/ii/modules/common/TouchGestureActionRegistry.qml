@@ -18,14 +18,18 @@ Singleton {
         { id: "overviewEmoji", name: "Emoji Picker", icon: "mood" },
         { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open" },
         { id: "sidebarRight", name: "Right Sidebar", icon: "right_panel_open" },
-        { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
+        // Tablet: no keyboard-shortcut reference. Returns as an app window in Fase 5.
+        { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" , families: ["ii", "waffle"] },
         { id: "osk", name: "On-screen Keyboard", icon: "keyboard_alt" },
-        { id: "overlay", name: "Game / Widget Overlay", icon: "layers" },
+        // Tablet: the game/widget overlay is a desktop surface, permanently out.
+        { id: "overlay", name: "Game / Widget Overlay", icon: "layers" , families: ["ii", "waffle"] },
         { id: "session", name: "Session / Power Menu", icon: "power_settings_new" },
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
-        { id: "usage", name: "App Usage Stats", icon: "query_stats" },
-        { id: "modes", name: "Modes & Routines", icon: "tune" },
+        // Tablet: returns as an app window in Fase 5.
+        { id: "usage", name: "App Usage Stats", icon: "query_stats" , families: ["ii", "waffle"] },
+        // Tablet: returns as an app window in Fase 5.
+        { id: "modes", name: "Modes & Routines", icon: "tune" , families: ["ii", "waffle"] },
         { id: "barToggle", name: "Toggle Bar", icon: "dock_to_bottom" },
         { id: "oledSaver", name: "OLED Saver (Blackout)", icon: "brightness_empty" },
         { id: "lock", name: "Lock Screen", icon: "lock" },
@@ -36,7 +40,8 @@ Singleton {
         { id: "regionSearch", name: "Google Lens (Search Image)", icon: "image_search" },
         { id: "regionOcr", name: "Character Recognition (OCR)", icon: "document_scanner" },
         { id: "screenTranslate", name: "Translate Screen Content", icon: "g_translate" },
-        { id: "colorPicker", name: "Color Picker (#HEX)", icon: "colorize" },
+        // Tablet: a desktop utility, permanently out.
+        { id: "colorPicker", name: "Color Picker (#HEX)", icon: "colorize" , families: ["ii", "waffle"] },
         { id: "regionRecord", name: "Record Region", icon: "videocam" },
         { id: "regionRecordWithSound", name: "Record Region (with Sound)", icon: "video_camera_front" },
 
@@ -56,11 +61,32 @@ Singleton {
         { id: "toggleLightDark", name: "Toggle Light / Dark", icon: "dark_mode" },
 
         // Window & Workspace Management
-        { id: "scratchpad", name: "Toggle Scratchpad", icon: "inventory_2" },
+        // Tablet: desktop window management. Returns as an app window in Fase 5.
+        { id: "scratchpad", name: "Toggle Scratchpad", icon: "inventory_2" , families: ["ii", "waffle"] },
         { id: "closeWindow", name: "Close Active Window", icon: "close" },
         { id: "toggleFullscreen", name: "Toggle Window Fullscreen", icon: "fullscreen" },
         { id: "toggleFloating", name: "Toggle Window Floating", icon: "picture_in_picture" }
     ]
+
+    /**
+     * Whether the running family can actually perform this action.
+     *
+     * A binding pointing at a surface the family does not load is worse than an unbound
+     * gesture: the swipe is recognised, it commits, and nothing happens — which reads as
+     * the touchscreen being broken rather than as a setting being wrong. Actions without
+     * a `families` field work everywhere, which is nearly all of them.
+     */
+    function availableForFamily(action, family) {
+        if (!action)
+            return false;
+        if (!action.families)
+            return true;
+        return action.families.indexOf(family ?? "ii") !== -1;
+    }
+
+    function availableActionsForFamily(family) {
+        return root.actions.filter(a => root.availableForFamily(a, family));
+    }
 
     function actionById(actionId) {
         return actions.find(action => action.id === actionId)

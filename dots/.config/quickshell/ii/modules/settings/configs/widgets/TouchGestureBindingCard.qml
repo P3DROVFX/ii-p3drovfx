@@ -91,17 +91,23 @@ Rectangle {
             id: actionPicker
             Layout.fillWidth: true
             buttonIcon: (root.currentAction && root.currentAction.icon) ? root.currentAction.icon : "block"
-            model: TouchGestureActionRegistry.actions.map(function(a) { return Translation.tr(a.name); })
+            // Only what this family can actually do. Offering an action whose surface the
+            // family never loads produces a binding that recognises the swipe and then does
+            // nothing, which reads as a broken touchscreen.
+            readonly property var availableActions:
+                TouchGestureActionRegistry.availableActionsForFamily(PanelFamily.current)
+
+            model: availableActions.map(function(a) { return Translation.tr(a.name); })
             currentIndex: {
-                for (var i = 0; i < TouchGestureActionRegistry.actions.length; ++i) {
-                    if (TouchGestureActionRegistry.actions[i].id === root.actionId) {
+                for (var i = 0; i < actionPicker.availableActions.length; ++i) {
+                    if (actionPicker.availableActions[i].id === root.actionId) {
                         return i;
                     }
                 }
                 return 0;
             }
             onActivated: function(index) {
-                var act = TouchGestureActionRegistry.actions[index];
+                var act = actionPicker.availableActions[index];
                 if (act) {
                     root.actionSelected(act.id);
                 }

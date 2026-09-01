@@ -16,8 +16,9 @@ import Quickshell
  * `Config.options.panelFamily === "tablet"` inline, which made a shared service depend
  * on one family's implementation: adding a second dragging family meant editing the
  * service, and the tablet module could never be deleted without breaking it. The
- * dependency is inverted here. The service only ever talks to this registry; the family
- * registers a handler from its own composition root and takes it away when it unloads.
+ * dependency is inverted here. The service only ever talks to this registry; a family
+ * registers its handlers from its own composition root and takes them away when it
+ * unloads.
  *
  * A handler is any object providing:
  *
@@ -30,61 +31,93 @@ import Quickshell
  *
  * `travel` is the raw primary-axis distance in pixels. Mapping it to a 0..1 progress is
  * the handler's business — only it knows what a full open means for its own surface.
+ *
+ * Several handlers may be registered at once, each claiming different edges: a home
+ * screen wants the bottom edge for its app drawer while the shade holds the top. Two
+ * handlers claiming the SAME edge is a bug in the family, not a supported layering —
+ * the first one registered wins and the collision is logged, because silently picking
+ * one would make the loser's surface simply never respond.
  */
 Singleton {
     id: root
 
-    property var handler: null
+    property var handlers: []
 
     function register(candidate) {
-        root.handler = candidate ?? null;
+        if (!candidate || root.handlers.indexOf(candidate) !== -1)
+            return;
+        root.handlers = root.handlers.concat([candidate]);
     }
 
     function unregister(candidate) {
-        if (root.handler === candidate)
-            root.handler = null;
+        root.handlers = root.handlers.filter(h => h !== candidate);
+    }
+
+    /// The handler that owns this edge, or null. Never throws: a handler whose family is
+    /// mid-teardown can raise, and one broken handler must not take the gesture service
+    /// with it.
+    function handlerFor(origin) {
+        if (!origin)
+            return null;
+        let found = null;
+        for (const handler of root.handlers) {
+            let claimed = false;
+            try {
+                claimed = handler.claims(origin) === true;
+            } catch (e) {
+                console.log("[TouchGestureDragRegistry] claims() failed:", e);
+                continue;
+            }
+            if (!claimed)
+                continue;
+            if (found) {
+                console.log("[TouchGestureDragRegistry] two handlers claim", origin,
+                            "- keeping the first registered");
+                break;
+            }
+            found = handler;
+        }
+        return found;
     }
 
     /// True when a family wants the whole drag for this edge. The service keeps its
     /// own commit/threshold logic for every origin this returns false for.
     function claims(origin) {
-        if (!root.handler || !origin)
-            return false;
-        try {
-            return root.handler.claims(origin) === true;
-        } catch (e) {
-            console.log("[TouchGestureDragRegistry] claims() failed:", e);
-            return false;
-        }
+        return root.handlerFor(origin) !== null;
     }
 
     /// What the feedback overlay should call this drag. The user's binding for the edge
     /// is not it — a claimed edge never reaches TouchGestureActionRegistry at all.
     function actionId(origin) {
-        if (!root.claims(origin) || !root.handler.actionId)
+        const handler = root.handlerFor(origin);
+        if (!handler || !handler.actionId)
             return "";
-        return root.handler.actionId(origin) ?? "";
+        return handler.actionId(origin) ?? "";
     }
 
     function begin(origin, screenName) {
-        if (root.claims(origin))
-            root.handler.begin(origin, screenName);
+        const handler = root.handlerFor(origin);
+        if (handler)
+            handler.begin(origin, screenName);
     }
 
     function update(origin, screenName, travel, velocity) {
-        if (root.claims(origin))
-            root.handler.update(origin, screenName, travel, velocity);
+        const handler = root.handlerFor(origin);
+        if (handler)
+            handler.update(origin, screenName, travel, velocity);
     }
 
     function release(origin, velocity) {
-        if (!root.claims(origin))
+        const handler = root.handlerFor(origin);
+        if (!handler)
             return false;
-        root.handler.release(origin, velocity);
+        handler.release(origin, velocity);
         return true;
     }
 
     function cancel(origin) {
-        if (root.claims(origin))
-            root.handler.cancel(origin);
+        const handler = root.handlerFor(origin);
+        if (handler)
+            handler.cancel(origin);
     }
 }
