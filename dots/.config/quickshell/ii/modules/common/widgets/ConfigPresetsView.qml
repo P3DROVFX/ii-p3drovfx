@@ -35,7 +35,10 @@ ColumnLayout {
     function applyPreset(name) {
         if (!name)
             return;
-        Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh load "${name}"`]);
+        // Through the store rather than straight to the script: it queues the
+        // apply behind any install or update touching the same files, and it
+        // is what keeps track of which preset the settings came from.
+        PresetStore.applyPreset(name);
     }
 
     Process {
@@ -102,6 +105,15 @@ ColumnLayout {
 
     Component.onCompleted: {
         listPresetsProc.running = true;
+        PresetStore.ensureLoaded();
+    }
+
+    // Installing or updating a preset from the store rewrites this folder.
+    Connections {
+        target: PresetStore
+        function onPresetFilesChanged() {
+            refreshTimer.restart();
+        }
     }
 
     ConfigRow {
@@ -317,7 +329,17 @@ ColumnLayout {
                                 }
 
                                 onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh delete "${model.name}"`]);
+                                    // A preset that came from a repository has
+                                    // to be removed through the store as well,
+                                    // or its link outlives it and the same
+                                    // preset can never be installed again.
+                                    let name = String(model.name);
+                                    if (PresetStore.isFromStore(name)) {
+                                        PresetStore.uninstall(name);
+                                    } else {
+                                        Quickshell.execDetached([
+                                            Directories.scriptPath + "/presets.sh", "delete", name]);
+                                    }
                                     refreshTimer.restart();
                                 }
 

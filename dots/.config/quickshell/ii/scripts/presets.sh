@@ -5,6 +5,9 @@ CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ii/preset-backups"
 BACKUP_KEEP=10
+# Which preset the running config came from. Nothing else records this, and
+# an update is only worth applying on the spot when it is the one in use.
+ACTIVE_FILE="$PRESETS_DIR/.active"
 mkdir -p "$PRESETS_DIR"
 
 notify_export() {
@@ -144,6 +147,7 @@ case $action in
             notify_export critical "Preset not applied" "Could not merge preset: $name"
             exit 1
         fi
+        printf '%s\n' "$name" > "$ACTIVE_FILE"
         apply_colors
         ;;
     revert)
@@ -158,12 +162,16 @@ case $action in
             exit 1
         fi
         rm -f -- "$latest"
+        rm -f -- "$ACTIVE_FILE"
         apply_colors
         notify_export normal "Settings restored" "Reverted to the config from before the last preset."
         ;;
     delete)
         if [[ -z "$name" ]]; then exit 1; fi
         rm -f "$PRESETS_DIR/$name.json"
+        if [[ -f "$ACTIVE_FILE" && "$(cat "$ACTIVE_FILE" 2>/dev/null)" == "$name" ]]; then
+            rm -f -- "$ACTIVE_FILE"
+        fi
         # Delete any associated asset files
         for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
             if [[ -f "$file" && "${file##*.}" != "json" ]]; then
