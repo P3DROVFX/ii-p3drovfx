@@ -17,6 +17,7 @@ WALLPAPER_IMAGE = (ROOT / "modules/ii/background/wallpaper/WallpaperImage.qml").
 OVERVIEW_BG_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewBackgroundController.qml").read_text()
 OVERVIEW_ZOOM_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewZoomController.qml").read_text()
 OVERVIEW_WINDOW_TRANSITION = (ROOT / "modules/ii/overview/OverviewWindowTransition.qml").read_text()
+BAR_GRADIENT_OVERLAY = (ROOT / "modules/ii/background/blur/BarGradientOverlay.qml").read_text()
 
 
 class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
@@ -65,6 +66,15 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         """The controller's progress is the only animation clock for clip radius."""
         self.assertIn("readonly property real wallpaperClipRadius: overviewController ? overviewController.cornerRadius : 0", WALLPAPER_IMAGE)
         self.assertNotIn("Behavior on wallpaperClipRadius", WALLPAPER_IMAGE)
+
+    def test_bar_gradient_stays_in_the_screen_fixed_composition_layer(self):
+        """The transparent-bar fade must not inherit the wallpaper overview transform."""
+        self.assertNotIn("BarGradientOverlay {", WALLPAPER_IMAGE)
+        self.assertIn("BarGradientOverlay {", BG_ROOT)
+        self.assertIn("sourceItem: wallpaperImage", BG_ROOT)
+        self.assertNotIn("parallaxX", BAR_GRADIENT_OVERLAY)
+        self.assertNotIn("parallaxY", BAR_GRADIENT_OVERLAY)
+        self.assertIn("sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY,", BAR_GRADIENT_OVERLAY)
 
     def test_overview_controller_gnome_preset_decreases_scale(self):
         """Gnome preset must shrink (zoom out < 1.0) and include followWidgetsScale."""

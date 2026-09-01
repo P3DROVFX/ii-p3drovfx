@@ -604,12 +604,5 @@ Item {
             }
         }
 
-        BarGradientOverlay {
-            sourceItem: wallpaperVisualContainer
-            parallaxX: wallpaperImageRoot.effectiveParallaxX
-            parallaxY: wallpaperImageRoot.effectiveParallaxY
-            screenWidth: wallpaperImageRoot.screen.width
-            screenHeight: wallpaperImageRoot.screen.height
-        }
     }
 }
