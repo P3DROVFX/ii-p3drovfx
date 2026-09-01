@@ -15,6 +15,12 @@ Item {
     // Touch hosts (tablet shade) render the same list a notch larger; 1.0 keeps the sidebar.
     property real zoom: 1.0
     property real placeholderScale: 1.0
+    /// Height of the row of controls under the list. 0 keeps the widget's own size; a
+    /// touch-first surface sets it so this row lines up with whatever sits beside it.
+    property real statusRowHeight: 0
+    /// Icon and label scale inside that row, so a taller row is not three small buttons
+    /// floating in it.
+    property real statusContentScale: 1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
     property real _entranceScale: 1
     property bool _entranceDone: true
@@ -187,6 +193,8 @@ Item {
 
         GroupButtonWithIcon {
             id: snoozeButton
+            contentScale: root.statusContentScale
+            baseHeight: root.statusRowHeight > 0 ? root.statusRowHeight : 36 * contentScale
             Layout.fillWidth: false
             buttonIcon: "notifications_paused"
             toggled: Notifications.silent
@@ -198,6 +206,8 @@ Item {
         }
         GroupButtonWithIcon {
             id: countButton
+            contentScale: root.statusContentScale
+            baseHeight: root.statusRowHeight > 0 ? root.statusRowHeight : 36 * contentScale
             enabled: false
             Layout.fillWidth: true
             buttonText: Translation.tr("%1 notifications").arg(String(Notifications.list.length))
@@ -205,6 +215,8 @@ Item {
         }
         GroupButtonWithIcon {
             id: deleteAllButton
+            contentScale: root.statusContentScale
+            baseHeight: root.statusRowHeight > 0 ? root.statusRowHeight : 36 * contentScale
             Layout.fillWidth: false
             buttonIcon: "delete_sweep"
             onClicked: () => {

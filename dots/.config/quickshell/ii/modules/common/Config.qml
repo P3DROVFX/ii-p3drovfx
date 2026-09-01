@@ -1494,6 +1494,10 @@ Singleton {
                     /// Empty means the translated default, "Search".
                     property string searchPlaceholder: ""
                     property bool showAppDividers: true
+                    // Circular arrows at either end of the dock, for moving between home
+                    // screens without a swipe. On a laptop with a touchscreen the swipe is
+                    // the only way there, and it needs bare wallpaper to start on.
+                    property bool showWorkspaceArrows: true
                     property bool showPageCounter: true
                     property bool hidePageCounterOnOccupiedWorkspace: true
                     property bool compactWhenPageCounterHidden: true

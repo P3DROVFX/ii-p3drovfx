@@ -43,6 +43,9 @@ Item {
     readonly property real outerMargin: Math.max(16, Math.min(32, Math.round(root.height * 0.022)))
     // The ii dialogs are sized for a 460px sidebar; here they float over the whole screen.
     readonly property real dialogWidth: Math.max(560, Math.min(980, Math.round(root.width * 0.38)))
+    /// Notifications are the one thing on this sheet you read rather than tap, and they
+    /// were still drawn at the size the desktop's 460px sidebar needs.
+    readonly property real notificationZoom: 1.35
 
     // The calendar / to-do / timer group is deliberately absent. It used to be wired up
     // behind a `false` switch, which cost the tablet an import of ii's sidebar module for
@@ -269,8 +272,13 @@ Item {
                         NotificationList {
                             anchors.fill: parent
                             anchors.margins: Math.round(root.gridSpacing * 0.8)
-                            zoom: 1.12
-                            placeholderScale: 1.4
+                            zoom: root.notificationZoom
+                            placeholderScale: 1.5
+                            // The same height as the system action row on the left, so the
+                            // two columns end on one line instead of the notification
+                            // controls stopping short of it.
+                            statusRowHeight: root.actionRowHeight
+                            statusContentScale: 1.25
                         }
                     }
 

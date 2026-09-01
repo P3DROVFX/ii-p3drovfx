@@ -7,9 +7,12 @@ GroupButton {
     id: button
     property string buttonIcon: ""
     property string buttonText: ""
+    /// Scales the icon, the label and the horizontal padding together. 1 is the desktop
+    /// size; a touch-first surface asks for more without every caller re-deriving it.
+    property real contentScale: 1
 
-    baseHeight: 36
-    baseWidth: content.implicitWidth + 46
+    baseHeight: 36 * button.contentScale
+    baseWidth: content.implicitWidth + 46 * button.contentScale
     clickedWidth: baseWidth + 6
 
     readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : baseHeight / 2
@@ -32,13 +35,13 @@ GroupButton {
             MaterialSymbol {
                 visible: buttonIcon !== ""
                 text: buttonIcon
-                iconSize: Appearance.font.pixelSize.huge
+                iconSize: Appearance.font.pixelSize.huge * button.contentScale
                 color: button.colText
             }
             StyledText {
                 visible: buttonText !== ""
                 text: buttonText
-                font.pixelSize: Appearance.font.pixelSize.small
+                font.pixelSize: Appearance.font.pixelSize.small * button.contentScale
                 color: button.colText
             }
         }

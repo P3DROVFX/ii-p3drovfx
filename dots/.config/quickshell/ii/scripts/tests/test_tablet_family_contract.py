@@ -207,6 +207,34 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Room to scroll the last row clear of the gradient.
         self.assertIn("bottomMargin: body.fadeSize", content)
 
+    def test_dashboard_notification_controls_line_up_with_the_system_action_row(self):
+        content = read("modules/tablet/sidebarDashboard/TabletDashboardContent.qml")
+        notifications = read("modules/common/notifications/NotificationList.qml")
+
+        # Notifications are read, not tapped, and were still drawn at the size the desktop's
+        # 460px sidebar needs.
+        self.assertIn("readonly property real notificationZoom:", content)
+        self.assertNotIn("zoom: 1.12", content)
+        # Both columns end on one line instead of the notification controls stopping short.
+        self.assertIn("statusRowHeight: root.actionRowHeight", content)
+        self.assertIn("property real statusRowHeight: 0", notifications)
+        self.assertIn("baseHeight: root.statusRowHeight > 0", notifications)
+
+    def test_dock_workspace_arrows_sit_at_the_extreme_ends(self):
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+
+        self.assertIn("id: workspacePrevButton", dock)
+        self.assertIn("id: workspaceNextButton", dock)
+        # Everything else moves inwards to make room, rather than overlapping them.
+        self.assertIn("anchors.left: root.workspaceArrowsRevealed"
+                      " ? workspacePrevButton.right : parent.left", dock)
+        self.assertIn("anchors.right: root.workspaceArrowsRevealed"
+                      " ? workspaceNextButton.left : parent.right", dock)
+        # The same dispatch the wallpaper swipe uses, so the two cannot disagree about
+        # which way is "next".
+        self.assertIn("hl.dsp.focus({ workspace = 'r+1' })", dock)
+        self.assertIn("workspacePrevRegion", dock)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

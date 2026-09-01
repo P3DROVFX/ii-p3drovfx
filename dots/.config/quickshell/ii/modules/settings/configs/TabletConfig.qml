@@ -186,6 +186,19 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "swap_horiz"
+                text: Translation.tr("Show workspace arrows")
+                checked: Config.options.tablet.dock.showWorkspaceArrows
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showWorkspaceArrows)
+                        Config.options.tablet.dock.showWorkspaceArrows = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("A circular arrow at each end of the dock, moving one home screen at a time. The swipe needs bare wallpaper to start on; these do not.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "vertical_align_center"
                 text: Translation.tr("Compact dock when the page counter is hidden")
                 checked: Config.options.tablet.dock.compactWhenPageCounterHidden

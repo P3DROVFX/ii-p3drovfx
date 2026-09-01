@@ -87,6 +87,18 @@ PanelWindow {
     // of the way once something is running.
     readonly property bool searchRevealed: root.searchBarEnabled && root.appsRevealed
     readonly property bool showAppDividers: root.tabletDock?.showAppDividers ?? true
+    // Tied to the dock as a whole rather than to the app row: moving between home screens
+    // is useful exactly when something is open and the apps have got out of the way.
+    readonly property bool workspaceArrowsRevealed: (root.tabletDock?.showWorkspaceArrows ?? true)
+        && root.dockRevealed
+
+    /// The same dispatch the wallpaper swipe uses, so the button and the gesture cannot
+    /// disagree about which way is "next".
+    function moveWorkspace(delta) {
+        Hyprland.dispatch(delta > 0
+            ? "hl.dsp.focus({ workspace = 'r+1' })"
+            : "hl.dsp.focus({ workspace = 'r-1' })");
+    }
 
     readonly property var recentApps: {
         if (!root.showRunningApps)
@@ -205,7 +217,19 @@ PanelWindow {
 
     // The transparent reserved strip must never swallow taps intended for an application.
     mask: Region {
-        regions: [navigationRegion, appsRegion, searchRegion]
+        regions: [navigationRegion, appsRegion, searchRegion, workspacePrevRegion, workspaceNextRegion]
+    }
+
+    Region {
+        id: workspacePrevRegion
+        item: workspacePrevButton
+        intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
+    }
+
+    Region {
+        id: workspaceNextRegion
+        item: workspaceNextButton
+        intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
@@ -283,9 +307,45 @@ PanelWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: root.appButtonSize
 
+            // Both arrows sit at the extreme ends, outside everything else: they are about
+            // the screen you are on, not about what is on it.
+            TabletNavButton {
+                id: workspacePrevButton
+                anchors.left: parent.left
+                anchors.leftMargin: Appearance.sizes.elevationMargin
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.workspaceArrowsRevealed
+                opacity: visible ? 1 : 0
+                symbol: "chevron_left"
+                buttonSize: root.appButtonSize
+                symbolSize: Math.round(root.appButtonSize * 0.45)
+                onActivated: root.moveWorkspace(-1)
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(workspacePrevButton)
+                }
+            }
+
+            TabletNavButton {
+                id: workspaceNextButton
+                anchors.right: parent.right
+                anchors.rightMargin: Appearance.sizes.elevationMargin
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.workspaceArrowsRevealed
+                opacity: visible ? 1 : 0
+                symbol: "chevron_right"
+                buttonSize: root.appButtonSize
+                symbolSize: Math.round(root.appButtonSize * 0.45)
+                onActivated: root.moveWorkspace(1)
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(workspaceNextButton)
+                }
+            }
+
             TabletDockSearchBar {
                 id: searchBar
-                anchors.left: parent.left
+                anchors.left: root.workspaceArrowsRevealed ? workspacePrevButton.right : parent.left
                 anchors.leftMargin: Appearance.sizes.elevationMargin
                 anchors.verticalCenter: parent.verticalCenter
                 width: searchBar.compact
@@ -315,7 +375,7 @@ PanelWindow {
 
             Rectangle {
                 id: navigationPill
-                anchors.right: parent.right
+                anchors.right: root.workspaceArrowsRevealed ? workspaceNextButton.left : parent.right
                 anchors.rightMargin: Appearance.sizes.elevationMargin
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.navigationRevealed
