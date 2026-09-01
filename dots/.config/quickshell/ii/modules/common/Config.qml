@@ -621,7 +621,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 15
+    readonly property int currentConfigVersion: 16
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1017,6 +1017,25 @@ Singleton {
                 raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
                 console.log(`[Config] Seeded sidebar.dashboardHeader.avatarShape from userProfile.avatarShape (${raw.userProfile.avatarShape})`);
             }
+        }
+
+        // v15 -> v16: the idle now-playing row moved out of "More results" into
+        // its own "Now playing" group. Every stored order predates that id, and
+        // a section missing from the order is a section that never renders — so
+        // without this the row silently disappeared the moment it was reclassed.
+        if (from < 16) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasMedia = sectionOrder.some(entry => String(entry?.id ?? entry) === "media");
+                if (!hasMedia) {
+                    const aliasesIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "aliases");
+                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, { "id": "media" });
+                }
+            }
+            console.log("[Config] Added Now playing search result group");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -4053,6 +4072,7 @@ Singleton {
                 property list<var> sectionOrder: [
                     { "id": "suggested" },
                     { "id": "aliases" },
+                    { "id": "media" },
                     { "id": "best" },
                     { "id": "apps" },
                     { "id": "sites" },
