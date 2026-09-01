@@ -76,6 +76,11 @@ AbstractQuickPanel {
         config: Config.options.sidebar.quickToggles.android
         persistedPages: root.pages
         columns: root.columns
+        // Hold a fresh swap for exactly as long as the delegates take to slide
+        // into their new slots, so a hesitating pointer cannot re-order the
+        // grid while it is still visibly reflowing. Zero when animations are
+        // off, because then there is nothing to wait for.
+        reorderSettleMs: Appearance.animation.elementMoveFast.duration
     }
 
     property alias editController: editController
