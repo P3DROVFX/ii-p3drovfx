@@ -1,0 +1,84 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Widgets
+
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+
+/**
+ * One app in the drawer: icon over a label, sized for a fingertip.
+ *
+ * The desktop launcher's tile is 100x110 with a 48px icon and grows on hover. Neither
+ * number survives a touchscreen — the whole tile is the target here, and there is no hover
+ * to grow on, so the press feedback has to be the press itself.
+ */
+Item {
+    id: root
+
+    required property var entry
+    property real iconSize: 56
+
+    signal activated
+
+    implicitWidth: 96
+    implicitHeight: 116
+
+    // A press ripple is the only feedback a finger gets: no cursor, no hover state. It has
+    // to start on press rather than on release, or the tile feels dead for the whole time
+    // the finger is down.
+    Rectangle {
+        id: pressPlate
+        anchors.centerIn: parent
+        width: root.width
+        height: root.height
+        radius: Appearance.rounding.large
+        color: Appearance.colors.colLayer2
+        opacity: tapArea.pressed ? 1 : 0
+        scale: tapArea.pressed ? 1 : 0.9
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 6
+        spacing: 6
+
+        IconImage {
+            Layout.alignment: Qt.AlignHCenter
+            implicitSize: root.iconSize
+            source: Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
+            // Android shrinks the icon under the finger rather than lighting up a
+            // background; the plate behind is a softer version of the same idea.
+            scale: tapArea.pressed ? 0.92 : 1
+            Behavior on scale {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
+            text: root.entry?.name ?? ""
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
+            color: Appearance.m3colors.m3onSurface
+        }
+    }
+
+    MouseArea {
+        id: tapArea
+        anchors.fill: parent
+        onClicked: root.activated()
+    }
+}

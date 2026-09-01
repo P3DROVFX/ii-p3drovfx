@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.common
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
+import qs.modules.tablet.appDrawer
 import qs.modules.tablet.sidebarDashboard
 
 // ── Borrowed from ii, pending a tablet replacement ──────────────────────────
@@ -84,10 +85,28 @@ Scope {
         component: Background {}
     }
 
-    // Still the desktop overview. It already scales workspace previews from the available
-    // geometry, so it is usable with a finger; it becomes the Android-style home screen and
-    // app drawer in a later phase, at which point it moves under modules/tablet/.
+    // Still the desktop overview, used as "recents" until the tablet's own lands (Fase 3e).
+    // It already scales workspace previews from the available geometry, so it is usable with
+    // a finger.
     PanelLoader { component: Overview {} }
+
+    // Every installed app in one searchable grid, and the tablet's replacement for the ii
+    // launcher. Swipe up from the bottom edge, or `qs -c ii ipc call appDrawer toggle`.
+    //
+    // The tool host is injected rather than imported: the panels it hosts (clipboard, emoji,
+    // translator, …) live in the ii family, and modules/tablet may not reach across. This
+    // file is the one place allowed to, so the borrow happens here and the drawer itself
+    // stays family-clean. Without it the drawer is still a complete app drawer, minus tools.
+    PanelLoader {
+        component: TabletAppDrawer {
+            toolHostComponent: searchPanelHostComponent
+        }
+    }
+
+    Component {
+        id: searchPanelHostComponent
+        SearchPanelHost {}
+    }
 
     // GNOME-like window scale-out during overview. Follows GlobalStates, owns no UI.
     OverviewWindowTransition {}

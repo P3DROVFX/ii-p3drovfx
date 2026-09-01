@@ -1017,6 +1017,30 @@ Singleton {
         root.policiesPanelOpen = true;
     }
 
+    // ── App drawer (tablet family) ───────────────────────────────────────────
+    // The tablet's replacement for the launcher: every installed app in one grid, with a
+    // search field that also reaches the shell's tool panels. Lives here rather than in the
+    // family because IPC, keybinds and the dock all open it from outside the drawer itself.
+    property bool appDrawerOpen: false
+    property string activeAppDrawerMonitor: ""
+
+    function openAppDrawer(monitorName) {
+        root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.appDrawerOpen = true;
+    }
+
+    function toggleAppDrawer(monitorName) {
+        // Reopening on a different screen moves the drawer there instead of closing it, so
+        // the gesture is never a no-op on the screen it was made on. Same rule as the
+        // sidebars — see TouchGestureActionRegistry.shouldCloseOnScreen.
+        const name = monitorName || Hyprland.focusedMonitor?.name || "";
+        if (root.appDrawerOpen && (!name || root.activeAppDrawerMonitor === name)) {
+            root.appDrawerOpen = false;
+            return;
+        }
+        root.openAppDrawer(name);
+    }
+
     function openRightSidebar(monitorName) {
         root.activeRightSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.dashboardPanelOpen = true;
@@ -1181,6 +1205,23 @@ Singleton {
 
         function open(): void {
             root.openRightSidebar();
+        }
+    }
+
+    // App drawer IPC (tablet family)
+    IpcHandler {
+        target: "appDrawer"
+
+        function toggle(): void {
+            root.toggleAppDrawer("");
+        }
+
+        function close(): void {
+            root.appDrawerOpen = false;
+        }
+
+        function open(): void {
+            root.openAppDrawer("");
         }
     }
 
