@@ -537,6 +537,9 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] O host das ferramentas é **injetado** pelo `TabletFamily`, porque os painéis moram na
       ii. Sem injeção a gaveta continua completa, só sem ferramentas.
 - [x] Claim da borda inferior via `TouchGestureDragRegistry` (↑ abre a gaveta).
+- [x] Abertura fullscreen: a dock desce antes de desaparecer, um scrim translúcido preserva o
+      app atual no fundo e a gaveta sobe da base; busca e grade derivam do mesmo progresso. A
+      layer fica mapeada e com máscara de input vazia no repouso para não pular os frames iniciais.
 - [ ] Lista de sugestões de ferramentas **antes** de digitar (segunda iteração).
 
 #### 3c. Dock — igual à do Android ✅

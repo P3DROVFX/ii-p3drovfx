@@ -42,9 +42,13 @@ PanelWindow {
     readonly property bool navigationRevealed: root.navigationEnabled
         && (root.appsRevealed || (root.tabletDock?.keepNavigationVisible ?? true))
     readonly property bool dockRevealed: root.appsRevealed || root.navigationRevealed
+    // Keep the dock mapped long enough to leave the screen instead of unmapping it on the
+    // first state change. The same structural clock drives opacity and translation below.
+    property real drawerProgress: GlobalStates.appDrawerOpen ? 1 : 0
     readonly property bool surfaceVisible: Config.ready && !GlobalStates.screenLocked
-        && !GlobalStates.appDrawerOpen && root.dockRevealed
+        && root.dockRevealed
     readonly property bool reservesSpace: (root.tabletDock?.reserveSpace ?? true) && root.surfaceVisible
+        && root.drawerProgress < 0.999
 
     readonly property real appIconSize: root.tabletDock?.iconSize ?? Appearance.sizes.minimumTouchTarget
     readonly property real appButtonSize: root.appIconSize + Appearance.sizes.elevationMargin * 2
@@ -59,6 +63,11 @@ PanelWindow {
     readonly property int maximumRecents: 3
     readonly property bool showRunningApps: root.tabletDock?.showRunningApps ?? true
     readonly property bool showAppDrawerButton: root.tabletDock?.showAppDrawerButton ?? true
+    readonly property bool searchBarEnabled: root.tabletDock?.showSearchBar ?? true
+    readonly property real searchBarWidth: root.tabletDock?.searchBarWidth ?? 320
+    // The search pill follows the app row: both belong to the home screen and both get out
+    // of the way once something is running.
+    readonly property bool searchRevealed: root.searchBarEnabled && root.appsRevealed
     readonly property bool showAppDividers: root.tabletDock?.showAppDividers ?? true
 
     readonly property var recentApps: {
@@ -148,6 +157,10 @@ PanelWindow {
 
     visible: root.surfaceVisible
 
+    Behavior on drawerProgress {
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
+
     anchors {
         bottom: true
         left: true
@@ -167,7 +180,13 @@ PanelWindow {
 
     // The transparent reserved strip must never swallow taps intended for an application.
     mask: Region {
-        regions: [navigationRegion, appsRegion]
+        regions: [navigationRegion, appsRegion, searchRegion]
+    }
+
+    Region {
+        id: searchRegion
+        item: searchBar
+        intersection: root.searchRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
@@ -187,6 +206,10 @@ PanelWindow {
         anchors.fill: parent
         anchors.margins: Appearance.sizes.elevationMargin
         spacing: Appearance.sizes.elevationMargin / 2
+        opacity: 1 - root.drawerProgress
+        transform: Translate {
+            y: root.drawerProgress * root.dockContentHeight
+        }
 
         Loader {
             id: pageCounterLoader
@@ -223,6 +246,26 @@ PanelWindow {
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: root.appButtonSize
+
+            TabletDockSearchBar {
+                id: searchBar
+                anchors.left: parent.left
+                anchors.leftMargin: Appearance.sizes.elevationMargin
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(root.searchBarWidth, parent.width * 0.3)
+                barHeight: root.appButtonSize
+                visible: root.searchRevealed
+                opacity: visible ? 1 : 0
+                transform: Translate {
+                    y: (1 - searchBar.opacity) * root.appButtonSize
+                }
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(searchBar)
+                }
+
+                onActivated: GlobalStates.openAppDrawer(root.screenName)
+            }
 
             Rectangle {
                 id: navigationPill

@@ -1476,6 +1476,11 @@ Singleton {
                     property list<string> navigationOrder: ["back", "home", "recents"]
                     property bool showRunningApps: true
                     property bool showAppDrawerButton: true
+                    // A search pill on the left of the dock, styled like the desktop's
+                    // Android search widget. It opens the app drawer with the field already
+                    // focused rather than searching anything itself.
+                    property bool showSearchBar: true
+                    property int searchBarWidth: 320
                     property bool showAppDividers: true
                     property bool showPageCounter: true
                     property bool hidePageCounterOnOccupiedWorkspace: true

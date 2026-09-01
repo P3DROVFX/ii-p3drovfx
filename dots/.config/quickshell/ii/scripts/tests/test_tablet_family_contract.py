@@ -48,6 +48,22 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("mask: Region", drawer)
         self.assertIn("root.wantOpen ? Intersection.Combine : Intersection.Subtract", drawer)
 
+    def test_app_drawer_uses_one_progress_for_the_backdrop_sheet_and_dock_exit(self):
+        drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
+        content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+
+        self.assertIn("id: drawerViewport", drawer)
+        self.assertIn("y: (1 - root.openProgress) * root.height", drawer)
+        self.assertIn("opacity: root.openProgress * 0.72", drawer)
+        self.assertIn("visible: !GlobalStates.screenLocked", drawer)
+        self.assertNotIn("visible: (root.wantOpen || root.openProgress > 0.001)", drawer)
+        self.assertIn("y: (1 - root.revealProgress) * root.searchHeight * 0.8", content)
+        self.assertIn("property real drawerProgress: GlobalStates.appDrawerOpen ? 1 : 0", dock)
+        self.assertIn("y: root.drawerProgress * root.dockContentHeight", dock)
+        self.assertIn("&& root.drawerProgress < 0.999", dock)
+        self.assertNotIn("!GlobalStates.appDrawerOpen || root.drawerProgress < 0.999", dock)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

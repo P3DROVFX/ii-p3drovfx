@@ -164,7 +164,7 @@ Item {
 
             opacity: root.revealProgress
             transform: Translate {
-                y: -(1 - root.revealProgress) * root.searchHeight * 0.8
+                y: (1 - root.revealProgress) * root.searchHeight * 0.8
             }
 
             RowLayout {

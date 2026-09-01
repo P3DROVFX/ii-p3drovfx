@@ -10,10 +10,9 @@ import qs.modules.common
 /**
  * The full-screen surface the app drawer is drawn on, one per monitor.
  *
- * It scrims rather than snapshots. The shade freezes and blurs a screencopy because its
- * blur has to ramp with the finger, frame by frame, while it is dragged; the drawer either
- * is open or is not, so a plain animated scrim gets the same read for none of the cost of a
- * continuous capture.
+ * The drawer uses a translucent colour wash rather than a snapshot. Unlike the shade, it
+ * is not dragged frame by frame, so keeping the live application visible under a themed
+ * scrim is both clearer and considerably cheaper than a continuous screencopy blur.
  */
 PanelWindow {
     id: root
@@ -61,10 +60,11 @@ PanelWindow {
         intersection: root.wantOpen ? Intersection.Combine : Intersection.Subtract
     }
 
-    // Unmapped when fully closed: an always-mapped full-screen Overlay surface would sit
-    // over every window for nothing. The shade stays mapped only because its top edge must
-    // remain grabbable at all times; the drawer has no such strip.
-    visible: (root.wantOpen || root.openProgress > 0.001) && !GlobalStates.screenLocked
+    // Keep the layer mapped while idle. A layer surface that is first mapped in the same
+    // turn as its progress changes gives the compositor only the settled buffer, so the
+    // sheet appears to pop in. Its closed mask is empty, therefore this transparent layer
+    // never takes pointer input from the application below.
+    visible: !GlobalStates.screenLocked
 
     Behavior on openProgress {
         animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
@@ -89,7 +89,9 @@ PanelWindow {
     Rectangle {
         anchors.fill: parent
         color: Appearance.colors.colLayer0
-        opacity: root.openProgress * (Config.options?.appearance?.transparency?.enable ? 0.86 : 1.0)
+        // Never make this opaque: the current app remains part of the transition, just as it
+        // does below Android's app drawer.
+        opacity: root.openProgress * 0.72
 
         MouseArea {
             anchors.fill: parent
@@ -99,20 +101,32 @@ PanelWindow {
         }
     }
 
-    Loader {
-        id: contentLoader
+    // A viewport makes the drawer a sheet that rises from the bottom. The progress is also
+    // the clock for the wash above and the stagger inside the content, so the transition
+    // cannot split into independent, visibly out-of-sync animations.
+    Item {
+        id: drawerViewport
         anchors.fill: parent
-        active: root.visible
-        sourceComponent: root.contentComponent
+        clip: true
 
-        onLoaded: {
-            if (!contentLoader.item)
-                return;
-            contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
-            contentLoader.item.dismissRequested.connect(root.dismiss);
-            contentLoader.item.appHeld.connect(root.appHeld);
-            if (root.wantOpen)
-                contentLoader.item.reset();
+        Loader {
+            id: contentLoader
+            anchors.fill: parent
+            active: root.visible
+            sourceComponent: root.contentComponent
+            transform: Translate {
+                y: (1 - root.openProgress) * root.height
+            }
+
+            onLoaded: {
+                if (!contentLoader.item)
+                    return;
+                contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
+                contentLoader.item.dismissRequested.connect(root.dismiss);
+                contentLoader.item.appHeld.connect(root.appHeld);
+                if (root.wantOpen)
+                    contentLoader.item.reset();
+            }
         }
     }
 
