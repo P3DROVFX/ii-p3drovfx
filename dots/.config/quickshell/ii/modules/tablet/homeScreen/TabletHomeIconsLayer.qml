@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Wayland
 import Quickshell.Widgets
 
 import qs
@@ -14,15 +13,17 @@ import qs.modules.common.widgets
 /**
  * App icons laid out on the wallpaper, one screen's worth.
  *
- * On the Bottom layer, above the wallpaper and below every window, so the icons are part
- * of the desktop rather than an overlay on it. Only the icons take input — the rest of the
- * surface is masked out, which is what leaves the workspace swipe and everything behind it
- * reachable.
+ * Not a surface of its own. It is injected into the desktop widget canvas
+ * (BackgroundWidgetsWindow.canvasOverlay) because that surface already owns the whole
+ * screen's input region on the Bottom layer — a second desktop surface underneath it
+ * renders fine and can never be touched, which is exactly what happened when this was its
+ * own PanelWindow. Sharing the canvas also means the icons inherit its coordinate space,
+ * parallax and lock choreography, and sit on the same grid as the widgets, which is what
+ * "icons and widgets coexist on one grid" was supposed to mean.
  */
-PanelWindow {
+Item {
     id: root
 
-    readonly property string screenName: root.screen?.name ?? ""
     readonly property int workspaceId: TabletHomeIcons.currentWorkspace
 
     /// Re-read whenever the store changes or the home screen does.
@@ -35,75 +36,13 @@ PanelWindow {
     readonly property real cellSize: Math.round(root.iconSize * 1.75)
     readonly property real gridStep: Appearance.sizes.widgetGridStep
 
-    anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
-    }
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-
-    WlrLayershell.namespace: "quickshell:tabletHomeIcons"
-    // Bottom, so icons are part of the desktop rather than floating over windows.
-    //
-    // KNOWN LIMITATION: ii's BackgroundWidgetsWindow is also on Bottom, is created after
-    // this one, and sets no input mask — so its input region covers the whole screen and
-    // the compositor never routes a tap down to these icons. They render correctly and are
-    // fully interactive once that surface is out of the way (verified by temporarily
-    // raising this window to Top, where dragging and the remove badge both work). Fixing it
-    // properly is a design decision recorded in the plan: either the tablet stops loading
-    // ii's widget surface, or that canvas is promoted so one surface holds both.
-    WlrLayershell.layer: WlrLayer.Bottom
-
-    /// Set by whichever icon is currently being dragged. See the mask below.
-    property bool dragging: false
-
-    /// The delegate Items, so the input mask can be built from them. Rebuilt rather than
-    /// appended to, because the Repeater destroys and recreates delegates whenever the
-    /// icon list changes.
-    property var iconItems: []
-
-    function refreshIconItems() {
-        const items = [];
-        for (let i = 0; i < iconRepeater.count; i++) {
-            const item = iconRepeater.itemAt(i);
-            if (item)
-                items.push(item);
-        }
-        root.iconItems = items;
-    }
-
-    Component {
-        id: regionComponent
-        Region {}
-    }
-
-    // Nothing over the desktop should take a tap except the icons themselves — otherwise
-    // this full-screen surface would swallow every click meant for the wallpaper and the
-    // background widgets behind it.
-    //
-    // While an icon IS being dragged the whole surface has to take input instead: the
-    // pointer leaves the icon's own region on the first pixel of movement, and with the
-    // narrow mask the drag was lost right there.
-    mask: Region {
-        item: root.dragging ? dragCatcher : null
-        regions: root.iconItems.map(item => regionComponent.createObject(root, { item: item }))
-    }
-
-    Item {
-        id: dragCatcher
-        anchors.fill: parent
-    }
-
-    visible: Config.ready && !GlobalStates.screenLocked
+    // No mask and no input region of its own: the canvas above decides what is touchable,
+    // and an Item only receives what lands on its children. That is why the icons no longer
+    // need the region bookkeeping the standalone window required.
 
     Repeater {
         id: iconRepeater
         model: root.icons
-        onCountChanged: Qt.callLater(root.refreshIconItems)
-        onItemAdded: Qt.callLater(root.refreshIconItems)
-        onItemRemoved: Qt.callLater(root.refreshIconItems)
 
         delegate: Item {
             id: iconItem
@@ -121,7 +60,6 @@ PanelWindow {
             property real dragX: iconItem.modelData.x
             property real dragY: iconItem.modelData.y
             property bool dragging: false
-            onDraggingChanged: root.dragging = iconItem.dragging
 
             Item {
                 id: visual
@@ -167,12 +105,19 @@ PanelWindow {
                 id: tapArea
                 anchors.fill: parent
 
+                // The widget canvas this layer sits on is itself a MouseArea, and a parent
+                // MouseArea steals the grab from a child as soon as the pointer moves. Without
+                // this the press and the long-press worked but every drag was lost on the
+                // first pixel of motion.
+                preventStealing: true
+
                 property real grabX: 0
                 property real grabY: 0
 
                 onPressed: mouse => {
                     tapArea.grabX = mouse.x;
                     tapArea.grabY = mouse.y;
+                    longPressTimer.fired = false;
                     longPressTimer.restart();
                 }
 
@@ -205,6 +150,11 @@ PanelWindow {
                 onClicked: {
                     if (iconItem.dragging)
                         return;
+                    // A long press always ends with a click. Without this the same gesture
+                    // that armed the remove badge immediately disarmed it again, so the
+                    // badge could never be tapped.
+                    if (longPressTimer.fired)
+                        return;
                     if (iconItem.editing) {
                         iconItem.editing = false;
                         return;
@@ -214,8 +164,12 @@ PanelWindow {
 
                 Timer {
                     id: longPressTimer
+                    property bool fired: false
                     interval: 550
-                    onTriggered: iconItem.editing = true
+                    onTriggered: {
+                        longPressTimer.fired = true;
+                        iconItem.editing = true;
+                    }
                 }
             }
 

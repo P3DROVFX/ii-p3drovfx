@@ -1,26 +1,13 @@
 import QtQuick
 import Quickshell
 
-import qs.modules.common
-
-/// Per-screen host for the home-screen icons, plus the workspace swipe handler.
+/**
+ * The home screen's non-visual half: the gesture that moves between workspaces.
+ *
+ * The icons themselves are not here. They are injected into the desktop widget canvas by
+ * the composition root — see TabletHomeIconsLayer for why they cannot be a surface of
+ * their own.
+ */
 Scope {
-    Variants {
-        model: Quickshell.screens
-
-        delegate: Scope {
-            id: screenScope
-            required property ShellScreen modelData
-
-            Loader {
-                active: Config.ready
-                sourceComponent: TabletHomeIconsWindow {
-                    screen: screenScope.modelData
-                }
-            }
-        }
-    }
-
-    // Swiping across the wallpaper moves between workspaces, as between home screen pages.
     TabletWorkspaceDragHandler {}
 }

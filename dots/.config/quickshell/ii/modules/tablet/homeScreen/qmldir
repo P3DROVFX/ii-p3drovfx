@@ -1,4 +1,4 @@
 singleton TabletHomeIcons 1.0 TabletHomeIcons.qml
 TabletWorkspaceDragHandler 1.0 TabletWorkspaceDragHandler.qml
-TabletHomeIconsWindow 1.0 TabletHomeIconsWindow.qml
+TabletHomeIconsLayer 1.0 TabletHomeIconsLayer.qml
 TabletHomeScreen 1.0 TabletHomeScreen.qml

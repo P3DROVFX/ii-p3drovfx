@@ -25,6 +25,19 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
+    /**
+     * Extra content for the widget canvas, supplied by the panel family.
+     *
+     * This surface owns the whole screen's input region on the Bottom layer, so a second
+     * desktop surface underneath it can render but can never be touched. Anything else that
+     * belongs *on the desktop* — the tablet family's home-screen app icons — therefore has
+     * to live on this canvas rather than beside it. Loaded inside the canvas, so it shares
+     * the same coordinate space, parallax and lock choreography as the widgets do.
+     *
+     * Null for the ii family, which puts nothing else on the desktop.
+     */
+    property Component canvasOverlay: null
+
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
@@ -448,6 +461,18 @@ PanelWindow {
                     duration: 600
                     easing.type: Easing.OutCubic
                 }
+            }
+
+            // Declared before the widget Repeater, so widgets stack above the overlay and a
+            // desktop icon never covers one the user placed.
+            //
+            // No negative z: the canvas is itself a MouseArea, and a child behind its parent
+            // loses the press to that parent, so a z of -1 left the overlay visible but
+            // completely untouchable.
+            Loader {
+                anchors.fill: parent
+                active: bgWidgetsWindow.canvasOverlay !== null
+                sourceComponent: bgWidgetsWindow.canvasOverlay
             }
 
             Repeater {

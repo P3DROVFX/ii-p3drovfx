@@ -92,13 +92,26 @@ Scope {
     // or vanished. Bar geometry has to be changed in Appearance, not per-window.
     PanelLoader { component: Bar { forceTop: true } }
 
+    // The wallpaper, the desktop widgets, and — injected onto the same canvas — this
+    // family's home-screen app icons.
+    //
+    // The icons ride the widget canvas rather than a surface of their own. That surface
+    // owns the whole screen's input region on the Bottom layer, so anything underneath it
+    // renders but can never be touched; sharing the canvas also puts icons and widgets on
+    // one grid, which is what D4 asked for.
     PanelLoader {
         extraCondition: Config.options.background.enable
-        component: Background {}
+        component: Background {
+            widgetCanvasOverlay: tabletHomeIconsComponent
+        }
     }
 
-    // App icons on the wallpaper, one set per workspace, plus the swipe that moves between
-    // them. The workspaces are this family's home screens.
+    Component {
+        id: tabletHomeIconsComponent
+        TabletHomeIconsLayer {}
+    }
+
+    // The swipe that moves between workspaces. The workspaces are this family's home screens.
     PanelLoader { component: TabletHomeScreen {} }
 
     // What was I just doing: every open window as a card, most recent first. Distinct from
