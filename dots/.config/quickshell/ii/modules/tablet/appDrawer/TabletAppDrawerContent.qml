@@ -85,6 +85,43 @@ Item {
     // ── Tools ───────────────────────────────────────────────────────────────
     // Only what the user could actually open: a panel whose module is switched off is not
     // offered, exactly as the launcher does it.
+    // ── Everything else the query can reach ─────────────────────────────────
+    // The drawer is this family's launcher, so it has to answer the questions the ii
+    // launcher answers: files, and the clipboard. The clipboard especially — reaching it
+    // used to mean typing "clipboard", finding a chip, and hitting a small target, which is
+    // three deliberate acts for something people want constantly. Entries are results now.
+    readonly property int maximumSideResults: 6
+
+    readonly property var clipboardResults: {
+        const q = root.query.trim();
+        if (q.length === 0)
+            return [];
+        return Cliphist.fuzzyQuery(q).slice(0, root.maximumSideResults);
+    }
+
+    readonly property var fileResults: {
+        if (root.query.trim().length === 0)
+            return [];
+        return (LauncherSearch.fileResults ?? []).slice(0, root.maximumSideResults);
+    }
+
+    // LauncherSearch owns the `fd` process; feeding it the drawer's query is what makes
+    // fileResults populate. Only while the drawer is up, so a closed drawer never spawns a
+    // file search.
+    onQueryChanged: {
+        if (root.revealProgress > 0.01)
+            LauncherSearch.query = root.query;
+    }
+
+    function clipboardText(entry) {
+        return String(entry ?? "").replace(/^\s*\S+\s+/, "").trim();
+    }
+
+    function fileName(path) {
+        const parts = String(path ?? "").split("/");
+        return parts[parts.length - 1] || path;
+    }
+
     readonly property var matchingTools: {
         const q = root.query.trim().toLowerCase();
         if (q.length === 0 || !root.toolHostComponent)
@@ -306,9 +343,28 @@ Item {
                 y: (1 - body.bodyReveal) * 40
             }
 
+            // Results that are not apps get their own column beside the grid rather than
+            // being mixed into it: a clipboard entry is a line of text and an app is an
+            // icon, and interleaving them makes both harder to scan. On a tablet there is
+            // room for both at once, which is the whole reason the drawer is full-screen.
+            readonly property bool hasSideResults: root.clipboardResults.length > 0
+                || root.fileResults.length > 0
+            // Not readonly: a Behavior cannot animate a readonly property, and this one has
+            // to ease so the grid does not jump sideways the instant a result arrives.
+            property real sideColumnWidth: body.hasSideResults
+                ? Math.max(320, Math.min(520, Math.round(body.width * 0.32))) : 0
+
+            Behavior on sideColumnWidth {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(body)
+            }
+
             GridView {
                 id: appGrid
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                anchors.rightMargin: body.sideColumnWidth > 0 ? body.sideColumnWidth + 24 : 0
                 visible: root.activeToolId.length === 0
                 enabled: visible
 
@@ -354,11 +410,83 @@ Item {
                 }
             }
 
+            // ── Clipboard and files ─────────────────────────────────────────
+            Flickable {
+                id: sideColumn
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: body.sideColumnWidth
+                visible: width > 1 && root.activeToolId.length === 0
+                clip: true
+                contentHeight: sideContent.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+
+                ColumnLayout {
+                    id: sideContent
+                    width: sideColumn.width
+                    spacing: 4
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.topMargin: 4
+                        visible: root.clipboardResults.length > 0
+                        text: Translation.tr("Clipboard")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    Repeater {
+                        model: root.clipboardResults
+
+                        delegate: TabletSearchResultRow {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            symbol: "content_paste"
+                            title: root.clipboardText(modelData.entry ?? modelData)
+                            subtitle: Translation.tr("Copy to clipboard")
+                            onActivated: {
+                                Cliphist.copy(modelData.entry ?? modelData);
+                                root.dismissRequested();
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.topMargin: 8
+                        visible: root.fileResults.length > 0
+                        text: Translation.tr("Files")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    Repeater {
+                        model: root.fileResults
+
+                        delegate: TabletSearchResultRow {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            symbol: "description"
+                            title: root.fileName(modelData)
+                            subtitle: String(modelData)
+                            onActivated: {
+                                Quickshell.execDetached(["xdg-open", String(modelData)]);
+                                root.dismissRequested();
+                            }
+                        }
+                    }
+                }
+            }
+
             // Outside the GridView: a child of a Flickable joins its scrolling content, so
             // an empty-state placeholder put in there would drift with the view.
             PagePlaceholder {
                 anchors.fill: parent
-                visible: appGrid.visible
+                // Only when nothing at all matched — apps, clipboard and files alike.
+                visible: appGrid.visible && !body.hasSideResults
                 shown: root.gridEntries.length === 0
                 icon: "search_off"
                 title: Translation.tr("No apps")
