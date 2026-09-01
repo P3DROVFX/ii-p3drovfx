@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import qs.services
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets

@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared

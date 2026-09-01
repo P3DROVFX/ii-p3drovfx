@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.modules.ii.sidebarDashboard
 import qs.services

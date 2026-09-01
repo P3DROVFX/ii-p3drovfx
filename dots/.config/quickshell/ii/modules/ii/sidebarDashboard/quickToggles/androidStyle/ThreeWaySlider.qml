@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Services.UPower
 import qs.services
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.sidebarDashboard
