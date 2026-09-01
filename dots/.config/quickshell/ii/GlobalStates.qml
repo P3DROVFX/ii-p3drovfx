@@ -1041,6 +1041,19 @@ Singleton {
         root.openAppDrawer(name);
     }
 
+    // ── Tablet app windows ───────────────────────────────────────────────────
+    // Which shell surface the tablet family is currently showing as an app, or "" for none.
+    // See TabletSystemApps for what an "app" means here.
+    property string tabletAppId: ""
+
+    function openTabletApp(appId) {
+        root.tabletAppId = appId ?? "";
+    }
+
+    function closeTabletApp() {
+        root.tabletAppId = "";
+    }
+
     // ── Recents (tablet family) ──────────────────────────────────────────────
     // Android keeps home screens and recents as two separate surfaces; this is the second
     // one. Distinct from overviewOpen, which is the desktop shell's workspace grid.

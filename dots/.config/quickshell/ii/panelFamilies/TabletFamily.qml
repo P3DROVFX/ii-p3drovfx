@@ -7,6 +7,7 @@ import qs.modules.common
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
+import qs.modules.tablet.appWindow
 import qs.modules.tablet.dock
 import qs.modules.tablet.homeScreen
 import qs.modules.tablet.recents
@@ -25,6 +26,8 @@ import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
+import qs.modules.ii.modes
+import qs.modules.ii.usage
 import qs.modules.ii.notificationPopup
 import qs.modules.ii.oledSaver
 import qs.modules.ii.onScreenDisplay
@@ -35,7 +38,10 @@ import qs.modules.ii.polkit
 import qs.modules.ii.regionSelector
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.screenTranslator
+import qs.modules.ii.cheatsheet
+import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.sessionScreen
+import qs.modules.ii.videoEditor
 import qs.modules.ii.sidebarPolicies
 import qs.modules.ii.touchGestures
 import qs.modules.ii.wallpaperSelector
@@ -67,15 +73,11 @@ import qs.modules.ii.wallpaperSelector
  *   WrappedFrame          — desktop chrome around a pointer-driven shell.
  *   TopLayer / Connect    — Connect is a desktop shell mode.
  *   Tiling assistant      — dragging windows into a tiling grid needs a pointer.
- *   ScratchpadOverlay     — desktop window management.
- *   Cheatsheet            — a keyboard-shortcut reference, on a device without a keyboard.
  *   KeypressDisplay       — a screencast helper for keyboards.
  *   KeyboardLayoutPopup   — layout switching belongs to the on-screen keyboard.
- *   Usage overlay         — a desktop diagnostic surface.
- *   Modes / ModeFlash     — desktop automation; revisit once the tablet UI has a home for it.
+ *   ModeFlashPopup        — the mode banner; the island drew it and there is no island.
  *   Overlay               — the game/widget overlay is a desktop surface.
  *   ColorPickerPopup      — a desktop utility.
- *   VideoEditor           — a desktop application.
  */
 Scope {
     id: root
@@ -143,6 +145,39 @@ Scope {
         id: searchPanelHostComponent
         SearchPanelHost {}
     }
+
+    // ── Shell surfaces presented as apps (D6) ───────────────────────────────
+    // Listed in the drawer next to real applications. Usage and Modes separate their
+    // content from their window, so that content is re-chromed by TabletAppWindow and gets
+    // a title bar and a back button. The rest open the desktop shell's own surface — see
+    // TabletSystemApps on why splitting those would mean refactoring ii.
+    //
+    // The content components are ii's, so the borrow happens here rather than inside
+    // modules/tablet, exactly like the drawer's tool host.
+    PanelLoader { component: TabletAppWindows {} }
+
+    Component {
+        id: usageAppContent
+        UsageContent {}
+    }
+
+    Component {
+        id: modesAppContent
+        ModesContent {}
+    }
+
+    Component.onCompleted: TabletSystemApps.hostedContent = {
+        "usage": usageAppContent,
+        "modes": modesAppContent
+    }
+
+    // The surface-kind entries need their windows loaded, or launching them does nothing.
+    PanelLoader { component: Cheatsheet {} }
+    PanelLoader {
+        extraCondition: GlobalStates.videoEditorOpen
+        component: VideoEditor {}
+    }
+    PanelLoader { component: ScratchpadOverlay {} }
 
     // Pinned apps, what is open, and a door to the drawer — the Pixel Tablet's taskbar.
     // Not the ii dock: see the note in TabletDockWindow on why none of it is reused.

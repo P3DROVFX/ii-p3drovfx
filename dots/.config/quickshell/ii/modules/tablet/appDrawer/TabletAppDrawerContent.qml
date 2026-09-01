@@ -8,6 +8,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.tablet.appWindow
 
 /**
  * The drawer's inside: a search field over a grid of every installed app.
@@ -56,6 +57,26 @@ Item {
         return AppSearch.fuzzyQuery(q);
     }
 
+    /// Everything the grid shows: matching system apps first, then installed applications.
+    /// System apps are wrapped so the delegate can tell them apart without inspecting types.
+    readonly property var gridEntries: {
+        const entries = root.matchingSystemApps.map(app => ({
+            systemAppId: app.id,
+            name: app.name,
+            icon: app.icon
+        }));
+        for (const entry of root.apps)
+            entries.push({ systemAppId: "", entry: entry });
+        return entries;
+    }
+
+    // ── System apps ─────────────────────────────────────────────────────────
+    // Shell surfaces the drawer lists next to real apps: usage stats, modes, the
+    // cheatsheet. See TabletSystemApps. Shown only while searching, so the grid of
+    // installed applications is not diluted by shell internals when it is just being
+    // browsed — the same reason Android hides its own settings panels from the A-Z list.
+    readonly property var matchingSystemApps: TabletSystemApps.search(root.query)
+
     // ── Tools ───────────────────────────────────────────────────────────────
     // Only what the user could actually open: a panel whose module is switched off is not
     // offered, exactly as the launcher does it.
@@ -95,6 +116,11 @@ Item {
     function activateTopResult() {
         if (root.activeToolId.length > 0)
             return;
+        if (root.matchingSystemApps.length > 0 && root.apps.length === 0) {
+            TabletSystemApps.launch(root.matchingSystemApps[0].id);
+            root.dismissRequested();
+            return;
+        }
         if (root.apps.length > 0) {
             root.apps[0].execute();
             root.dismissRequested();
@@ -283,7 +309,7 @@ Item {
 
                 cellWidth: root.tileWidth
                 cellHeight: root.tileHeight
-                model: root.apps
+                model: root.gridEntries
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 cacheBuffer: 600
@@ -294,18 +320,29 @@ Item {
                     width: appGrid.cellWidth
                     height: appGrid.cellHeight
 
+                    readonly property bool isSystemApp: appCell.modelData.systemAppId.length > 0
+
                     TabletAppTile {
                         anchors.centerIn: parent
                         width: appGrid.cellWidth - 8
                         height: appGrid.cellHeight - 8
-                        entry: appCell.modelData
+                        entry: appCell.isSystemApp ? null : appCell.modelData.entry
+                        systemName: appCell.isSystemApp ? appCell.modelData.name : ""
+                        systemIcon: appCell.isSystemApp ? appCell.modelData.icon : ""
                         iconSize: root.appIconSize
                         onActivated: {
-                            appCell.modelData.execute();
+                            if (appCell.isSystemApp)
+                                TabletSystemApps.launch(appCell.modelData.systemAppId);
+                            else
+                                appCell.modelData.entry.execute();
                             root.dismissRequested();
                         }
                         onHeld: {
-                            root.appHeld(appCell.modelData.id);
+                            // A shell surface is not a desktop icon: it has no .desktop entry
+                            // to place, so long-press does nothing for those.
+                            if (appCell.isSystemApp)
+                                return;
+                            root.appHeld(appCell.modelData.entry.id);
                             root.dismissRequested();
                         }
                     }
@@ -317,7 +354,7 @@ Item {
             PagePlaceholder {
                 anchors.fill: parent
                 visible: appGrid.visible
-                shown: root.apps.length === 0
+                shown: root.gridEntries.length === 0
                 icon: "search_off"
                 title: Translation.tr("No apps")
                 description: Translation.tr("Nothing matches this search")

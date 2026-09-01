@@ -17,7 +17,14 @@ import qs.modules.common.widgets
 Item {
     id: root
 
+    /// A desktop entry, or null for a shell surface listed as an app.
     required property var entry
+    /// Set instead of `entry` for a shell surface: it has no .desktop file, so its name and
+    /// Material symbol are supplied directly.
+    property string systemName: ""
+    property string systemIcon: ""
+    readonly property bool isSystem: root.systemIcon.length > 0
+
     property real iconSize: 56
 
     signal activated
@@ -54,22 +61,44 @@ Item {
         anchors.margins: 6
         spacing: 6
 
-        IconImage {
+        Item {
             Layout.alignment: Qt.AlignHCenter
-            implicitSize: root.iconSize
-            source: Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
+            implicitWidth: root.iconSize
+            implicitHeight: root.iconSize
             // Android shrinks the icon under the finger rather than lighting up a
             // background; the plate behind is a softer version of the same idea.
             scale: tapArea.pressed ? 0.92 : 1
             Behavior on scale {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
+
+            IconImage {
+                anchors.fill: parent
+                visible: !root.isSystem
+                source: Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
+            }
+
+            // A shell surface has no application icon, so it gets a symbol on a tinted
+            // round plate — visibly a system thing rather than a badly-themed app.
+            Rectangle {
+                anchors.fill: parent
+                visible: root.isSystem
+                radius: width * 0.28
+                color: Appearance.colors.colPrimaryContainer
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.systemIcon
+                    iconSize: Math.round(root.iconSize * 0.52)
+                    color: Appearance.colors.colOnPrimaryContainer
+                }
+            }
         }
 
         StyledText {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            text: root.entry?.name ?? ""
+            text: root.isSystem ? Translation.tr(root.systemName) : (root.entry?.name ?? "")
             font.pixelSize: Appearance.font.pixelSize.smaller
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
