@@ -208,32 +208,6 @@ Item {
                 }
             }
 
-            ConfigSpinBox {
-                icon: "swipe_down"
-                text: Translation.tr("Tablet shade pull-down edge (px)")
-                value: Config.options.sidebar.tabletShade.edgeDragHeight
-                from: 4
-                to: 64
-                stepSize: 2
-                onValueChanged: {
-                    if (Config.ready)
-                        Config.options.sidebar.tabletShade.edgeDragHeight = value;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "motion_photos_on"
-                text: Translation.tr("Live shade backdrop (tablet)")
-                checked: Config.options.sidebar.tabletShade.liveBackdrop
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.sidebar.tabletShade.liveBackdrop)
-                        Config.options.sidebar.tabletShade.liveBackdrop = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Keeps capturing the desktop behind the tablet shade instead of freezing one frame. Costs a continuous screencopy and can smear, since the capture also sees the shade's own blur.")
-                }
-            }
-
             ContentSubsection {
                 title: Translation.tr("Sidebar position")
                 icon: "switch_right"

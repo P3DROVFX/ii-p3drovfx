@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Hyprland
 
 import qs
+import qs.services
 import qs.modules.common
 
 /**
@@ -59,20 +60,68 @@ Singleton {
             // keyboard, so the on-screen one needs a way in that is not itself a keybind.
             keywords: ["keyboard", "osk", "onscreen", "teclado", "virtual"]
         },
+        // ── The policies panel, split into its tabs ─────────────────────────
+        // The desktop shell stacks these behind a tab bar because they share one narrow
+        // sidebar. Nothing about them is actually related — an AI chat, a translator, a
+        // media remote, a wallpaper browser — and with a whole screen to work in, a tab bar
+        // is just a lid over four separate things. Each is its own app here.
+        //
+        // They keep entering from the left, so the panel that used to live on that edge
+        // still arrives from it.
         {
-            id: "policies",
-            name: "Policies",
-            icon: "policy",
+            id: "policies.intelligence",
+            name: "Intelligence",
+            icon: "neurology",
             kind: "hosted",
-            // It lives on the left edge in the desktop shell, so it still arrives from
-            // there — but at app width with a title bar, not as a 460px sidebar.
             enterFrom: "left",
-            // Its content only builds its tabs while the shell considers policies open
-            // (SidebarPoliciesContent.tabsWanted). Opening it as an app has to say so, and
-            // saying so is true: policies IS open, just presented differently.
-            onOpen: () => GlobalStates.sidebarLeftOpen = true,
-            onClose: () => GlobalStates.sidebarLeftOpen = false,
-            keywords: ["policies", "ai", "phone", "anime", "politicas", "telefone"]
+            enabled: () => Ai.enabled,
+            keywords: ["ai", "chat", "intelligence", "assistant", "inteligencia"]
+        },
+        {
+            id: "policies.translator",
+            name: "Translator",
+            icon: "translate",
+            kind: "hosted",
+            enterFrom: "left",
+            enabled: () => (Config.options?.policies?.translator ?? 0) !== 0,
+            keywords: ["translator", "translate", "tradutor", "traduzir"]
+        },
+        {
+            id: "policies.media",
+            name: "Media",
+            icon: "music_note",
+            kind: "hosted",
+            enterFrom: "left",
+            enabled: () => (Config.options?.policies?.player ?? 0) !== 0,
+            keywords: ["media", "player", "music", "musica", "reprodutor"]
+        },
+        {
+            id: "policies.wallpapers",
+            name: "Wallpapers",
+            icon: "wallpaper",
+            kind: "hosted",
+            enterFrom: "left",
+            enabled: () => (Config.options?.policies?.wallpapers ?? 0) !== 0,
+            keywords: ["wallpaper", "wallpapers", "papel de parede", "fundo"]
+        },
+        {
+            id: "policies.anime",
+            name: "Anime",
+            icon: "bookmark_heart",
+            kind: "hosted",
+            enterFrom: "left",
+            enabled: () => (Config.options?.policies?.weeb ?? 0) !== 0
+                && (Config.options?.policies?.weeb ?? 0) !== 2,
+            keywords: ["anime", "weeb", "booru"]
+        },
+        {
+            id: "policies.phone",
+            name: "Phone",
+            icon: "smartphone",
+            kind: "hosted",
+            enterFrom: "left",
+            enabled: () => (Config.options?.policies?.phone ?? 0) !== 0,
+            keywords: ["phone", "telefone", "celular", "kdeconnect", "scrcpy"]
         },
         {
             id: "timetable",

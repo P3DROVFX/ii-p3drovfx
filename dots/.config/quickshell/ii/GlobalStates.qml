@@ -1273,6 +1273,20 @@ Singleton {
         }
     }
 
+    // Tablet app windows IPC. Also the only way to open one from a script or a keybind,
+    // which the drawer alone could not offer.
+    IpcHandler {
+        target: "tabletApp"
+
+        function open(appId: string): void {
+            root.openTabletApp(appId);
+        }
+
+        function close(): void {
+            root.closeTabletApp();
+        }
+    }
+
     // Recents IPC (tablet family)
     IpcHandler {
         target: "recents"

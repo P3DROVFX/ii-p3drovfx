@@ -42,8 +42,14 @@ QtObject {
     function release(origin, velocity) {
         const screen = Quickshell.primaryScreen;
         const needed = Math.max(1, (screen ? screen.width : 1000) * handler.commitFraction);
-        if (handler._travel >= needed || velocity >= handler.flingVelocity)
-            GlobalStates.openTabletApp("policies");
+        if (handler._travel >= needed || velocity >= handler.flingVelocity) {
+            // The policies panel is six separate apps now, so the edge opens the first one
+            // the user still has switched on — "the panel that used to be here" — rather
+            // than a hub that would just put the tab bar back.
+            const first = TabletSystemApps.available.find(app => app.id.startsWith("policies."));
+            if (first)
+                GlobalStates.openTabletApp(first.id);
+        }
         handler._travel = 0;
     }
 

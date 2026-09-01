@@ -43,6 +43,7 @@ import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.sessionScreen
 import qs.modules.ii.videoEditor
 import qs.modules.ii.sidebarPolicies
+import qs.modules.ii.sidebarPolicies.phone
 import qs.modules.ii.touchGestures
 import qs.modules.ii.wallpaperSelector
 
@@ -169,20 +170,25 @@ Scope {
         ModesContent {}
     }
 
-    Component {
-        id: policiesAppContent
-        SidebarPoliciesContent {
-            // Only read for the Ctrl+O/D/P shortcuts, which already fall back to
-            // GlobalStates when the controller has no such function — and this family has
-            // no detach/pin controller to offer.
-            scopeRoot: null
-        }
-    }
+    // The policies tabs, each as its own app. They are plain standalone types in ii — the
+    // tab bar around them was only there because they shared one narrow sidebar — so with a
+    // whole screen each they need no wrapper at all.
+    Component { id: policiesIntelligence; AiChat {} }
+    Component { id: policiesTranslator; Translator {} }
+    Component { id: policiesMedia; SidebarPlayerControl {} }
+    Component { id: policiesWallpapers; WallpaperBrowserUI {} }
+    Component { id: policiesAnime; Anime {} }
+    Component { id: policiesPhone; Phone {} }
 
     Component.onCompleted: TabletSystemApps.hostedContent = {
         "usage": usageAppContent,
         "modes": modesAppContent,
-        "policies": policiesAppContent
+        "policies.intelligence": policiesIntelligence,
+        "policies.translator": policiesTranslator,
+        "policies.media": policiesMedia,
+        "policies.wallpapers": policiesWallpapers,
+        "policies.anime": policiesAnime,
+        "policies.phone": policiesPhone
     }
 
     // The left edge opens policies as an app rather than as a sidebar, so it has to claim
