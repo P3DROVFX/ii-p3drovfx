@@ -684,6 +684,23 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       o toque continua pelo serviço, e os dois caminhos dirigem o mesmo controller.
 - [x] **Botões de navegação com as formas do Android**: chevron, círculo, quadrado. Home
       desenhava o quadrado e recentes o círculo — o par trocado.
+- [x] **Notificações legíveis na shade.** Estavam no tamanho que a sidebar de 460px do
+      desktop precisa, numa superfície que é a tela inteira. A linha de controles delas
+      agora tem a mesma altura da linha de ações do sistema ao lado, então as duas colunas
+      terminam na mesma linha. `NotificationList` ganhou altura e escala de conteúdo para
+      repassar, em vez de a tablet enfiar a mão dentro dos botões; ambos com padrão neutro.
+- [x] **Setas de workspace na dock**, uma em cada extremo. O swipe já existia mas precisa de
+      wallpaper nu para começar, ou seja, fica inalcançável exatamente quando há algo aberto
+      — que é quando mudar de tela mais importa. Despacham o mesmo que o swipe.
+- [x] **Swipes multitoque na tela.** O touchpad do compositor não existe num tablet, e o par
+      que ele traz — scratchpad para dentro e para fora — é ideia de gerenciamento de janela
+      de desktop. Na touchscreen: lateral troca de workspace, para cima abre a gaveta, para
+      baixo puxa a shade. Reconhecidos antes do filtro de contato único, porque os outros
+      dedos da mão não são o contato ativo e o movimento deles é o gesto inteiro. Armam com
+      a contagem exata e disparam uma vez por mão apoiada.
+- [x] **Back virou ação vinculável.** O que "voltar" significa é específico da família e
+      `modules/common` não pode importar uma para descobrir, então a tablet instala um
+      handler, como já fazia com o keybind de policies.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.
