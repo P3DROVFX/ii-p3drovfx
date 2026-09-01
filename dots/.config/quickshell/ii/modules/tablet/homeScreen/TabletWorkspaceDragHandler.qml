@@ -102,7 +102,13 @@ QtObject {
 
         if (horizontal && (Math.abs(handler._dx) >= needed || Math.abs(velocity) >= handler.flingVelocity)) {
             // Dragging the page leftwards reveals the one to its right, as on a home screen.
-            Hyprland.dispatch(handler._dx < 0 ? "workspace r+1" : "workspace r-1");
+            //
+            // The Lua dispatcher API, not the classic "workspace r+1" string: this Hyprland
+            // is configured with the former, and the latter fails as a Lua syntax error
+            // rather than doing nothing visible, so it is easy to ship broken.
+            Hyprland.dispatch(handler._dx < 0
+                ? "hl.dsp.focus({ workspace = 'r+1' })"
+                : "hl.dsp.focus({ workspace = 'r-1' })");
         }
         handler._reset();
     }

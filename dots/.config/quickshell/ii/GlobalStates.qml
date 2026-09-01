@@ -1041,6 +1041,26 @@ Singleton {
         root.openAppDrawer(name);
     }
 
+    // ── Recents (tablet family) ──────────────────────────────────────────────
+    // Android keeps home screens and recents as two separate surfaces; this is the second
+    // one. Distinct from overviewOpen, which is the desktop shell's workspace grid.
+    property bool recentsOpen: false
+    property string activeRecentsMonitor: ""
+
+    function openRecents(monitorName) {
+        root.activeRecentsMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.recentsOpen = true;
+    }
+
+    function toggleRecents(monitorName) {
+        const name = monitorName || Hyprland.focusedMonitor?.name || "";
+        if (root.recentsOpen && (!name || root.activeRecentsMonitor === name)) {
+            root.recentsOpen = false;
+            return;
+        }
+        root.openRecents(name);
+    }
+
     function openRightSidebar(monitorName) {
         root.activeRightSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.dashboardPanelOpen = true;
@@ -1222,6 +1242,23 @@ Singleton {
 
         function open(): void {
             root.openAppDrawer("");
+        }
+    }
+
+    // Recents IPC (tablet family)
+    IpcHandler {
+        target: "recents"
+
+        function toggle(): void {
+            root.toggleRecents("");
+        }
+
+        function close(): void {
+            root.recentsOpen = false;
+        }
+
+        function open(): void {
+            root.openRecents("");
         }
     }
 

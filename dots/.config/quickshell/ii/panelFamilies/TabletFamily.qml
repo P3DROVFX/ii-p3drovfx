@@ -9,6 +9,7 @@ import qs.modules.common
 import qs.modules.tablet.appDrawer
 import qs.modules.tablet.dock
 import qs.modules.tablet.homeScreen
+import qs.modules.tablet.recents
 import qs.modules.tablet.sidebarDashboard
 
 // ── Borrowed from ii, pending a tablet replacement ──────────────────────────
@@ -50,7 +51,16 @@ import qs.modules.ii.wallpaperSelector
  *
  * What the tablet deliberately does NOT load, and why:
  *
- *   Dock                  — replaced by an Android-style dock built into the home screen.
+ *   ii Dock               — replaced by modules/tablet/dock, an Android-style taskbar.
+ *   ii Overview           — replaced by modules/tablet/recents. The overview is a grid of
+ *                           workspaces answering "where is everything"; recents is a flat
+ *                           most-recent-first list answering "what was I just doing".
+ *                           Android keeps the two apart, and here the workspaces ARE the
+ *                           home screens, so only the second surface is needed.
+ *                           OverviewWindowTransition goes with it: nothing drives
+ *                           GlobalStates.overviewOpen in this family any more.
+ *                           The module is still imported for SearchPanelHost, which the
+ *                           app drawer borrows to host tool panels.
  *   DynamicIsland         — the bar is a fixed status bar; a notch has no role here.
  *   ScreenCorners         — a corner hot-zone is a pointer affordance. Edges are gestures.
  *   VerticalBar           — the bar is pinned to the top (BarPlacement.familyPinsBarToTop).
@@ -87,10 +97,9 @@ Scope {
         component: Background {}
     }
 
-    // Still the desktop overview, used as "recents" until the tablet's own lands (Fase 3e).
-    // It already scales workspace previews from the available geometry, so it is usable with
-    // a finger.
-    PanelLoader { component: Overview {} }
+    // What was I just doing: every open window as a card, most recent first. Distinct from
+    // the workspaces, which are this family's home screens.
+    PanelLoader { component: TabletRecents {} }
 
     // Every installed app in one searchable grid, and the tablet's replacement for the ii
     // launcher. Swipe up from the bottom edge, or `qs -c ii ipc call appDrawer toggle`.
@@ -113,9 +122,6 @@ Scope {
     // Pinned apps, what is open, and a door to the drawer — the Pixel Tablet's taskbar.
     // Not the ii dock: see the note in TabletDockWindow on why none of it is reused.
     PanelLoader { component: TabletDock {} }
-
-    // GNOME-like window scale-out during overview. Follows GlobalStates, owns no UI.
-    OverviewWindowTransition {}
 
     PanelLoader { component: TabletSidebarDashboard {} }
 
