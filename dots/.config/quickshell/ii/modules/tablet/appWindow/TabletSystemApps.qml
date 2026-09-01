@@ -51,11 +51,35 @@ Singleton {
             keywords: ["modes", "routines", "automation", "modos", "rotinas", "automacao", "focus"]
         },
         {
-            id: "cheatsheet",
-            name: "Shortcuts",
+            id: "timetable",
+            name: "Timetable",
+            icon: "calendar_month",
+            kind: "surface",
+            enabled: () => Config.options?.cheatsheet?.enableTimetable ?? false,
+            keywords: ["timetable", "schedule", "classes", "horario", "aulas", "agenda"]
+        },
+        {
+            id: "keybinds",
+            name: "Keybinds",
             icon: "keyboard",
             kind: "surface",
             keywords: ["cheatsheet", "shortcuts", "keybinds", "atalhos", "teclas"]
+        },
+        {
+            id: "elements",
+            name: "Periodic Table",
+            icon: "experiment",
+            kind: "surface",
+            enabled: () => Config.options?.cheatsheet?.enablePeriodicTable ?? false,
+            keywords: ["periodic", "table", "elements", "quimica", "elementos", "tabela"]
+        },
+        {
+            id: "aminoAcids",
+            name: "Amino Acids",
+            icon: "biotech",
+            kind: "surface",
+            enabled: () => Config.options?.cheatsheet?.enableAminoAcids ?? false,
+            keywords: ["amino", "acids", "aminoacidos", "biologia"]
         },
         {
             id: "videoEditor",
@@ -73,6 +97,10 @@ Singleton {
         }
     ]
 
+    /// Entries whose feature is switched on. An app the user has disabled in Settings must
+    /// not sit in the drawer doing nothing when tapped.
+    readonly property var available: root.apps.filter(app => !app.enabled || app.enabled())
+
     function byId(appId) {
         return root.apps.find(app => app.id === appId) ?? null;
     }
@@ -82,7 +110,7 @@ Singleton {
         const q = String(query).trim().toLowerCase();
         if (q.length === 0)
             return [];
-        return root.apps.filter(app => {
+        return root.available.filter(app => {
             if (app.name.toLowerCase().includes(q))
                 return true;
             return (app.keywords ?? []).some(keyword => keyword.startsWith(q));
@@ -100,8 +128,14 @@ Singleton {
         }
 
         switch (appId) {
-        case "cheatsheet":
-            GlobalStates.cheatsheetOpen = true;
+        // The cheatsheet is one window with tabs, so each tab is its own entry in the
+        // drawer and opens straight onto it. From the user's side those are separate apps,
+        // which is what they are here.
+        case "timetable":
+        case "keybinds":
+        case "elements":
+        case "aminoAcids":
+            GlobalStates.openCheatsheet(appId);
             break;
         case "videoEditor":
             GlobalStates.videoEditorOpen = true;

@@ -71,11 +71,16 @@ Item {
     }
 
     // ── System apps ─────────────────────────────────────────────────────────
-    // Shell surfaces the drawer lists next to real apps: usage stats, modes, the
-    // cheatsheet. See TabletSystemApps. Shown only while searching, so the grid of
-    // installed applications is not diluted by shell internals when it is just being
-    // browsed — the same reason Android hides its own settings panels from the A-Z list.
-    readonly property var matchingSystemApps: TabletSystemApps.search(root.query)
+    // Shell surfaces the drawer lists as apps: usage stats, modes, the timetable, the
+    // keybind sheet. See TabletSystemApps.
+    //
+    // Always listed, not only while searching. Hiding them behind a search meant the only
+    // way to find them was already knowing they existed, which is no way to ship a feature.
+    // They lead the grid so they read as their own group rather than as strays among the
+    // installed applications.
+    readonly property var matchingSystemApps: root.query.trim().length === 0
+        ? TabletSystemApps.available
+        : TabletSystemApps.search(root.query)
 
     // ── Tools ───────────────────────────────────────────────────────────────
     // Only what the user could actually open: a panel whose module is switched off is not
