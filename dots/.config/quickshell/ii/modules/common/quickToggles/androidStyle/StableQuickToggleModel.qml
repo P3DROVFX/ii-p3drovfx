@@ -7,6 +7,15 @@ import QtQuick
 ListModel {
     id: root
 
+    // A ListModel fixes each role's type on first use, and a nested JS object is inferred
+    // as a nested list — so the `modelData` role became a List, and every later
+    // setProperty() of the payload was refused with "Can't assign to existing role
+    // 'modelData' of different type [List -> VariantMap]" and silently dropped. That is
+    // not just log noise: it meant a payload change (a tile moved to new layoutX/layoutY)
+    // never reached the delegate. Dynamic roles hold arbitrary JS values without inferring
+    // a type, which is exactly what a keyed adapter over immutable records needs.
+    dynamicRoles: true
+
     property list<var> sourceValues: []
     property bool syncing: false
 
