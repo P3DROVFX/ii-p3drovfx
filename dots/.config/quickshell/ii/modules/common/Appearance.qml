@@ -789,6 +789,15 @@ Singleton {
         // measured against a bar that was not the one on screen.
         // Material's minimum touch target, and the Pixel Tablet's status bar height.
         property real minimumTouchTarget: 48
+
+        // Snap step for desktop widgets and icons on the wallpaper canvas.
+        //
+        // Ten pixels is a fine-positioning aid for a mouse: it takes the jitter out of a
+        // drag without really constraining where something lands. A finger cannot place
+        // anything that precisely, and a home screen is supposed to look laid out on a
+        // grid rather than merely tidy — so a touch-first family snaps to a step coarse
+        // enough to read as cells, the way Android's home screen does.
+        property real widgetGridStep: PanelFamily.touchFirst ? 40 : 10
         property real baseBarHeight: PanelFamily.touchFirst
             ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
             : Config.options.bar.sizes.height

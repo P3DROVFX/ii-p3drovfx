@@ -9,7 +9,8 @@ MouseArea {
     property real snapLineY: -1
     property bool draggingActive: false
     property bool gridOverlayEnabled: false
-    property int alignmentGridStep: 10
+    // Hosts may override; the default follows the family, see Appearance.sizes.widgetGridStep.
+    property int alignmentGridStep: Appearance.sizes.widgetGridStep
     onAlignmentGridStepChanged: dotGrid.requestPaint()
 
     Canvas {
