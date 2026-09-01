@@ -21,7 +21,11 @@ AnimatedIcon {
 
     property bool active: false
     property bool busy: false
-    readonly property bool activityVisible: !root.presenceController || root.presenceController.reveal
+    // `visible` is recursive in Qt Quick: it reads false whenever an ancestor is
+    // hidden, so this also covers the whole dashboard widget being switched off in
+    // the bar layout. Without it activeLoop kept running - and repainting the bar
+    // every frame - for a widget that was not on screen at all.
+    readonly property bool activityVisible: root.visible && (!root.presenceController || root.presenceController.reveal)
 
     readonly property real dimmed: 0.35
     readonly property var columns: [3.7, 7.85, 12, 16.15, 20.3]
@@ -34,7 +38,10 @@ AnimatedIcon {
         property real half: 1.1
         property real offset: 0
         anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
+        // Deliberately the default GeometryRenderer. Each bar is one straight,
+        // round-capped line, and at this icon's size the CurveRenderer draws it
+        // pixel-for-pixel identically while costing noticeably more CPU for every
+        // frame activeLoop animates.
         ShapePath {
             strokeColor: root.color
             fillColor: "transparent"
