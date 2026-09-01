@@ -66,9 +66,12 @@ PanelWindow {
     }
     mask: Region {
         item: inputRegion
-        // Follows the drag, not the settled flag: a sheet being pulled up has to accept the
-        // finger that is pulling it.
-        intersection: root.openProgress > 0.001 ? Intersection.Combine : Intersection.Subtract
+        // Open, or being dragged open — but deliberately NOT while closing. A sheet being
+        // pulled up must accept the finger pulling it; a sheet on its way out must hand
+        // input straight back, or it stays the topmost target after the dock button has
+        // reappeared and swallows the next tap on Apps.
+        intersection: (root.wantOpen || TabletAppDrawerGestureController.tracking)
+            ? Intersection.Combine : Intersection.Subtract
     }
 
     // Keep the layer mapped while idle. A layer surface that is first mapped in the same

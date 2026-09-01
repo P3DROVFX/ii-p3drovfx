@@ -46,7 +46,11 @@ class TabletFamilyContractTests(unittest.TestCase):
         drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
 
         self.assertIn("mask: Region", drawer)
-        self.assertIn("root.wantOpen ? Intersection.Combine : Intersection.Subtract", drawer)
+        # Input while open or while being dragged open, never while closing. The drag case
+        # was added when the sheet started following the finger; the closing case is the
+        # original bug and must stay excluded.
+        self.assertIn("root.wantOpen || TabletAppDrawerGestureController.tracking", drawer)
+        self.assertIn("Intersection.Combine : Intersection.Subtract", drawer)
 
     def test_app_drawer_uses_one_progress_for_the_backdrop_sheet_and_dock_exit(self):
         drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
@@ -59,8 +63,12 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("visible: !GlobalStates.screenLocked", drawer)
         self.assertNotIn("visible: (root.wantOpen || root.openProgress > 0.001)", drawer)
         self.assertIn("y: (1 - root.revealProgress) * root.searchHeight * 0.8", content)
-        self.assertIn("property real drawerProgress: GlobalStates.appDrawerOpen ? 1 : 0", dock)
-        self.assertIn("y: root.drawerProgress * root.dockContentHeight", dock)
+        # One progress for both surfaces, which is what this test is named for: the dock
+        # reads the drawer's controller rather than animating its own copy of the boolean.
+        self.assertIn("drawerProgress: TabletAppDrawerGestureController.progress", dock)
+        self.assertNotIn("property real drawerProgress: GlobalStates.appDrawerOpen ? 1 : 0", dock)
+        # Negative: the dock rises with the sheet instead of dropping away from it.
+        self.assertIn("y: -root.drawerProgress * root.dockContentHeight", dock)
         self.assertIn("&& root.drawerProgress < 0.999", dock)
         self.assertNotIn("!GlobalStates.appDrawerOpen || root.drawerProgress < 0.999", dock)
 
