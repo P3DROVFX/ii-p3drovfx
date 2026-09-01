@@ -1,0 +1,1225 @@
+#!/usr/bin/env python3
+"""preset_store.py -- the community preset store, over plain git and GitHub.
+
+There is no server and no central index. A preset is a public GitHub repo
+carrying a `preset.json` manifest next to the config it ships; the store is
+whatever GitHub returns for the `ii-p3drovfx-preset` topic. Installing is a
+clone, updating is a fast-forward pull, and publishing is `gh repo create`
+followed by `gh repo edit --add-topic`, so a preset can be written, shipped
+and updated without ever opening a browser tab.
+
+Every command prints exactly one JSON line on stdout, failures included, so a
+QML caller never has to tell "it broke" apart from "it printed nothing". The
+one exception is `auth login`, which streams one JSON line per step because
+the user has to be shown a code while the flow is still waiting.
+
+Commands:
+  auth status
+  auth login
+  discover [--limit N] [--query TEXT]
+  fetch-manifest <owner/repo>
+  install <owner/repo> [--name NAME] [--force]
+  check-updates
+  pull <name>
+  diff <name> [--incoming]
+  publish <name> [--repo NAME] [--description TEXT] [--notes TEXT] [--private]
+  push-update <name> [--version V | --bump major|minor|patch] [--notes TEXT]
+  links
+  unlink <name>
+  uninstall <name>
+"""
+import datetime
+import glob
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import presets_helper  # noqa: E402
+
+TOPIC = 'ii-p3drovfx-preset'
+MANIFEST_NAME = 'preset.json'
+MANIFEST_SCHEMA = 1
+CONFIG_NAME = 'config.json'
+USER_AGENT = 'ii-preset-store/1.0'
+
+# The device flow needs an OAuth app that belongs to the shell, and its client
+# id is public by design -- it is not a secret and nothing can be done with it
+# alone. Until the fork registers one, `auth login` says so and hands back the
+# `gh auth login` line to run instead, rather than pretending to work.
+GITHUB_CLIENT_ID = os.environ.get('II_PRESET_STORE_CLIENT_ID', '').strip()
+DEVICE_CODE_URL = 'https://github.com/login/device/code'
+DEVICE_TOKEN_URL = 'https://github.com/login/oauth/access_token'
+REQUIRED_SCOPES = ('repo',)
+
+# Where a slug is cloned from. Overridable so the install/update path can be
+# exercised against local repositories instead of the real GitHub.
+GIT_BASE = os.environ.get('II_PRESET_STORE_GIT_BASE', 'https://github.com/')
+
+GIT_TIMEOUT = 180
+GH_TIMEOUT = 120
+HTTP_TIMEOUT = 20
+DIFF_LIMIT = 40
+
+NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _.-]*$')
+REPO_NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+SLUG_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$')
+IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp')
+
+
+class StoreError(Exception):
+    """Anything the user should be told about in prose."""
+
+
+# ---------------------------------------------------------------------------
+# Paths and small helpers
+# ---------------------------------------------------------------------------
+
+def home():
+    return presets_helper.user_home()
+
+
+def config_dir():
+    return os.path.join(home(), '.config', 'illogical-impulse')
+
+
+def presets_dir():
+    return os.path.join(config_dir(), 'presets')
+
+
+def store_dir():
+    return os.path.join(config_dir(), 'preset-store')
+
+
+def config_file():
+    return os.path.join(config_dir(), 'config.json')
+
+
+def links_file():
+    return os.path.join(store_dir(), 'links.json')
+
+
+def scripts_dir():
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def emit(payload):
+    print(json.dumps(payload))
+
+
+def run(args, cwd=None, timeout=GIT_TIMEOUT, stdin_text=None):
+    """Run a command and hand back (code, stdout, stderr), never raising."""
+    try:
+        proc = subprocess.run(args, cwd=cwd, input=stdin_text, capture_output=True,
+                              text=True, timeout=timeout)
+        return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+    except FileNotFoundError:
+        return 127, '', '%s is not installed' % args[0]
+    except subprocess.TimeoutExpired:
+        return 124, '', '%s timed out' % args[0]
+    except Exception as exc:
+        return 1, '', str(exc)
+
+
+def git(args, cwd, timeout=GIT_TIMEOUT):
+    return run(['git'] + list(args), cwd=cwd, timeout=timeout)
+
+
+def gh(args, timeout=GH_TIMEOUT, stdin_text=None):
+    return run(['gh'] + list(args), timeout=timeout, stdin_text=stdin_text)
+
+
+def check_name(name):
+    """Preset names become filenames, so they get checked before they are used."""
+    if not name:
+        raise StoreError('No preset name was given.')
+    if '/' in name or '\\' in name or '..' in name or name.startswith('.'):
+        raise StoreError('That preset name cannot be used as a file name.')
+    if not NAME_RE.match(name):
+        raise StoreError('Preset names may only hold letters, numbers, spaces, dots, dashes and underscores.')
+    return name
+
+
+def check_slug(slug):
+    slug = (slug or '').strip()
+    slug = re.sub(r'^https?://github\.com/', '', slug)
+    slug = re.sub(r'\.git$', '', slug).strip('/')
+    if not SLUG_RE.match(slug):
+        raise StoreError('Expected a repository in owner/name form.')
+    return slug
+
+
+def slug_dir(slug):
+    return os.path.join(store_dir(), slug.replace('/', '__'))
+
+
+def repo_name_from_preset(name):
+    slug = re.sub(r'[^A-Za-z0-9._-]+', '-', name.strip().lower()).strip('-.')
+    slug = re.sub(r'-{2,}', '-', slug)
+    return slug or 'ii-preset'
+
+
+def version_key(value):
+    numbers = re.findall(r'\d+', str(value or ''))[:3]
+    numbers += ['0'] * (3 - len(numbers))
+    return tuple(int(n) for n in numbers)
+
+
+def bump_version(value, part='patch'):
+    numbers = list(version_key(value))
+    index = {'major': 0, 'minor': 1, 'patch': 2}.get(part, 2)
+    numbers[index] += 1
+    for i in range(index + 1, 3):
+        numbers[i] = 0
+    return '.'.join(str(n) for n in numbers)
+
+
+def today():
+    return datetime.date.today().isoformat()
+
+
+def read_json(path):
+    with open(path, 'r', encoding='utf-8') as handle:
+        return json.load(handle)
+
+
+def image_ext(path):
+    ext = os.path.splitext(path)[1].lower()
+    return ext if ext in IMAGE_EXTS else None
+
+
+# ---------------------------------------------------------------------------
+# Compatibility
+#
+# "Migrate up, block newer": Config.qml migrates an older preset forward on
+# its own, but a preset written against a newer schema holds keys this build
+# has never heard of and would be quietly mangled on load.
+# ---------------------------------------------------------------------------
+
+def current_config_version():
+    """Read the version this build understands, straight from Config.qml."""
+    qml = os.path.join(os.path.dirname(scripts_dir()), 'modules', 'common', 'Config.qml')
+    try:
+        with open(qml, 'r', encoding='utf-8') as handle:
+            match = re.search(r'currentConfigVersion\s*:\s*(\d+)', handle.read())
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
+    # Config.qml moved or could not be read. The live config was written by
+    # this build, so its own version is the next best answer.
+    try:
+        value = read_json(config_file()).get('configVersion')
+        if isinstance(value, int):
+            return value
+    except Exception:
+        pass
+    return None
+
+
+def compatibility(preset_version):
+    """Say whether a preset can be applied, and why not when it cannot."""
+    ours = current_config_version()
+    if ours is None or not isinstance(preset_version, int):
+        return {'ok': True, 'status': 'unknown', 'ours': ours, 'theirs': preset_version}
+    if preset_version > ours:
+        return {
+            'ok': False,
+            'status': 'too-new',
+            'ours': ours,
+            'theirs': preset_version,
+            'reason': 'This preset was made for a newer version of the shell. Update first.',
+        }
+    if preset_version < ours:
+        return {'ok': True, 'status': 'migrate', 'ours': ours, 'theirs': preset_version}
+    return {'ok': True, 'status': 'current', 'ours': ours, 'theirs': preset_version}
+
+
+# ---------------------------------------------------------------------------
+# The link index
+#
+# One file mapping installed preset names to the repos they came from. It is
+# the only durable state the store keeps; everything else can be re-derived
+# from the clones themselves.
+# ---------------------------------------------------------------------------
+
+def load_links():
+    try:
+        data = read_json(links_file())
+    except Exception:
+        return {}
+    presets = data.get('presets') if isinstance(data, dict) else None
+    return presets if isinstance(presets, dict) else {}
+
+
+def save_links(presets):
+    presets_helper.atomic_write_json(links_file(), {'schema': 1, 'presets': presets})
+
+
+def get_link(name):
+    link = load_links().get(name)
+    if not link:
+        raise StoreError('"%s" did not come from the store.' % name)
+    return link
+
+
+def set_link(name, link):
+    presets = load_links()
+    presets[name] = link
+    save_links(presets)
+
+
+def drop_link(name):
+    presets = load_links()
+    if name in presets:
+        del presets[name]
+        save_links(presets)
+
+
+# ---------------------------------------------------------------------------
+# Manifests
+# ---------------------------------------------------------------------------
+
+def validate_manifest(manifest, source='preset.json'):
+    if not isinstance(manifest, dict):
+        raise StoreError('%s is not a JSON object.' % source)
+    name = manifest.get('name')
+    if not isinstance(name, str) or not name.strip():
+        raise StoreError('%s does not name the preset.' % source)
+    config = manifest.get('config') or CONFIG_NAME
+    if not isinstance(config, str) or config.startswith('/') or '..' in config:
+        raise StoreError('%s points its config outside the repository.' % source)
+    manifest['config'] = config
+    return manifest
+
+
+def read_manifest(directory):
+    path = os.path.join(directory, MANIFEST_NAME)
+    if not os.path.exists(path):
+        raise StoreError('This repository carries no %s, so it is not a preset.' % MANIFEST_NAME)
+    try:
+        manifest = read_json(path)
+    except Exception as exc:
+        raise StoreError('%s could not be read: %s' % (MANIFEST_NAME, exc))
+    return validate_manifest(manifest, MANIFEST_NAME)
+
+
+def manifest_summary(manifest, slug=''):
+    return {
+        'name': manifest.get('name', ''),
+        'author': manifest.get('author', slug.split('/')[0] if slug else ''),
+        'description': manifest.get('description', '') or '',
+        'version': str(manifest.get('version', '') or ''),
+        'configVersion': manifest.get('configVersion'),
+        'screenshots': [s for s in (manifest.get('screenshots') or []) if isinstance(s, str)],
+        'changelog': manifest.get('changelog') or [],
+        'repo': slug,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GitHub, unauthenticated
+# ---------------------------------------------------------------------------
+
+def http_json(url, token=None, timeout=HTTP_TIMEOUT):
+    headers = {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': USER_AGENT,
+        'X-GitHub-Api-Version': '2022-11-28',
+    }
+    if token:
+        headers['Authorization'] = 'Bearer %s' % token
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def http_text(url, timeout=HTTP_TIMEOUT):
+    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read().decode('utf-8')
+
+
+def gh_token():
+    code, out, _ = gh(['auth', 'token'], timeout=20)
+    return out if code == 0 and out else None
+
+
+# ---------------------------------------------------------------------------
+# auth
+# ---------------------------------------------------------------------------
+
+def cmd_auth_status():
+    if not shutil.which('gh'):
+        return {
+            'ok': True, 'hasGh': False, 'authenticated': False, 'login': '',
+            'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
+            'hint': 'Publishing needs the GitHub CLI. Install the "github-cli" package.',
+        }
+    # -i so the granted scopes come back in the response headers; `gh auth
+    # status` only prints them for tokens it stored itself.
+    code, out, err = gh(['api', '-i', 'user'], timeout=30)
+    if code != 0:
+        return {
+            'ok': True, 'hasGh': True, 'authenticated': False, 'login': '',
+            'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
+            'hint': err or 'Not signed in to GitHub.',
+        }
+    scopes = []
+    for line in out.splitlines():
+        if line.lower().startswith('x-oauth-scopes:'):
+            scopes = [s.strip() for s in line.split(':', 1)[1].split(',') if s.strip()]
+            break
+    login = ''
+    body = out.split('\n\n', 1)[-1]
+    try:
+        login = json.loads(body).get('login', '')
+    except Exception:
+        pass
+    # A fine-grained token reports no scopes at all. Treating that as "missing
+    # everything" would block a token that works perfectly well, so an empty
+    # scope list is taken at face value and the publish itself decides.
+    missing = [s for s in REQUIRED_SCOPES if scopes and s not in scopes]
+    return {
+        'ok': True, 'hasGh': True, 'authenticated': True, 'login': login,
+        'scopes': scopes, 'missingScopes': missing,
+        'hint': 'The token cannot create repositories. Sign in again with the "repo" scope.' if missing else '',
+    }
+
+
+def post_form(url, fields):
+    data = '&'.join('%s=%s' % (k, urllib.parse.quote(str(v))) for k, v in fields.items())
+    request = urllib.request.Request(url, data=data.encode('utf-8'), headers={
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': USER_AGENT,
+    })
+    with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def cmd_auth_login():
+    """Sign in without handing the browser the whole flow.
+
+    Streams one JSON line per step: the caller shows the code as soon as it
+    arrives and keeps reading until the last line says how it ended.
+    """
+    if not shutil.which('gh'):
+        emit({'ok': False, 'event': 'error', 'error': 'The GitHub CLI is not installed.'})
+        return 1
+    if not GITHUB_CLIENT_ID:
+        # No OAuth app is configured for this build, so there is no honest way
+        # to run the flow here. Hand back the command that does work.
+        emit({
+            'ok': False, 'event': 'unavailable',
+            'command': 'gh auth login --scopes repo',
+            'error': 'This build has no GitHub app configured, so signing in has to be done '
+                     'once with the GitHub CLI: run "gh auth login --scopes repo" in a terminal.',
+        })
+        return 1
+
+    try:
+        start = post_form(DEVICE_CODE_URL, {
+            'client_id': GITHUB_CLIENT_ID,
+            'scope': ' '.join(REQUIRED_SCOPES),
+        })
+    except Exception as exc:
+        emit({'ok': False, 'event': 'error', 'error': 'Could not reach GitHub: %s' % exc})
+        return 1
+
+    device_code = start.get('device_code')
+    user_code = start.get('user_code')
+    if not device_code or not user_code:
+        emit({'ok': False, 'event': 'error', 'error': start.get('error_description') or 'GitHub refused the request.'})
+        return 1
+
+    emit({
+        'ok': True, 'event': 'code',
+        'userCode': user_code,
+        'verificationUri': start.get('verification_uri', 'https://github.com/login/device'),
+        'expiresIn': start.get('expires_in', 900),
+    })
+    sys.stdout.flush()
+
+    interval = max(int(start.get('interval', 5) or 5), 1)
+    deadline = time.time() + int(start.get('expires_in', 900) or 900)
+    while time.time() < deadline:
+        time.sleep(interval)
+        try:
+            result = post_form(DEVICE_TOKEN_URL, {
+                'client_id': GITHUB_CLIENT_ID,
+                'device_code': device_code,
+                'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
+            })
+        except Exception as exc:
+            emit({'ok': False, 'event': 'error', 'error': 'Could not reach GitHub: %s' % exc})
+            return 1
+        token = result.get('access_token')
+        if token:
+            # Hand the token to gh rather than keeping a second copy: one
+            # credential store means signing out actually signs out.
+            code, _, err = gh(['auth', 'login', '--hostname', 'github.com',
+                               '--git-protocol', 'https', '--with-token'],
+                              timeout=60, stdin_text=token + '\n')
+            if code != 0:
+                emit({'ok': False, 'event': 'error', 'error': err or 'Could not store the token.'})
+                return 1
+            status = cmd_auth_status()
+            emit({'ok': True, 'event': 'done', 'login': status.get('login', '')})
+            return 0
+        error = result.get('error')
+        if error == 'authorization_pending':
+            continue
+        if error == 'slow_down':
+            interval = max(interval + int(result.get('interval', 5) or 5), interval + 1)
+            continue
+        emit({'ok': False, 'event': 'error',
+              'error': result.get('error_description') or error or 'Sign-in was refused.'})
+        return 1
+
+    emit({'ok': False, 'event': 'error', 'error': 'The code expired before it was entered.'})
+    return 1
+
+
+# ---------------------------------------------------------------------------
+# discover / fetch-manifest
+# ---------------------------------------------------------------------------
+
+def cmd_discover(limit=30, query=''):
+    limit = max(1, min(int(limit or 30), 100))
+    search = 'topic:%s' % TOPIC
+    if query:
+        search = '%s %s' % (query.strip(), search)
+    url = ('https://api.github.com/search/repositories?q=%s&sort=stars&order=desc&per_page=%d'
+           % (urllib.parse.quote(search), limit))
+    # Signed in, the rate limit is 30 searches a minute instead of 10, which
+    # is the difference between a store that reloads and one that stops.
+    try:
+        data = http_json(url, token=gh_token())
+    except urllib.error.HTTPError as exc:
+        if exc.code in (403, 429):
+            raise StoreError('GitHub is rate-limiting the search. Try again in a minute.')
+        raise StoreError('GitHub returned %s.' % exc.code)
+    except urllib.error.URLError as exc:
+        raise StoreError('Could not reach GitHub: %s' % exc.reason)
+
+    installed = {link.get('repo'): name for name, link in load_links().items()}
+    results = []
+    for repo in data.get('items', []):
+        slug = repo.get('full_name', '')
+        results.append({
+            'repo': slug,
+            'name': repo.get('name', ''),
+            'description': repo.get('description') or '',
+            'author': (repo.get('owner') or {}).get('login', ''),
+            'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
+            'stars': repo.get('stargazers_count', 0),
+            'repoUrl': repo.get('html_url', ''),
+            'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
+            'defaultBranch': repo.get('default_branch', 'main'),
+            'installedAs': installed.get(slug, ''),
+        })
+    return {'ok': True, 'topic': TOPIC, 'total': len(results), 'results': results}
+
+
+def cmd_fetch_manifest(slug):
+    slug = check_slug(slug)
+    try:
+        repo = http_json('https://api.github.com/repos/%s' % slug, token=gh_token())
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise StoreError('No such repository: %s' % slug)
+        raise StoreError('GitHub returned %s.' % exc.code)
+    except urllib.error.URLError as exc:
+        raise StoreError('Could not reach GitHub: %s' % exc.reason)
+
+    branch = repo.get('default_branch') or 'main'
+    raw = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, MANIFEST_NAME)
+    try:
+        manifest = validate_manifest(json.loads(http_text(raw)), MANIFEST_NAME)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise StoreError('%s carries no %s, so it is not a preset.' % (slug, MANIFEST_NAME))
+        raise StoreError('GitHub returned %s.' % exc.code)
+    except StoreError:
+        raise
+    except Exception as exc:
+        raise StoreError('%s could not be read: %s' % (MANIFEST_NAME, exc))
+
+    summary = manifest_summary(manifest, slug)
+    summary['defaultBranch'] = branch
+    summary['stars'] = repo.get('stargazers_count', 0)
+    summary['repoUrl'] = repo.get('html_url', '')
+    summary['updatedAt'] = repo.get('pushed_at') or repo.get('updated_at') or ''
+    summary['screenshotUrls'] = [
+        'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, path.lstrip('/'))
+        for path in summary['screenshots']
+    ]
+    return {'ok': True, 'manifest': summary,
+            'compatibility': compatibility(summary.get('configVersion'))}
+
+
+# ---------------------------------------------------------------------------
+# Materialising a clone into the presets folder
+#
+# An installed preset is a normal preset: same folder, same file names, so
+# every existing path -- the list, the scan, the apply, the revert -- keeps
+# working without knowing the store exists.
+# ---------------------------------------------------------------------------
+
+def clear_preset_assets(name):
+    for pattern in ('%s.*' % name, '%s_profile.*' % name, '%s_banner.*' % name):
+        for path in glob.glob(os.path.join(presets_dir(), pattern)):
+            if not path.lower().endswith('.json'):
+                os.remove(path)
+
+
+def repo_asset(directory, declared, stem):
+    """Locate a shipped image, by name if the manifest gives one.
+
+    A preset written by hand often just drops wallpaper.png at the repo root
+    without listing it, and losing the wallpaper over a missing manifest line
+    would be the most visible possible failure.
+    """
+    if isinstance(declared, str) and declared and not declared.startswith('/') and '..' not in declared:
+        path = os.path.join(directory, declared)
+        if image_ext(path) and os.path.isfile(path):
+            return path
+    for candidate in sorted(glob.glob(os.path.join(directory, '%s.*' % stem))):
+        if image_ext(candidate) and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def materialise(directory, manifest, name):
+    """Copy a clone's payload into the presets folder under `name`."""
+    os.makedirs(presets_dir(), exist_ok=True)
+    source = os.path.join(directory, manifest['config'])
+    if not os.path.exists(source):
+        raise StoreError('The preset names a config file (%s) the repository does not carry.'
+                         % manifest['config'])
+    try:
+        read_json(source)
+    except Exception as exc:
+        raise StoreError('The preset ships a config that is not valid JSON: %s' % exc)
+
+    clear_preset_assets(name)
+    target = os.path.join(presets_dir(), '%s.json' % name)
+    # Sanitised on the way in as well as on the way out: a preset published
+    # from a raw config would otherwise hand its author's tokens to everyone
+    # who installed it.
+    presets_helper.sanitize(source, target)
+
+    for key, suffix in (('wallpaper', ''), ('banner', '_banner')):
+        asset = repo_asset(directory, manifest.get(key), key)
+        if not asset:
+            continue
+        ext = image_ext(asset)
+        shutil.copy2(asset, os.path.join(presets_dir(), '%s%s%s' % (name, suffix, ext)))
+    return target
+
+
+def unique_preset_name(preferred):
+    existing = {os.path.splitext(os.path.basename(p))[0]
+                for p in glob.glob(os.path.join(presets_dir(), '*.json'))}
+    if preferred not in existing:
+        return preferred
+    for index in range(2, 100):
+        candidate = '%s (%d)' % (preferred, index)
+        if candidate not in existing:
+            return candidate
+    raise StoreError('Too many presets already share that name.')
+
+
+def clone(slug, directory):
+    if os.path.exists(directory):
+        shutil.rmtree(directory, ignore_errors=True)
+    os.makedirs(store_dir(), exist_ok=True)
+    # Deliberately not --depth 1: a shallow clone cannot show what changed
+    # between the version installed and the version being offered.
+    code, _, err = git(['clone', '%s%s.git' % (GIT_BASE, slug), directory], cwd=store_dir())
+    if code != 0:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise StoreError(err.splitlines()[-1] if err else 'Could not download the preset.')
+
+
+def head_commit(directory):
+    code, out, _ = git(['rev-parse', 'HEAD'], cwd=directory, timeout=30)
+    return out if code == 0 else ''
+
+
+def cmd_install(slug, name=None, force=False):
+    slug = check_slug(slug)
+    for existing, link in load_links().items():
+        if link.get('repo') == slug:
+            raise StoreError('"%s" is already installed from that repository.' % existing)
+
+    directory = slug_dir(slug)
+    clone(slug, directory)
+    try:
+        manifest = read_manifest(directory)
+        compat = compatibility(manifest.get('configVersion'))
+        if not compat['ok'] and not force:
+            raise StoreError(compat['reason'])
+        preset_name = check_name(name) if name else check_name(manifest['name'].strip())
+        preset_name = unique_preset_name(preset_name)
+        materialise(directory, manifest, preset_name)
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
+
+    set_link(preset_name, {
+        'repo': slug,
+        'path': directory,
+        'commit': head_commit(directory),
+        'version': str(manifest.get('version', '') or ''),
+        'configVersion': manifest.get('configVersion'),
+        'owned': False,
+        'installedAt': today(),
+    })
+    return {'ok': True, 'name': preset_name, 'repo': slug,
+            'manifest': manifest_summary(manifest, slug), 'compatibility': compat}
+
+
+# ---------------------------------------------------------------------------
+# Updates
+# ---------------------------------------------------------------------------
+
+def upstream_ref(directory):
+    code, out, _ = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+                       cwd=directory, timeout=30)
+    if code == 0 and out:
+        return out
+    code, out, _ = git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd=directory, timeout=30)
+    return 'origin/%s' % out if code == 0 and out else 'origin/main'
+
+
+def remote_manifest(directory, ref):
+    code, out, _ = git(['show', '%s:%s' % (ref, MANIFEST_NAME)], cwd=directory, timeout=30)
+    if code != 0:
+        return {}
+    try:
+        return json.loads(out)
+    except Exception:
+        return {}
+
+
+def cmd_check_updates():
+    links = load_links()
+    updates = []
+    problems = []
+    for name, link in sorted(links.items(), key=lambda kv: kv[0].lower()):
+        directory = link.get('path') or slug_dir(link.get('repo', ''))
+        if not os.path.isdir(os.path.join(directory, '.git')):
+            problems.append({'name': name, 'repo': link.get('repo', ''),
+                             'error': 'Its local copy is gone.'})
+            continue
+        code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+        if code != 0:
+            problems.append({'name': name, 'repo': link.get('repo', ''),
+                             'error': err.splitlines()[-1] if err else 'Could not reach GitHub.'})
+            continue
+        ref = upstream_ref(directory)
+        code, out, _ = git(['rev-list', '--count', 'HEAD..%s' % ref], cwd=directory, timeout=30)
+        behind = int(out) if code == 0 and out.isdigit() else 0
+        if behind <= 0:
+            continue
+        manifest = remote_manifest(directory, ref)
+        version = str(manifest.get('version', '') or '')
+        # Only the entries newer than what is installed: a preset that has
+        # shipped ten times should not read like ten pending updates.
+        installed_version = str(link.get('version', '') or '')
+        changelog = [entry for entry in (manifest.get('changelog') or [])
+                     if isinstance(entry, dict)
+                     and version_key(entry.get('version')) > version_key(installed_version)]
+        updates.append({
+            'name': name,
+            'repo': link.get('repo', ''),
+            'commits': behind,
+            'installedVersion': installed_version,
+            'availableVersion': version,
+            'configVersion': manifest.get('configVersion'),
+            'compatibility': compatibility(manifest.get('configVersion')),
+            'changelog': changelog[:10],
+            'owned': bool(link.get('owned')),
+        })
+    return {'ok': True, 'updates': updates, 'problems': problems, 'checked': len(links)}
+
+
+def cmd_pull(name, force=False):
+    name = check_name(name)
+    link = get_link(name)
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    if not os.path.isdir(os.path.join(directory, '.git')):
+        raise StoreError('The local copy of "%s" is gone. Reinstall it from the store.' % name)
+
+    code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+    ref = upstream_ref(directory)
+    incoming = remote_manifest(directory, ref)
+    compat = compatibility(incoming.get('configVersion'))
+    if incoming and not compat['ok'] and not force:
+        raise StoreError(compat['reason'])
+
+    before = head_commit(directory)
+    # --ff-only, always: a preset the author force-pushed should fail loudly
+    # rather than leave a half-merged config behind.
+    code, _, err = git(['pull', '--ff-only', '--quiet'], cwd=directory, timeout=120)
+    if code != 0:
+        raise StoreError('The preset\'s history was rewritten, so it cannot be updated in place. '
+                         'Remove it and install it again.')
+    manifest = read_manifest(directory)
+    materialise(directory, manifest, name)
+
+    link.update({
+        'commit': head_commit(directory),
+        'version': str(manifest.get('version', '') or ''),
+        'configVersion': manifest.get('configVersion'),
+        'updatedAt': today(),
+    })
+    set_link(name, link)
+    return {'ok': True, 'name': name, 'repo': link.get('repo', ''),
+            'changed': before != link['commit'],
+            'version': link['version'], 'compatibility': compat,
+            'manifest': manifest_summary(manifest, link.get('repo', ''))}
+
+
+# ---------------------------------------------------------------------------
+# diff
+# ---------------------------------------------------------------------------
+
+def flatten(node, prefix=()):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            for item in flatten(value, prefix + (str(key),)):
+                yield item
+    else:
+        yield prefix, node
+
+
+def json_diff(before, after):
+    """Dotted-path differences between two configs, newest key order first."""
+    old = dict(flatten(before if isinstance(before, dict) else {}))
+    new = dict(flatten(after if isinstance(after, dict) else {}))
+    changes = []
+    for path in sorted(set(old) | set(new)):
+        was = old.get(path, presets_helper._MISSING)
+        now = new.get(path, presets_helper._MISSING)
+        if was is presets_helper._MISSING:
+            kind = 'added'
+        elif now is presets_helper._MISSING:
+            kind = 'removed'
+        elif was == now:
+            continue
+        else:
+            kind = 'changed'
+        changes.append({
+            'path': '.'.join(path),
+            'kind': kind,
+            'from': '' if was is presets_helper._MISSING else presets_helper._preview(was),
+            'to': '' if now is presets_helper._MISSING else presets_helper._preview(now),
+        })
+    return changes
+
+
+def sanitized_copy(path):
+    """Read a config the way publishing would write it."""
+    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as handle:
+        staged = handle.name
+    try:
+        presets_helper.sanitize(path, staged)
+        return read_json(staged)
+    finally:
+        os.unlink(staged)
+
+
+def cmd_diff(name, incoming=False):
+    name = check_name(name)
+    link = get_link(name)
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    if not os.path.isdir(os.path.join(directory, '.git')):
+        raise StoreError('The local copy of "%s" is gone.' % name)
+    manifest = read_manifest(directory)
+
+    if incoming:
+        code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+        ref = upstream_ref(directory)
+        code, out, _ = git(['show', 'HEAD:%s' % manifest['config']], cwd=directory, timeout=30)
+        before = json.loads(out) if code == 0 and out else {}
+        code, out, _ = git(['show', '%s:%s' % (ref, manifest['config'])], cwd=directory, timeout=30)
+        after = json.loads(out) if code == 0 and out else {}
+        direction = 'incoming'
+    else:
+        local = os.path.join(presets_dir(), '%s.json' % name)
+        if not os.path.exists(local):
+            raise StoreError('"%s" is no longer in your presets.' % name)
+        published = os.path.join(directory, manifest['config'])
+        # Both sides go through the same sanitiser first. The working copy is
+        # sanitised when it is published, so comparing it raw would report
+        # every personal path as a change that publishing would never make.
+        before = sanitized_copy(published) if os.path.exists(published) else {}
+        after = sanitized_copy(local)
+        direction = 'outgoing'
+
+    changes = json_diff(before, after)
+    return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'direction': direction,
+            'total': len(changes), 'changes': changes[:DIFF_LIMIT],
+            'truncated': max(0, len(changes) - DIFF_LIMIT)}
+
+
+# ---------------------------------------------------------------------------
+# publish / push-update
+# ---------------------------------------------------------------------------
+
+def require_login():
+    status = cmd_auth_status()
+    if not status.get('hasGh'):
+        raise StoreError('Publishing needs the GitHub CLI. Install the "github-cli" package.')
+    if not status.get('authenticated'):
+        raise StoreError('Sign in to GitHub first.')
+    if status.get('missingScopes'):
+        raise StoreError('Your GitHub token cannot create repositories. '
+                         'Sign in again with the "repo" scope.')
+    return status['login']
+
+
+def stage_payload(directory, name, manifest):
+    """Write the preset and its assets into the repo working tree."""
+    source = os.path.join(presets_dir(), '%s.json' % name)
+    if not os.path.exists(source):
+        raise StoreError('"%s" is no longer in your presets.' % name)
+    presets_helper.sanitize(source, os.path.join(directory, CONFIG_NAME))
+
+    for existing in glob.glob(os.path.join(directory, 'wallpaper.*')) + \
+            glob.glob(os.path.join(directory, 'banner.*')):
+        os.remove(existing)
+    manifest.pop('wallpaper', None)
+    manifest.pop('banner', None)
+
+    # The profile picture is never shipped. It is the author's own face, it
+    # says nothing about the theme, and a published preset is public.
+    wallpaper = presets_helper.find_wallpaper_fallback(presets_dir(), name)
+    if wallpaper and image_ext(wallpaper):
+        target = 'wallpaper%s' % image_ext(wallpaper)
+        shutil.copy2(wallpaper, os.path.join(directory, target))
+        manifest['wallpaper'] = target
+    banner = presets_helper.find_banner_fallback(presets_dir(), name)
+    if banner and image_ext(banner):
+        target = 'banner%s' % image_ext(banner)
+        shutil.copy2(banner, os.path.join(directory, target))
+        manifest['banner'] = target
+    return manifest
+
+
+def write_readme(directory, manifest):
+    lines = [
+        '# %s' % manifest.get('name', ''),
+        '',
+        manifest.get('description', '') or 'An Illogical Impulse preset.',
+        '',
+        '## Install',
+        '',
+        'Open **Settings → Presets → Store** in the shell and search for this preset,',
+        'or install it by name:',
+        '',
+        '```',
+        'ii preset install %s' % manifest.get('_repo', ''),
+        '```',
+        '',
+        '## What it ships',
+        '',
+        '- `%s` — the settings this preset applies' % CONFIG_NAME,
+    ]
+    if manifest.get('wallpaper'):
+        lines.append('- `%s` — the wallpaper' % manifest['wallpaper'])
+    if manifest.get('banner'):
+        lines.append('- `%s` — the sidebar banner' % manifest['banner'])
+    lines += [
+        '',
+        'Applying a preset never replaces your whole configuration: it is layered over',
+        'what you already have, and anything tied to your machine — monitors, folders,',
+        'accounts, keys — is kept.',
+        '',
+        '_Topic: `%s`_' % TOPIC,
+        '',
+    ]
+    with open(os.path.join(directory, 'README.md'), 'w', encoding='utf-8') as handle:
+        handle.write('\n'.join(lines))
+
+
+def cmd_publish(name, repo=None, description='', notes='', private=False):
+    name = check_name(name)
+    login = require_login()
+    links = load_links()
+    if name in links:
+        raise StoreError('"%s" is already published. Use the update button instead.' % name)
+
+    repo_name = repo or repo_name_from_preset(name)
+    if not REPO_NAME_RE.match(repo_name):
+        raise StoreError('Repository names may only hold letters, numbers, dots, dashes and underscores.')
+    slug = '%s/%s' % (login, repo_name)
+    directory = slug_dir(slug)
+    if os.path.exists(directory):
+        shutil.rmtree(directory, ignore_errors=True)
+    os.makedirs(directory, exist_ok=True)
+
+    try:
+        preset = read_json(os.path.join(presets_dir(), '%s.json' % name))
+        version = '1.0.0'
+        manifest = {
+            'schema': MANIFEST_SCHEMA,
+            'name': name,
+            'author': login,
+            'description': description.strip(),
+            'version': version,
+            'configVersion': preset.get('configVersion', current_config_version()),
+            'config': CONFIG_NAME,
+            'screenshots': [],
+            'changelog': [{'version': version, 'date': today(),
+                           'notes': notes.strip() or 'First release.'}],
+        }
+        manifest = stage_payload(directory, name, manifest)
+        presets_helper.atomic_write_json(os.path.join(directory, MANIFEST_NAME), manifest)
+        readme_manifest = dict(manifest, _repo=slug)
+        write_readme(directory, readme_manifest)
+
+        for args in (['init', '-b', 'main'], ['add', '-A']):
+            code, _, err = git(args, cwd=directory, timeout=60)
+            if code != 0:
+                raise StoreError(err or 'git %s failed.' % args[0])
+        code, _, err = git(['commit', '-m', 'Add the %s preset' % name], cwd=directory, timeout=60)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not make the first commit.')
+
+        create = ['repo', 'create', slug, '--private' if private else '--public',
+                  '--source', directory, '--push']
+        if description.strip():
+            create += ['--description', description.strip()]
+        code, _, err = gh(create, timeout=180)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not create the repository.')
+
+        # The topic is the whole index: without it the preset exists but no
+        # one can find it, so a failure here is reported rather than swallowed.
+        code, _, err = gh(['repo', 'edit', slug, '--add-topic', TOPIC], timeout=60)
+        topic_error = '' if code == 0 else (err.splitlines()[-1] if err else 'Could not set the topic.')
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
+
+    set_link(name, {
+        'repo': slug, 'path': directory, 'commit': head_commit(directory),
+        'version': manifest['version'], 'configVersion': manifest.get('configVersion'),
+        'owned': True, 'installedAt': today(),
+    })
+    return {'ok': True, 'name': name, 'repo': slug,
+            'repoUrl': 'https://github.com/%s' % slug,
+            'version': manifest['version'], 'private': bool(private),
+            'topic': TOPIC, 'topicError': topic_error}
+
+
+def cmd_push_update(name, version=None, bump='patch', notes=''):
+    name = check_name(name)
+    link = get_link(name)
+    if not link.get('owned'):
+        raise StoreError('"%s" was installed from someone else\'s repository, so it cannot be updated from here.' % name)
+    require_login()
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    if not os.path.isdir(os.path.join(directory, '.git')):
+        raise StoreError('The local copy of "%s" is gone.' % name)
+
+    manifest = read_manifest(directory)
+    manifest = stage_payload(directory, name, manifest)
+    new_version = version.strip() if version and version.strip() else bump_version(manifest.get('version'), bump)
+    if version_key(new_version) <= version_key(manifest.get('version')):
+        raise StoreError('Version %s is not newer than the published %s.'
+                         % (new_version, manifest.get('version')))
+    manifest['version'] = new_version
+    manifest['configVersion'] = read_json(os.path.join(directory, CONFIG_NAME)).get(
+        'configVersion', manifest.get('configVersion'))
+    changelog = manifest.get('changelog')
+    if not isinstance(changelog, list):
+        changelog = []
+    # An empty note is allowed on purpose -- a version and a date are already
+    # more than most small changes need, and demanding prose stops people
+    # publishing fixes at all.
+    changelog.insert(0, {'version': new_version, 'date': today(), 'notes': notes.strip()})
+    manifest['changelog'] = changelog[:50]
+    presets_helper.atomic_write_json(os.path.join(directory, MANIFEST_NAME), manifest)
+    write_readme(directory, dict(manifest, _repo=link.get('repo', '')))
+
+    code, _, err = git(['add', '-A'], cwd=directory, timeout=60)
+    if code != 0:
+        raise StoreError(err or 'Could not stage the changes.')
+    code, out, _ = git(['status', '--porcelain'], cwd=directory, timeout=30)
+    if code == 0 and not out:
+        return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'changed': False,
+                'version': manifest['version'], 'message': 'Nothing has changed since the last release.'}
+
+    message = 'Update to %s' % new_version
+    if notes.strip():
+        message += '\n\n%s' % notes.strip()
+    code, _, err = git(['commit', '-m', message], cwd=directory, timeout=60)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not commit the update.')
+    code, _, err = git(['push', 'origin', 'HEAD'], cwd=directory, timeout=180)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not push the update.')
+
+    link.update({'commit': head_commit(directory), 'version': new_version,
+                 'configVersion': manifest.get('configVersion'), 'updatedAt': today()})
+    set_link(name, link)
+    return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'changed': True,
+            'version': new_version, 'repoUrl': 'https://github.com/%s' % link.get('repo', '')}
+
+
+# ---------------------------------------------------------------------------
+# links / unlink / uninstall
+# ---------------------------------------------------------------------------
+
+def cmd_links():
+    links = load_links()
+    rows = []
+    for name, link in sorted(links.items(), key=lambda kv: kv[0].lower()):
+        directory = link.get('path') or slug_dir(link.get('repo', ''))
+        rows.append({
+            'name': name,
+            'repo': link.get('repo', ''),
+            'repoUrl': 'https://github.com/%s' % link.get('repo', ''),
+            'version': str(link.get('version', '') or ''),
+            'configVersion': link.get('configVersion'),
+            'owned': bool(link.get('owned')),
+            'installedAt': link.get('installedAt', ''),
+            'updatedAt': link.get('updatedAt', ''),
+            'present': os.path.isdir(os.path.join(directory, '.git')),
+            'installed': os.path.exists(os.path.join(presets_dir(), '%s.json' % name)),
+        })
+    return {'ok': True, 'total': len(rows), 'links': rows}
+
+
+def cmd_unlink(name):
+    name = check_name(name)
+    link = get_link(name)
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    shutil.rmtree(directory, ignore_errors=True)
+    drop_link(name)
+    # The preset itself stays: forgetting where it came from should never cost
+    # someone the settings they are using.
+    return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'keptPreset': True}
+
+
+def cmd_uninstall(name):
+    name = check_name(name)
+    links = load_links()
+    link = links.get(name, {})
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    if link:
+        shutil.rmtree(directory, ignore_errors=True)
+        drop_link(name)
+    clear_preset_assets(name)
+    preset = os.path.join(presets_dir(), '%s.json' % name)
+    if os.path.exists(preset):
+        os.remove(preset)
+    return {'ok': True, 'name': name, 'repo': link.get('repo', '')}
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def take_flag(argv, flag):
+    if flag in argv:
+        argv.remove(flag)
+        return True
+    return False
+
+
+def take_option(argv, flag, default=None):
+    if flag in argv:
+        index = argv.index(flag)
+        if index + 1 < len(argv):
+            value = argv[index + 1]
+            del argv[index:index + 2]
+            return value
+        del argv[index]
+    return default
+
+
+def dispatch(argv):
+    if not argv:
+        raise StoreError('No command was given.')
+    command = argv[0]
+    rest = argv[1:]
+
+    if command == 'auth':
+        action = rest[0] if rest else 'status'
+        if action == 'status':
+            return cmd_auth_status()
+        if action == 'login':
+            sys.exit(cmd_auth_login())
+        raise StoreError('Unknown auth command: %s' % action)
+    if command == 'discover':
+        limit = take_option(rest, '--limit', '30')
+        query = take_option(rest, '--query', '')
+        return cmd_discover(limit, query)
+    if command == 'fetch-manifest':
+        return cmd_fetch_manifest(rest[0] if rest else '')
+    if command == 'install':
+        force = take_flag(rest, '--force')
+        name = take_option(rest, '--name')
+        return cmd_install(rest[0] if rest else '', name, force)
+    if command == 'check-updates':
+        return cmd_check_updates()
+    if command == 'pull':
+        force = take_flag(rest, '--force')
+        return cmd_pull(rest[0] if rest else '', force)
+    if command == 'diff':
+        incoming = take_flag(rest, '--incoming')
+        return cmd_diff(rest[0] if rest else '', incoming)
+    if command == 'publish':
+        private = take_flag(rest, '--private')
+        repo = take_option(rest, '--repo')
+        description = take_option(rest, '--description', '')
+        notes = take_option(rest, '--notes', '')
+        return cmd_publish(rest[0] if rest else '', repo, description, notes, private)
+    if command == 'push-update':
+        version = take_option(rest, '--version')
+        bump = take_option(rest, '--bump', 'patch')
+        notes = take_option(rest, '--notes', '')
+        return cmd_push_update(rest[0] if rest else '', version, bump, notes)
+    if command == 'links':
+        return cmd_links()
+    if command == 'unlink':
+        return cmd_unlink(rest[0] if rest else '')
+    if command == 'uninstall':
+        return cmd_uninstall(rest[0] if rest else '')
+    raise StoreError('Unknown command: %s' % command)
+
+
+def main():
+    try:
+        emit(dispatch(sys.argv[1:]))
+        return 0
+    except StoreError as exc:
+        emit({'ok': False, 'error': str(exc)})
+        return 1
+    except Exception as exc:
+        # Nothing may escape as a traceback on stdout: the caller parses this
+        # line and has to be able to show a reason even for a bug in here.
+        emit({'ok': False, 'error': '%s: %s' % (type(exc).__name__, exc)})
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
