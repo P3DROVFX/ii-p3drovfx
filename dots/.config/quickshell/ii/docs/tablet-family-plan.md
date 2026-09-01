@@ -19,7 +19,7 @@
 | **1** | Acabamento da bar de tablet | ✅ **concluída** |
 | **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
 | **4** | Gestos: múltiplos handlers + ações por família | ✅ **concluída** (arrasto fora das bordas entregue na Fase 3) |
-| **3** | Tela inicial: gaveta, dock, workspaces, grid, recentes | 🟡 **quase** — 1 bloqueio de camada (ver §6) |
+| **3** | Tela inicial: gaveta, dock, workspaces, ícones, recentes | ✅ **concluída** (2 polimentos adiados, ver 3a/3b) |
 | **5** | Application windows + layout de módulos | ⬜ a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
@@ -383,27 +383,31 @@ O que sobrou de parâmetro atravessando fronteira, e por quê:
 Nada disso está mais dentro de `modules/ii/` a não ser o `forceTop`, que é o mecanismo
 correto e não uma gambiarra.
 
-### 🚧 Bloqueio: duas superfícies de desktop na mesma camada
+### ✅ Resolvido: duas superfícies de desktop na mesma camada
 
-Os ícones do home screen (`quickshell:tabletHomeIcons`) e a janela de widgets de desktop da
-ii (`quickshell:backgroundWidgets`) estão **ambas na camada Bottom**. A da ii é criada
-depois e **não define máscara de input**, então sua região de input cobre a tela inteira e o
-compositor nunca roteia um toque para os ícones embaixo.
+Os ícones do home screen eram uma `PanelWindow` própria na camada Bottom, **embaixo** da
+janela de widgets de desktop da ii. Essa janela não define máscara de input, então sua
+região cobre a tela inteira e o compositor nunca roteava um toque para os ícones: eles
+renderizavam perfeitamente e não respondiam a nada.
 
-Os ícones **renderizam corretamente** e toda a interação funciona — verificado subindo a
-janela para a camada Top temporariamente, onde arrastar e o badge de remover funcionam. Na
-Bottom eles aparecem e não respondem.
+**Resolvido pelo Plano B — uma superfície só — mas por injeção, não por promoção.**
+`BackgroundWidgetsWindow` depende de seis submódulos do background da ii (wallpaper,
+lockscreen, parallax, overview, blur); promovê-lo significa promover todos, ou forkar uma
+cópia pior que perde parallax e a coreografia de lock. Em vez disso ele ganhou um
+`canvasOverlay` que a família preenche — o mesmo padrão de ponto de extensão que o
+`Bar.forceTop` já sancionado: ~10 linhas na ii, zero mudança de comportamento para ela, e
+os ícones acabam **literalmente no canvas dos widgets**, dividindo espaço de coordenadas,
+parallax e grid. É mais "mesmo grid" (D4) do que dois canvas seriam.
 
-**Isto é uma decisão de design, não um bug a corrigir às cegas.** Três caminhos:
+Três armadilhas que isso revelou, **todas renderizando sem um único erro**:
 
-| | O que fazer | Custo |
-|---|---|---|
-| **A** | A tablet family deixa de carregar a superfície de widgets da ii | Perde os widgets de desktop da ii na tablet. Contradiz a D4 ("convivem no mesmo grid"). Hoje custaria o widget `media`, que está ativo. |
-| **B** | Promover o canvas de widgets da ii para `modules/common`, e a tablet hospeda um canvas próprio com **widgets + ícones** | É literalmente o que a D4 pediu. Promoção grande, no estilo da Fase 2. |
-| **C** | Dar máscara ao `BackgroundWidgetsWindow` da ii, restrita aos widgets fora do modo de edição | Correção legítima na ii (uma superfície que captura input da tela toda na camada Bottom impede qualquer outra de existir ali), mas mexe em arrastar widget, overlay de grid e menus de contexto — risco de regressão real. |
+| Sintoma | Causa |
+|---|---|
+| Overlay visível e intocável | `z: -1` no Loader. Um filho atrás do pai perde o press para ele, e o canvas é um `MouseArea`. Ordem de declaração dá o mesmo empilhamento sem custo de input. |
+| Todo arrasto perdido no 1º pixel | `MouseArea` pai rouba o grab do filho no movimento. `preventStealing: true` no ícone. |
+| Badge de remover nunca clicável | Um long press **sempre** termina em `clicked`, e esse clique desarmava o badge que o mesmo gesto tinha acabado de armar. |
 
-**Recomendação: B.** É o que a D4 pediu e é a única que não troca um problema por outro.
-**Precisa da decisão do mantenedor antes de seguir.**
+---
 
 ### Conhecido, ainda aberto
 
@@ -531,12 +535,14 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] `exclusionMode: Ignore` (flutua, não reserva faixa) e máscara de input só no pill.
 - [x] Some enquanto a gaveta está aberta.
 
-#### 3a. Workspaces como home screens 🟡
+#### 3a. Workspaces como home screens ✅
 - [x] Arrasto horizontal no corpo do desktop troca workspace. Só age quando o toque cai
       onde nenhuma janela cobre — senão o arrasto é do aplicativo. Origem `surface` nova no
       `TouchGestureService`, com `dx`/`dy` no contrato do registry.
-- [ ] Wallpaper acompanhando o dedo (parallax).
-- [ ] Indicador de página acima da dock.
+- [x] Indicador de página acima da dock, só com os workspaces **deste monitor** (senão o
+      indicador discorda do swipe, que se move dentro do monitor).
+- [ ] **Adiado:** wallpaper acompanhando o dedo (parallax durante o arrasto). Polimento;
+      exige dirigir o parallax do background da ii a partir do gesto.
 
 #### 3b. Ícones no grid (D4) 🟡
 - [x] `Appearance.sizes.widgetGridStep` — 40 na tablet, 10 no resto. Sem grid novo.
@@ -544,8 +550,9 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] Long-press na gaveta adiciona ao home screen atual; arrastar move (com snap no grid);
       long-press no ícone arma um badge × que exige um segundo toque deliberado.
 - [x] Persistência em `Persistent.states.tablet.homeIconsJson`, por workspace.
-- [ ] **Bloqueado por conflito de camada** — ver §6.
-- [ ] Arrastar entre workspaces; pasta ao soltar ícone sobre ícone.
+- [x] **Conflito de camada resolvido** — os ícones foram para dentro do canvas de widgets
+      via `BackgroundWidgetsWindow.canvasOverlay`. Ver abaixo.
+- [ ] **Adiado:** arrastar ícone entre workspaces; pasta ao soltar ícone sobre ícone.
 
 #### 3e. Recentes (D2) ✅
 - [x] `modules/tablet/recents/` — carrossel de janelas abertas com screencopy, ícone e
