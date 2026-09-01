@@ -14,8 +14,55 @@ ColumnLayout {
     spacing: 15
     Layout.fillWidth: true
 
+    // Applying is the owner's call, not this view's: it holds the dialog that
+    // shows what the preset would let run before anything is written.
+    signal applyRequested(string name, var scanResult)
+
+    property string pendingApplyName: ""
+
     ListModel {
         id: presetsModel
+    }
+
+    function requestApply(name) {
+        presetsViewRoot.pendingApplyName = name;
+        scanPresetProc.reported = false;
+        scanPresetProc.running = false;
+        scanPresetProc.command = ["bash", "-c", `${Directories.scriptPath}/presets.sh scan "${name}"`];
+        scanPresetProc.running = true;
+    }
+
+    function applyPreset(name) {
+        if (!name)
+            return;
+        Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh load "${name}"`]);
+    }
+
+    Process {
+        id: scanPresetProc
+        // The dialog must open even when the scan cannot speak for itself, so
+        // a failed run still reports, once.
+        property bool reported: false
+
+        function report(result) {
+            if (scanPresetProc.reported)
+                return;
+            scanPresetProc.reported = true;
+            presetsViewRoot.applyRequested(presetsViewRoot.pendingApplyName, result);
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let result = null;
+                try {
+                    result = JSON.parse(text.trim());
+                } catch (e) {
+                    result = null;
+                }
+                scanPresetProc.report(result);
+            }
+        }
+        onExited: scanPresetProc.report(null)
     }
 
     Process {
@@ -178,9 +225,7 @@ ColumnLayout {
                         colBackground: "transparent"
                         colBackgroundHover: "transparent"
                         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-                        onClicked: {
-                            Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh load "${model.name}"`]);
-                        }
+                        onClicked: presetsViewRoot.requestApply(String(model.name))
                     }
 
                     ColumnLayout {

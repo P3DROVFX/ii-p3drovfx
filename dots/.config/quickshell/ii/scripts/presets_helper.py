@@ -132,6 +132,53 @@ ASSET_PATHS = (
     ("sidebar.bannerImage", "banner"),
 )
 
+# ---------------------------------------------------------------------------
+# Risk scanning
+#
+# A preset is a whole config file, and a handful of config keys are commands
+# the shell hands to a shell. Applying a stranger's preset is therefore a
+# decision that has to be made with the facts in hand, so everything a preset
+# would change that can run something, redirect traffic or widen what the
+# assistant may do on its own is collected up front and shown before a single
+# byte is written.
+# ---------------------------------------------------------------------------
+
+# (pattern, category, note). Patterns take the same dotted form as above.
+RISK_RULES = (
+    ("apps.*", "shell", "Command run when this shell action is picked"),
+    ("update.scriptFlags", "shell", "Arguments handed to the updater"),
+    ("mediaDownloader.extraArgs", "shell", "Extra arguments handed to the downloader"),
+    ("ai.tools.allowShellInLocalPolicy", "ai", "Lets the assistant run shell commands"),
+    ("ai.tools.alwaysAllow", "ai", "Assistant tools that stop asking first"),
+    ("dnsOverTls.serverName", "network", "Encrypted DNS resolver"),
+    ("dnsOverTls.serverAddress", "network", "Encrypted DNS resolver"),
+    ("mediaDownloader.proxy", "network", "Proxy every download goes through"),
+    ("search.engineBaseUrl", "network", "Where the search bar sends what is typed"),
+    ("search.imageSearch.imageSearchEngineBaseUrl", "network", "Where image searches are uploaded"),
+)
+
+# Modes and routines can carry a "shell" action whose value is run with sh -c
+# when the mode starts or ends, and a mode can start itself off a trigger, so
+# these run without anyone pressing anything.
+MODE_ACTION_PATTERNS = ("modes.modes.*.actions.*", "modes.routines.*.actions.*")
+
+SEVERITY = {"shell": "high", "ai": "high", "network": "medium", "unknown": "medium"}
+
+RISK_ORDER = ("shell", "ai", "network", "unknown")
+
+# Strings that read like a command line. Deliberately loose: a false positive
+# costs one more line in the dialog, a miss costs someone their session.
+COMMAND_HINT_RE = re.compile(
+    r"\$\(|`|&&|\|\||;\s*\S|\b(?:sh|bash|zsh|fish)\s+-c\b"
+    r"|\b(?:curl|wget|ncat|socat|ssh|scp)\b|\brm\s+-|\bnc\s+-"
+    r"|\b(?:pkexec|sudo|doas)\b|\bchmod\b|\beval\b|\bbase64\b"
+    r"|\bsystemctl\b|\bcrontab\b|\.sh\b|\.py\b"
+)
+
+# Long enough to read a command, short enough that one line cannot flood the
+# dialog and hide the rest of the findings.
+VALUE_PREVIEW_LIMIT = 300
+
 _MISSING = object()
 
 
@@ -550,6 +597,164 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
     atomic_write_json(out_path, merged)
 
 
+def _dotted(path):
+    return '.'.join(str(key) for key in path)
+
+
+def _preview(value):
+    """One-line, length-capped rendering of a value for the dialog."""
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    text = ' '.join(text.split())
+    if len(text) > VALUE_PREVIEW_LIMIT:
+        text = text[:VALUE_PREVIEW_LIMIT - 1] + '\u2026'
+    return text
+
+
+def _is_empty(value):
+    """True for values that change nothing worth warning about."""
+    return value is None or value is False or (isinstance(value, (str, list, dict)) and not value)
+
+
+def _changed(merged, current, path):
+    return get_path(merged, path, _MISSING) != get_path(current, path, _MISSING)
+
+
+def _walk_strings(node, path=()):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            for found in _walk_strings(value, path + (key,)):
+                yield found
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            for found in _walk_strings(value, path + (index,)):
+                yield found
+    elif isinstance(node, str):
+        yield list(path), node
+
+
+def _shell_action_commands(action):
+    """The start/end command pair of one mode or routine action, if it has any."""
+    if not isinstance(action, dict) or action.get('type') != 'shell':
+        return []
+    value = action.get('value')
+    pairs = value if isinstance(value, dict) else {'start': value}
+    return [(when, pairs.get(when)) for when in ('start', 'end')
+            if isinstance(pairs.get(when), str) and pairs.get(when).strip()]
+
+
+def _existing_shell_commands(current):
+    """Every shell command the config already runs, so re-listing one is quiet.
+
+    Matching on the command text rather than the path is what keeps a
+    reordered mode list from being reported as a page of new commands.
+    """
+    commands = set()
+    for pattern in MODE_ACTION_PATTERNS:
+        for path in find_paths(current, pattern):
+            for _, command in _shell_action_commands(get_path(current, path)):
+                commands.add(command)
+    return commands
+
+
+def _scan_mode_actions(merged, current, seen):
+    known = _existing_shell_commands(current)
+    findings = []
+    for pattern in MODE_ACTION_PATTERNS:
+        for path in find_paths(merged, pattern):
+            action = get_path(merged, path)
+            owner = get_path(merged, path[:-2], {})
+            name = owner.get('name') or owner.get('id') or _dotted(path[:-2])
+            # Also claim the bare value path: a shell action may hold its
+            # command as a plain string, and the sweep below would then list
+            # the same command a second time as an unrecognised one.
+            seen.add(tuple(path + ['value']))
+            for when, command in _shell_action_commands(action):
+                if command in known:
+                    continue
+                seen.add(tuple(path + ['value', when]))
+                findings.append({
+                    'category': 'shell',
+                    'path': _dotted(path + ['value', when]),
+                    'label': '%s (%s)' % (name, 'on start' if when == 'start' else 'on end'),
+                    'note': 'Run by a mode or routine, which can start on its own',
+                    'value': _preview(command),
+                })
+    return findings
+
+
+def scan(preset_path, config_path=None):
+    """What applying this preset would let run, reach or unlock.
+
+    Reported against the merged result rather than the preset itself: anything
+    merge() hands back from the local config cannot be delivered by a preset,
+    so warning about it would be a lie in the one direction that matters.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    if not isinstance(preset, dict):
+        raise ValueError('preset is not a JSON object')
+
+    current = {}
+    if config_path and os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            current = loaded
+
+    preset = expand_val(preset, user_home())
+    merged = deep_merge(current, preset)
+    restore_local_only(merged, current)
+
+    seen = set()
+    findings = _scan_mode_actions(merged, current, seen)
+
+    for pattern, category, note in RISK_RULES:
+        for path in find_paths(merged, pattern):
+            if tuple(path) in seen or not _changed(merged, current, path):
+                continue
+            value = get_path(merged, path)
+            if _is_empty(value):
+                continue
+            seen.add(tuple(path))
+            findings.append({
+                'category': category,
+                'path': _dotted(path),
+                'label': _dotted(path),
+                'note': note,
+                'value': _preview(value),
+            })
+
+    # Keys nobody has classified yet. A preset written for a newer build can
+    # carry a command in a setting this list has never heard of, so anything
+    # that merely reads like a command line is surfaced too.
+    for path, value in _walk_strings(preset):
+        if tuple(path) in seen or not COMMAND_HINT_RE.search(value):
+            continue
+        if not _changed(merged, current, path):
+            continue
+        seen.add(tuple(path))
+        findings.append({
+            'category': 'unknown',
+            'path': _dotted(path),
+            'label': _dotted(path),
+            'note': 'Unrecognised setting that reads like a command',
+            'value': _preview(value),
+        })
+
+    groups = []
+    for category in RISK_ORDER:
+        items = [f for f in findings if f['category'] == category]
+        if items:
+            groups.append({
+                'id': category,
+                'severity': SEVERITY[category],
+                'count': len(items),
+                'items': items,
+            })
+
+    return {'ok': True, 'total': len(findings), 'groups': groups}
+
+
 def find_wallpaper_fallback(presets_dir, preset_name):
     pattern = os.path.join(presets_dir, f"{preset_name}.*")
     for filepath in glob.glob(pattern):
@@ -630,6 +835,17 @@ def main():
             merge(sys.argv[2], sys.argv[3], sys.argv[4], presets_dir, preset_name)
         except Exception as exc:
             print(f'merge failed: {exc}', file=sys.stderr)
+            sys.exit(1)
+    elif action == 'scan':
+        if len(sys.argv) < 3:
+            sys.exit(1)
+        config_path = sys.argv[3] if len(sys.argv) > 3 else None
+        # Always one JSON line, failure included: the dialog that reads this
+        # has to be able to say why it could not vouch for a preset.
+        try:
+            print(json.dumps(scan(sys.argv[2], config_path)))
+        except Exception as exc:
+            print(json.dumps({'ok': False, 'error': str(exc)}))
             sys.exit(1)
     elif action == 'list':
         if len(sys.argv) < 3:

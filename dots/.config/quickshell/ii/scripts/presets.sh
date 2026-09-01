@@ -171,6 +171,19 @@ case $action in
             fi
         done
         ;;
+    scan)
+        # One JSON line describing what applying this preset would let run.
+        # Always prints something the caller can show, even on failure.
+        if [[ -z "$name" ]]; then
+            echo '{"ok": false, "error": "No preset name was provided."}'
+            exit 1
+        fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then
+            echo '{"ok": false, "error": "That preset no longer exists."}'
+            exit 1
+        fi
+        python3 "$SCRIPTS_DIR/presets_helper.py" scan "$PRESETS_DIR/$name.json" "$CONFIG_FILE"
+        ;;
     list)
         python3 "$SCRIPTS_DIR/presets_helper.py" list "$PRESETS_DIR"
         ;;
