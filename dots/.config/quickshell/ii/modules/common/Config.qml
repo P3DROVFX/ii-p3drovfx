@@ -3537,6 +3537,11 @@ Singleton {
                 // Each entry is { id: string, apps: list<string> } and is
                 // rendered as one dock item while app groups are enabled.
                 property list<var> appGroups: []
+                // Order keys the user has dragged into place by hand. Smart
+                // grouping treats these as anchors and auto-arranges only what
+                // is left, so turning the feature on no longer makes the dock
+                // undo every reorder.
+                property list<string> manualOrder: []
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "livePreview", "phone", "trash", "overview"]
             }
 
