@@ -529,6 +529,12 @@ Singleton {
         configResume.stop();
         Config.saveOptionsNow();
         Config.blockWrites = true;
+        // The file about to appear was written against whichever schema the
+        // preset was exported from, and the shell only migrates a file it
+        // reads once per session. Re-arming that pass is what makes "migrate
+        // up" true for a preset applied hours after startup, rather than only
+        // at the next restart.
+        Config.configRepaired = false;
     }
 
     function _releaseConfigWrites() {

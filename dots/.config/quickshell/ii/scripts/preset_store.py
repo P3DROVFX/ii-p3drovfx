@@ -204,48 +204,16 @@ def image_ext(path):
 # ---------------------------------------------------------------------------
 # Compatibility
 #
-# "Migrate up, block newer": Config.qml migrates an older preset forward on
-# its own, but a preset written against a newer schema holds keys this build
-# has never heard of and would be quietly mangled on load.
+# "Migrate up, block newer", decided in presets_helper so the store and the
+# apply path can never disagree about which presets this build can take.
 # ---------------------------------------------------------------------------
 
 def current_config_version():
-    """Read the version this build understands, straight from Config.qml."""
-    qml = os.path.join(os.path.dirname(scripts_dir()), 'modules', 'common', 'Config.qml')
-    try:
-        with open(qml, 'r', encoding='utf-8') as handle:
-            match = re.search(r'currentConfigVersion\s*:\s*(\d+)', handle.read())
-        if match:
-            return int(match.group(1))
-    except Exception:
-        pass
-    # Config.qml moved or could not be read. The live config was written by
-    # this build, so its own version is the next best answer.
-    try:
-        value = read_json(config_file()).get('configVersion')
-        if isinstance(value, int):
-            return value
-    except Exception:
-        pass
-    return None
+    return presets_helper.current_config_version()
 
 
 def compatibility(preset_version):
-    """Say whether a preset can be applied, and why not when it cannot."""
-    ours = current_config_version()
-    if ours is None or not isinstance(preset_version, int):
-        return {'ok': True, 'status': 'unknown', 'ours': ours, 'theirs': preset_version}
-    if preset_version > ours:
-        return {
-            'ok': False,
-            'status': 'too-new',
-            'ours': ours,
-            'theirs': preset_version,
-            'reason': 'This preset was made for a newer version of the shell. Update first.',
-        }
-    if preset_version < ours:
-        return {'ok': True, 'status': 'migrate', 'ours': ours, 'theirs': preset_version}
-    return {'ok': True, 'status': 'current', 'ours': ours, 'theirs': preset_version}
+    return presets_helper.compatibility(preset_version)
 
 
 # ---------------------------------------------------------------------------

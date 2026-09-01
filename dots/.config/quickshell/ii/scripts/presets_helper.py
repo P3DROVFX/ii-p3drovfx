@@ -187,6 +187,72 @@ def user_home():
     return home[:-1] if home.endswith('/') else home
 
 
+# ---------------------------------------------------------------------------
+# Schema compatibility
+#
+# "Migrate up, block newer". Config.qml carries every older schema forward on
+# its own, so an old preset is safe. A preset written against a newer schema
+# is not: it holds keys and shapes this build has never heard of, and
+# JsonAdapter coerces those into whatever the local type happens to be without
+# ever saying so.
+# ---------------------------------------------------------------------------
+
+def current_config_version():
+    """The schema version this build understands, read from Config.qml."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    qml = os.path.join(root, 'modules', 'common', 'Config.qml')
+    try:
+        with open(qml, 'r', encoding='utf-8') as handle:
+            match = re.search(r'currentConfigVersion\s*:\s*(\d+)', handle.read())
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
+    # Config.qml moved or could not be read. The live config was written by
+    # this build, so its own version is the next best answer.
+    try:
+        path = os.path.join(user_home(), '.config', 'illogical-impulse', 'config.json')
+        with open(path, 'r', encoding='utf-8') as handle:
+            value = json.load(handle).get('configVersion')
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    except Exception:
+        pass
+    return None
+
+
+def compatibility(preset_version):
+    """Say whether a preset can be applied, and why not when it cannot."""
+    ours = current_config_version()
+    known = isinstance(preset_version, int) and not isinstance(preset_version, bool)
+    if ours is None or not known:
+        # Nothing to compare. A preset from before versioning existed reads
+        # as unknown rather than old, and refusing those would lock out every
+        # preset exported before the store was built.
+        return {'ok': True, 'status': 'unknown', 'ours': ours, 'theirs': preset_version}
+    if preset_version > ours:
+        return {
+            'ok': False,
+            'status': 'too-new',
+            'ours': ours,
+            'theirs': preset_version,
+            'reason': 'This preset was made for a newer version of the shell. Update first.',
+        }
+    if preset_version < ours:
+        return {'ok': True, 'status': 'migrate', 'ours': ours, 'theirs': preset_version}
+    return {'ok': True, 'status': 'current', 'ours': ours, 'theirs': preset_version}
+
+
+def preset_config_version(preset_path):
+    """The schema version a preset file was written against, or None."""
+    try:
+        with open(preset_path, 'r', encoding='utf-8') as handle:
+            value = json.load(handle).get('configVersion')
+    except Exception:
+        return None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def plain_path(value):
     """Strip the file:// scheme and any ?query from a path-ish string."""
     if not isinstance(value, str):
@@ -701,6 +767,7 @@ def scan(preset_path, config_path=None):
         if isinstance(loaded, dict):
             current = loaded
 
+    verdict = compatibility(preset.get('configVersion'))
     preset = expand_val(preset, user_home())
     merged = deep_merge(current, preset)
     restore_local_only(merged, current)
@@ -752,7 +819,7 @@ def scan(preset_path, config_path=None):
                 'items': items,
             })
 
-    return {'ok': True, 'total': len(findings), 'groups': groups}
+    return {'ok': True, 'total': len(findings), 'groups': groups, 'compatibility': verdict}
 
 
 def find_wallpaper_fallback(presets_dir, preset_name):
@@ -811,7 +878,13 @@ def list_presets(presets_dir):
             if fallback:
                 wall_path = fallback
                 
-        print(json.dumps({"name": preset_name, "wallpaper": wall_path}))
+        # 0, never null: a ListModel fixes its roles on the first row, and a
+        # null there would type the role as something no other row fits.
+        version = data.get('configVersion')
+        if not isinstance(version, int) or isinstance(version, bool):
+            version = 0
+        print(json.dumps({"name": preset_name, "wallpaper": wall_path,
+                          "configVersion": version}))
 
 def main():
     if len(sys.argv) < 2:
@@ -847,6 +920,10 @@ def main():
         except Exception as exc:
             print(json.dumps({'ok': False, 'error': str(exc)}))
             sys.exit(1)
+    elif action == 'compat':
+        if len(sys.argv) < 3:
+            sys.exit(1)
+        print(json.dumps(compatibility(preset_config_version(sys.argv[2]))))
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)

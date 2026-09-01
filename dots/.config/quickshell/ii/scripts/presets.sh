@@ -136,6 +136,16 @@ case $action in
     load)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        # Migrate up, block newer. An older preset is carried forward by the
+        # shell's own migrations; a newer one names settings this build has
+        # never heard of, and merging it in would mangle them silently.
+        compat=$(python3 "$SCRIPTS_DIR/presets_helper.py" compat "$PRESETS_DIR/$name.json" 2>/dev/null)
+        if [[ -n "$compat" ]] && [[ "$(jq -r '.ok' <<<"$compat" 2>/dev/null)" == "false" ]]; then
+            notify_export critical "Preset not applied" \
+                "$(jq -r '.reason // "This preset is not compatible with this version of the shell."' <<<"$compat")"
+            printf '[presets.sh] %s\n' "$(jq -r '.reason // "incompatible preset"' <<<"$compat")" >&2
+            exit 1
+        fi
         if ! backup_config; then
             notify_export critical "Preset not applied" "Could not back up the current config."
             exit 1

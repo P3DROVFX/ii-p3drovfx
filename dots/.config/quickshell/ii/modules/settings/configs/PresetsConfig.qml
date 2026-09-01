@@ -153,6 +153,14 @@ ContentPage {
     readonly property var scanGroups: page.scanUsable ? page.pendingScan.groups : []
     readonly property int scanTotal: page.scanUsable ? page.pendingScan.total : 0
 
+    // Migrate up, block newer. An older preset is carried forward by the
+    // shell's own migrations; a newer one names settings this build does not
+    // have, and there is no honest way to guess what they were meant to mean.
+    readonly property var scanCompat: (page.scanUsable && page.pendingScan.compatibility)
+        ? page.pendingScan.compatibility : null
+    readonly property bool compatBlocked: page.scanCompat !== null && page.scanCompat.ok === false
+    readonly property bool compatMigrates: page.scanCompat !== null && page.scanCompat.status === "migrate"
+
     // How many findings of one group are spelled out before the rest are
     // summed up, so one crowded preset cannot push the buttons off screen.
     readonly property int scanDetailLimit: 6
@@ -198,6 +206,43 @@ ContentPage {
         WindowDialogParagraph {
             Layout.fillWidth: true
             text: Translation.tr("Your current settings are saved first. Anything tied to this machine — API keys, save folders, monitor names and your profile — is kept as it is.")
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            visible: page.compatBlocked
+            implicitHeight: blockedRow.implicitHeight + 20
+            radius: Appearance.rounding.small
+            color: Appearance.colors.colErrorContainer
+
+            RowLayout {
+                id: blockedRow
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignTop
+                    text: "system_update_alt"
+                    iconSize: 18
+                    color: Appearance.colors.colOnErrorContainer
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("This preset was made for a newer version of the shell. Update the shell first — settings this build does not have would be mangled rather than applied.")
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnErrorContainer
+                }
+            }
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            visible: page.compatMigrates
+            text: Translation.tr("This preset was made for an older version of the shell. Its settings are brought up to date as it is applied.")
+            color: Appearance.colors.colOnSurfaceVariant
         }
 
         NoticeBox {
@@ -333,6 +378,7 @@ ContentPage {
 
             DialogButton {
                 buttonText: Translation.tr("Apply")
+                enabled: !page.compatBlocked
                 colEnabled: page.scanTotal > 0 ? Appearance.colors.colError : Appearance.colors.colPrimary
                 onClicked: {
                     page.applyBecauseUpdated = false;

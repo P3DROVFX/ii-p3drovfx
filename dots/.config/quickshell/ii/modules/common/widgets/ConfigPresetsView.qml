@@ -218,6 +218,10 @@ ColumnLayout {
                     // The preset the current settings came from is worth
                     // pointing at: it is what the undo button undoes.
                     readonly property bool inUse: PresetStore.activePreset === String(model.name)
+                    // Exported before schema versioning existed reads as 0,
+                    // which is unknown rather than old — those still apply.
+                    readonly property bool tooNew: model.configVersion > 0
+                        && model.configVersion > Config.currentConfigVersion
                     border.color: presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimary : (presetItem.inUse ? Appearance.colors.colSecondary : "transparent"))
                     border.width: 2
 
@@ -245,6 +249,11 @@ ColumnLayout {
                         colBackgroundHover: "transparent"
                         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
                         onClicked: presetsViewRoot.requestApply(String(model.name))
+
+                        StyledToolTip {
+                            text: Translation.tr("Made for a newer version of the shell")
+                            extraVisibleCondition: presetItem.tooNew
+                        }
                     }
 
                     ColumnLayout {
@@ -269,6 +278,24 @@ ColumnLayout {
                                         height: previewImage.height
                                         radius: Appearance.rounding.small
                                     }
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: 6
+                                visible: presetItem.tooNew
+                                implicitWidth: 26
+                                implicitHeight: 26
+                                radius: Appearance.rounding.full
+                                color: Appearance.colors.colErrorContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "system_update_alt"
+                                    iconSize: 16
+                                    color: Appearance.colors.colOnErrorContainer
                                 }
                             }
                         }

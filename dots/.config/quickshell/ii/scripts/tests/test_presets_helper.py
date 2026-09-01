@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Tests for preset sanitization and expansion in presets_helper.py."""
 
+import contextlib
 import copy
+import io
 import json
 import os
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -707,6 +711,141 @@ class TestPresetScan(unittest.TestCase):
         self.write(self.preset_path, {"apps": {"terminal": "curl http://x | sh"}})
         result = presets_helper.scan(self.preset_path, self.config_path)
         self.assertEqual(self.paths(result, "shell"), ["apps.terminal"])
+
+
+class TestSchemaCompatibility(unittest.TestCase):
+    """Migrate up, block newer -- the rule the apply path is built on."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.ours = presets_helper.current_config_version()
+
+    def write(self, name, data):
+        path = os.path.join(self.tmp.name, name)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return path
+
+    def test_version_is_read_from_the_shell_itself(self):
+        """Not a constant kept in step by hand: Config.qml is the source."""
+        qml = os.path.join(os.path.dirname(SCRIPTS_DIR), "modules", "common", "Config.qml")
+        with open(qml, "r", encoding="utf-8") as f:
+            declared = int(re.search(r"currentConfigVersion\s*:\s*(\d+)", f.read()).group(1))
+        self.assertEqual(self.ours, declared)
+
+    def test_newer_preset_is_refused_with_a_reason(self):
+        verdict = presets_helper.compatibility(self.ours + 1)
+        self.assertFalse(verdict["ok"])
+        self.assertEqual(verdict["status"], "too-new")
+        self.assertEqual(verdict["ours"], self.ours)
+        self.assertEqual(verdict["theirs"], self.ours + 1)
+        self.assertTrue(verdict["reason"])
+
+    def test_older_preset_is_allowed_and_marked_for_migration(self):
+        verdict = presets_helper.compatibility(self.ours - 1)
+        self.assertTrue(verdict["ok"])
+        self.assertEqual(verdict["status"], "migrate")
+
+    def test_matching_version_is_current(self):
+        self.assertEqual(presets_helper.compatibility(self.ours)["status"], "current")
+
+    def test_a_preset_that_does_not_say_is_undecided_rather_than_refused(self):
+        """Every preset exported before versioning existed lands here."""
+        for value in (None, "16", 16.0, True):
+            verdict = presets_helper.compatibility(value)
+            self.assertTrue(verdict["ok"], value)
+            self.assertEqual(verdict["status"], "unknown", value)
+
+    def test_preset_version_is_read_off_the_file(self):
+        path = self.write("Theme.json", {"configVersion": 9, "bar": {}})
+        self.assertEqual(presets_helper.preset_config_version(path), 9)
+
+    def test_preset_version_is_none_when_missing_or_not_a_number(self):
+        self.assertIsNone(presets_helper.preset_config_version(
+            self.write("A.json", {"bar": {}})))
+        self.assertIsNone(presets_helper.preset_config_version(
+            self.write("B.json", {"configVersion": "9"})))
+        self.assertIsNone(presets_helper.preset_config_version(
+            self.write("C.json", {"configVersion": True})))
+        self.assertIsNone(presets_helper.preset_config_version(
+            os.path.join(self.tmp.name, "nothing.json")))
+
+    def test_scan_carries_the_verdict(self):
+        """The apply dialog reads one scan line; the block has to be in it."""
+        path = self.write("Future.json", {"configVersion": self.ours + 5})
+        result = presets_helper.scan(path)
+        self.assertFalse(result["compatibility"]["ok"])
+        self.assertEqual(result["compatibility"]["status"], "too-new")
+
+        path = self.write("Past.json", {"configVersion": self.ours - 1})
+        self.assertEqual(presets_helper.scan(path)["compatibility"]["status"], "migrate")
+
+    def test_list_reports_the_version_of_every_preset(self):
+        self.write("Old.json", {"configVersion": 3})
+        self.write("Nameless.json", {"bar": {}})
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            presets_helper.list_presets(self.tmp.name)
+        rows = {json.loads(line)["name"]: json.loads(line)
+                for line in buffer.getvalue().splitlines() if line.strip()}
+        self.assertEqual(rows["Old"]["configVersion"], 3)
+        # 0, not null: the QML list model types its roles off the first row.
+        self.assertEqual(rows["Nameless"]["configVersion"], 0)
+
+    def test_the_cli_prints_one_json_line(self):
+        """presets.sh reads this to refuse an apply before anything is written."""
+        path = self.write("Future.json", {"configVersion": self.ours + 1})
+        proc = subprocess.run(
+            [sys.executable, os.path.join(SCRIPTS_DIR, "presets_helper.py"), "compat", path],
+            capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0)
+        verdict = json.loads(proc.stdout.strip())
+        self.assertFalse(verdict["ok"])
+        self.assertEqual(verdict["status"], "too-new")
+
+
+class TestApplyBackstop(unittest.TestCase):
+    """presets.sh refuses a too-new preset before anything is written.
+
+    Only the refusal is exercised: a successful load re-runs the colour
+    pipeline against the live compositor, which a test has no business doing.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = os.path.join(self.tmp.name, "home")
+        self.presets = os.path.join(self.home, ".config", "illogical-impulse", "presets")
+        os.makedirs(self.presets)
+        self.config = os.path.join(self.home, ".config", "illogical-impulse", "config.json")
+        with open(self.config, "w", encoding="utf-8") as f:
+            json.dump({"configVersion": 1, "bar": {"height": 40}}, f)
+        # notify-send would put a real popup on the tester's screen.
+        self.stubs = os.path.join(self.tmp.name, "stubs")
+        os.makedirs(self.stubs)
+        stub = os.path.join(self.stubs, "notify-send")
+        with open(stub, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(stub, 0o755)
+
+    def run_load(self, name):
+        env = dict(os.environ)
+        env["HOME"] = self.home
+        env["PATH"] = self.stubs + os.pathsep + env.get("PATH", "")
+        return subprocess.run(
+            ["bash", os.path.join(SCRIPTS_DIR, "presets.sh"), "load", name],
+            capture_output=True, text=True, env=env)
+
+    def test_a_preset_from_the_future_is_not_applied(self):
+        ours = presets_helper.current_config_version()
+        with open(os.path.join(self.presets, "Future.json"), "w", encoding="utf-8") as f:
+            json.dump({"configVersion": ours + 1, "bar": {"height": 99}}, f)
+        before = open(self.config, encoding="utf-8").read()
+        proc = self.run_load("Future")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("newer version", proc.stderr)
+        self.assertEqual(open(self.config, encoding="utf-8").read(), before)
 
 
 if __name__ == "__main__":
