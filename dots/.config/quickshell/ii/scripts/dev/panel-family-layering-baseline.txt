@@ -16,7 +16,6 @@ modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebar
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.localSend
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.nightLight
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.notifications
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.quickToggles
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.screenShader
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.tailscale
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.volumeMixer

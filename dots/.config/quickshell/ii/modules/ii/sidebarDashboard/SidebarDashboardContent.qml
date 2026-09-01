@@ -14,8 +14,8 @@ import Quickshell.Bluetooth
 import Quickshell.Hyprland
 import Qt5Compat.GraphicalEffects
 
-import qs.modules.ii.sidebarDashboard.quickToggles
-import qs.modules.ii.sidebarDashboard.quickToggles.classicStyle
+import qs.modules.common.quickToggles
+import qs.modules.common.quickToggles.classicStyle
 
 import qs.modules.ii.sidebarDashboard.bluetoothDevices
 import qs.modules.ii.sidebarDashboard.nightLight

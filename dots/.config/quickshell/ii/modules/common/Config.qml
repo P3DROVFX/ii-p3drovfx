@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.services
 import qs.modules.common.functions
-import "../ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
+import "quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 
 Singleton {
     id: root

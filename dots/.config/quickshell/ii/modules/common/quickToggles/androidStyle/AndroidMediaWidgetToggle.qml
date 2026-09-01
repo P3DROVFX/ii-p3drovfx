@@ -7,12 +7,10 @@ import qs.modules.common.animations
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 import Quickshell.Services.Mpris
 import Quickshell.Io
-import "../../../mediaControls" as MediaCtrl
-import "../../../bar" as Bar
+import qs.modules.common.media as MediaCtrl
 
 Item {
     id: root

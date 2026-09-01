@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as Catalog
+import "../../modules/common/quickToggles/androidStyle/QuickToggleCatalog.js" as Catalog
 
 TestCase {
     name: "QuickToggleCatalog"

@@ -6,11 +6,11 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Bluetooth
 
-import qs.modules.ii.sidebarDashboard.quickToggles.classicStyle
+import qs.modules.common.quickToggles.classicStyle
 // Keyed list model shared with the Android panel: it inserts and removes only
 // the rows that actually changed, so adding one toggle never rebuilds - and
 // re-queries the state of - every other one.
-import qs.modules.ii.sidebarDashboard.quickToggles.androidStyle
+import qs.modules.common.quickToggles.androidStyle
 import "classicStyle/ClassicQuickToggleCatalog.js" as ClassicQuickToggleCatalog
 
 AbstractQuickPanel {

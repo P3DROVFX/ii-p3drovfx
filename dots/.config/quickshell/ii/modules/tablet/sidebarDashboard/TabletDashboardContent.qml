@@ -8,7 +8,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 import qs.modules.ii.sidebarDashboard
-import qs.modules.ii.sidebarDashboard.quickToggles
+import qs.modules.common.quickToggles
 import qs.modules.ii.sidebarDashboard.notifications
 import qs.modules.ii.sidebarDashboard.bluetoothDevices
 import qs.modules.ii.sidebarDashboard.nightLight

@@ -18,6 +18,12 @@
 #   3. modules/ii/ must not import qs.modules.tablet.* or qs.modules.waffle.*, for the same
 #      reason as (1) in the other direction.
 #
+#   4. No relative directory import may climb out of its own top-level module directory.
+#      `import "../../../mediaControls"` is the same dependency as `import qs.modules.ii`,
+#      just spelled in a way the first three rules cannot see — and it silently resolves to
+#      a different directory the moment the importing file is moved. Rule 4 caught exactly
+#      that during the Fase 2 promotion, after rules 1-3 had reported OK.
+#
 # Known violations are listed in the baseline next to this script, one "file:import" per
 # line. They are debt, not permission: the burn-down is tracked in the tablet family plan.
 # A violation not in the baseline fails the check; a baseline entry that no longer occurs
@@ -43,11 +49,55 @@ collect() {
     done
 }
 
+# Rule 4 needs the resolved destination, not a qs.modules.* name, so it is collected
+# separately. A relative import is a violation only when it lands inside ANOTHER module's
+# directory — climbing down into modules/common/functions/ or services/ is a normal
+# dependency on a shared layer and is fine.
+collect_escaping_relative() {
+    python3 - "$@" <<'PY'
+import os, re, sys
+
+FAMILY_DIRS = ("modules/ii", "modules/tablet", "modules/waffle")
+IMPORT_RE = re.compile(r'^\s*import\s+"([^"]*\.\./[^"]*)"')
+
+def owner(path):
+    """The module directory a file belongs to, or None for anything else."""
+    for d in FAMILY_DIRS + ("modules/common",):
+        if path.startswith(d + "/"):
+            return d
+    return None
+
+for root_dir in sys.argv[1:]:
+    for dirpath, _, filenames in os.walk(root_dir):
+        for name in filenames:
+            if not name.endswith(".qml"):
+                continue
+            path = os.path.join(dirpath, name)
+            src_owner = owner(path)
+            try:
+                lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                m = IMPORT_RE.match(line)
+                if not m:
+                    continue
+                spec = m.group(1)
+                dest = os.path.normpath(os.path.join(os.path.dirname(path), spec))
+                dest_owner = owner(dest)
+                # Landing in another module's directory is the violation. Staying inside
+                # your own, or descending into a shared layer, is not.
+                if dest_owner in FAMILY_DIRS and dest_owner != src_owner:
+                    print(f"{path}:{spec}")
+PY
+}
+
 current=$(
     {
         collect '^[[:space:]]*import[[:space:]]+qs\.modules\.(ii|tablet|waffle)\b' services modules/common
         collect '^[[:space:]]*import[[:space:]]+qs\.modules\.ii\b' modules/tablet
         collect '^[[:space:]]*import[[:space:]]+qs\.modules\.(tablet|waffle)\b' modules/ii
+        collect_escaping_relative modules/common modules/tablet modules/ii modules/waffle
     } | sort -u
 )
 

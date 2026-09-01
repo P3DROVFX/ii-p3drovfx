@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
-import qs.modules.ii.sidebarDashboard.quickToggles.androidStyle
+import qs.modules.common.quickToggles.androidStyle
 import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 

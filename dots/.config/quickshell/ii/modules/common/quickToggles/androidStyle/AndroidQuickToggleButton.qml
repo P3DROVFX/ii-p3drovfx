@@ -6,7 +6,6 @@ import qs.modules.common.animations
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
