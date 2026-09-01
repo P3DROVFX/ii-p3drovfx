@@ -18,6 +18,7 @@ Item {
     property color color: Appearance.colors.colOnLayer0
     property bool silent: false
     readonly property bool showUnreadCount: Config.options.bar.indicators.notifications.showUnreadCount
+    readonly property Item presenceController: bell.presenceController
 
     implicitWidth: root.iconSize
     implicitHeight: root.iconSize

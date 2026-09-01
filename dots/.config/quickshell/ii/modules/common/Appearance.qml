@@ -671,6 +671,31 @@ Singleton {
             }
         }
 
+        // Dashboard indicators use a staged transition: the slot changes size
+        // before/after the icon pop. Keep these slower and softer than the
+        // global barResize clock without slowing every other responsive widget.
+        property QtObject dashboardIndicatorResize: QtObject {
+            property int duration: Math.round(420 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.standard
+        }
+
+        property QtObject dashboardIndicatorPop: QtObject {
+            property int enterDuration: Math.round(360 * root.animMultiplier)
+            property int exitDuration: Math.round(280 * root.animMultiplier)
+            property int cueDelay: Math.round(90 * root.animMultiplier)
+            property int exitHoldDuration: Math.round(220 * root.animMultiplier)
+            property int enterType: Easing.OutBack
+            property real enterOvershoot: 1.18
+            property int exitType: Easing.BezierSpline
+            property list<real> exitCurve: animationCurves.emphasizedAccel
+        }
+
+        property QtObject dashboardEqualizerActivity: QtObject {
+            property int duration: Math.round(440 * root.animMultiplier)
+            property int type: Easing.InOutSine
+        }
+
         // The bar and the wrapped frame leaving the screen together: a
         // fullscreen window taking over, media mode, or a placement swap. The
         // exit accelerates away and the entrance decelerates in, so a swap does

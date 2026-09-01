@@ -90,6 +90,11 @@ AnimatedIcon {
         case "disabled":
             disableAnim.start();
             break;
+        case "settle":
+            // Used when the dialog closes back onto the wired indicator.
+            root.applyRest();
+            root.busy = false;
+            break;
         default:
             root.busy = false;
             break;

@@ -26,6 +26,15 @@ Item {
     property real stroke: 2.1
 
     readonly property real unit: root.iconSize / 24
+    readonly property Item presenceController: {
+        let candidate = root.parent;
+        while (candidate) {
+            if (candidate.dashboardIconPresenceController === true)
+                return candidate;
+            candidate = candidate.parent;
+        }
+        return null;
+    }
 
     implicitWidth: root.iconSize
     implicitHeight: root.iconSize

@@ -20,14 +20,6 @@ Item {
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
-    Behavior on implicitWidth {
-        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-    }
-
-    Behavior on implicitHeight {
-        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-    }
-
     MouseArea {
         id: mouseArea
         anchors.fill: parent
@@ -58,19 +50,11 @@ Item {
         property real radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         property real dashOffset: 0
 
-        implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 10
-        implicitHeight: root.vertical ? flow.implicitHeight + 10 : Appearance.sizes.baseBarHeight - 8
+        implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth - 8 : Math.max(0, flow.implicitWidth - flow.itemSpacing) + 10
+        implicitHeight: root.vertical ? Math.max(0, flow.implicitHeight - flow.itemSpacing) + 10 : Appearance.sizes.baseBarHeight - 8
 
         width: implicitWidth
         height: implicitHeight
-
-        Behavior on implicitWidth {
-            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-        }
-
-        Behavior on implicitHeight {
-            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-        }
 
         onPillColorChanged: requestPaint()
         onBorderColorChanged: requestPaint()
@@ -174,15 +158,13 @@ Item {
         anchors.verticalCenterOffset: root.vertical ? 0 : 0
         flow: root.vertical ? Grid.TopToBottom : Grid.LeftToRight
         columns: root.vertical ? 1 : Math.max(1, flow.visibleChildren.length)
-        spacing: isMaterial ? 6 : 10
+        property real itemSpacing: isMaterial ? 6 : 10
+        spacing: 0
 
-        move: Transition {
-            NumberAnimation { properties: "x,y"; duration: 250; easing.type: Easing.OutQuint }
-        }
-
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showCaffeine && (Idle.inhibit ?? false)
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: caffeineWrapper
                 vertical: root.vertical
@@ -195,9 +177,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showVolume
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: volumeWrapper
                 vertical: root.vertical
@@ -209,9 +192,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showMic && (Audio.source?.audio?.muted ?? false)
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: micWrapper
                 vertical: root.vertical
@@ -224,16 +208,17 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showNetwork
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: netWrapper
                 vertical: root.vertical
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    visible: Network.ethernet
+                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
                     text: "lan"
                     iconSize: root.iconPixelSize
                     color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
@@ -242,7 +227,7 @@ Item {
                 WifiIcon {
                     id: wifiIcon
                     anchors.centerIn: parent
-                    visible: !Network.ethernet
+                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
                     iconSize: root.iconPixelSize
                     color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                     bars: {
@@ -256,9 +241,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showBluetooth && BluetoothStatus.available
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: btWrapper
                 vertical: root.vertical
@@ -272,9 +258,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showVpn && VpnService.active
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: vpnWrapper
                 vertical: root.vertical
@@ -287,9 +274,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: tailscaleWrapper
                 vertical: root.vertical
@@ -302,9 +290,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showPomodoro && TimerService.pomodoroRunning
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: pomodoroWrapper
                 vertical: root.vertical
@@ -318,9 +307,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showStopwatch && TimerService.stopwatchRunning
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: stopwatchWrapper
                 vertical: root.vertical
@@ -333,9 +323,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: countdownWrapper
                 vertical: root.vertical
@@ -350,9 +341,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showEasyEffects && EasyEffects.active
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: easyEffectsWrapper
                 vertical: root.vertical
@@ -365,9 +357,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showDns && DnsOverTls.active
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: dnsWrapper
                 vertical: root.vertical
@@ -380,9 +373,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showGameMode && iconDriver.gameModeOn
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: gameModeWrapper
                 vertical: root.vertical
@@ -395,9 +389,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showMusicRecognition && SongRec.running
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: songRecWrapper
                 vertical: root.vertical
@@ -410,9 +405,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showAlarms && iconDriver.alarmVisible
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: alarmWrapper
                 vertical: root.vertical
@@ -426,9 +422,10 @@ Item {
                 }
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             reveal: Config.options.bar.dashboardButton.showNotifications && (Notifications.silent || Notifications.unread > 0)
             vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
             ExpressiveIconWrapper {
                 id: notifWrapper
                 vertical: root.vertical

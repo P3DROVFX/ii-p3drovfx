@@ -13,6 +13,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ICONS = REPO_ROOT / "modules/ii/bar/widgets/dashboard/icons"
 BUTTON = REPO_ROOT / "modules/ii/bar/widgets/dashboard/ExpressiveDashboardPanelButton.qml"
+ICON_REVEALER = REPO_ROOT / "modules/ii/bar/widgets/dashboard/DashboardIconRevealer.qml"
+APPEARANCE = REPO_ROOT / "modules/common/Appearance.qml"
+ANIMATED_ICON = ICONS / "AnimatedIcon.qml"
+EQUALIZER = ICONS / "EqualizerIcon.qml"
+WIFI = ICONS / "WifiIcon.qml"
+MIC = ICONS / "MicIcon.qml"
+GLOBAL_STATES = REPO_ROOT / "GlobalStates.qml"
+SIDEBAR_DASHBOARD = REPO_ROOT / "modules/ii/sidebarDashboard/SidebarDashboardContent.qml"
 CONFIG = REPO_ROOT / "modules/settings/configs/widgets/DashboardButtonConfig.qml"
 CUES = REPO_ROOT / "services/DashboardIconCues.qml"
 
@@ -425,7 +433,7 @@ class WiringTests(unittest.TestCase):
             self.assertIn(handler, body)
         # Every handler that can play a cue must be gated by it.
         for handler in re.findall(r"on\w+Changed: \{(.*?)\n    \}", body, re.S):
-            if ".play(" in handler:
+            if ".play(" in handler or "playIconCue(" in handler:
                 self.assertIn("driverReady", handler, handler[:80])
 
     def test_all_three_dashboard_buttons_use_the_animated_icons(self):
@@ -461,8 +469,10 @@ class WiringTests(unittest.TestCase):
         self.assertIn("GlobalStates.alarmRinging", driver)
         self.assertNotIn("AlarmService.", driver)
         self.assertIn("id: alarmHideTimer", driver)
-        for cue in ('play("open")', 'play("ringing")', 'play("stopped")',
-                    'play("removed")'):
+        for cue in ('playIconCue(root.alarmIcon, "open")',
+                    'playIconCue(root.alarmIcon, "ringing")',
+                    'playIconCue(root.alarmIcon, "stopped")',
+                    'playIconCue(root.alarmIcon, "removed")'):
             self.assertIn(cue, driver)
         for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
@@ -474,8 +484,11 @@ class WiringTests(unittest.TestCase):
         driver = DRIVER.read_text()
         self.assertIn("TimerService.countdowns", driver)
         self.assertIn("id: countdownHideTimer", driver)
-        for cue in ('play("start")', 'play("pause")', 'play("resume")',
-                    'play("complete")', 'play("removed")'):
+        for cue in ('playIconCue(root.countdownIcon, "start")',
+                    'playIconCue(root.countdownIcon, "pause")',
+                    'playIconCue(root.countdownIcon, "resume")',
+                    'playIconCue(root.countdownIcon, "complete")',
+                    'playIconCue(root.countdownIcon, "removed")'):
             self.assertIn(cue, driver)
         for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
@@ -517,6 +530,143 @@ class WiringTests(unittest.TestCase):
         )
         self.assertNotIn("border.width", combined)
         self.assertNotIn("border.color", combined)
+
+
+class IndicatorRevealTests(unittest.TestCase):
+    def test_dashboard_revealer_stages_layout_before_content_on_entry(self):
+        body = ICON_REVEALER.read_text()
+        self.assertIn("property real layoutProgress: 0.0", body)
+        self.assertIn("property real contentProgress: 0.0", body)
+        self.assertRegex(
+            body,
+            re.compile(
+                r"if \(root\.reveal\) \{.*?"
+                r"if \(root\.layoutProgress < 0\.999\).*?"
+                r"root\.animateLayout\(1\.0\);.*?"
+                r"else if \(root\.contentProgress < 0\.999\).*?"
+                r"root\.animateContent\(1\.0\);",
+                re.S,
+            ),
+        )
+
+    def test_dashboard_revealer_stages_content_before_layout_on_exit(self):
+        body = ICON_REVEALER.read_text()
+        self.assertRegex(
+            body,
+            re.compile(
+                r"else \{.*?"
+                r"if \(root\.contentProgress > 0\.001\).*?"
+                r"root\.animateContent\(0\.0\);.*?"
+                r"else if \(root\.layoutProgress > 0\.001\).*?"
+                r"root\.animateLayout\(0\.0\);",
+                re.S,
+            ),
+        )
+        self.assertIn("scale: root.collapsedScale + (1.0 - root.collapsedScale) * root.contentProgress", body)
+        self.assertIn("opacity: root.contentProgress", body)
+
+    def test_all_dashboard_buttons_use_the_staged_revealer(self):
+        for path in DEFAULT_BUTTONS + [BUTTON]:
+            body = path.read_text()
+            self.assertIn("DashboardIconRevealer {", body, path.name)
+            self.assertNotRegex(body, re.compile(r"^\s*Revealer \{", re.M), path.name)
+
+    def test_expressive_geometry_has_only_the_leaf_animation_clock(self):
+        body = BUTTON.read_text()
+        self.assertNotIn("Behavior on implicitWidth", body)
+        self.assertNotIn("Behavior on implicitHeight", body)
+        self.assertNotIn("move: Transition", body)
+
+    def test_dashboard_uses_slow_eased_resize_and_a_mild_pop(self):
+        revealer = ICON_REVEALER.read_text()
+        appearance = APPEARANCE.read_text()
+        resize = appearance.split("property QtObject dashboardIndicatorResize")[1].split("property QtObject dashboardIndicatorPop")[0]
+        pop = appearance.split("property QtObject dashboardIndicatorPop")[1].split("property QtObject shellEdgeSlide")[0]
+
+        self.assertIn("Math.round(420 * root.animMultiplier)", resize)
+        self.assertIn("animationCurves.standard", resize)
+        self.assertIn("Math.round(360 * root.animMultiplier)", pop)
+        self.assertIn("property int enterType: Easing.OutBack", pop)
+        self.assertIn("property real enterOvershoot: 1.18", pop)
+        self.assertIn("Math.round(280 * root.animMultiplier)", pop)
+
+        self.assertIn("Appearance.animation.dashboardIndicatorResize.duration", revealer)
+        self.assertIn("Appearance.animation.dashboardIndicatorPop.enterDuration", revealer)
+        self.assertIn("Appearance.animation.dashboardIndicatorPop.enterOvershoot", revealer)
+        self.assertIn("property real collapsedScale: 0.68", revealer)
+
+    def test_icon_cues_wait_for_entry_and_exit_holds_before_scale_down(self):
+        revealer = ICON_REVEALER.read_text()
+        driver = DRIVER.read_text()
+        base = ANIMATED_ICON.read_text()
+
+        self.assertIn("function queueIconCue(target: Item, cue: string): void", revealer)
+        self.assertIn("id: entryCueTimer", revealer)
+        self.assertIn("id: exitHoldTimer", revealer)
+        self.assertIn("dashboardIndicatorPop.cueDelay", revealer)
+        self.assertIn("dashboardIndicatorPop.exitHoldDuration", revealer)
+        self.assertIn("readonly property Item presenceController", base)
+        self.assertIn("function playIconCue(icon: Item, cue: string): void", driver)
+        self.assertNotRegex(driver, re.compile(r"root\.\w+Icon\.play\("))
+
+
+class LiveActivityTests(unittest.TestCase):
+    def test_easyeffects_bars_keep_moving_while_active(self):
+        body = EQUALIZER.read_text()
+        loop = body.split("id: activeLoop")[1].split("// ── Off")[0]
+        self.assertIn("loops: Animation.Infinite", loop)
+        self.assertIn("activeLoop.stop()", body.split("function stopAll")[1].split("}")[0])
+        self.assertRegex(
+            body,
+            re.compile(r"id: onAnim.*?onFinished:.*?root\.active.*?activeLoop\.restart\(\)", re.S),
+        )
+        self.assertRegex(
+            body,
+            re.compile(r"id: offAnim.*?onFinished:.*?root\.active.*?activeLoop\.restart\(\)", re.S),
+        )
+        self.assertIn("readonly property bool activityVisible", body)
+        self.assertIn("onActivityVisibleChanged: root.syncActivityLoop(true)", body)
+        for bar in range(5):
+            self.assertIn(f'target: bar{bar}; property: "half"', loop)
+        self.assertNotIn('property: "offset"', loop)
+        self.assertIn("startY: 12 + bar.offset - bar.half", body)
+        self.assertIn("y: 12 + bar.offset + bar.half", body)
+
+    def test_mic_mute_rebuilds_the_unmuted_start_frame(self):
+        body = MIC.read_text()
+        mute = body.split("id: muteAnim")[1].split("id: unmuteAnim")[0]
+        self.assertIn("root.capsuleDrop = 0", mute)
+        self.assertIn("root.standDrop = 0", mute)
+        self.assertIn("root.slashProgress = 0", mute)
+
+    def test_sidebar_dialog_state_drives_wifi_and_bluetooth_search(self):
+        states = GLOBAL_STATES.read_text()
+        sidebar = SIDEBAR_DASHBOARD.read_text()
+        driver = DRIVER.read_text()
+
+        self.assertIn("readonly property bool dashboardWifiDialogOpen: dashboardWifiDialogOpenCount > 0", states)
+        self.assertIn("readonly property bool dashboardBluetoothDialogOpen: dashboardBluetoothDialogOpenCount > 0", states)
+        self.assertIn("onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)", sidebar)
+        self.assertIn("onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)", sidebar)
+        self.assertIn("property bool wifiDialogStatePublished: false", sidebar)
+        self.assertIn("property bool bluetoothDialogStatePublished: false", sidebar)
+        destruction = sidebar.split("Component.onDestruction")[1].split("Connections")[0]
+        self.assertIn("root.publishWifiDialogState(false)", destruction)
+        self.assertIn("root.publishBluetoothDialogState(false)", destruction)
+
+        wifi = driver.split("readonly property string wifiCue")[1].split("// ── Bluetooth")[0]
+        bluetooth = driver.split("readonly property string bluetoothCue")[1].split("property string previousBluetoothCue")[0]
+        self.assertLess(wifi.index("GlobalStates.dashboardWifiDialogOpen"), wifi.index("Network.ethernet"))
+        self.assertLess(bluetooth.index("GlobalStates.dashboardBluetoothDialogOpen"), bluetooth.index("BluetoothStatus.connected"))
+        self.assertIn('return "searching"', wifi)
+        self.assertIn('return "scanning"', bluetooth)
+        self.assertIn('root.wifiCue === "wired" ? "settle" : root.wifiCue', driver)
+        self.assertIn('case "settle":', WIFI.read_text())
+
+    def test_wifi_icon_remains_visible_during_its_dialog(self):
+        for path in DEFAULT_BUTTONS + [BUTTON]:
+            body = path.read_text()
+            self.assertIn("visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen", body, path.name)
 
 
 if __name__ == "__main__":

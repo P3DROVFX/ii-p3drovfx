@@ -44,6 +44,16 @@ Item {
     // changed.
     property bool driverReady: false
 
+    function playIconCue(icon: Item, cue: string): void {
+        if (!icon || cue.length === 0)
+            return;
+        const controller = icon.presenceController;
+        if (controller)
+            controller.queueIconCue(icon, cue);
+        else
+            icon.play(cue);
+    }
+
     Timer {
         running: true
         interval: 1400
@@ -51,11 +61,17 @@ Item {
         onTriggered: {
             root.refreshCountdownState(false);
             root.driverReady = true;
+            if (GlobalStates.dashboardWifiDialogOpen && root.wifiIcon)
+                root.playIconCue(root.wifiIcon, "searching");
+            if (GlobalStates.dashboardBluetoothDialogOpen && root.bluetoothIcon)
+                root.playIconCue(root.bluetoothIcon, "scanning");
         }
     }
 
     // ── Wi-Fi ───────────────────────────────────────────────────────────────
     readonly property string wifiCue: {
+        if (GlobalStates.dashboardWifiDialogOpen)
+            return "searching";
         if (Network.ethernet)
             return "wired";
         switch (Network.wifiStatus) {
@@ -70,12 +86,14 @@ Item {
         }
     }
     onWifiCueChanged: {
-        if (root.driverReady && root.wifiIcon && root.wifiCue !== "wired")
-            root.wifiIcon.play(root.wifiCue);
+        if (root.driverReady && root.wifiIcon)
+            root.playIconCue(root.wifiIcon, root.wifiCue === "wired" ? "settle" : root.wifiCue);
     }
 
     // ── Bluetooth ───────────────────────────────────────────────────────────
     readonly property string bluetoothCue: {
+        if (GlobalStates.dashboardBluetoothDialogOpen)
+            return "scanning";
         if (!BluetoothStatus.enabled)
             return "disabled";
         if (BluetoothStatus.connected)
@@ -95,14 +113,14 @@ Item {
             // "disabled" is the adapter coming back — both are events. A scan
             // merely ending is not, so that one just settles.
             if (previous === "connected")
-                root.bluetoothIcon.play("disconnected");
+                root.playIconCue(root.bluetoothIcon, "disconnected");
             else if (previous === "disabled")
-                root.bluetoothIcon.play("enabled");
+                root.playIconCue(root.bluetoothIcon, "enabled");
             else
-                root.bluetoothIcon.play("settle");
+                root.playIconCue(root.bluetoothIcon, "settle");
             return;
         }
-        root.bluetoothIcon.play(root.bluetoothCue);
+        root.playIconCue(root.bluetoothIcon, root.bluetoothCue);
     }
 
     // ── Volume ──────────────────────────────────────────────────────────────
@@ -138,7 +156,7 @@ Item {
 
     onSinkMutedChanged: {
         if (root.driverReady && root.volumeIcon)
-            root.volumeIcon.play(root.sinkMuted ? "mute" : "unmute");
+            root.playIconCue(root.volumeIcon, root.sinkMuted ? "mute" : "unmute");
     }
 
     onSinkVolumeChanged: {
@@ -149,7 +167,7 @@ Item {
         // Ignore the noise a slider produces while it is being dragged.
         if (Math.abs(root.sinkVolume - previous) < 0.005)
             return;
-        root.volumeIcon.play(root.sinkVolume > previous ? "up" : "down");
+        root.playIconCue(root.volumeIcon, root.sinkVolume > previous ? "up" : "down");
     }
 
     Connections {
@@ -182,49 +200,49 @@ Item {
     }
     onSourceMutedChanged: {
         if (root.driverReady && root.micIcon)
-            root.micIcon.play(root.sourceMuted ? "mute" : "unmute");
+            root.playIconCue(root.micIcon, root.sourceMuted ? "mute" : "unmute");
     }
 
     // ── Keep awake ──────────────────────────────────────────────────────────
     readonly property bool caffeineOn: Idle.inhibit ?? false
     onCaffeineOnChanged: {
         if (root.driverReady && root.caffeineIcon)
-            root.caffeineIcon.play(root.caffeineOn ? "on" : "off");
+            root.playIconCue(root.caffeineIcon, root.caffeineOn ? "on" : "off");
     }
 
     // ── VPN ─────────────────────────────────────────────────────────────────
     readonly property bool vpnOn: VpnService.active
     onVpnOnChanged: {
         if (root.driverReady && root.vpnIcon)
-            root.vpnIcon.play(root.vpnOn ? "connected" : "disconnected");
+            root.playIconCue(root.vpnIcon, root.vpnOn ? "connected" : "disconnected");
     }
 
     // ── Tailscale ───────────────────────────────────────────────────────────
     readonly property bool tailscaleOn: TailscaleService.active
     onTailscaleOnChanged: {
         if (root.driverReady && root.tailscaleIcon)
-            root.tailscaleIcon.play(root.tailscaleOn ? "connected" : "disconnected");
+            root.playIconCue(root.tailscaleIcon, root.tailscaleOn ? "connected" : "disconnected");
     }
 
     // ── Pomodoro ────────────────────────────────────────────────────────────
     readonly property bool pomodoroRunning: TimerService.pomodoroRunning
     onPomodoroRunningChanged: {
         if (root.driverReady && root.pomodoroIcon)
-            root.pomodoroIcon.play(root.pomodoroRunning ? "start" : "pause");
+            root.playIconCue(root.pomodoroIcon, root.pomodoroRunning ? "start" : "pause");
     }
 
     // A lap boundary is the event worth animating, not the seconds ticking.
     readonly property bool pomodoroBreak: TimerService.pomodoroBreak
     onPomodoroBreakChanged: {
         if (root.driverReady && root.pomodoroIcon)
-            root.pomodoroIcon.play("complete");
+            root.playIconCue(root.pomodoroIcon, "complete");
     }
 
     // ── Stopwatch ───────────────────────────────────────────────────────────
     readonly property bool stopwatchRunning: TimerService.stopwatchRunning
     onStopwatchRunningChanged: {
         if (root.driverReady && root.stopwatchIcon)
-            root.stopwatchIcon.play(root.stopwatchRunning ? "start" : "stop");
+            root.playIconCue(root.stopwatchIcon, root.stopwatchRunning ? "start" : "stop");
     }
 
     readonly property int stopwatchLapCount: (TimerService.stopwatchLaps ?? []).length
@@ -234,7 +252,7 @@ Item {
         root.previousLapCount = root.stopwatchLapCount;
         if (!root.driverReady || !root.stopwatchIcon)
             return;
-        root.stopwatchIcon.play(root.stopwatchLapCount > previous ? "lap" : "reset");
+        root.playIconCue(root.stopwatchIcon, root.stopwatchLapCount > previous ? "lap" : "reset");
     }
 
     // ── Countdown timers ───────────────────────────────────────────────────
@@ -294,15 +312,15 @@ Item {
             return;
 
         if (count > previousCount)
-            root.countdownIcon.play("start");
+            root.playIconCue(root.countdownIcon, "start");
         else if (count < previousCount)
-            root.countdownIcon.play("removed");
+            root.playIconCue(root.countdownIcon, "removed");
         else if (finished > previousFinished)
-            root.countdownIcon.play("complete");
+            root.playIconCue(root.countdownIcon, "complete");
         else if (paused > previousPaused)
-            root.countdownIcon.play("pause");
+            root.playIconCue(root.countdownIcon, "pause");
         else if (running > previousRunning)
-            root.countdownIcon.play("resume");
+            root.playIconCue(root.countdownIcon, "resume");
     }
 
     onCountdownItemsChanged: root.refreshCountdownState()
@@ -311,7 +329,7 @@ Item {
     readonly property bool easyEffectsActive: EasyEffects.active
     onEasyEffectsActiveChanged: {
         if (root.driverReady && root.easyEffectsIcon)
-            root.easyEffectsIcon.play(root.easyEffectsActive ? "on" : "off");
+            root.playIconCue(root.easyEffectsIcon, root.easyEffectsActive ? "on" : "off");
     }
 
     // ── Encrypted DNS ───────────────────────────────────────────────────────
@@ -322,7 +340,7 @@ Item {
     }
     onDnsCueChanged: {
         if (root.driverReady && root.dnsIcon)
-            root.dnsIcon.play(root.dnsCue);
+            root.playIconCue(root.dnsIcon, root.dnsCue);
     }
 
     // ── Game mode ───────────────────────────────────────────────────────────
@@ -337,14 +355,14 @@ Item {
     readonly property bool gameModeOn: !animationsEnabled.value
     onGameModeOnChanged: {
         if (root.driverReady && root.gameModeIcon)
-            root.gameModeIcon.play(root.gameModeOn ? "on" : "off");
+            root.playIconCue(root.gameModeIcon, root.gameModeOn ? "on" : "off");
     }
 
     // ── Identify Music ──────────────────────────────────────────────────────
     readonly property bool songRecRunning: SongRec.running
     onSongRecRunningChanged: {
         if (root.driverReady && root.songRecIcon)
-            root.songRecIcon.play(root.songRecRunning ? "listening" : "found");
+            root.playIconCue(root.songRecIcon, root.songRecRunning ? "listening" : "found");
     }
 
     // ── System alarms ──────────────────────────────────────────────────────
@@ -379,9 +397,9 @@ Item {
         if (!root.driverReady || !root.alarmIcon)
             return;
         if (root.alarmCount > previous)
-            root.alarmIcon.play("open");
+            root.playIconCue(root.alarmIcon, "open");
         else if (root.alarmCount < previous)
-            root.alarmIcon.play("removed");
+            root.playIconCue(root.alarmIcon, "removed");
     }
 
     readonly property bool alarmRinging: GlobalStates.alarmRinging
@@ -389,16 +407,16 @@ Item {
         if (!root.driverReady || !root.alarmIcon)
             return;
         if (root.alarmRinging)
-            root.alarmIcon.play("ringing");
+            root.playIconCue(root.alarmIcon, "ringing");
         else
-            root.alarmIcon.play("stopped");
+            root.playIconCue(root.alarmIcon, "stopped");
     }
 
     // ── Notifications ───────────────────────────────────────────────────────
     readonly property bool notificationsSilent: Notifications.silent
     onNotificationsSilentChanged: {
         if (root.driverReady && root.notificationIcon)
-            root.notificationIcon.play(root.notificationsSilent ? "silence" : "unsilence");
+            root.playIconCue(root.notificationIcon, root.notificationsSilent ? "silence" : "unsilence");
     }
 
     readonly property int unreadCount: Notifications.unread
@@ -407,6 +425,6 @@ Item {
         const previous = root.previousUnreadCount;
         root.previousUnreadCount = root.unreadCount;
         if (root.driverReady && root.notificationIcon && root.unreadCount > previous)
-            root.notificationIcon.play("arrive");
+            root.playIconCue(root.notificationIcon, "arrive");
     }
 }

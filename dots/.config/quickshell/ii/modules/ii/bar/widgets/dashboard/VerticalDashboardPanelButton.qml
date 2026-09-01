@@ -20,7 +20,7 @@ RippleButton { // Right sidebar button
     bottomLeftRadius: endRadius
     bottomRightRadius: endRadius
 
-    implicitHeight: indicatorsColumnLayout.implicitHeight + 8 * 2
+    implicitHeight: Math.max(0, indicatorsColumnLayout.implicitHeight - indicatorsColumnLayout.realSpacing) + 8 * 2
     implicitWidth: Math.max(indicatorsColumnLayout.implicitWidth, Appearance.font.pixelSize.larger) + 12
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -63,14 +63,11 @@ RippleButton { // Right sidebar button
         property real realSpacing: 6
         spacing: 0
 
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Config.options.bar.dashboardButton.showCaffeine && (Idle.inhibit ?? false)
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillHeight: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             CoffeeIcon {
                 id: caffeineIcon
                 iconSize: rightSidebarButton.iconPixelSize
@@ -78,28 +75,22 @@ RippleButton { // Right sidebar button
                 active: Idle.inhibit ?? false
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Audio.sink?.audio?.muted ?? false
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             VolumeIcon {
                 id: volumeIcon
                 iconSize: rightSidebarButton.iconPixelSize
                 color: rightSidebarButton.colText
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Audio.source?.audio?.muted ?? false
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.topMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             MicIcon {
                 id: micIcon
                 iconSize: rightSidebarButton.iconPixelSize
@@ -107,14 +98,11 @@ RippleButton { // Right sidebar button
                 muted: Audio.source?.audio?.muted ?? false
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Config.options.bar.dashboardButton.showCountdowns && iconDriver.countdownVisible
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             HourglassIcon {
                 id: countdownIcon
                 iconSize: rightSidebarButton.iconPixelSize
@@ -124,14 +112,11 @@ RippleButton { // Right sidebar button
                 finished: iconDriver.countdownFinished
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Config.options.bar.dashboardButton.showAlarms && iconDriver.alarmVisible
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             AlarmIcon {
                 id: alarmIcon
                 iconSize: rightSidebarButton.iconPixelSize
@@ -140,16 +125,11 @@ RippleButton { // Right sidebar button
                 ringing: iconDriver.alarmRinging
             }
         }
-        Revealer {
+        DashboardIconRevealer {
             vertical: true
             reveal: Notifications.silent || Notifications.unread > 0
+            layoutSpacing: indicatorsColumnLayout.realSpacing
             Layout.fillWidth: true
-            Layout.bottomMargin: reveal ? indicatorsColumnLayout.realSpacing : 0
-            implicitHeight: reveal ? notificationUnreadCount.implicitHeight : 0
-            implicitWidth: reveal ? notificationUnreadCount.implicitWidth : 0
-            Behavior on Layout.bottomMargin {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
             Loader {
                 id: notificationUnreadCount
                 sourceComponent: (Config.options.bar.styles.dashboard === "expressive") ? expressiveNotificationComp : defaultNotificationComp
@@ -163,58 +143,73 @@ RippleButton { // Right sidebar button
                 ExpressiveNotificationUnreadCount {}
             }
         }
-        Item {
-            implicitWidth: rightSidebarButton.iconPixelSize
-            implicitHeight: rightSidebarButton.iconPixelSize
+        DashboardIconRevealer {
+            vertical: true
+            reveal: true
+            layoutSpacing: indicatorsColumnLayout.realSpacing
 
-            MaterialSymbol {
-                anchors.centerIn: parent
-                visible: Network.ethernet
-                text: "lan"
-                iconSize: rightSidebarButton.iconPixelSize
-                color: rightSidebarButton.colText
-            }
+            Item {
+                implicitWidth: rightSidebarButton.iconPixelSize
+                implicitHeight: rightSidebarButton.iconPixelSize
 
-            WifiIcon {
-                id: wifiIcon
-                anchors.centerIn: parent
-                visible: !Network.ethernet
-                iconSize: rightSidebarButton.iconPixelSize
-                color: rightSidebarButton.colText
-                bars: {
-                    if (!Network.ready || Network.wifiStatus !== "connected")
-                        return 0;
-                    const strength = Number(Network.networkStrength);
-                    if (isNaN(strength))
-                        return 1;
-                    return strength > 67 ? 3 : strength > 33 ? 2 : 1;
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
+                    text: "lan"
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                }
+
+                WifiIcon {
+                    id: wifiIcon
+                    anchors.centerIn: parent
+                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                    bars: {
+                        if (!Network.ready || Network.wifiStatus !== "connected")
+                            return 0;
+                        const strength = Number(Network.networkStrength);
+                        if (isNaN(strength))
+                            return 1;
+                        return strength > 67 ? 3 : strength > 33 ? 2 : 1;
+                    }
                 }
             }
         }
-        BluetoothIcon {
-            id: bluetoothIcon
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: BluetoothStatus.available
-            iconSize: rightSidebarButton.iconPixelSize
-            color: rightSidebarButton.colText
-            connected: BluetoothStatus.connected
-            poweredOff: !BluetoothStatus.enabled
+        DashboardIconRevealer {
+            vertical: true
+            reveal: BluetoothStatus.available
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            BluetoothIcon {
+                id: bluetoothIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: BluetoothStatus.connected
+                poweredOff: !BluetoothStatus.enabled
+            }
         }
-        VpnKeyIcon {
-            id: vpnIcon
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: Config.options.bar.dashboardButton.showVpn && VpnService.active
-            iconSize: rightSidebarButton.iconPixelSize
-            color: rightSidebarButton.colText
-            connected: VpnService.active
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showVpn && VpnService.active
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            VpnKeyIcon {
+                id: vpnIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: VpnService.active
+            }
         }
-        TailscaleIcon {
-            id: tailscaleIcon
-            Layout.topMargin: indicatorsColumnLayout.realSpacing
-            visible: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
-            iconSize: rightSidebarButton.iconPixelSize
-            color: rightSidebarButton.colText
-            connected: TailscaleService.active
+        DashboardIconRevealer {
+            vertical: true
+            reveal: Config.options.bar.dashboardButton.showTailscale && TailscaleService.active
+            layoutSpacing: indicatorsColumnLayout.realSpacing
+            TailscaleIcon {
+                id: tailscaleIcon
+                iconSize: rightSidebarButton.iconPixelSize
+                color: rightSidebarButton.colText
+                connected: TailscaleService.active
+            }
         }
     }
 }

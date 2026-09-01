@@ -123,6 +123,11 @@ AnimatedIcon {
 
         ScriptAction {
             script: {
+                // `muted` may already have applied its final rest pose while
+                // the revealer was opening. Rebuild the complete unmuted frame
+                // before the delayed cue so the glyph only moves forward.
+                root.capsuleDrop = 0;
+                root.standDrop = 0;
                 root.slashProgress = 0;
                 capsule.opacity = 1;
                 stand.opacity = 1;

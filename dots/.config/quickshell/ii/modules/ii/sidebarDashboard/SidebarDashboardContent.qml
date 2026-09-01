@@ -48,6 +48,25 @@ Item {
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showModesDialog: false
+    property bool wifiDialogStatePublished: false
+    property bool bluetoothDialogStatePublished: false
+
+    function publishWifiDialogState(open: bool): void {
+        if (root.wifiDialogStatePublished === open)
+            return;
+        root.wifiDialogStatePublished = open;
+        GlobalStates.adjustDashboardWifiDialogOpenCount(open ? 1 : -1);
+    }
+
+    function publishBluetoothDialogState(open: bool): void {
+        if (root.bluetoothDialogStatePublished === open)
+            return;
+        root.bluetoothDialogStatePublished = open;
+        GlobalStates.adjustDashboardBluetoothDialogOpenCount(open ? 1 : -1);
+    }
+
+    onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
+    onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
@@ -146,6 +165,11 @@ Item {
         root.activateDeferredContent();
         if (GlobalStates.sidebarRightOpen)
             root.queueContentEntrance();
+    }
+
+    Component.onDestruction: {
+        root.publishWifiDialogState(false);
+        root.publishBluetoothDialogState(false);
     }
 
     Connections {

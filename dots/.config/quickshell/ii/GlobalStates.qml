@@ -941,6 +941,18 @@ Singleton {
 
     property bool dashboardPanelOpen: false // formerly sidebarRightOpen
     property bool policiesPanelOpen: false  // formerly sidebarLeftOpen
+    property int dashboardWifiDialogOpenCount: 0
+    property int dashboardBluetoothDialogOpenCount: 0
+    readonly property bool dashboardWifiDialogOpen: dashboardWifiDialogOpenCount > 0
+    readonly property bool dashboardBluetoothDialogOpen: dashboardBluetoothDialogOpenCount > 0
+
+    function adjustDashboardWifiDialogOpenCount(delta: int): void {
+        root.dashboardWifiDialogOpenCount = Math.max(0, root.dashboardWifiDialogOpenCount + delta);
+    }
+
+    function adjustDashboardBluetoothDialogOpenCount(delta: int): void {
+        root.dashboardBluetoothDialogOpenCount = Math.max(0, root.dashboardBluetoothDialogOpenCount + delta);
+    }
 
     /**
      * Held above zero while something the left sidebar itself started — a file
