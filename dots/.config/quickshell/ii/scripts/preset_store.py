@@ -68,6 +68,11 @@ GIT_TIMEOUT = 180
 GH_TIMEOUT = 120
 HTTP_TIMEOUT = 20
 DIFF_LIMIT = 40
+SCREENSHOT_DIR = 'screenshots'
+# Git keeps every version of a binary forever, so a preset that reships eight
+# large captures on every patch release grows a clone nobody wants to pull.
+MAX_SCREENSHOTS = 6
+MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024
 
 NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _.-]*$')
 REPO_NAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$')
@@ -894,7 +899,38 @@ def require_login():
     return status['login']
 
 
-def stage_payload(directory, name, manifest):
+def stage_screenshots(directory, manifest, screenshots):
+    """Replace the shipped screenshots.
+
+    `None` means the caller is not touching them, which is what an update that
+    only changes settings wants -- the pictures already published stay.
+    An empty list is a deliberate "ship none".
+    """
+    if screenshots is None:
+        return manifest
+    shutil.rmtree(os.path.join(directory, SCREENSHOT_DIR), ignore_errors=True)
+    shipped = []
+    if screenshots:
+        if len(screenshots) > MAX_SCREENSHOTS:
+            raise StoreError('A preset may ship at most %d screenshots.' % MAX_SCREENSHOTS)
+        os.makedirs(os.path.join(directory, SCREENSHOT_DIR), exist_ok=True)
+        for index, source in enumerate(screenshots, start=1):
+            if not os.path.isfile(source):
+                raise StoreError('The screenshot %s is no longer there.' % os.path.basename(source))
+            ext = image_ext(source)
+            if not ext:
+                raise StoreError('%s is not an image.' % os.path.basename(source))
+            if os.path.getsize(source) > MAX_SCREENSHOT_BYTES:
+                raise StoreError('%s is larger than %d MB.'
+                                 % (os.path.basename(source), MAX_SCREENSHOT_BYTES // (1024 * 1024)))
+            target = '%s/%d%s' % (SCREENSHOT_DIR, index, ext)
+            shutil.copy2(source, os.path.join(directory, target))
+            shipped.append(target)
+    manifest['screenshots'] = shipped
+    return manifest
+
+
+def stage_payload(directory, name, manifest, screenshots=None):
     """Write the preset and its assets into the repo working tree."""
     source = os.path.join(presets_dir(), '%s.json' % name)
     if not os.path.exists(source):
@@ -919,7 +955,7 @@ def stage_payload(directory, name, manifest):
         target = 'banner%s' % image_ext(banner)
         shutil.copy2(banner, os.path.join(directory, target))
         manifest['banner'] = target
-    return manifest
+    return stage_screenshots(directory, manifest, screenshots)
 
 
 def write_readme(directory, manifest):
@@ -945,6 +981,8 @@ def write_readme(directory, manifest):
         lines.append('- `%s` — the wallpaper' % manifest['wallpaper'])
     if manifest.get('banner'):
         lines.append('- `%s` — the sidebar banner' % manifest['banner'])
+    for shot in manifest.get('screenshots') or []:
+        lines.append('- `%s` — a screenshot' % shot)
     lines += [
         '',
         'Applying a preset never replaces your whole configuration: it is layered over',
@@ -958,7 +996,7 @@ def write_readme(directory, manifest):
         handle.write('\n'.join(lines))
 
 
-def cmd_publish(name, repo=None, description='', notes='', private=False):
+def cmd_publish(name, repo=None, description='', notes='', private=False, screenshots=None):
     name = check_name(name)
     login = require_login()
     links = load_links()
@@ -989,7 +1027,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False):
             'changelog': [{'version': version, 'date': today(),
                            'notes': notes.strip() or 'First release.'}],
         }
-        manifest = stage_payload(directory, name, manifest)
+        manifest = stage_payload(directory, name, manifest, screenshots or [])
         presets_helper.atomic_write_json(os.path.join(directory, MANIFEST_NAME), manifest)
         readme_manifest = dict(manifest, _repo=slug)
         write_readme(directory, readme_manifest)
@@ -1029,7 +1067,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False):
             'topic': TOPIC, 'topicError': topic_error}
 
 
-def cmd_push_update(name, version=None, bump='patch', notes=''):
+def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None):
     name = check_name(name)
     link = get_link(name)
     if not link.get('owned'):
@@ -1040,7 +1078,7 @@ def cmd_push_update(name, version=None, bump='patch', notes=''):
         raise StoreError('The local copy of "%s" is gone.' % name)
 
     manifest = read_manifest(directory)
-    manifest = stage_payload(directory, name, manifest)
+    manifest = stage_payload(directory, name, manifest, screenshots)
     new_version = version.strip() if version and version.strip() else bump_version(manifest.get('version'), bump)
     if version_key(new_version) <= version_key(manifest.get('version')):
         raise StoreError('Version %s is not newer than the published %s.'
@@ -1145,6 +1183,25 @@ def take_flag(argv, flag):
     return False
 
 
+def take_options(argv, flag):
+    """Every occurrence of a repeatable flag, in the order they were given.
+
+    Returns None when the flag is absent at all, which is how "leave what is
+    published alone" is told apart from "ship none".
+    """
+    values = []
+    seen = False
+    while flag in argv:
+        seen = True
+        index = argv.index(flag)
+        if index + 1 < len(argv):
+            values.append(argv[index + 1])
+            del argv[index:index + 2]
+        else:
+            del argv[index]
+    return values if seen else None
+
+
 def take_option(argv, flag, default=None):
     if flag in argv:
         index = argv.index(flag)
@@ -1192,12 +1249,14 @@ def dispatch(argv):
         repo = take_option(rest, '--repo')
         description = take_option(rest, '--description', '')
         notes = take_option(rest, '--notes', '')
-        return cmd_publish(rest[0] if rest else '', repo, description, notes, private)
+        screenshots = take_options(rest, '--screenshot')
+        return cmd_publish(rest[0] if rest else '', repo, description, notes, private, screenshots)
     if command == 'push-update':
         version = take_option(rest, '--version')
         bump = take_option(rest, '--bump', 'patch')
         notes = take_option(rest, '--notes', '')
-        return cmd_push_update(rest[0] if rest else '', version, bump, notes)
+        screenshots = take_options(rest, '--screenshot')
+        return cmd_push_update(rest[0] if rest else '', version, bump, notes, screenshots)
     if command == 'links':
         return cmd_links()
     if command == 'unlink':

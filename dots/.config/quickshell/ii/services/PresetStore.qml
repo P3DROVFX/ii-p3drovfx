@@ -168,7 +168,10 @@ Singleton {
         root._run("diff", name, args);
     }
 
-    function publish(name, repoName, description, notes, isPrivate) {
+    // screenshots is a list of file paths. Passing none at all leaves the
+    // pictures a preset already ships alone, which is what an update that only
+    // changed settings wants.
+    function publish(name, repoName, description, notes, isPrivate, screenshots) {
         if (!name || root._pending("publish", name))
             return;
         let args = ["publish", name];
@@ -180,11 +183,12 @@ Singleton {
             args = args.concat(["--notes", notes]);
         if (isPrivate)
             args.push("--private");
+        args = args.concat(root._screenshotArgs(screenshots));
         root._run("publish", name, args);
     }
 
     // bump is "major" | "minor" | "patch"; an explicit version wins over it.
-    function pushUpdate(name, bump, notes, version) {
+    function pushUpdate(name, bump, notes, version, screenshots) {
         if (!name || root._pending("push-update", name))
             return;
         let args = ["push-update", name];
@@ -194,7 +198,21 @@ Singleton {
             args = args.concat(["--bump", bump]);
         if (notes && notes.length > 0)
             args = args.concat(["--notes", notes]);
+        args = args.concat(root._screenshotArgs(screenshots));
         root._run("push-update", name, args);
+    }
+
+    function _screenshotArgs(screenshots) {
+        if (!screenshots)
+            return [];
+        let args = [];
+        for (let i = 0; i < screenshots.length; i++) {
+            if (screenshots[i] && String(screenshots[i]).length > 0)
+                args = args.concat(["--screenshot", String(screenshots[i])]);
+        }
+        // The flag carrying no value is how "ship none" is spelled, and it is
+        // the only way to tell it apart from not touching them at all.
+        return args.length > 0 ? args : ["--screenshot"];
     }
 
     // Forgets where a preset came from but keeps the preset itself.
@@ -219,6 +237,7 @@ Singleton {
             action: "apply",
             name: name,
             json: false,
+            guardsConfig: true,
             command: [root.presetsScript, "load", name]
         });
     }
@@ -230,6 +249,7 @@ Singleton {
             action: "revert",
             name: "",
             json: false,
+            guardsConfig: true,
             command: [root.presetsScript, "revert"]
         });
     }
@@ -343,6 +363,18 @@ Singleton {
         runner.errorText = "";
         runner.exitCode = -1;
         runner.command = job.command;
+        if (!job.guardsConfig) {
+            root._startRunner();
+            return;
+        }
+        // The script about to run reads config.json and writes it back. A
+        // write the shell still owes that file has to be on disk before it is
+        // read, and nothing more may be written until the result has landed.
+        root._holdConfigWrites();
+        configFlush.restart();
+    }
+
+    function _startRunner() {
         runner.running = false;
         runner.running = true;
         watchdog.restart();
@@ -370,6 +402,9 @@ Singleton {
         root.busyAction = "";
         root.busyName = "";
         watchdog.stop();
+        configFlush.stop();
+        if (job && job.guardsConfig)
+            root._releaseConfigWrites();
         if (job)
             root._dispatch(job, payload);
         root._pump();
@@ -478,6 +513,46 @@ Singleton {
 
     function _dropUpdate(name) {
         root.updates = root.updates.filter(entry => entry.name !== name);
+    }
+
+    // ── Holding the config still ─────────────────────────────────────────────
+    //
+    // Config.qml writes config.json on a short debounce of its own. Applying a
+    // preset rewrites that same file from a script, so without this a setting
+    // touched moments earlier would be written back over the preset the
+    // instant it landed.
+
+    readonly property int _configFlushDelay: 150
+    readonly property int _configResumeDelay: 600
+
+    function _holdConfigWrites() {
+        configResume.stop();
+        Config.saveOptionsNow();
+        Config.blockWrites = true;
+    }
+
+    function _releaseConfigWrites() {
+        configResume.restart();
+    }
+
+    Timer {
+        id: configFlush
+        interval: root._configFlushDelay
+        repeat: false
+        onTriggered: root._startRunner()
+    }
+
+    Timer {
+        id: configResume
+        interval: root._configResumeDelay
+        repeat: false
+        onTriggered: {
+            // A config the shell is refusing to write for its own reasons — a
+            // broken file it is preserving — stays blocked. This lifts only
+            // the hold that was put on here.
+            if (!Config.configMalformed)
+                Config.blockWrites = false;
+        }
     }
 
     // ── The one worker ───────────────────────────────────────────────────────

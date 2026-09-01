@@ -17,6 +17,10 @@ ColumnLayout {
     // Applying is the owner's call, not this view's: it holds the dialog that
     // shows what the preset would let run before anything is written.
     signal applyRequested(string name, var scanResult)
+    // Publishing and pulling both belong to the page that owns the dialogs;
+    // this view only knows which preset a button was pressed on.
+    signal publishRequested(string name)
+    signal updateRequested(string name)
 
     property string pendingApplyName: ""
 
@@ -211,7 +215,10 @@ ColumnLayout {
                     height: width * 0.8
                     radius: Appearance.rounding.normal
                     color: Appearance.colors.colSurfaceContainerLow
-                    border.color: presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimary : "transparent")
+                    // The preset the current settings came from is worth
+                    // pointing at: it is what the undo button undoes.
+                    readonly property bool inUse: PresetStore.activePreset === String(model.name)
+                    border.color: presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimary : (presetItem.inUse ? Appearance.colors.colSecondary : "transparent"))
                     border.width: 2
 
                     Behavior on border.color {
@@ -273,12 +280,56 @@ ColumnLayout {
                             StyledText {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: updateButton.left
+                                anchors.right: storeButton.left
                                 anchors.rightMargin: 10
                                 text: model.name
                                 color: Appearance.colors.colOnLayer1
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 elide: Text.ElideRight
+                            }
+
+                            RippleButton {
+                                id: storeButton
+                                // What this button does depends on where the
+                                // preset came from: offer the update if one is
+                                // waiting, offer a release if it is yours, and
+                                // stay out of the way for somebody else's.
+                                readonly property string presetName: String(model.name)
+                                readonly property bool hasUpdate: PresetStore.updateFor(storeButton.presetName) !== null
+                                readonly property bool owned: PresetStore.isOwned(storeButton.presetName)
+                                readonly property bool foreign: PresetStore.isFromStore(storeButton.presetName) && !storeButton.owned
+
+                                anchors.right: updateButton.left
+                                anchors.rightMargin: 5
+                                anchors.verticalCenter: parent.verticalCenter
+                                implicitWidth: 30
+                                implicitHeight: 30
+                                visible: !storeButton.foreign || storeButton.hasUpdate
+                                enabled: !PresetStore.busyFor(storeButton.presetName)
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSecondaryContainer
+                                colBackgroundHover: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colSecondaryContainerHover
+                                colRipple: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colSecondaryContainerActive
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: storeButton.hasUpdate ? "download" : (storeButton.owned ? "publish" : "share")
+                                    iconSize: 16
+                                    color: storeButton.hasUpdate ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSecondaryContainer
+                                }
+
+                                onClicked: {
+                                    if (storeButton.hasUpdate) {
+                                        presetsViewRoot.updateRequested(storeButton.presetName);
+                                        return;
+                                    }
+                                    presetsViewRoot.publishRequested(storeButton.presetName);
+                                }
+
+                                StyledToolTip {
+                                    text: storeButton.hasUpdate ? Translation.tr("An update is waiting")
+                                        : (storeButton.owned ? Translation.tr("Release an update") : Translation.tr("Publish to the store"))
+                                }
                             }
 
                             RippleButton {

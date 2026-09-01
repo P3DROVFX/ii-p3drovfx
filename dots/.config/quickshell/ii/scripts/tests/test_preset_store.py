@@ -468,5 +468,99 @@ class TestPublishGuards(StoreTestCase):
             os.environ["HOME"] = os.path.expanduser("~")
 
 
+class TestScreenshotStaging(StoreTestCase):
+    """Screenshots are the only picture a publisher chooses by hand."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ["HOME"] = self.home
+        self.addCleanup(os.environ.__setitem__, "HOME", os.path.expanduser("~"))
+        with open(os.path.join(self.presets_dir, "Mine.json"), "w", encoding="utf-8") as handle:
+            json.dump({"configVersion": 16}, handle)
+        self.staging = os.path.join(self.root, "staging")
+        os.makedirs(self.staging)
+
+    def shot(self, name, payload=b"\x89PNG shot"):
+        path = os.path.join(self.root, name)
+        with open(path, "wb") as handle:
+            handle.write(payload)
+        return path
+
+    def stage(self, screenshots, manifest=None):
+        import preset_store
+        return preset_store.stage_payload(
+            self.staging, "Mine", manifest if manifest is not None else {"name": "Mine"},
+            screenshots)
+
+    def test_screenshots_are_copied_in_and_listed_in_order(self):
+        manifest = self.stage([self.shot("a.png"), self.shot("b.jpg")])
+        self.assertEqual(manifest["screenshots"], ["screenshots/1.png", "screenshots/2.jpg"])
+        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "1.png")))
+        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "2.jpg")))
+
+    def test_not_naming_any_keeps_what_is_already_published(self):
+        self.stage([self.shot("a.png")])
+        manifest = self.stage(None, {"name": "Mine", "screenshots": ["screenshots/1.png"]})
+        self.assertEqual(manifest["screenshots"], ["screenshots/1.png"])
+        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "1.png")))
+
+    def test_an_empty_list_ships_none_and_clears_the_folder(self):
+        self.stage([self.shot("a.png")])
+        manifest = self.stage([])
+        self.assertEqual(manifest["screenshots"], [])
+        self.assertFalse(os.path.exists(os.path.join(self.staging, "screenshots")))
+
+    def test_replacing_them_does_not_leave_the_old_ones_behind(self):
+        self.stage([self.shot("a.png"), self.shot("b.png")])
+        manifest = self.stage([self.shot("c.jpg")])
+        self.assertEqual(manifest["screenshots"], ["screenshots/1.jpg"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.staging, "screenshots"))), ["1.jpg"])
+
+    def test_something_that_is_not_an_image_is_refused(self):
+        import preset_store
+        with self.assertRaises(preset_store.StoreError):
+            self.stage([self.shot("notes.txt")])
+
+    def test_a_screenshot_that_vanished_is_refused(self):
+        import preset_store
+        with self.assertRaises(preset_store.StoreError):
+            self.stage([os.path.join(self.root, "gone.png")])
+
+    def test_too_many_are_refused(self):
+        import preset_store
+        with self.assertRaises(preset_store.StoreError):
+            self.stage([self.shot("%d.png" % i) for i in range(preset_store.MAX_SCREENSHOTS + 1)])
+
+    def test_an_oversized_screenshot_is_refused(self):
+        import preset_store
+        big = self.shot("big.png", b"0" * (preset_store.MAX_SCREENSHOT_BYTES + 1))
+        with self.assertRaises(preset_store.StoreError):
+            self.stage([big])
+
+    def test_the_readme_lists_them(self):
+        import preset_store
+        manifest = self.stage([self.shot("a.png")])
+        preset_store.write_readme(self.staging, dict(manifest, _repo="someone/mine"))
+        with open(os.path.join(self.staging, "README.md"), encoding="utf-8") as handle:
+            self.assertIn("screenshots/1.png", handle.read())
+
+
+class TestRepeatableOptions(unittest.TestCase):
+    """`--screenshot` has to tell "ship none" apart from "leave them alone"."""
+
+    def test_absent_is_none_and_present_is_a_list(self):
+        import preset_store
+        self.assertIsNone(preset_store.take_options(["publish", "Mine"], "--screenshot"))
+        argv = ["publish", "Mine", "--screenshot", "a.png", "--screenshot", "b.png", "--private"]
+        self.assertEqual(preset_store.take_options(argv, "--screenshot"), ["a.png", "b.png"])
+        self.assertEqual(argv, ["publish", "Mine", "--private"])
+
+    def test_a_trailing_flag_with_no_value_is_dropped(self):
+        import preset_store
+        argv = ["publish", "Mine", "--screenshot"]
+        self.assertEqual(preset_store.take_options(argv, "--screenshot"), [])
+        self.assertEqual(argv, ["publish", "Mine"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

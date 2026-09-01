@@ -1,0 +1,10 @@
+module qs.modules.settings.configs.presets
+
+GithubSignInPanel 1.0 GithubSignInPanel.qml
+PresetDetailDialog 1.0 PresetDetailDialog.qml
+PresetDiffDialog 1.0 PresetDiffDialog.qml
+PresetStoreTab 1.0 PresetStoreTab.qml
+PublishDialog 1.0 PublishDialog.qml
+PublishedPresetsTab 1.0 PublishedPresetsTab.qml
+PushUpdateDialog 1.0 PushUpdateDialog.qml
+StoreResultCard 1.0 StoreResultCard.qml

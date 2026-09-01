@@ -7,15 +7,42 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.settings.configs.presets
 
 ContentPage {
     id: page
     forceWidth: false
 
+    // 0 the presets on this machine · 1 what other people published · 2 yours
+    property alias currentTab: tabBar.currentIndex
+
+    SecondaryTabBar {
+        id: tabBar
+        Layout.fillWidth: true
+
+        SecondaryTabButton {
+            buttonIcon: "style"
+            buttonText: Translation.tr("My presets")
+        }
+
+        SecondaryTabButton {
+            buttonIcon: "storefront"
+            buttonText: PresetStore.updateCount > 0
+                ? Translation.tr("Store (%1)").arg(PresetStore.updateCount)
+                : Translation.tr("Store")
+        }
+
+        SecondaryTabButton {
+            buttonIcon: "cloud_upload"
+            buttonText: Translation.tr("Published")
+        }
+    }
+
     ContentSection {
         icon: "style"
         title: Translation.tr("Presets")
         Layout.fillWidth: true
+        visible: page.currentTab === 0
 
         ConfigPresetsView {
             id: presetsView
@@ -26,12 +53,53 @@ ContentPage {
                 page.scanDetailsShown = false;
                 applyDialog.show = true;
             }
+            onPublishRequested: name => {
+                // A preset that already has a repository is released again;
+                // one that does not gets a repository made for it.
+                if (PresetStore.isOwned(name))
+                    pushDialog.openFor(name);
+                else
+                    publishDialog.openFor(name);
+            }
+            onUpdateRequested: name => PresetStore.pull(name, false)
+        }
+    }
+
+    Loader {
+        Layout.fillWidth: true
+        active: page.currentTab === 1
+        visible: active
+        sourceComponent: storeTabComponent
+    }
+
+    Component {
+        id: storeTabComponent
+
+        PresetStoreTab {
+            onOpenDetails: entry => detailDialog.openFor(entry)
+        }
+    }
+
+    Loader {
+        Layout.fillWidth: true
+        active: page.currentTab === 2
+        visible: active
+        sourceComponent: publishedTabComponent
+    }
+
+    Component {
+        id: publishedTabComponent
+
+        PublishedPresetsTab {
+            onPushRequested: name => pushDialog.openFor(name)
+            onDiffRequested: name => diffDialog.openFor(name, false)
         }
     }
 
     NoticeBox {
         Layout.fillWidth: true
         Layout.topMargin: -20
+        visible: page.currentTab === 0
         text: Translation.tr('Not all options are available in this app. You should also check the config file by hitting the "Config file" button on the topleft corner or opening ~/.config/illogical-impulse/config.json manually.')
 
         RippleButtonWithIcon {
@@ -118,6 +186,13 @@ ContentPage {
         WindowDialogTitle {
             Layout.fillWidth: true
             text: Translation.tr('Apply "%1"?').arg(page.pendingPreset)
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            visible: page.applyBecauseUpdated
+            text: Translation.tr("This is the preset your settings came from, and a new version of it was just downloaded.")
+            color: Appearance.colors.colOnSurface
         }
 
         WindowDialogParagraph {
@@ -250,13 +325,17 @@ ContentPage {
 
             DialogButton {
                 buttonText: Translation.tr("Cancel")
-                onClicked: applyDialog.show = false
+                onClicked: {
+                    page.applyBecauseUpdated = false;
+                    applyDialog.show = false;
+                }
             }
 
             DialogButton {
                 buttonText: Translation.tr("Apply")
                 colEnabled: page.scanTotal > 0 ? Appearance.colors.colError : Appearance.colors.colPrimary
                 onClicked: {
+                    page.applyBecauseUpdated = false;
                     presetsView.applyPreset(page.pendingPreset);
                     applyDialog.show = false;
                 }
@@ -306,6 +385,315 @@ ContentPage {
             cursorShape: Qt.PointingHandCursor
             onEntered: restartFab.expanded = true
             onExited: restartFab.expanded = false
+        }
+    }
+
+    // ── The store ────────────────────────────────────────────────────────────
+
+    // Set when the apply dialog was opened by an update landing rather than by
+    // the preset being clicked, so it can say so.
+    property bool applyBecauseUpdated: false
+
+    property string statusText: ""
+
+    Timer {
+        id: statusTimer
+        interval: 8000
+        repeat: false
+        onTriggered: page.statusText = ""
+    }
+
+    function report(text) {
+        page.statusText = text;
+        statusTimer.restart();
+    }
+
+    Connections {
+        target: PresetStore
+
+        function onInstallFinished(name, ok, error): void {
+            page.report(ok ? Translation.tr('"%1" was added to your presets.').arg(name) : error);
+        }
+
+        function onRemoveFinished(name, ok, error): void {
+            if (!ok)
+                page.report(error);
+        }
+
+        function onPublishFinished(name, ok, repoUrl, error): void {
+            if (!ok) {
+                page.report(error);
+                return;
+            }
+            page.publishedUrl = repoUrl;
+            publishedDialog.show = true;
+        }
+
+        function onPushFinished(name, ok, changed, error): void {
+            if (!ok) {
+                page.report(error);
+                return;
+            }
+            page.report(changed
+                ? Translation.tr('"%1" was updated for everyone who installed it.').arg(name)
+                : Translation.tr("Nothing has changed since the last release."));
+        }
+
+        function onPullFinished(name, ok, changed, error): void {
+            if (!ok) {
+                page.report(error);
+                return;
+            }
+            if (!changed) {
+                page.report(Translation.tr('"%1" was already up to date.').arg(name));
+                return;
+            }
+            page.report(Translation.tr('"%1" was updated.').arg(name));
+            // Downloading an update never changes the running settings. It is
+            // only worth asking about when the settings came from this very
+            // preset, because then the new version is what the machine is
+            // meant to look like.
+            if (name !== PresetStore.activePreset)
+                return;
+            page.applyBecauseUpdated = true;
+            presetsView.requestApply(name);
+        }
+
+        function onRevertFinished(ok): void {
+            page.report(ok ? Translation.tr("Your previous settings are back.")
+                : Translation.tr("There was nothing to go back to."));
+        }
+    }
+
+    property string publishedUrl: ""
+
+    PresetDetailDialog {
+        id: detailDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        z: 100000
+        onInstallRequested: repo => PresetStore.install(repo, "", false)
+    }
+
+    PublishDialog {
+        id: publishDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        z: 100000
+    }
+
+    PushUpdateDialog {
+        id: pushDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        z: 100000
+        onDiffRequested: name => diffDialog.openFor(name, false)
+    }
+
+    PresetDiffDialog {
+        id: diffDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        z: 100001
+    }
+
+    WindowDialog {
+        id: publishedDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        preferredDialogWidth: 520
+        onDismiss: show = false
+        z: 100000
+
+        WindowDialogTitle {
+            Layout.fillWidth: true
+            text: Translation.tr("It is published")
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            text: Translation.tr("The repository is tagged with the store's topic, so it shows up in the Store tab for everyone. Searching GitHub for a brand new repository can take a few minutes.")
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            icon: "link"
+            title: Translation.tr("Its address")
+            codeSnippet: page.publishedUrl
+        }
+
+        WindowDialogButtonRow {
+            Layout.fillWidth: true
+
+            Item { Layout.fillWidth: true }
+
+            DialogButton {
+                buttonText: Translation.tr("Open on GitHub")
+                onClicked: {
+                    if (page.publishedUrl.length > 0)
+                        Quickshell.execDetached(["xdg-open", page.publishedUrl]);
+                }
+            }
+
+            DialogButton {
+                buttonText: Translation.tr("Done")
+                onClicked: publishedDialog.show = false
+            }
+        }
+    }
+
+    // Applying snapshots the settings first, and until now the only way back
+    // was the command line.
+    FloatingActionButton {
+        id: revertFab
+        parent: page.parent
+        anchors {
+            right: parent ? parent.right : undefined
+            bottom: parent ? parent.bottom : undefined
+            rightMargin: 30
+            bottomMargin: restartFab.visible ? 30 + restartFab.height + 12 : 30
+        }
+        z: 100
+        iconText: "undo"
+        buttonText: Translation.tr("Undo preset")
+        expanded: false
+        visible: opacity > 0
+        opacity: (PresetStore.activePreset.length > 0 && !PresetStore.busy) ? 1 : 0
+        scale: opacity
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+
+        colBackground: Appearance.colors.colSecondaryContainer
+        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+        colRipple: Appearance.colors.colSecondaryContainerActive
+        colOnBackground: Appearance.colors.colOnSecondaryContainer
+
+        onClicked: revertDialog.show = true
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onEntered: revertFab.expanded = true
+            onExited: revertFab.expanded = false
+        }
+
+        StyledToolTip {
+            text: Translation.tr("Go back to the settings you had before applying %1")
+                .arg(PresetStore.activePreset)
+        }
+    }
+
+    WindowDialog {
+        id: revertDialog
+        parent: page.parent ? page.parent : page
+        anchors.fill: parent
+        show: false
+        preferredDialogWidth: 460
+        onDismiss: show = false
+        z: 100000
+
+        WindowDialogTitle {
+            Layout.fillWidth: true
+            text: Translation.tr("Undo the preset?")
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            text: Translation.tr("Your settings go back to the snapshot taken just before the last preset was applied. Anything changed since then goes with it.")
+        }
+
+        WindowDialogButtonRow {
+            Layout.fillWidth: true
+
+            Item { Layout.fillWidth: true }
+
+            DialogButton {
+                buttonText: Translation.tr("Cancel")
+                onClicked: revertDialog.show = false
+            }
+
+            DialogButton {
+                buttonText: Translation.tr("Undo")
+                colEnabled: Appearance.colors.colError
+                onClicked: {
+                    PresetStore.revert();
+                    revertDialog.show = false;
+                }
+            }
+        }
+    }
+
+    // One line of feedback for work that happens without a dialog in front of
+    // it — an install finishing, an update landing, a push refused.
+    Rectangle {
+        parent: page.parent
+        anchors {
+            left: parent ? parent.left : undefined
+            right: parent ? parent.right : undefined
+            bottom: parent ? parent.bottom : undefined
+            margins: 20
+        }
+        z: 99
+        implicitHeight: statusRow.implicitHeight + 20
+        radius: Appearance.rounding.small
+        color: Appearance.colors.colSurfaceContainerHighest
+        visible: opacity > 0
+        opacity: page.statusText.length > 0 ? 1 : 0
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        RowLayout {
+            id: statusRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.margins: 12
+            spacing: 8
+
+            MaterialSymbol {
+                text: "info"
+                iconSize: 18
+                color: Appearance.colors.colOnSurface
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: page.statusText
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurface
+            }
+
+            RippleButton {
+                implicitWidth: 26
+                implicitHeight: 26
+                buttonRadius: Appearance.rounding.full
+                colBackground: "transparent"
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "close"
+                    iconSize: 15
+                    color: Appearance.colors.colOnSurface
+                }
+
+                onClicked: page.statusText = ""
+            }
         }
     }
 }
