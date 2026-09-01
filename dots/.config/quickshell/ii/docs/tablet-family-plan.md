@@ -19,7 +19,7 @@
 | **1** | Acabamento da bar de tablet | ✅ **concluída** |
 | **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
 | **4** | Gestos: múltiplos handlers + ações por família | ✅ **concluída** (arrasto fora das bordas entregue na Fase 3) |
-| **3** | Tela inicial: gaveta, dock, workspaces, grid | 🟡 **parcial** — falta ícones no desktop (3b) e recentes (3e) |
+| **3** | Tela inicial: gaveta, dock, workspaces, grid, recentes | 🟡 **quase** — 1 bloqueio de camada (ver §6) |
 | **5** | Application windows + layout de módulos | ⬜ a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
@@ -383,6 +383,28 @@ O que sobrou de parâmetro atravessando fronteira, e por quê:
 Nada disso está mais dentro de `modules/ii/` a não ser o `forceTop`, que é o mecanismo
 correto e não uma gambiarra.
 
+### 🚧 Bloqueio: duas superfícies de desktop na mesma camada
+
+Os ícones do home screen (`quickshell:tabletHomeIcons`) e a janela de widgets de desktop da
+ii (`quickshell:backgroundWidgets`) estão **ambas na camada Bottom**. A da ii é criada
+depois e **não define máscara de input**, então sua região de input cobre a tela inteira e o
+compositor nunca roteia um toque para os ícones embaixo.
+
+Os ícones **renderizam corretamente** e toda a interação funciona — verificado subindo a
+janela para a camada Top temporariamente, onde arrastar e o badge de remover funcionam. Na
+Bottom eles aparecem e não respondem.
+
+**Isto é uma decisão de design, não um bug a corrigir às cegas.** Três caminhos:
+
+| | O que fazer | Custo |
+|---|---|---|
+| **A** | A tablet family deixa de carregar a superfície de widgets da ii | Perde os widgets de desktop da ii na tablet. Contradiz a D4 ("convivem no mesmo grid"). Hoje custaria o widget `media`, que está ativo. |
+| **B** | Promover o canvas de widgets da ii para `modules/common`, e a tablet hospeda um canvas próprio com **widgets + ícones** | É literalmente o que a D4 pediu. Promoção grande, no estilo da Fase 2. |
+| **C** | Dar máscara ao `BackgroundWidgetsWindow` da ii, restrita aos widgets fora do modo de edição | Correção legítima na ii (uma superfície que captura input da tela toda na camada Bottom impede qualquer outra de existir ali), mas mexe em arrastar widget, overlay de grid e menus de contexto — risco de regressão real. |
+
+**Recomendação: B.** É o que a D4 pediu e é a única que não troca um problema por outro.
+**Precisa da decisão do mantenedor antes de seguir.**
+
 ### Conhecido, ainda aberto
 
 - **`SidebarPerformancePolicy.js`** continua em `modules/ii/sidebarDashboard/`. É usado só
@@ -518,15 +540,18 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 
 #### 3b. Ícones no grid (D4) 🟡
 - [x] `Appearance.sizes.widgetGridStep` — 40 na tablet, 10 no resto. Sem grid novo.
-- [ ] Arrastar app da gaveta para o desktop; entre workspaces; para remover; pasta ao
-      soltar ícone sobre ícone.
-- [ ] Persistência em `Persistent.qml` (é estado, não preferência), por workspace e monitor.
-- [ ] Long-press → menu de contexto.
+- [x] `modules/tablet/homeScreen/` — ícones no wallpaper, um conjunto por workspace.
+- [x] Long-press na gaveta adiciona ao home screen atual; arrastar move (com snap no grid);
+      long-press no ícone arma um badge × que exige um segundo toque deliberado.
+- [x] Persistência em `Persistent.states.tablet.homeIconsJson`, por workspace.
+- [ ] **Bloqueado por conflito de camada** — ver §6.
+- [ ] Arrastar entre workspaces; pasta ao soltar ícone sobre ícone.
 
-#### 3e. Recentes (D2) ⬜
-- [ ] `modules/tablet/recents/` — carrossel de apps abertos, design Android tablet.
-- [ ] Botão/gesto para abrir workspace nova.
-- [ ] Aposentar o `Overview` da ii no `TabletFamily.qml`.
+#### 3e. Recentes (D2) ✅
+- [x] `modules/tablet/recents/` — carrossel de janelas abertas com screencopy, ícone e
+      título; toque foca a janela, arrasto para cima fecha.
+- [x] Pill "New workspace" leva a um workspace vazio.
+- [x] `Overview` da ii aposentado no `TabletFamily.qml`, junto do `OverviewWindowTransition`.
 
 ### Fase 5 — Application windows (D6)
 
