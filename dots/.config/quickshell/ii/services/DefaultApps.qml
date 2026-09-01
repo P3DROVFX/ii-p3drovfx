@@ -93,6 +93,14 @@ Singleton {
         return String(root.defaults[id] ?? "");
     }
 
+    /// xdg-mime only accepts full desktop file names, while DesktopEntry.id drops the suffix.
+    function desktopFileId(id: string): string {
+        const desktopId = String(id ?? "").trim();
+        if (desktopId === "")
+            return "";
+        return desktopId.endsWith(".desktop") ? desktopId : desktopId + ".desktop";
+    }
+
     function desktopEntry(id: string): var {
         const desktopId = String(id ?? "");
         if (desktopId === "")
@@ -154,7 +162,7 @@ Singleton {
 
     function setDefault(categoryId: string, desktopId: string): bool {
         const entry = root.category(categoryId);
-        const cleanedId = String(desktopId ?? "").trim();
+        const cleanedId = root.desktopFileId(desktopId);
         if (!entry || cleanedId === "" || root.updating)
             return false;
 
