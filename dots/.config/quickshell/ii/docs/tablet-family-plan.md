@@ -610,10 +610,25 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       distintos, que é o que são aqui.
 - [x] Apps de sistema **sempre listados** na gaveta, liderando a grade. Escondê-los atrás
       da busca significava que só achava quem já sabia que existiam.
-- [ ] Diálogos da shade: hoje redimensionados por fora (`dialogWidth`) mas com layout
-      interno de sidebar de 460px.
+- [x] **Long-press alcança todo `altAction`** no `RippleButton`. Era só botão direito — o
+      caminho por trás do diálogo de cada quick toggle e das tooltips que literalmente dizem
+      *"Right-click to configure"*. Um dedo não tem botão direito, então na tablet essas
+      ações não tinham entrada nenhuma. Armado só quando existe `altAction` e só em família
+      touch-first; a ação roda no **release**, porque abrir o diálogo com o dedo ainda
+      pressionado colocava o scrim dele embaixo do dedo e o release dispensava o que tinha
+      acabado de abrir. O clique final é suprimido, senão abrir os ajustes de um toggle o
+      alternaria no caminho.
+- [x] **On-screen keyboard** como app da gaveta — cidadão de primeira classe, já que nada
+      aqui pressupõe teclado físico e alcançá-lo só por keybind é circular.
+- [ ] **Aberto:** o diálogo de um quick toggle não aparece nem pelo long-press nem pelo
+      botão direito documentado — **nem na tablet nem na ii**. A falha é anterior a esta
+      mudança, mas de fora não deu para distinguir bug pré-existente de clique direito
+      sintético não contando (`console.log` não chega ao log aqui). Vale olhar com ponteiro
+      real.
+- [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
+      via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
+      *interno* — listas e linhas ainda desenhadas para a sidebar estreita.
 - [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
-- [ ] On-screen keyboard como cidadão de primeira classe.
 
 ### Fase 6 — Settings adaptado para toque
 
