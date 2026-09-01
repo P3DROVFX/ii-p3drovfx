@@ -1,0 +1,3 @@
+singleton TabletNavigation 1.0 TabletNavigation.qml
+TabletBottomEdgeHandler 1.0 TabletBottomEdgeHandler.qml
+TabletBackEdgeHandler 1.0 TabletBackEdgeHandler.qml

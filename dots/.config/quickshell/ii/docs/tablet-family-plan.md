@@ -544,7 +544,9 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] **Sem fundo**: linha horizontal na largura da tela, ícones direto no wallpaper, como
       na home screen do Android. Glifos com contorno e divisórias brancas, porque o
       wallpaper embaixo é arbitrário.
-- [x] **Botões de navegação** do Android no canto esquerdo: voltar, home, recentes.
+- [x] **Botões de navegação** do Android no lado direito: `arrow_back_ios_new`,
+      `check_box_outline_blank` e `radio_button_unchecked`, com o mesmo hit target vertical
+      dos apps. A ordem é configurável.
       Voltar sai da superfície do shell que estiver por cima, em ordem, e é inerte numa home
       screen vazia — exatamente como o do Android, já que não existe "tela anterior"
       genérica para um aplicativo qualquer. Home fecha o que estiver aberto e cai num
@@ -557,7 +559,14 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       rodando, como no Android.
 - [x] Compartilha a lista de fixos via `TaskbarApps` — são os favoritos do usuário, não
       propriedade da dock de um shell, então os pinos atravessam as famílias.
-- [x] `exclusionMode: Ignore` (flutua, não reserva faixa) e máscara de input só no pill.
+- [x] Reserva uma faixa real via `exclusionMode: Normal` + `exclusiveZone`: apps tiled param
+      acima da dock. A faixa é liberada ao esconder a dock ou se o usuário escolher o modo
+      overlay.
+- [x] Reutiliza `DockIcon` do módulo comum: máscara Material, monocromia e dimming são os
+      mesmos da dock do ii, sem acoplamento da TabletFamily ao módulo `ii`.
+- [x] Settings › Tablet concentra reserva, auto-hide, visibilidade de apps/navegação/recentes/
+      gaveta/divisórias, tamanho, contador de páginas (e compactação sem ele) e aparência
+      adaptativa dos ícones.
 - [x] Some enquanto a gaveta está aberta.
 
 #### 3a. Workspaces como home screens ✅

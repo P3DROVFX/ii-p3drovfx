@@ -16,11 +16,12 @@ Item {
     property string symbol: ""
     property real symbolSize: 22
     property real symbolRotation: 0
+    property real buttonSize: Appearance.sizes.minimumTouchTarget
 
     signal activated
 
-    implicitWidth: Appearance.sizes.minimumTouchTarget
-    implicitHeight: Appearance.sizes.minimumTouchTarget
+    implicitWidth: root.buttonSize
+    implicitHeight: root.buttonSize
 
     Rectangle {
         anchors.centerIn: parent
@@ -40,11 +41,8 @@ Item {
         text: root.symbol
         iconSize: root.symbolSize
         rotation: root.symbolRotation
-        // The dock sits on the wallpaper with no plate behind it, so the glyph carries its
-        // own contrast rather than trusting whatever image is underneath.
-        color: "white"
-        style: Text.Outline
-        styleColor: Qt.rgba(0, 0, 0, 0.45)
+        fill: 0
+        color: Appearance.colors.colOnLayer0
     }
 
     MouseArea {

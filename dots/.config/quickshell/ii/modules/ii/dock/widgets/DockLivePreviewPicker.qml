@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.dock
 import qs.services
 
 PopupWindow {

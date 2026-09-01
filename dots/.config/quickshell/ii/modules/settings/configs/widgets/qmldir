@@ -19,6 +19,8 @@ PrivacyConnectionCards 1.0 PrivacyConnectionCards.qml
 SoundStatusHeader 1.0 SoundStatusHeader.qml
 TimeDatePreview 1.0 TimeDatePreview.qml
 TimetableStatusCard 1.0 TimetableStatusCard.qml
+TabletDockIconConfig 1.0 TabletDockIconConfig.qml
+TabletDockNavigationConfig 1.0 TabletDockNavigationConfig.qml
 TouchGestureBindingCard 1.0 TouchGestureBindingCard.qml
 TouchGestureScreenPreview 1.0 TouchGestureScreenPreview.qml
 TouchGestureStatusCard 1.0 TouchGestureStatusCard.qml

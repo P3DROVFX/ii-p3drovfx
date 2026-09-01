@@ -8,6 +8,7 @@ import Quickshell.Wayland
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.dock
 import qs.services
 
 import "./widgets"

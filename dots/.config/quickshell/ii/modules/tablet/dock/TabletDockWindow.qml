@@ -10,32 +10,22 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.tablet.navigation
 
 /**
- * The tablet dock: Android's three navigation buttons in the corner, and the app row across
- * the bottom of the screen.
+ * Tablet taskbar: an Android-style launcher row with three-button navigation.
  *
- * No plate behind it. An Android tablet's home screen puts its icons straight onto the
- * wallpaper — the taskbar pill only appears over an app — so the dock here is a bare
- * full-width row and the icons carry their own contrast.
- *
- * Modelled on the Pixel Tablet taskbar rather than on modules/ii/dock. That is 6919 lines
- * of magnification, live previews, smart grouping, media/weather/sports widgets, drag
- * reordering and per-file context menus, every one of which assumes a cursor. What it does
- * share is the reveal rule, which is the right one: the app row belongs to an empty home
- * screen, and gets out of the way once something is running.
+ * Unlike its first overlay-only version, this is a real layer-shell reservation. Apps tile
+ * above it instead of disappearing beneath it, while the user can still release that space
+ * through the tablet-only auto-hide and reservation preferences.
  */
 PanelWindow {
     id: root
 
     readonly property string screenName: root.screen?.name ?? ""
-
-    // ── Reveal ──────────────────────────────────────────────────────────────
-    // Same rule as the ii dock: pinned always, otherwise only while this workspace has
-    // nothing open. The navigation buttons are deliberately NOT part of this — they are
-    // system controls, and a shell whose only way home disappears the moment you open
-    // something is a shell you can get stuck in.
-    property bool pinned: Config.options?.dock.pinnedOnStartup ?? false
+    readonly property var tabletDock: Config.options?.tablet?.dock
+    readonly property bool pinned: Config.options?.dock?.pinnedOnStartup ?? false
+    readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
     readonly property bool workspaceEmpty: {
         const workspaceId = HyprlandData.activeWorkspace?.id ?? -1;
@@ -44,20 +34,33 @@ PanelWindow {
         return HyprlandData.hyprlandClientsForWorkspace(workspaceId).length === 0;
     }
 
-    readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
-    readonly property bool appsRevealed: root.pinned
-        || (!root.anySidebarOpen && root.workspaceEmpty)
+    readonly property bool appRowEnabled: root.tabletDock?.showAppRow ?? true
+    readonly property bool autoHideOnOccupiedWorkspace: root.tabletDock?.autoHideOnOccupiedWorkspace ?? true
+    readonly property bool appsRevealed: root.appRowEnabled && (root.pinned || (!root.anySidebarOpen
+        && (!root.autoHideOnOccupiedWorkspace || root.workspaceEmpty)))
+    readonly property bool navigationEnabled: root.tabletDock?.showNavigation ?? true
+    readonly property bool navigationRevealed: root.navigationEnabled
+        && (root.appsRevealed || (root.tabletDock?.keepNavigationVisible ?? true))
+    readonly property bool dockRevealed: root.appsRevealed || root.navigationRevealed
+    readonly property bool surfaceVisible: Config.ready && !GlobalStates.screenLocked
+        && !GlobalStates.appDrawerOpen && root.dockRevealed
+    readonly property bool reservesSpace: (root.tabletDock?.reserveSpace ?? true) && root.surfaceVisible
 
-    // ── Apps ────────────────────────────────────────────────────────────────
-    // The pins are the ones the ii dock uses. Sharing the list is deliberate: it is the
-    // user's set of favourite apps, not a property of one shell's dock.
+    readonly property real appIconSize: root.tabletDock?.iconSize ?? Appearance.sizes.minimumTouchTarget
+    readonly property real appButtonSize: root.appIconSize + Appearance.sizes.elevationMargin * 2
+    readonly property real pageIndicatorSize: Appearance.sizes.elevationMargin * 0.75
+
+    // Favourite apps and adaptive icon treatment are deliberately shared with the ii dock:
+    // they are personal launcher choices, not a desktop-family preference.
     readonly property var pinnedApps: Config.options?.dock?.pinnedApps ?? []
-
-    /// Apps with a window open that are not already pinned, most recent last. Capped
-    /// because the dock is a fixed strip, not a task list — recents is where everything
-    /// open belongs.
     readonly property int maximumRecents: 3
+    readonly property bool showRunningApps: root.tabletDock?.showRunningApps ?? true
+    readonly property bool showAppDrawerButton: root.tabletDock?.showAppDrawerButton ?? true
+    readonly property bool showAppDividers: root.tabletDock?.showAppDividers ?? true
+
     readonly property var recentApps: {
+        if (!root.showRunningApps)
+            return [];
         const pinnedNormalized = root.pinnedApps.map(id => TaskbarApps.normalizeAppId(id));
         const seen = [];
         for (const toplevel of (ToplevelManager.toplevels?.values ?? [])) {
@@ -90,83 +93,41 @@ PanelWindow {
         TaskbarApps.getCachedDesktopEntry(appId)?.execute();
     }
 
-    // ── Navigation ──────────────────────────────────────────────────────────
-    /// Android's back: leave whatever shell surface is on top. There is no generic
-    /// "previous screen" for an arbitrary application, so this stops at the shell's own
-    /// surfaces and is inert on a bare home screen, exactly as Android's back is.
-    function navigateBack() {
-        if (GlobalStates.tabletAppId.length > 0) {
-            GlobalStates.closeTabletApp();
-            return;
+    readonly property var navigationOrder: {
+        const configured = root.tabletDock?.navigationOrder ?? ["back", "home", "recents"];
+        const accepted = ["back", "home", "recents"];
+        const ordered = [];
+        for (const action of configured) {
+            if (accepted.indexOf(action) !== -1 && ordered.indexOf(action) === -1)
+                ordered.push(action);
         }
-        if (GlobalStates.appDrawerOpen) {
-            GlobalStates.appDrawerOpen = false;
-            return;
+        for (const action of accepted) {
+            if (ordered.indexOf(action) === -1)
+                ordered.push(action);
         }
-        if (GlobalStates.recentsOpen) {
-            GlobalStates.recentsOpen = false;
-            return;
-        }
-        if (GlobalStates.dashboardPanelOpen) {
-            GlobalStates.dashboardPanelOpen = false;
-            return;
-        }
-        if (GlobalStates.sidebarLeftOpen)
-            GlobalStates.sidebarLeftOpen = false;
+        return ordered;
     }
 
-    /// Home: close whatever is open and land on an empty workspace, which is this family's
-    /// home screen.
-    function navigateHome() {
-        GlobalStates.closeTabletApp();
-        GlobalStates.appDrawerOpen = false;
-        GlobalStates.recentsOpen = false;
-        Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+    function navigationSymbol(action) {
+        if (action === "back")
+            return "arrow_back_ios_new";
+        if (action === "home")
+            return "check_box_outline_blank";
+        return "radio_button_unchecked";
     }
 
-    visible: Config.ready && !GlobalStates.screenLocked && !GlobalStates.appDrawerOpen
-
-    anchors {
-        bottom: true
-        left: true
-        right: true
-    }
-    color: "transparent"
-    implicitHeight: dockColumn.implicitHeight + 20
-
-    // Ignore, not Auto: the dock floats over the desktop the way Android's taskbar does,
-    // rather than reserving a strip that every window then has to lay out around.
-    exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.namespace: "quickshell:tabletDock"
-    WlrLayershell.layer: WlrLayer.Top
-
-    // Only the buttons take input. Without this the invisible full-width strip would
-    // swallow taps meant for whatever is behind it — and unlike the old pill this row now
-    // spans the whole screen, so the mask matters much more.
-    mask: Region {
-        regions: [navRegion, appsRegion]
+    function activateNavigation(action) {
+        if (action === "back")
+            TabletNavigation.back();
+        else if (action === "home")
+            TabletNavigation.home();
+        else
+            TabletNavigation.recents(root.screenName);
     }
 
-    Region {
-        id: navRegion
-        item: navRow
-    }
-
-    Region {
-        id: appsRegion
-        item: appRow
-        // A hidden row must not keep taking input where it used to be.
-        intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
-    }
-
-    // ── Page indicator ──────────────────────────────────────────────────────
-    // Which home screen you are on. Only the workspaces on this monitor count: with a
-    // second display, showing every workspace in the session would make the indicator
-    // disagree with the swipe, which moves within the monitor.
     readonly property var monitorWorkspaces: {
         const list = [];
         for (const workspace of (Hyprland.workspaces?.values ?? [])) {
-            // Special workspaces (scratchpad) have negative ids and are not pages.
             if (workspace && workspace.id > 0 && workspace.monitor?.name === root.screenName)
                 list.push(workspace.id);
         }
@@ -176,75 +137,113 @@ PanelWindow {
         const monitor = Hyprland.monitors.values.find(m => m.name === root.screenName);
         return monitor?.activeWorkspace?.id ?? -1;
     }
+    readonly property bool pageCounterVisible: (root.tabletDock?.showPageCounter ?? true)
+        && root.monitorWorkspaces.length > 1
+        && (!(root.tabletDock?.hidePageCounterOnOccupiedWorkspace ?? true) || root.workspaceEmpty)
+    readonly property bool compactWhenPageCounterHidden: root.tabletDock?.compactWhenPageCounterHidden ?? true
+    readonly property real dockContentHeight: dockColumn.implicitHeight + Appearance.sizes.elevationMargin * 2
+
+    visible: root.surfaceVisible
+
+    anchors {
+        bottom: true
+        left: true
+        right: true
+    }
+    color: "transparent"
+    implicitHeight: root.pageCounterVisible || !root.compactWhenPageCounterHidden
+        ? Math.max(root.tabletDock?.height ?? root.appButtonSize, root.dockContentHeight)
+        : root.dockContentHeight
+
+    // An explicit zone is used instead of ExclusionMode.Auto so the reserve follows the
+    // tablet auto-hide state exactly. A hidden dock releases the work area in the same frame.
+    exclusionMode: ExclusionMode.Normal
+    exclusiveZone: root.reservesSpace ? root.implicitHeight : 0
+    WlrLayershell.namespace: "quickshell:tabletDock"
+    WlrLayershell.layer: WlrLayer.Top
+
+    // The transparent reserved strip must never swallow taps intended for an application.
+    mask: Region {
+        regions: [navigationRegion, appsRegion]
+    }
+
+    Region {
+        id: navigationRegion
+        item: navigationRow
+        intersection: root.navigationRevealed ? Intersection.Combine : Intersection.Subtract
+    }
+
+    Region {
+        id: appsRegion
+        item: appRow
+        intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
+    }
 
     ColumnLayout {
         id: dockColumn
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 10
-        spacing: 10
+        anchors.fill: parent
+        anchors.margins: Appearance.sizes.elevationMargin
+        spacing: Appearance.sizes.elevationMargin / 2
 
-        RowLayout {
+        Loader {
+            id: pageCounterLoader
             Layout.alignment: Qt.AlignHCenter
-            spacing: 7
-            visible: root.appsRevealed && root.monitorWorkspaces.length > 1
-            opacity: root.appsRevealed ? 1 : 0
+            Layout.minimumHeight: 0
+            Layout.preferredHeight: item?.implicitHeight ?? 0
+            Layout.maximumHeight: Layout.preferredHeight
+            active: root.pageCounterVisible
 
-            Behavior on opacity {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-            }
+            sourceComponent: RowLayout {
+                spacing: Appearance.sizes.elevationMargin * 0.875
 
-            Repeater {
-                model: root.monitorWorkspaces
+                Repeater {
+                    model: root.monitorWorkspaces
 
-                delegate: Rectangle {
-                    required property int modelData
-                    readonly property bool current: modelData === root.activeWorkspaceId
+                    delegate: Rectangle {
+                        required property int modelData
+                        readonly property bool current: modelData === root.activeWorkspaceId
 
-                    implicitWidth: current ? 18 : 6
-                    implicitHeight: 6
-                    radius: height / 2
-                    color: "white"
-                    opacity: current ? 0.95 : 0.45
+                        implicitWidth: current ? root.pageIndicatorSize * 3 : root.pageIndicatorSize
+                        implicitHeight: root.pageIndicatorSize
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colOnLayer0
+                        opacity: current ? 0.95 : 0.45
 
-                    Behavior on implicitWidth {
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        Behavior on implicitWidth {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
                     }
                 }
             }
         }
 
-        // The bottom line: navigation pinned to the corner, apps across the middle.
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(navRow.implicitHeight, appRow.implicitHeight)
+            Layout.preferredHeight: root.appButtonSize
 
             RowLayout {
-                id: navRow
-                anchors.left: parent.left
-                anchors.leftMargin: 16
+                id: navigationRow
+                anchors.right: parent.right
+                anchors.rightMargin: Appearance.sizes.elevationMargin
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 4
+                spacing: Appearance.sizes.elevationMargin / 2
+                visible: root.navigationRevealed
+                opacity: visible ? 1 : 0
 
-                TabletNavButton {
-                    symbol: "arrow_back_ios_new"
-                    symbolSize: 18
-                    onActivated: root.navigateBack()
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
-                TabletNavButton {
-                    // Android's home is a circle; the filled one reads as a button rather
-                    // than as a status dot at this size.
-                    symbol: "circle"
-                    symbolSize: 15
-                    onActivated: root.navigateHome()
-                }
+                Repeater {
+                    model: root.navigationOrder
 
-                TabletNavButton {
-                    symbol: "square"
-                    symbolSize: 15
-                    onActivated: GlobalStates.toggleRecents(root.screenName)
+                    delegate: TabletNavButton {
+                        required property string modelData
+                        symbol: root.navigationSymbol(modelData)
+                        buttonSize: root.appButtonSize
+                        symbolSize: root.appIconSize * 0.625
+                        onActivated: root.activateNavigation(modelData)
+                    }
                 }
             }
 
@@ -252,12 +251,11 @@ PanelWindow {
                 id: appRow
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 10
-
-                opacity: root.appsRevealed ? 1 : 0
-                visible: opacity > 0.01
+                spacing: Appearance.sizes.elevationMargin
+                visible: root.appsRevealed
+                opacity: visible ? 1 : 0
                 transform: Translate {
-                    y: (1 - appRow.opacity) * 24
+                    y: (1 - appRow.opacity) * root.appButtonSize
                 }
 
                 Behavior on opacity {
@@ -270,20 +268,21 @@ PanelWindow {
                     delegate: TabletDockButton {
                         required property string modelData
                         appId: modelData
-                        iconSource: Quickshell.iconPath(TaskbarApps.getCachedIcon(modelData), "image-missing")
+                        iconSize: root.appIconSize
+                        buttonSize: root.appButtonSize
                         running: root.isRunning(modelData)
                         onActivated: root.launch(modelData)
                     }
                 }
 
-                // Divider, exactly as Android separates favourites from what is merely open.
                 Rectangle {
-                    visible: root.recentApps.length > 0
-                    Layout.preferredWidth: 1
-                    Layout.preferredHeight: appRow.implicitHeight * 0.45
-                    Layout.leftMargin: 4
-                    Layout.rightMargin: 4
-                    color: "white"
+                    visible: root.showAppDividers && root.pinnedApps.length > 0 && root.recentApps.length > 0
+                    Layout.preferredWidth: Appearance.sizes.elevationMargin / 8
+                    Layout.preferredHeight: root.appButtonSize * 0.45
+                    Layout.leftMargin: Appearance.sizes.elevationMargin / 2
+                    Layout.rightMargin: Appearance.sizes.elevationMargin / 2
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colOnLayer0
                     opacity: 0.3
                 }
 
@@ -293,34 +292,39 @@ PanelWindow {
                     delegate: TabletDockButton {
                         required property string modelData
                         appId: modelData
-                        iconSource: Quickshell.iconPath(TaskbarApps.getCachedIcon(modelData), "image-missing")
+                        iconSize: root.appIconSize
+                        buttonSize: root.appButtonSize
                         running: true
                         onActivated: root.launch(modelData)
                     }
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 1
-                    Layout.preferredHeight: appRow.implicitHeight * 0.45
-                    Layout.leftMargin: 4
-                    Layout.rightMargin: 4
-                    color: "white"
+                    visible: root.showAppDividers && root.showAppDrawerButton
+                        && (root.pinnedApps.length > 0 || root.recentApps.length > 0)
+                    Layout.preferredWidth: Appearance.sizes.elevationMargin / 8
+                    Layout.preferredHeight: root.appButtonSize * 0.45
+                    Layout.leftMargin: Appearance.sizes.elevationMargin / 2
+                    Layout.rightMargin: Appearance.sizes.elevationMargin / 2
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colOnLayer0
                     opacity: 0.3
                 }
 
-                // The drawer is also a swipe up from the bottom edge; this is the same door
-                // for anyone driving the shell with a pointer.
                 TabletDockButton {
-                    iconSize: 40
-                    onActivated: GlobalStates.openAppDrawer(root.screenName)
+                    visible: root.showAppDrawerButton
+                    iconSize: root.appIconSize
+                    buttonSize: root.appButtonSize
+                    onActivated: TabletNavigation.appDrawer(root.screenName)
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "apps"
-                        iconSize: 26
-                        color: "white"
+                        iconSize: root.appIconSize * 0.625
+                        fill: 1
+                        color: Appearance.colors.colOnLayer0
                         style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.45)
+                        styleColor: Appearance.colors.colLayer0
                     }
                 }
             }

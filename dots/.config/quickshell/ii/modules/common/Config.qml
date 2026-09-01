@@ -1459,6 +1459,30 @@ Singleton {
 
             property string panelFamily: "ii" // "ii", "tablet", "waffle"
 
+            // Preferences for surfaces that exist only in the tablet family. Keeping these
+            // apart from `dock` lets the ii dock retain its desktop defaults while the two
+            // families still share the user's pinned apps and adaptive-icon treatment.
+            property JsonObject tablet: JsonObject {
+                property JsonObject dock: JsonObject {
+                    // The taskbar is a real layer-shell reservation by default. It can be
+                    // released only when the user deliberately prefers overlay behaviour.
+                    property bool reserveSpace: true
+                    property int height: 96
+                    property int iconSize: 48
+                    property bool showAppRow: true
+                    property bool autoHideOnOccupiedWorkspace: true
+                    property bool keepNavigationVisible: true
+                    property bool showNavigation: true
+                    property list<string> navigationOrder: ["back", "home", "recents"]
+                    property bool showRunningApps: true
+                    property bool showAppDrawerButton: true
+                    property bool showAppDividers: true
+                    property bool showPageCounter: true
+                    property bool hidePageCounterOnOccupiedWorkspace: true
+                    property bool compactWhenPageCounterHidden: true
+                }
+            }
+
             property JsonObject policies: JsonObject {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local
                 property int weeb: 0 // 0: No | 1: Open | 2: Closet

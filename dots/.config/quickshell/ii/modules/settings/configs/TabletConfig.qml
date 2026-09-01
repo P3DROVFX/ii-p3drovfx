@@ -75,6 +75,25 @@ Item {
             title: Translation.tr("Dock")
             icon: "dock_to_bottom"
 
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "vertical_align_bottom"
+                text: Translation.tr("The tablet dock reserves the bottom edge, so tiled applications stop above it instead of rendering underneath it.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "space_bar"
+                text: Translation.tr("Reserve screen space")
+                checked: Config.options.tablet.dock.reserveSpace
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.reserveSpace)
+                        Config.options.tablet.dock.reserveSpace = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Keeps a real work area for the dock. Turn this off only if you prefer applications to extend behind it.")
+                }
+            }
+
             ConfigSwitch {
                 buttonIcon: "push_pin"
                 text: Translation.tr("Keep the app row pinned")
@@ -84,8 +103,142 @@ Item {
                         Config.options.dock.pinnedOnStartup = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Unpinned, the app row shows only while the workspace is empty and gets out of the way once something is running. The navigation buttons are always visible either way.")
+                    text: Translation.tr("Unpinned, the app row follows the automatic visibility rules below. This preference remains shared with the desktop dock for backwards compatibility.")
                 }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "apps"
+                text: Translation.tr("Show app row")
+                checked: Config.options.tablet.dock.showAppRow
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showAppRow)
+                        Config.options.tablet.dock.showAppRow = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "visibility_off"
+                text: Translation.tr("Hide app row in occupied workspaces")
+                visible: Config.options.tablet.dock.showAppRow
+                checked: Config.options.tablet.dock.autoHideOnOccupiedWorkspace
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.autoHideOnOccupiedWorkspace)
+                        Config.options.tablet.dock.autoHideOnOccupiedWorkspace = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Keeps the home screen calm by hiding launchers once an application occupies the current workspace.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "running_with_errors"
+                text: Translation.tr("Show running apps")
+                visible: Config.options.tablet.dock.showAppRow
+                checked: Config.options.tablet.dock.showRunningApps
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showRunningApps)
+                        Config.options.tablet.dock.showRunningApps = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "apps_outage"
+                text: Translation.tr("Show app drawer button")
+                visible: Config.options.tablet.dock.showAppRow
+                checked: Config.options.tablet.dock.showAppDrawerButton
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showAppDrawerButton)
+                        Config.options.tablet.dock.showAppDrawerButton = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "vertical_split"
+                text: Translation.tr("Show app dividers")
+                visible: Config.options.tablet.dock.showAppRow
+                checked: Config.options.tablet.dock.showAppDividers
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showAppDividers)
+                        Config.options.tablet.dock.showAppDividers = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "pagination"
+                text: Translation.tr("Show home-screen page counter")
+                checked: Config.options.tablet.dock.showPageCounter
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.showPageCounter)
+                        Config.options.tablet.dock.showPageCounter = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "filter_1"
+                text: Translation.tr("Hide page counter in occupied workspaces")
+                visible: Config.options.tablet.dock.showPageCounter
+                checked: Config.options.tablet.dock.hidePageCounterOnOccupiedWorkspace
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.hidePageCounterOnOccupiedWorkspace)
+                        Config.options.tablet.dock.hidePageCounterOnOccupiedWorkspace = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "vertical_align_center"
+                text: Translation.tr("Compact dock when the page counter is hidden")
+                checked: Config.options.tablet.dock.compactWhenPageCounterHidden
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.compactWhenPageCounterHidden)
+                        Config.options.tablet.dock.compactWhenPageCounterHidden = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Removes the counter's unused vertical space instead of keeping the dock at its page-counter height.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "height"
+                text: Translation.tr("Dock height (px)")
+                value: Config.options.tablet.dock.height
+                from: 72
+                to: 168
+                stepSize: 4
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.dock.height)
+                        Config.options.tablet.dock.height = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "photo_size_select_large"
+                text: Translation.tr("App and navigation size (px)")
+                value: Config.options.tablet.dock.iconSize
+                from: 36
+                to: 72
+                stepSize: 4
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.dock.iconSize)
+                        Config.options.tablet.dock.iconSize = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("The navigation buttons share this touch target, keeping them aligned with the app icons on the right side of the dock.")
+                }
+            }
+
+            ConfigSubpageRow {
+                buttonIcon: "swap_horiz"
+                title: Translation.tr("Navigation buttons")
+                description: Translation.tr("Show or hide navigation, keep it visible during auto-hide, and choose its order")
+                configPage: Qt.resolvedUrl("widgets/TabletDockNavigationConfig.qml")
+            }
+
+            ConfigSubpageRow {
+                buttonIcon: "interests"
+                title: Translation.tr("App icon appearance")
+                description: Translation.tr("Adaptive Material shape, inactive-app treatment, and monochrome icons")
+                configPage: Qt.resolvedUrl("widgets/TabletDockIconConfig.qml")
             }
 
             ConfigSubpageRow {
