@@ -18,15 +18,17 @@
 | **0** | Merge com `dev`, isolamento arquitetural, limpeza | ✅ **concluída** |
 | **1** | Acabamento da bar de tablet | ✅ **concluída** |
 | **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
-| **4** | Gestos fora das bordas | ⬜ **próxima** |
-| **3** | Tela inicial: workspaces, grid, dock, gaveta de apps | ⬜ a fazer |
+| **4** | Gestos: múltiplos handlers + ações por família | 🟡 **parcial** — arrasto fora das bordas movido para a Fase 3 |
+| **3** | Tela inicial: workspaces, grid, dock, gaveta de apps | ⬜ **próxima** |
 | **5** | Application windows + layout de módulos | ⬜ a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
 
 > Ordem de execução: **1 → 2 → 4 → 3 → 5 → 6 → 7**.
 > A Fase 2 vem cedo porque a Fase 3 quer os componentes compartilhados já limpos.
-> A Fase 4 vem antes da 3 porque a home screen **depende** de arrasto fora das bordas.
+> A Fase 4 vinha antes da 3 para a home screen ter os gestos prontos. Na prática só a
+> metade sem consumidor pôde ser feita antes: o arrasto fora das bordas precisa da home
+> screen para ter contra o que ser projetado, então essa parte migrou para a Fase 3.
 
 ---
 
@@ -455,23 +457,31 @@ Também nesta fase:
       sidebar, nas duas famílias, foram a zero.
 - [x] Regra 4 adicionada ao guarda (ver §2).
 
-### Fase 4 — Gestos fora das bordas
+### Fase 4 — Gestos 🟡
 
 | Gesto | Ação | Estado |
 |---|---|---|
 | ↓ da borda superior | Central de controle (shade) | ✅ funciona |
-| ← / → no corpo do desktop | Trocar de workspace | novo — precisa de drag fora de borda |
-| ↑ da base | Gaveta de apps | novo — registrar `bottomEdge` |
-| ↑ e segurar | Recentes | novo — distinguir por tempo/velocidade |
-| ← / → da borda lateral | Voltar (back) | novo |
+| ↑ da base | Gaveta de apps | Fase 3 — registrar `bottomEdge` no registry |
+| ↑ e segurar | Recentes | Fase 3 — distinguir por tempo/velocidade |
+| ← / → da borda lateral | Voltar (back) | Fase 3 |
+| ← / → no corpo do desktop | Trocar de workspace | Fase 3 — precisa de arrasto fora de borda |
 | → da borda esquerda (longo) | Policies como app window | Fase 5 |
 
-- [ ] `TouchGestureService`: reconhecer arrasto iniciado **fora** das bordas
-      (hoje `originFor()` só classifica bordas e cantos).
-- [ ] `TouchGestureDragRegistry`: suportar **múltiplos handlers** simultâneos
-      (hoje é um só). Home screen e shade querem bordas diferentes ao mesmo tempo.
-- [ ] Defaults de binding por família (hoje o global é `topEdge: cheatsheet`,
-      `bottomEdge: overview`).
+- [x] `TouchGestureDragRegistry` suporta **múltiplos handlers**, resolvidos por origem.
+      Dois handlers reivindicando a mesma borda é bug da família, não camada suportada:
+      o primeiro registrado vence e a colisão é logada, porque escolher em silêncio
+      deixaria a superfície perdedora simplesmente sem responder. `handlerFor()` também
+      sobrevive a um handler que lança exceção.
+- [x] Ações de gesto ganharam o campo `families`, igual às páginas de settings. Seis delas
+      nomeiam superfície que a tablet não renderiza; o serviço trata esse binding como
+      **não vinculado** e o seletor do Settings não oferece a ação. Isso é ativo hoje: o
+      `topEdge` guardado é `cheatsheet`. Quatro das seis voltam quando a Fase 5 lhes der
+      app windows.
+
+**Adiado de propósito:** reconhecer arrasto iniciado **fora** de uma borda. O modelo de
+travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor que vai usá-lo
+é exatamente como se constrói a abstração errada. Vai junto da home screen, na Fase 3.
 
 ### Fase 3 — Tela inicial
 
