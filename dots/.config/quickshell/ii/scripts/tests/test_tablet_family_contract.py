@@ -156,6 +156,19 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Opening the drawer plainly must not reopen whatever panel was asked for last.
         self.assertIn('root.appDrawerTool = "";\n        root._showAppDrawer(monitorName);', states)
 
+    def test_app_tile_geometry_does_not_depend_on_how_long_the_name_is(self):
+        tile = read("modules/tablet/appDrawer/TabletAppTile.qml")
+
+        # A layout let the label size the tile's contents, so a two-line name pushed its own
+        # icon up and the whole row read as crooked.
+        self.assertNotIn("ColumnLayout {", tile)
+        self.assertIn("readonly property real labelHeight: Math.ceil(labelMetrics.height * 2)", tile)
+        self.assertIn("height: root.labelHeight", tile)
+        # Top-aligned in a fixed two-line box, and elided past that.
+        self.assertIn("verticalAlignment: Text.AlignTop", tile)
+        self.assertIn("elide: Text.ElideRight", tile)
+        self.assertIn("maximumLineCount: 2", tile)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

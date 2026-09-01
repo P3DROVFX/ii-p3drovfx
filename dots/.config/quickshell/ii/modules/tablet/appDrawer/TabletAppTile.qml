@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
 
@@ -32,8 +31,22 @@ Item {
     /// right button.
     signal held
 
+    /// Room for two lines whether or not the name needs them.
+    ///
+    /// The label used to size the tile's contents, so a two-line name pushed its own icon
+    /// up and broke the row it was in — one long name and the whole row read as crooked.
+    /// The block is a fixed height now: short names leave the second line empty, and names
+    /// too long for two lines elide.
+    readonly property real labelHeight: Math.ceil(labelMetrics.height * 2)
+    readonly property real contentSpacing: 6
+
     implicitWidth: 96
     implicitHeight: 116
+
+    FontMetrics {
+        id: labelMetrics
+        font: label.font
+    }
 
     // A press ripple is the only feedback a finger gets: no cursor, no hover state. It has
     // to start on press rather than on release, or the tile feels dead for the whole time
@@ -56,17 +69,24 @@ Item {
         }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 6
-        spacing: 6
+    // Anchors rather than a layout: the icon's position is a property of the tile, not
+    // something negotiated with whatever the label happens to need this frame.
+    Item {
+        id: content
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        width: parent.width - 12
+        height: root.iconSize + root.contentSpacing + root.labelHeight
 
         Item {
-            Layout.alignment: Qt.AlignHCenter
-            implicitWidth: root.iconSize
-            implicitHeight: root.iconSize
+            id: iconHolder
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: root.iconSize
+            height: root.iconSize
             // Android shrinks the icon under the finger rather than lighting up a
-            // background; the plate behind is a softer version of the same idea.
+            // background; the plate behind is a softer version of the same idea. Scale
+            // leaves the anchor geometry alone, so the label below does not move with it.
             scale: tapArea.pressed ? 0.92 : 1
             Behavior on scale {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -96,11 +116,18 @@ Item {
         }
 
         StyledText {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
+            id: label
+            anchors.top: iconHolder.bottom
+            anchors.topMargin: root.contentSpacing
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: root.labelHeight
             text: root.isSystem ? Translation.tr(root.systemName) : (root.entry?.name ?? "")
             font.pixelSize: Appearance.font.pixelSize.smaller
             horizontalAlignment: Text.AlignHCenter
+            // Top, not centre: a one-line name has to start where the first of two lines
+            // would, or short and long names sit at different heights again.
+            verticalAlignment: Text.AlignTop
             elide: Text.ElideRight
             wrapMode: Text.WordWrap
             maximumLineCount: 2
