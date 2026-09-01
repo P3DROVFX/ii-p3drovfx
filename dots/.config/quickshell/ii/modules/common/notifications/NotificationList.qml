@@ -1,12 +1,11 @@
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import qs.services
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "../SidebarSpaceArbitration.js" as SpaceArbitration
+import "../functions/SpaceArbitration.js" as SpaceArbitration
 
 Item {
     id: root

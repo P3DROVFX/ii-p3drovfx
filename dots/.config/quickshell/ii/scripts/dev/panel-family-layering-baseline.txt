@@ -9,16 +9,4 @@ modules/common/widgets/CalendarView.qml:qs.modules.waffle.looks
 # notification list. Phase 2 promotes these to modules/common/ so both families
 # consume one shared implementation instead of the tablet reaching into ii.
 modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.bluetoothDevices
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.darkMode
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.dnsOverTls
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.idleInhibitor
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.localSend
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.nightLight
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.notifications
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.screenShader
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.tailscale
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.volumeMixer
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.vpn
-modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.wifiNetworks
 modules/tablet/sidebarDashboard/TabletTrayDialog.qml:qs.modules.ii.bar.widgets.tray

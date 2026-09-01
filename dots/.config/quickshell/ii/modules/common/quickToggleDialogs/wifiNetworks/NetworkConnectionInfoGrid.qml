@@ -3,7 +3,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
-import "../../bar/shared/cards"
+import qs.modules.common.widgets.cards
 
 ColumnLayout {
     id: root
