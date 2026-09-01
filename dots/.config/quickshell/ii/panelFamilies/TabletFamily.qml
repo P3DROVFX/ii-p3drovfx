@@ -10,6 +10,7 @@ import qs.modules.tablet.appDrawer
 import qs.modules.tablet.appWindow
 import qs.modules.tablet.dock
 import qs.modules.tablet.homeScreen
+import qs.modules.tablet.navigation
 import qs.modules.tablet.recents
 import qs.modules.tablet.sidebarDashboard
 
@@ -39,6 +40,7 @@ import qs.modules.ii.regionSelector
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.cheatsheet
+import qs.modules.ii.cheatsheet.commands
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.sessionScreen
 import qs.modules.ii.videoEditor
@@ -59,9 +61,8 @@ import qs.modules.ii.wallpaperSelector
  * What the tablet deliberately does NOT load, and why:
  *
  *   ii Dock               — replaced by modules/tablet/dock, an Android-style taskbar.
- *   SidebarPolicies       — the window, not the content: policies is a TabletAppWindow
- *                           here, entering from the left at app width with a title bar and
- *                           a back button, instead of a 460px sidebar you dismiss.
+ *   SidebarPolicies       — the window, not the content: each policy is a normal tablet app
+ *                           window on its own workspace instead of a 460px sidebar.
  *   ii Overview           — replaced by modules/tablet/recents. The overview is a grid of
  *                           workspaces answering "where is everything"; recents is a flat
  *                           most-recent-first list answering "what was I just doing".
@@ -85,6 +86,10 @@ import qs.modules.ii.wallpaperSelector
  */
 Scope {
     id: root
+
+    // Owns stable Hyprland IPC target names whose actions differ from ii. In particular,
+    // Super opens the app drawer rather than the desktop Overview.
+    TabletSystemKeybinds {}
 
     // ── Shell surfaces ──────────────────────────────────────────────────────
 
@@ -151,10 +156,8 @@ Scope {
     }
 
     // ── Shell surfaces presented as apps (D6) ───────────────────────────────
-    // Listed in the drawer next to real applications. Usage and Modes separate their
-    // content from their window, so that content is re-chromed by TabletAppWindow and gets
-    // a title bar and a back button. The rest open the desktop shell's own surface — see
-    // TabletSystemApps on why splitting those would mean refactoring ii.
+    // Listed in the drawer next to real applications. All standalone ii content is injected
+    // into TabletAppWindow, which is a normal Hyprland client rather than an overlay.
     //
     // The content components are ii's, so the borrow happens here rather than inside
     // modules/tablet, exactly like the drawer's tool host.
@@ -170,6 +173,18 @@ Scope {
         ModesContent {}
     }
 
+    // Cheatsheet entries are application pages, not tabs in a legacy overlay. Keeping each
+    // source component here preserves the one-way family dependency: `modules/tablet` never
+    // imports ii; its composition root owns this deliberate borrow.
+    Component { id: timetableAppContent; CheatsheetTimetable {} }
+    Component { id: keybindsAppContent; CheatsheetKeybinds {} }
+    Component { id: elementsAppContent; CheatsheetPeriodicTable {} }
+    Component { id: aminoAcidsAppContent; CheatsheetAminoAcids {} }
+    Component { id: commandsAppContent; CheatsheetCommands {} }
+    Component { id: workspacesAppContent; CheatsheetWorkspaces {} }
+    Component { id: emailAppContent; CheatsheetEmail {} }
+    Component { id: typingTestAppContent; CheatsheetTypingTest {} }
+
     // The policies tabs, each as its own app. They are plain standalone types in ii — the
     // tab bar around them was only there because they shared one narrow sidebar — so with a
     // whole screen each they need no wrapper at all.
@@ -183,6 +198,14 @@ Scope {
     Component.onCompleted: TabletSystemApps.hostedContent = {
         "usage": usageAppContent,
         "modes": modesAppContent,
+        "timetable": timetableAppContent,
+        "keybinds": keybindsAppContent,
+        "elements": elementsAppContent,
+        "aminoAcids": aminoAcidsAppContent,
+        "commands": commandsAppContent,
+        "workspaces": workspacesAppContent,
+        "email": emailAppContent,
+        "typingTest": typingTestAppContent,
         "policies.intelligence": policiesIntelligence,
         "policies.translator": policiesTranslator,
         "policies.media": policiesMedia,
@@ -195,8 +218,6 @@ Scope {
     // the drag — otherwise the same swipe would also fire the user's leftEdge binding.
     TabletPoliciesDragHandler {}
 
-    // The surface-kind entries need their windows loaded, or launching them does nothing.
-    PanelLoader { component: Cheatsheet {} }
     PanelLoader {
         extraCondition: GlobalStates.videoEditorOpen
         component: VideoEditor {}

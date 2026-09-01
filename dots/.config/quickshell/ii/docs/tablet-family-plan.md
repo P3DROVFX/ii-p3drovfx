@@ -596,27 +596,35 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 
 ### Fase 5 — Application windows (D6) 🟡
 
-- [x] `modules/tablet/appWindow/TabletAppWindow.qml` — barra de título com ícone, nome e
-      **botão voltar**, entrada subindo, Escape também fecha. O botão é o ponto: as versões
-      de desktop são overlays que se dispensam com Escape, clique fora ou o keybind de novo,
-      e nenhum desses é algo que um dedo faça.
-- [x] `TabletSystemApps` — registro com **dois tipos**, porque as superfícies diferem de
-      verdade:
-      - `hosted` — o módulo já separa conteúdo de janela (`UsageContent`, `ModesContent`),
-        então o conteúdo é re-emoldurado dentro do `TabletAppWindow`.
-      - `surface` — o módulo é uma `PanelWindow` indivisível. Separar exigiria refatorar a
-        ii, o que esta família não pode exigir; a entrada abre a superfície que o shell de
-        desktop já tem. Continua sendo lançada pela gaveta, só usa a própria moldura.
+- [x] `modules/tablet/appWindow/TabletAppWindow.qml` é uma `FloatingWindow` (xdg toplevel),
+      não uma `PanelWindow` Overlay: Hyprland abre o módulo numa workspace vazia e aplica as
+      regras de janela `ii Tablet: …` para flutuar e centralizar. A barra própria oferece
+      **voltar** à esquerda e **fechar** à direita, pois ambos são necessários num fluxo de
+      tablet mesmo quando o compositor não expõe decorações; dismiss por clique fora e Escape
+      continuam removidos.
+- [x] `TabletSystemApps` hospeda todo conteúdo independente da ii na mesma janela nativa:
+      Usage, Modes, cada policy e as páginas Timetable, Keybinds, Periodic Table, Amino
+      Acids, Commands, Workspaces, Email e Typing Test. `TabletFamily` injeta os componentes
+      para manter `modules/tablet/` sem importar `modules/ii/`.
 - [x] Renderizam como símbolo em placa tingida em vez de fingir ser ícone de app.
 - [x] Componentes de conteúdo são da ii → **injetados** pelo composition root.
-- [x] **Policies entrando da esquerda** como app window — largura de app, barra de título e
-      voltar, e a borda esquerda reivindica o arrasto pelo `TouchGestureDragRegistry`.
-      O conteúdo só monta as abas enquanto o shell considera policies aberto, então a
-      entrada do registro liga `sidebarLeftOpen` enquanto está no ar e desliga ao fechar —
-      o que é verdade, não truque: policies **está** aberto, só apresentado diferente.
-- [x] Entradas do cheatsheet como apps separados (Timetable, Keybinds, Periodic Table,
-      Amino Acids), cada uma abrindo direto na sua aba. Do lado do usuário são apps
-      distintos, que é o que são aqui.
+- [x] **Policies não são mais sidebar** na tablet: o arrasto da borda esquerda continua
+      abrindo Intelligence, mas como aplicação nativa. `sidebarLeft*` é no-op para a família,
+      `effectiveLeftOpen` é sempre falso e o parallax lateral do background é desativado por
+      capability; atalhos herdados não conseguem movimentar o wallpaper.
+- [x] Entradas do cheatsheet são apps nativos separados, sem carregar o antigo
+      `Cheatsheet` Overlay. Deep links (`openCheatsheet` e `openTimetableAt`) são roteados
+      para o id de aplicação correspondente na tablet e preservam a data solicitada.
+- [x] `TabletSystemKeybinds` assume os targets globais de Hyprland na composição tablet:
+      Super abre/fecha a gaveta com o mesmo debounce do ii, Super+Tab abre Recentes e os
+      atalhos de cheatsheet, Usage e Modes abrem suas janelas nativas. O indicador de números
+      de workspace fica desativado para uma família touch-first.
+- [x] A máscara de input da gaveta é removida assim que começa a fechar, embora a animação
+      visual permaneça mapeada. Assim o botão Apps da dock pode receber o próximo toque em
+      vez de ele ser absorvido pela Overlay transparente em saída.
+- [x] Apps da dock têm o mesmo menu contextual da dock ii: clique direito no ponteiro e
+      toque longo abrem Launch, ações do desktop entry, Live Preview, Pin/Unpin e fechar
+      janela(s). A cópia fica em `modules/tablet/dock/`, sem importar a família ii.
 - [x] Apps de sistema **sempre listados** na gaveta, liderando a grade. Escondê-los atrás
       da busca significava que só achava quem já sabia que existiam.
 - [x] **Long-press alcança todo `altAction`** no `RippleButton`. Era só botão direito — o

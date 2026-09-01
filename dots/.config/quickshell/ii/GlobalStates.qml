@@ -103,7 +103,10 @@ Singleton {
             return;
         root.timetableRequestedDate = text;
         root.timetableNavigationRequest++;
-        root.cheatsheetOpen = true;
+        if (PanelFamily.nativeAppWindows)
+            root.openTabletApp("timetable");
+        else
+            root.cheatsheetOpen = true;
     }
 
     // Legacy Gnome-like window transition state.  These values intentionally
@@ -602,11 +605,20 @@ Singleton {
     }
 
     function toggleCheatsheet() {
+        if (PanelFamily.nativeAppWindows) {
+            root.toggleTabletApp("keybinds");
+            return;
+        }
         root.cheatsheetOpen = !root.cheatsheetOpen;
     }
 
     function openCheatsheet(tabId) {
-        root.cheatsheetPendingTab = String(tabId ?? "");
+        const requestedTab = String(tabId ?? "").trim();
+        if (PanelFamily.nativeAppWindows) {
+            root.openTabletApp(requestedTab.length > 0 ? requestedTab : "keybinds");
+            return;
+        }
+        root.cheatsheetPendingTab = requestedTab;
         if (root.cheatsheetOpen) {
             root.cheatsheetOpen = false;
         }
@@ -614,6 +626,10 @@ Singleton {
     }
 
     function closeCheatsheet() {
+        if (PanelFamily.nativeAppWindows && root.isTabletCheatsheetApp(root.tabletAppId)) {
+            root.closeTabletApp();
+            return;
+        }
         root.cheatsheetOpen = false;
     }
 
@@ -966,6 +982,8 @@ Singleton {
     property bool requestVolumeDialog: false
 
     readonly property bool effectiveLeftOpen: {
+        if (PanelFamily.nativeAppWindows)
+            return false;
         switch (Config.options.sidebar.position) {
         case "default":
             return policiesPanelOpen;
@@ -995,6 +1013,8 @@ Singleton {
     }
 
     function toggleLeftSidebar(monitorName) {
+        if (PanelFamily.nativeAppWindows)
+            return;
         if (root.policiesPanelOpen) {
             root.policiesPanelOpen = false;
         } else {
@@ -1013,6 +1033,8 @@ Singleton {
     }
 
     function openLeftSidebar(monitorName) {
+        if (PanelFamily.nativeAppWindows)
+            return;
         root.activeLeftSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.policiesPanelOpen = true;
     }
@@ -1045,12 +1067,57 @@ Singleton {
     // Which shell surface the tablet family is currently showing as an app, or "" for none.
     // See TabletSystemApps for what an "app" means here.
     property string tabletAppId: ""
+    property int tabletAppLaunchRequest: 0
+    property bool tabletAppTransitioning: false
+
+    function isTabletCheatsheetApp(appId) {
+        return ["timetable", "keybinds", "elements", "aminoAcids", "commands", "workspaces", "email", "typingTest"]
+            .includes(String(appId ?? ""));
+    }
 
     function openTabletApp(appId) {
-        root.tabletAppId = appId ?? "";
+        const requestedAppId = String(appId ?? "").trim();
+        if (requestedAppId.length === 0) {
+            root.closeTabletApp();
+            return;
+        }
+
+        // The IPC target remains available to every family, but only a family that owns
+        // native app windows may change Hyprland's workspace as part of launching one.
+        if (!PanelFamily.nativeAppWindows) {
+            root.tabletAppId = requestedAppId;
+            return;
+        }
+
+        // A tablet shell tool is a real client window. Free the current one, move focus to
+        // an empty workspace, then map the next toplevel there on the following event turn.
+        // The transition flag distinguishes that deliberate unmap from a compositor close.
+        const request = ++root.tabletAppLaunchRequest;
+        root.tabletAppTransitioning = true;
+        root.appDrawerOpen = false;
+        root.recentsOpen = false;
+        root.tabletAppId = "";
+        Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+        Qt.callLater(() => {
+            if (root.tabletAppLaunchRequest !== request)
+                return;
+            root.tabletAppId = requestedAppId;
+            root.tabletAppTransitioning = false;
+        });
+    }
+
+    function toggleTabletApp(appId) {
+        const requestedAppId = String(appId ?? "").trim();
+        if (requestedAppId.length > 0 && root.tabletAppId === requestedAppId && !root.tabletAppTransitioning) {
+            root.closeTabletApp();
+            return;
+        }
+        root.openTabletApp(requestedAppId);
     }
 
     function closeTabletApp() {
+        root.tabletAppLaunchRequest++;
+        root.tabletAppTransitioning = false;
         root.tabletAppId = "";
     }
 
@@ -1201,6 +1268,10 @@ Singleton {
     onAnimatedRightSidebarWidthChanged: {}
 
     onPoliciesPanelOpenChanged: {
+        if (PanelFamily.nativeAppWindows && policiesPanelOpen) {
+            policiesPanelOpen = false;
+            return;
+        }
         if (policiesPanelOpen) {
             if (root.activeLeftSidebarMonitor === "") {
                 root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -1368,10 +1439,12 @@ Singleton {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"
         onPressed: {
-            root.superDown = true;
+            if (!PanelFamily.touchFirst)
+                root.superDown = true;
         }
         onReleased: {
-            root.superDown = false;
+            if (!PanelFamily.touchFirst)
+                root.superDown = false;
         }
     }
 }

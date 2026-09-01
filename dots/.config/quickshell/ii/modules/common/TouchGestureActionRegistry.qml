@@ -13,23 +13,20 @@ Singleton {
     readonly property var actions: [
         // Navigation & Core Shell
         { id: "none", name: "None", icon: "block" },
-        { id: "overview", name: "Overview / Search", icon: "grid_view" },
-        { id: "overviewClipboard", name: "Clipboard History", icon: "content_paste" },
-        { id: "overviewEmoji", name: "Emoji Picker", icon: "mood" },
-        { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open" },
+        { id: "overview", name: "Overview / Search", icon: "grid_view", families: ["ii", "waffle"] },
+        { id: "overviewClipboard", name: "Clipboard History", icon: "content_paste", families: ["ii", "waffle"] },
+        { id: "overviewEmoji", name: "Emoji Picker", icon: "mood", families: ["ii", "waffle"] },
+        { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open", families: ["ii", "waffle"] },
         { id: "sidebarRight", name: "Right Sidebar", icon: "right_panel_open" },
-        // Tablet: no keyboard-shortcut reference. Returns as an app window in Fase 5.
-        { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" , families: ["ii", "waffle"] },
+        { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
         { id: "osk", name: "On-screen Keyboard", icon: "keyboard_alt" },
         // Tablet: the game/widget overlay is a desktop surface, permanently out.
         { id: "overlay", name: "Game / Widget Overlay", icon: "layers" , families: ["ii", "waffle"] },
         { id: "session", name: "Session / Power Menu", icon: "power_settings_new" },
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
-        // Tablet: returns as an app window in Fase 5.
-        { id: "usage", name: "App Usage Stats", icon: "query_stats" , families: ["ii", "waffle"] },
-        // Tablet: returns as an app window in Fase 5.
-        { id: "modes", name: "Modes & Routines", icon: "tune" , families: ["ii", "waffle"] },
+        { id: "usage", name: "App Usage Stats", icon: "query_stats" },
+        { id: "modes", name: "Modes & Routines", icon: "tune" },
         { id: "barToggle", name: "Toggle Bar", icon: "dock_to_bottom" },
         { id: "oledSaver", name: "OLED Saver (Blackout)", icon: "brightness_empty" },
         { id: "lock", name: "Lock Screen", icon: "lock" },
@@ -161,11 +158,17 @@ Singleton {
             break;
 
         case "usage":
-            GlobalStates.usageOpen = !GlobalStates.usageOpen;
+            if (PanelFamily.nativeAppWindows)
+                GlobalStates.toggleTabletApp("usage");
+            else
+                GlobalStates.usageOpen = !GlobalStates.usageOpen;
             break;
 
         case "modes":
-            GlobalStates.modesOpen = !GlobalStates.modesOpen;
+            if (PanelFamily.nativeAppWindows)
+                GlobalStates.toggleTabletApp("modes");
+            else
+                GlobalStates.modesOpen = !GlobalStates.modesOpen;
             break;
 
         case "barToggle":

@@ -49,6 +49,18 @@ PanelWindow {
     // while it is still animating steals keys from whatever the user was doing.
     WlrLayershell.keyboardFocus: root.openProgress > 0.99 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    // Keep the close animation mapped, but give input back to the dock immediately. Without
+    // this, the transparent, closing overlay was still the topmost touch target while the
+    // dock button had already reappeared, so a second tap on Apps was swallowed.
+    Item {
+        id: inputRegion
+        anchors.fill: parent
+    }
+    mask: Region {
+        item: inputRegion
+        intersection: root.wantOpen ? Intersection.Combine : Intersection.Subtract
+    }
+
     // Unmapped when fully closed: an always-mapped full-screen Overlay surface would sit
     // over every window for nothing. The shade stays mapped only because its top edge must
     // remain grabbable at all times; the drawer has no such strip.
@@ -82,6 +94,7 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             // Tapping the backdrop closes, the way tapping outside any Android sheet does.
+            enabled: root.wantOpen
             onClicked: root.dismiss()
         }
     }

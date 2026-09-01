@@ -3,25 +3,24 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Wayland
 
 import qs
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.tablet.navigation
 
 /**
- * A shell surface presented as an app: title bar, back button, the content below.
+ * A shell tool presented as a normal application window.
  *
- * The desktop shell shows these things as overlays you dismiss — press Escape, click away,
- * hit the keybind again. None of that reads as an application on a tablet, and none of it
- * is reachable without a keyboard. So the content is re-chromed here into something with a
- * visible way back, which is what a finger needs and what D6 asked for.
+ * Unlike a layer-shell overlay this is an xdg toplevel: Hyprland places it on the workspace
+ * selected by GlobalStates.openTabletApp and can focus it like any other program. A compact
+ * app bar restores touch-reachable Back and Close controls without turning the window back
+ * into a layer-shell overlay.
  *
  * The content Components come from the ii family, so they are injected by the composition
  * root; this window knows only their ids.
  */
-PanelWindow {
+FloatingWindow {
     id: root
 
     readonly property string appId: GlobalStates.tabletAppId
@@ -30,102 +29,60 @@ PanelWindow {
         ? (TabletSystemApps.hostedContent[root.appId] ?? null)
         : null
 
-    readonly property bool wantOpen: root.contentComponent !== null
-    property real openProgress: root.wantOpen ? 1 : 0
+    title: root.app ? "ii Tablet: " + Translation.tr(root.app.name) : "ii Tablet"
+    implicitWidth: Math.round((root.screen?.width ?? 1280) * 0.86)
+    implicitHeight: Math.round((root.screen?.height ?? 800) * 0.82)
+    minimumSize: Qt.size(Appearance.sizes.minimumTouchTarget * 10,
+                         Appearance.sizes.minimumTouchTarget * 8)
+    color: Appearance.colors.colLayer0
 
-    /// Which edge the window comes in from. Most apps rise from the bottom, the way an
-    /// Android app does when you tap its icon; a surface that lives on an edge of the
-    /// screen — policies on the left — keeps coming from there, so opening it still reads
-    /// as the same panel rather than as an unrelated app.
-    readonly property string enterFrom: root.app?.enterFrom ?? "bottom"
+    visible: root.contentComponent !== null && !GlobalStates.screenLocked
 
-    anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
-    }
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-
-    WlrLayershell.namespace: "quickshell:tabletAppWindow"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: root.openProgress > 0.99 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-
-    visible: (root.wantOpen || root.openProgress > 0.001) && !GlobalStates.screenLocked
-
-    Behavior on openProgress {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
-    }
-
-    onWantOpenChanged: {
-        if (root.wantOpen)
-            GlobalFocusGrab.addDismissable(root);
-        else
-            GlobalFocusGrab.removeDismissable(root);
-    }
-
-    Component.onDestruction: GlobalFocusGrab.removeDismissable(root)
-
-    function dismiss() {
-        GlobalStates.closeTabletApp();
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Appearance.colors.colLayer0
-        opacity: root.openProgress
+    // A compositor close must release the current app id; otherwise the next app request
+    // would only change a hidden Loader instead of reopening a normal toplevel.
+    onVisibleChanged: {
+        if (!visible && !GlobalStates.screenLocked && root.appId.length > 0)
+            GlobalStates.closeTabletApp();
     }
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
-        opacity: root.openProgress
-        transform: Translate {
-            x: root.enterFrom === "left" ? -(1 - root.openProgress) * 64 : 0
-            y: root.enterFrom === "left" ? 0 : (1 - root.openProgress) * 48
-        }
 
-        // ── Title bar ───────────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(Appearance.sizes.minimumTouchTarget + 12, 64)
+            Layout.preferredHeight: Appearance.sizes.minimumTouchTarget
+                + Appearance.sizes.elevationMargin * 2
             color: Appearance.colors.colLayer1
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 20
-                spacing: 14
+                anchors.leftMargin: Appearance.sizes.elevationMargin
+                anchors.rightMargin: Appearance.sizes.elevationMargin
+                spacing: Appearance.sizes.elevationMargin
 
-                // The only way out that does not need a keyboard.
-                Rectangle {
+                RippleButton {
                     Layout.preferredWidth: Appearance.sizes.minimumTouchTarget
                     Layout.preferredHeight: Appearance.sizes.minimumTouchTarget
-                    radius: width / 2
-                    color: backArea.pressed ? Appearance.colors.colLayer2 : "transparent"
+                    buttonRadius: Appearance.rounding.full
+                    buttonRadiusPressed: Appearance.rounding.large
+                    colBackground: Appearance.colors.colLayer1
+                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                    colBackgroundActive: Appearance.colors.colLayer1Active
+                    colRipple: Appearance.colors.colLayer1Active
+                    releaseAction: () => TabletNavigation.back()
 
-                    Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-
-                    MaterialSymbol {
+                    contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         text: "arrow_back"
-                        iconSize: 24
+                        iconSize: Appearance.font.pixelSize.large
                         color: Appearance.colors.colOnLayer1
-                    }
-
-                    MouseArea {
-                        id: backArea
-                        anchors.fill: parent
-                        onClicked: root.dismiss()
                     }
                 }
 
                 MaterialSymbol {
                     text: root.app?.icon ?? "widgets"
-                    iconSize: 22
+                    iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer1
                 }
 
@@ -136,24 +93,36 @@ PanelWindow {
                     color: Appearance.colors.colOnLayer1
                     elide: Text.ElideRight
                 }
+
+                RippleButton {
+                    Layout.preferredWidth: Appearance.sizes.minimumTouchTarget
+                    Layout.preferredHeight: Appearance.sizes.minimumTouchTarget
+                    buttonRadius: Appearance.rounding.full
+                    buttonRadiusPressed: Appearance.rounding.large
+                    colBackground: Appearance.colors.colLayer1
+                    colBackgroundHover: Appearance.colors.colLayer1Hover
+                    colBackgroundActive: Appearance.colors.colLayer1Active
+                    colRipple: Appearance.colors.colLayer1Active
+                    releaseAction: () => GlobalStates.closeTabletApp()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
             }
         }
 
-        // ── The app itself ──────────────────────────────────────────────────
         Loader {
             id: contentLoader
             Layout.fillWidth: true
             Layout.fillHeight: true
             // Only while mapped: these are heavy trees, and keeping the last opened app
-            // built after it closes is what makes a shell slow to start.
+            // built after it closes would make the shell slow to start.
             active: root.visible && root.contentComponent !== null
             sourceComponent: root.contentComponent
         }
-    }
-
-    Shortcut {
-        sequence: "Escape"
-        enabled: root.wantOpen
-        onActivated: root.dismiss()
     }
 }

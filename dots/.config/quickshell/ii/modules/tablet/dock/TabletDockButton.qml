@@ -1,7 +1,11 @@
 import QtQuick
+import Quickshell
+import Quickshell.Wayland
 
 import qs.modules.common
 import qs.modules.common.dock
+import qs.modules.common.widgets
+import qs.services
 
 /**
  * One touch-sized item in the tablet dock: an adaptive app icon with a running dot.
@@ -9,7 +13,7 @@ import qs.modules.common.dock
  * No hover growth and no tooltip — there is no cursor to read intent from, so the only
  * feedback available is the press itself.
  */
-Item {
+RippleButton {
     id: root
 
     property string appId: ""
@@ -21,6 +25,25 @@ Item {
 
     implicitWidth: root.buttonSize
     implicitHeight: root.buttonSize
+    buttonRadius: Appearance.rounding.full
+    buttonRadiusPressed: Appearance.rounding.large
+    colBackground: Appearance.colors.colLayer1
+    colBackgroundHover: Appearance.colors.colLayer1Hover
+    colBackgroundActive: Appearance.colors.colLayer1Active
+    colRipple: Appearance.colors.colLayer1Active
+    releaseAction: () => root.activated()
+    // RippleButton supplies both conventional right-click and the touch-first long hold;
+    // the primary release is suppressed after a hold, so the app never launches behind its
+    // own context menu.
+    altAction: () => contextMenu.open()
+
+    readonly property var appToplevels: {
+        const normalized = TaskbarApps.normalizeAppId(root.appId);
+        if (normalized.length === 0)
+            return [];
+        return Array.from(ToplevelManager.toplevels?.values ?? []).filter(toplevel =>
+            TaskbarApps.normalizeAppId(toplevel?.appId ?? "") === normalized);
+    }
 
     DockIcon {
         id: icon
@@ -30,11 +53,6 @@ Item {
         appId: root.appId
         isRunning: root.running
         visible: root.appId.length > 0
-        scale: tapArea.pressed ? 0.86 : 1
-
-        Behavior on scale {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
     }
 
     // Android marks a running app with a dot under the icon rather than a highlight behind
@@ -57,9 +75,10 @@ Item {
         }
     }
 
-    MouseArea {
-        id: tapArea
-        anchors.fill: parent
-        onClicked: root.activated()
+    TabletDockContextMenu {
+        id: contextMenu
+        anchorItem: root
+        appId: root.appId
+        appToplevels: root.appToplevels
     }
 }

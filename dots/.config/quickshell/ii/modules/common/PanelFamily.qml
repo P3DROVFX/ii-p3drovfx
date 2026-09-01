@@ -33,6 +33,11 @@ Singleton {
     // The bar is a status bar at the top of the screen and the user cannot move it.
     readonly property bool pinsBarToTop: root.isTablet
 
+    // Some families present shell tools as regular xdg toplevels instead of layer-shell
+    // overlays. Shared routing uses this capability so a tool can keep its desktop
+    // implementation without leaking desktop overlay state into a touch-first family.
+    readonly property bool nativeAppWindows: root.isTablet
+
     // The family curates its own panel set, so the desktop shell's optional
     // surfaces (dock, dynamic island, screen corners, wrapped frame) are not
     // offered at all. Settings uses this to hide the sections outright rather

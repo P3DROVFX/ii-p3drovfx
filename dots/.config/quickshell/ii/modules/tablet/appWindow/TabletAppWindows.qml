@@ -3,21 +3,10 @@ import Quickshell
 
 import qs.modules.common
 
-/// Per-screen host for the app window. One is open at a time, on whichever screen it lands.
+/// There is one native toplevel, on Hyprland's focused monitor/workspace when opened.
 Scope {
-    Variants {
-        model: Quickshell.screens
-
-        delegate: Scope {
-            id: screenScope
-            required property ShellScreen modelData
-
-            Loader {
-                active: Config.ready
-                sourceComponent: TabletAppWindow {
-                    screen: screenScope.modelData
-                }
-            }
-        }
+    Loader {
+        active: Config.ready
+        sourceComponent: TabletAppWindow {}
     }
 }

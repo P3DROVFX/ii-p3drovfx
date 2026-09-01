@@ -17,15 +17,10 @@ import qs.modules.common
  * and opened the same way, which is what D6 asked for — they come back "as if they were
  * Android apps".
  *
- * Two kinds of entry, because the surfaces genuinely differ:
- *
- *   `hosted`  — the module separates its content from its window (UsageContent,
- *               ModesContent), so the content is re-chromed inside a TabletAppWindow and
- *               gets a title bar and a back button like any app.
- *   `surface` — the module is one indivisible PanelWindow. Splitting it is a refactor of
- *               ii, which this family is not allowed to require, so the entry simply opens
- *               the surface the desktop shell already has. It is still launched from the
- *               drawer; it just wears its own chrome.
+ * Every ii tool that exposes standalone content is hosted in the same native app window.
+ * The composition root injects those components, so this registry remains tablet-owned and
+ * does not import ii directly. Keyboard, video editor and scratchpad keep their specialised
+ * launch paths because they are already independent system surfaces.
  *
  * The content Components live in the ii family, so they are injected by the composition
  * root rather than imported here — the same rule that governs the drawer's tool panels.
@@ -33,7 +28,7 @@ import qs.modules.common
 Singleton {
     id: root
 
-    /// id -> Component, filled in by TabletFamily for the `hosted` entries.
+    /// id -> Component, filled in by TabletFamily for native app entries.
     property var hostedContent: ({})
 
     readonly property var apps: [
@@ -41,21 +36,18 @@ Singleton {
             id: "usage",
             name: "App Usage",
             icon: "query_stats",
-            kind: "hosted",
             keywords: ["usage", "stats", "screen time", "uso", "estatisticas", "tempo de tela"]
         },
         {
             id: "modes",
             name: "Modes & Routines",
             icon: "tune",
-            kind: "hosted",
             keywords: ["modes", "routines", "automation", "modos", "rotinas", "automacao", "focus"]
         },
         {
             id: "keyboard",
             name: "On-screen Keyboard",
             icon: "keyboard_alt",
-            kind: "surface",
             // First-class here rather than an accessory: this family assumes no physical
             // keyboard, so the on-screen one needs a way in that is not itself a keybind.
             keywords: ["keyboard", "osk", "onscreen", "teclado", "virtual"]
@@ -66,14 +58,10 @@ Singleton {
         // media remote, a wallpaper browser — and with a whole screen to work in, a tab bar
         // is just a lid over four separate things. Each is its own app here.
         //
-        // They keep entering from the left, so the panel that used to live on that edge
-        // still arrives from it.
         {
             id: "policies.intelligence",
             name: "Intelligence",
             icon: "neurology",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => Ai.enabled,
             keywords: ["ai", "chat", "intelligence", "assistant", "inteligencia"]
         },
@@ -81,8 +69,6 @@ Singleton {
             id: "policies.translator",
             name: "Translator",
             icon: "translate",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => (Config.options?.policies?.translator ?? 0) !== 0,
             keywords: ["translator", "translate", "tradutor", "traduzir"]
         },
@@ -90,8 +76,6 @@ Singleton {
             id: "policies.media",
             name: "Media",
             icon: "music_note",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => (Config.options?.policies?.player ?? 0) !== 0,
             keywords: ["media", "player", "music", "musica", "reprodutor"]
         },
@@ -99,8 +83,6 @@ Singleton {
             id: "policies.wallpapers",
             name: "Wallpapers",
             icon: "wallpaper",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => (Config.options?.policies?.wallpapers ?? 0) !== 0,
             keywords: ["wallpaper", "wallpapers", "papel de parede", "fundo"]
         },
@@ -108,8 +90,6 @@ Singleton {
             id: "policies.anime",
             name: "Anime",
             icon: "bookmark_heart",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => (Config.options?.policies?.weeb ?? 0) !== 0
                 && (Config.options?.policies?.weeb ?? 0) !== 2,
             keywords: ["anime", "weeb", "booru"]
@@ -118,8 +98,6 @@ Singleton {
             id: "policies.phone",
             name: "Phone",
             icon: "smartphone",
-            kind: "hosted",
-            enterFrom: "left",
             enabled: () => (Config.options?.policies?.phone ?? 0) !== 0,
             keywords: ["phone", "telefone", "celular", "kdeconnect", "scrcpy"]
         },
@@ -127,7 +105,6 @@ Singleton {
             id: "timetable",
             name: "Timetable",
             icon: "calendar_month",
-            kind: "surface",
             enabled: () => Config.options?.cheatsheet?.enableTimetable ?? false,
             keywords: ["timetable", "schedule", "classes", "horario", "aulas", "agenda"]
         },
@@ -135,14 +112,12 @@ Singleton {
             id: "keybinds",
             name: "Keybinds",
             icon: "keyboard",
-            kind: "surface",
             keywords: ["cheatsheet", "shortcuts", "keybinds", "atalhos", "teclas"]
         },
         {
             id: "elements",
             name: "Periodic Table",
             icon: "experiment",
-            kind: "surface",
             enabled: () => Config.options?.cheatsheet?.enablePeriodicTable ?? false,
             keywords: ["periodic", "table", "elements", "quimica", "elementos", "tabela"]
         },
@@ -150,22 +125,47 @@ Singleton {
             id: "aminoAcids",
             name: "Amino Acids",
             icon: "biotech",
-            kind: "surface",
             enabled: () => Config.options?.cheatsheet?.enableAminoAcids ?? false,
             keywords: ["amino", "acids", "aminoacidos", "biologia"]
+        },
+        {
+            id: "commands",
+            name: "Commands",
+            icon: "terminal",
+            enabled: () => Config.options?.cheatsheet?.enableCommands ?? false,
+            keywords: ["commands", "terminal", "comandos"]
+        },
+        {
+            id: "workspaces",
+            name: "Workspaces",
+            icon: "dashboard",
+            enabled: () => Config.options?.cheatsheet?.enableWorkspaceProfiles ?? false,
+            keywords: ["workspaces", "profiles", "areas de trabalho", "perfis"]
+        },
+        {
+            id: "email",
+            name: "Email",
+            icon: "mail",
+            enabled: () => Config.options?.cheatsheet?.enableGmail ?? false,
+            keywords: ["email", "mail", "gmail"]
+        },
+        {
+            id: "typingTest",
+            name: "Typing Test",
+            icon: "speed",
+            enabled: () => Config.options?.cheatsheet?.enableTypingTest ?? false,
+            keywords: ["typing", "test", "digitacao"]
         },
         {
             id: "videoEditor",
             name: "Video Editor",
             icon: "movie_edit",
-            kind: "surface",
             keywords: ["video", "editor", "cut", "trim", "editar", "cortar"]
         },
         {
             id: "scratchpad",
             name: "Scratchpad",
             icon: "inventory_2",
-            kind: "surface",
             keywords: ["scratchpad", "special", "rascunho"]
         }
     ]
@@ -191,9 +191,8 @@ Singleton {
     }
 
     // ── Open/close hooks ────────────────────────────────────────────────────
-    // Some hosted surfaces need shell state set while they are up. Driven from the id
-    // rather than from the window, because there is one window per screen and they would
-    // all fire; the id changes exactly once per open.
+    // Some native app surfaces need shell state set while they are up. Driven from the id
+    // rather than from the window, because one window hosts one app at a time.
     property string _activeHostedId: ""
 
     function _syncActive() {
@@ -217,21 +216,7 @@ Singleton {
         if (!app)
             return;
 
-        if (app.kind === "hosted") {
-            GlobalStates.openTabletApp(appId);
-            return;
-        }
-
         switch (appId) {
-        // The cheatsheet is one window with tabs, so each tab is its own entry in the
-        // drawer and opens straight onto it. From the user's side those are separate apps,
-        // which is what they are here.
-        case "timetable":
-        case "keybinds":
-        case "elements":
-        case "aminoAcids":
-            GlobalStates.openCheatsheet(appId);
-            break;
         case "keyboard":
             GlobalStates.oskOpen = !GlobalStates.oskOpen;
             break;
@@ -244,7 +229,7 @@ Singleton {
             Hyprland.dispatch("hl.dsp.workspace.toggle_special('special')");
             break;
         default:
-            console.log("[TabletSystemApps] no launcher for surface app:", appId);
+            GlobalStates.openTabletApp(appId);
             break;
         }
     }
