@@ -99,6 +99,45 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertNotIn("exclusiveZone: root.reservesSpace ? root.implicitHeight : 0", dock)
         self.assertIn("anchors.bottom: parent.bottom", dock)
 
+    def test_app_drawer_reorders_in_place_instead_of_rebuilding_the_grid(self):
+        content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
+
+        # Assigning a fresh array resets the view, and a reset fires no move transitions:
+        # every tile is destroyed and rebuilt where it lands, which is the opposite of the
+        # live reordering this is for.
+        self.assertNotIn("model: root.gridEntries", content)
+        self.assertIn("dynamicRoles: true", content)
+        self.assertIn("gridModel.move(currentIndex, newIndex, 1)", content)
+        self.assertIn("move: Transition", content)
+        self.assertIn("displaced: Transition", content)
+        # Entrance animates scale, never opacity: an interrupted opacity transition strands
+        # a tile invisible, and a tile that never paints is worse than one that never moves.
+        self.assertNotIn('property: "opacity"', content)
+
+    def test_app_drawer_sorts_only_when_there_is_no_query(self):
+        content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
+
+        for mode in ('"nameDesc"', '"category"', '"usage"'):
+            self.assertIn(mode, content)
+        # With a query the ranking IS the order, and it is what moves under the user's
+        # fingers as they type. Re-sorting it would throw that away.
+        self.assertIn("if (q.length > 0)\n            return AppSearch.fuzzyQuery(q);", content)
+        self.assertIn("readonly property var availableCategories", content)
+
+    def test_long_press_offers_a_menu_instead_of_silently_adding_to_the_home_screen(self):
+        content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
+        menu = read("modules/tablet/appDrawer/TabletInlineMenu.qml")
+
+        self.assertIn("root.openAppMenu(appTile, appCell.modelData.entry)", content)
+        for label in ("Open", "Add to home screen", "Pin to dock"):
+            self.assertIn(label, content)
+        # Desktop-entry shortcuts, the way Android surfaces an app's own shortcuts.
+        self.assertIn("entry.actions", content)
+        # Drawn inside the drawer. A second surface would fight the drawer's exclusive
+        # keyboard focus for something Android draws in the launcher itself.
+        self.assertNotIn("PopupWindow {", menu)
+        self.assertNotIn("HyprlandFocusGrab {", menu)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

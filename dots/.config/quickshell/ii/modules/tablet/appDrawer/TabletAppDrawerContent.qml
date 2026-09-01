@@ -4,6 +4,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
+import Quickshell
+
 import qs
 import qs.services
 import qs.modules.common
@@ -45,29 +47,185 @@ Item {
     // large scaled display, the same way the shade does it.
     readonly property real outerMargin: Math.max(20, Math.min(56, Math.round(root.width * 0.04)))
     readonly property real searchHeight: Math.max(52, Math.min(68, Math.round(root.height * 0.062)))
-    readonly property real tileWidth: Math.max(96, Math.min(148, Math.round(root.width / 8)))
+    readonly property var drawerConfig: Config.options?.tablet?.appDrawer
+    readonly property real tileWidth: (root.drawerConfig?.tileWidth ?? 0) > 0
+        ? root.drawerConfig.tileWidth
+        : Math.max(96, Math.min(148, Math.round(root.width / 8)))
     readonly property real tileHeight: Math.round(root.tileWidth * 1.18)
-    readonly property real appIconSize: Math.round(root.tileWidth * 0.52)
+    readonly property real appIconSize: (root.drawerConfig?.iconSize ?? 0) > 0
+        ? root.drawerConfig.iconSize
+        : Math.round(root.tileWidth * 0.52)
 
     // ── Apps ────────────────────────────────────────────────────────────────
+    /// "name" | "nameDesc" | "category" | "usage".
+    readonly property string sortMode: root.drawerConfig?.sortMode ?? "name"
+    /// One category at a time, and only with an empty query: a filter and a search are two
+    /// answers to the same question, and showing both invites them to contradict.
+    property string categoryFilter: ""
+
+    /// The thirteen freedesktop main categories collapsed into groups someone would
+    /// actually browse. Most apps claim several, so the first match in this order wins and
+    /// the order is what decides where a dual-purpose app lands.
+    readonly property var categoryGroups: [
+        { id: "Development", symbol: "code", match: ["Development"] },
+        { id: "Graphics", symbol: "palette", match: ["Graphics"] },
+        { id: "Internet", symbol: "public", match: ["Network"] },
+        { id: "Multimedia", symbol: "movie", match: ["AudioVideo", "Audio", "Video"] },
+        { id: "Games", symbol: "sports_esports", match: ["Game"] },
+        { id: "Office", symbol: "description", match: ["Office"] },
+        { id: "Education", symbol: "school", match: ["Education", "Science"] },
+        { id: "System", symbol: "settings", match: ["Settings", "System"] },
+        { id: "Utilities", symbol: "handyman", match: ["Utility"] },
+        { id: "Other", symbol: "category", match: [] }
+    ]
+
+    function categoryOf(entry) {
+        const cats = Array.from(entry?.categories ?? []);
+        for (const group of root.categoryGroups) {
+            for (const wanted of group.match) {
+                if (cats.indexOf(wanted) !== -1)
+                    return group.id;
+            }
+        }
+        return "Other";
+    }
+
+    function categorySymbol(categoryId) {
+        const group = root.categoryGroups.find(g => g.id === categoryId);
+        return group?.symbol ?? "category";
+    }
+
     readonly property var apps: {
         const q = root.query.trim();
-        if (q.length === 0)
-            return AppSearch.list;
-        return AppSearch.fuzzyQuery(q);
+        // A query already ranks the results, and that ranking is what changes under the
+        // user's fingers as they type. Re-sorting it alphabetically would throw away the
+        // only ordering that responds to what they are doing.
+        if (q.length > 0)
+            return AppSearch.fuzzyQuery(q);
+
+        let list = root.sortMode === "usage" ? AppSearch.frecencyQuery("").slice() : AppSearch.list.slice();
+        if (root.categoryFilter.length > 0)
+            list = list.filter(entry => root.categoryOf(entry) === root.categoryFilter);
+
+        if (root.sortMode === "nameDesc")
+            list.sort((a, b) => (b.name ?? "").localeCompare(a.name ?? ""));
+        else if (root.sortMode === "category")
+            list.sort((a, b) => {
+                const ca = root.categoryOf(a);
+                const cb = root.categoryOf(b);
+                if (ca !== cb)
+                    return ca.localeCompare(cb);
+                return (a.name ?? "").localeCompare(b.name ?? "");
+            });
+        // "name" needs no sort: AppSearch.list is already alphabetical, and "usage" is
+        // already in frecency order.
+        return list;
+    }
+
+    /// Categories that actually have something in them. An empty chip is a dead end.
+    readonly property var availableCategories: {
+        if (root.query.trim().length > 0)
+            return [];
+        const present = new Set();
+        for (const entry of AppSearch.list)
+            present.add(root.categoryOf(entry));
+        return root.categoryGroups.filter(group => present.has(group.id)).map(group => group.id);
     }
 
     /// Everything the grid shows: matching system apps first, then installed applications.
     /// System apps are wrapped so the delegate can tell them apart without inspecting types.
+    ///
+    /// Each row carries a stable key, which is what lets the grid animate a reorder instead
+    /// of rebuilding: see applyGridDiff.
     readonly property var gridEntries: {
-        const entries = root.matchingSystemApps.map(app => ({
-            systemAppId: app.id,
-            name: app.name,
-            icon: app.icon
-        }));
+        const entries = [];
+        // A category filter is a filter on applications; the shell's own surfaces are not
+        // .desktop entries and have no category to be filtered by.
+        if (root.categoryFilter.length === 0) {
+            for (const app of root.matchingSystemApps)
+                entries.push({ key: "sys:" + app.id, systemAppId: app.id, name: app.name, icon: app.icon, entry: null });
+        }
         for (const entry of root.apps)
-            entries.push({ systemAppId: "", entry: entry });
+            entries.push({ key: "app:" + entry.id, systemAppId: "", name: entry.name, icon: "", entry: entry });
         return entries;
+    }
+
+    onGridEntriesChanged: root.applyGridDiff(root.gridEntries)
+
+    /**
+     * Reconcile the grid's model with `rows` in place, so the view can animate.
+     *
+     * Assigning a fresh JS array resets the view, and a reset fires no move transitions —
+     * every tile is destroyed and rebuilt where it lands. Rows keyed and moved one at a
+     * time is what makes the grid visibly rearrange itself as the query narrows, the same
+     * way the ii launcher's result list does.
+     */
+    property bool _applyingDiff: false
+    /// The grid's model is created after this Item's own property bindings, so the first
+    /// gridEntries change arrives before there is anything to reconcile.
+    property bool _gridReady: false
+
+    function applyGridDiff(rows) {
+        if (root._applyingDiff || !root._gridReady)
+            return;
+        root._applyingDiff = true;
+        try {
+            root._applyGridDiffUnguarded(rows);
+        } finally {
+            root._applyingDiff = false;
+        }
+    }
+
+    function _applyGridDiffUnguarded(rows) {
+        if (rows.length === 0) {
+            if (gridModel.count > 0)
+                gridModel.clear();
+            return;
+        }
+
+        const currentKeys = [];
+        for (let i = 0; i < gridModel.count; i++)
+            currentKeys.push(gridModel.get(i).key);
+
+        const wanted = new Set();
+        for (const row of rows)
+            wanted.add(row.key);
+
+        // Backwards, so the indexes of the rows still to be examined stay valid.
+        for (let i = currentKeys.length - 1; i >= 0; i--) {
+            if (!wanted.has(currentKeys[i])) {
+                gridModel.remove(i);
+                currentKeys.splice(i, 1);
+            }
+        }
+
+        for (let newIndex = 0; newIndex < rows.length; newIndex++) {
+            const row = rows[newIndex];
+            const currentIndex = currentKeys.indexOf(row.key);
+
+            if (currentIndex === -1) {
+                gridModel.insert(newIndex, {
+                    key: row.key,
+                    systemAppId: row.systemAppId,
+                    name: row.name,
+                    icon: row.icon,
+                    entry: row.entry
+                });
+                currentKeys.splice(newIndex, 0, row.key);
+                continue;
+            }
+
+            if (currentIndex !== newIndex) {
+                gridModel.move(currentIndex, newIndex, 1);
+                currentKeys.splice(newIndex, 0, currentKeys.splice(currentIndex, 1)[0]);
+            }
+        }
+
+        // Whatever the passes above did, the model has to end exactly as long as `rows`.
+        // Anything past that length is a tile the diff failed to account for, and it would
+        // stay on screen and stay tappable.
+        while (gridModel.count > rows.length)
+            gridModel.remove(gridModel.count - 1);
     }
 
     // ── System apps ─────────────────────────────────────────────────────────
@@ -90,17 +248,17 @@ Item {
     // launcher answers: files, and the clipboard. The clipboard especially — reaching it
     // used to mean typing "clipboard", finding a chip, and hitting a small target, which is
     // three deliberate acts for something people want constantly. Entries are results now.
-    readonly property int maximumSideResults: 6
+    readonly property int maximumSideResults: root.drawerConfig?.sideResultLimit ?? 6
 
     readonly property var clipboardResults: {
         const q = root.query.trim();
-        if (q.length === 0)
+        if (q.length === 0 || !(root.drawerConfig?.showClipboardResults ?? true))
             return [];
         return Cliphist.fuzzyQuery(q).slice(0, root.maximumSideResults);
     }
 
     readonly property var fileResults: {
-        if (root.query.trim().length === 0)
+        if (root.query.trim().length === 0 || !(root.drawerConfig?.showFileResults ?? true))
             return [];
         return (LauncherSearch.fileResults ?? []).slice(0, root.maximumSideResults);
     }
@@ -144,6 +302,14 @@ Item {
     /// One step back. Returns false when there is nothing left to back out of, so the
     /// window above can close itself instead.
     function goBack() {
+        if (inlineMenu.opened) {
+            inlineMenu.close();
+            return true;
+        }
+        if (root.categoryFilter.length > 0) {
+            root.categoryFilter = "";
+            return true;
+        }
         if (root.activeToolId.length > 0) {
             root.closeTool();
             return true;
@@ -174,8 +340,87 @@ Item {
 
     function reset() {
         root.activeToolId = "";
+        root.categoryFilter = "";
+        inlineMenu.close();
         searchField.text = "";
         appGrid.contentY = 0;
+    }
+
+    /// Opened from the host when a dock button asks for a specific panel.
+    function openToolById(toolId) {
+        if (SearchPanelRegistry.enabledPanels.some(panel => panel.id === toolId))
+            root.openTool(toolId);
+    }
+
+    // ── Sort menu ───────────────────────────────────────────────────────────
+    readonly property var sortOptions: [
+        { id: "name", symbol: "sort_by_alpha", label: Translation.tr("Name (A–Z)") },
+        { id: "nameDesc", symbol: "sort_by_alpha", label: Translation.tr("Name (Z–A)") },
+        { id: "category", symbol: "category", label: Translation.tr("Category") },
+        { id: "usage", symbol: "trending_up", label: Translation.tr("Most used") }
+    ]
+
+    function setSortMode(mode) {
+        if (Config.options?.tablet?.appDrawer)
+            Config.options.tablet.appDrawer.sortMode = mode;
+    }
+
+    function openSortMenu(item) {
+        const point = item.mapToItem(root, item.width / 2, item.height + 8);
+        inlineMenu.openAt(point.x, point.y, root.sortOptions.map(option => ({
+            symbol: option.symbol,
+            label: option.label,
+            checked: root.sortMode === option.id,
+            trigger: () => root.setSortMode(option.id)
+        })), Translation.tr("Sort by"), "", "sort");
+    }
+
+    /// The Android long-press menu. "Add to home screen" is in here rather than being the
+    /// whole gesture, which is what it used to be — the same press now offers everything
+    /// that press could reasonably mean instead of silently picking one.
+    function openAppMenu(item, entry) {
+        if (!entry)
+            return;
+        const point = item.mapToItem(root, item.width / 2, item.height * 0.6);
+        const actions = [];
+
+        for (const action of (entry.actions ?? [])) {
+            actions.push({
+                symbol: "shortcut",
+                label: action.name ?? "",
+                trigger: () => {
+                    action.execute();
+                    root.dismissRequested();
+                }
+            });
+        }
+
+        actions.push({
+            symbol: "launch",
+            label: Translation.tr("Open"),
+            trigger: () => {
+                entry.execute();
+                root.dismissRequested();
+            }
+        });
+        actions.push({
+            symbol: "add_to_home_screen",
+            label: Translation.tr("Add to home screen"),
+            trigger: () => {
+                root.appHeld(entry.id);
+                root.dismissRequested();
+            }
+        });
+        actions.push({
+            symbol: TaskbarApps.isPinned(entry.id) ? "keep_off" : "keep",
+            label: TaskbarApps.isPinned(entry.id)
+                ? Translation.tr("Unpin from dock")
+                : Translation.tr("Pin to dock"),
+            trigger: () => TaskbarApps.togglePin(entry.id)
+        });
+
+        inlineMenu.openAt(point.x, point.y, actions, entry.name ?? entry.id,
+            Quickshell.iconPath(AppSearch.guessIcon(entry.id), "image-missing"), "");
     }
 
     function focusSearch() {
@@ -261,6 +506,95 @@ Item {
                         anchors.fill: parent
                         anchors.margins: -12
                         onClicked: searchField.text = ""
+                    }
+                }
+
+                // Only without a query: with one, the order is the ranking, so a sort
+                // control here would offer to break the results rather than arrange them.
+                MaterialSymbol {
+                    id: sortButton
+                    visible: searchField.text.length === 0 && (root.drawerConfig?.showSortButton ?? true)
+                    text: "sort"
+                    iconSize: Math.round(root.searchHeight * 0.40)
+                    color: Appearance.colors.colOnLayer1
+
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -12
+                        onClicked: root.openSortMenu(sortButton)
+                    }
+                }
+            }
+        }
+
+        // Category chips. Android's drawer is one flat list, but a desktop's application
+        // menu is thousands of entries deep, and the categories are already in the .desktop
+        // files — not offering them means the only way through the list is scrolling.
+        Flickable {
+            id: categoryStrip
+            Layout.fillWidth: true
+            Layout.preferredHeight: categoryStrip.shown ? categoryRow.implicitHeight : 0
+            visible: Layout.preferredHeight > 0
+            opacity: root.revealProgress
+            contentWidth: categoryRow.implicitWidth
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            readonly property bool shown: (root.drawerConfig?.showCategoryFilter ?? true)
+                && root.query.trim().length === 0
+                && root.availableCategories.length > 1
+
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(categoryStrip)
+            }
+
+            RowLayout {
+                id: categoryRow
+                spacing: 8
+
+                Repeater {
+                    model: [""].concat(root.availableCategories)
+
+                    delegate: Rectangle {
+                        id: categoryChip
+                        required property string modelData
+                        readonly property bool selected: root.categoryFilter === categoryChip.modelData
+
+                        implicitWidth: categoryChipRow.implicitWidth + 28
+                        implicitHeight: Math.max(40, Math.round(root.searchHeight * 0.68))
+                        radius: height / 2
+                        color: categoryChip.selected ? Appearance.colors.colPrimary
+                            : (categoryChipArea.pressed ? Appearance.colors.colLayer2Active : Appearance.colors.colLayer2)
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(categoryChip)
+                        }
+
+                        RowLayout {
+                            id: categoryChipRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: categoryChip.modelData.length === 0
+                                    ? "apps" : root.categorySymbol(categoryChip.modelData)
+                                iconSize: 18
+                                color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                            }
+
+                            StyledText {
+                                text: categoryChip.modelData.length === 0
+                                    ? Translation.tr("All") : Translation.tr(categoryChip.modelData)
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                            }
+                        }
+
+                        MouseArea {
+                            id: categoryChipArea
+                            anchors.fill: parent
+                            onClicked: root.categoryFilter = categoryChip.modelData
+                        }
                     }
                 }
             }
@@ -370,10 +704,54 @@ Item {
 
                 cellWidth: root.tileWidth
                 cellHeight: root.tileHeight
-                model: root.gridEntries
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 cacheBuffer: 600
+
+                model: ListModel {
+                    id: gridModel
+                    // The rows carry a DesktopEntry in one field and nothing in it for the
+                    // shell's own surfaces. Static role inference locks that field to
+                    // whichever shape lands first and drops every later write in silence.
+                    dynamicRoles: true
+                }
+
+                Component.onCompleted: {
+                    root._gridReady = true;
+                    root.applyGridDiff(root.gridEntries);
+                }
+
+                // What makes a narrowing query read as the grid rearranging itself rather
+                // than as a new grid appearing. `y` and `x` only: an interrupted opacity
+                // transition can strand a tile invisible, and a tile that never paints is a
+                // worse bug than a tile that never animates.
+                move: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasized
+                    }
+                }
+
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasized
+                    }
+                }
+
+                add: Transition {
+                    NumberAnimation {
+                        property: "scale"
+                        from: 0.86
+                        to: 1
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 delegate: Item {
                     id: appCell
@@ -381,9 +759,10 @@ Item {
                     width: appGrid.cellWidth
                     height: appGrid.cellHeight
 
-                    readonly property bool isSystemApp: appCell.modelData.systemAppId.length > 0
+                    readonly property bool isSystemApp: String(appCell.modelData.systemAppId ?? "").length > 0
 
                     TabletAppTile {
+                        id: appTile
                         anchors.centerIn: parent
                         width: appGrid.cellWidth - 8
                         height: appGrid.cellHeight - 8
@@ -400,9 +779,13 @@ Item {
                         }
                         onHeld: {
                             // A shell surface is not a desktop icon: it has no .desktop entry
-                            // to place, so long-press does nothing for those.
+                            // to place and no actions to offer, so long-press does nothing.
                             if (appCell.isSystemApp)
                                 return;
+                            if (root.drawerConfig?.longPressMenu ?? true) {
+                                root.openAppMenu(appTile, appCell.modelData.entry);
+                                return;
+                            }
                             root.appHeld(appCell.modelData.entry.id);
                             root.dismissRequested();
                         }
@@ -487,7 +870,7 @@ Item {
                 anchors.fill: parent
                 // Only when nothing at all matched — apps, clipboard and files alike.
                 visible: appGrid.visible && !body.hasSideResults
-                shown: root.gridEntries.length === 0
+                shown: gridModel.count === 0
                 icon: "search_off"
                 title: Translation.tr("No apps")
                 description: Translation.tr("Nothing matches this search")
@@ -519,5 +902,11 @@ Item {
                 }
             }
         }
+    }
+
+    // Last, and outside the layout: it has to cover the grid it was opened from.
+    TabletInlineMenu {
+        id: inlineMenu
+        anchors.fill: parent
     }
 }

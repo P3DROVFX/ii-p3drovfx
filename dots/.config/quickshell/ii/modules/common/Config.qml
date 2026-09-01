@@ -1481,10 +1481,40 @@ Singleton {
                     // focused rather than searching anything itself.
                     property bool showSearchBar: true
                     property int searchBarWidth: 320
+                    // "extended" is the Android pill; "compact" collapses it to a single
+                    // circular button the size of a dock icon, for people who want the row
+                    // to be apps and nothing else.
+                    property string searchBarStyle: "extended"
+                    // Either end of the pill is a button the user picks. "none" hides it,
+                    // "search" and "apps" open the drawer on its search and its grid, and
+                    // "tool:<id>" opens the drawer straight into one of the search panels
+                    // (see SearchPanelRegistry) — "tool:clipboard" being the obvious one.
+                    property string searchLeadingAction: "search"
+                    property string searchTrailingAction: "apps"
+                    /// Empty means the translated default, "Search".
+                    property string searchPlaceholder: ""
                     property bool showAppDividers: true
                     property bool showPageCounter: true
                     property bool hidePageCounterOnOccupiedWorkspace: true
                     property bool compactWhenPageCounterHidden: true
+                }
+
+                property JsonObject appDrawer: JsonObject {
+                    // "name" | "nameDesc" | "category" | "usage". Only the unsearched grid
+                    // is sorted: with a query, relevance is the order, and re-sorting it
+                    // would discard the ranking the user is typing towards.
+                    property string sortMode: "name"
+                    property bool showSortButton: true
+                    property bool showCategoryFilter: true
+                    /// Long-press opens an Android-style menu on the tile. Off restores the
+                    /// old behaviour, where a long-press dropped the app on the home screen.
+                    property bool longPressMenu: true
+                    property bool showClipboardResults: true
+                    property bool showFileResults: true
+                    property int sideResultLimit: 6
+                    /// 0 derives the tile from the screen, which is what a tablet wants.
+                    property int tileWidth: 0
+                    property int iconSize: 0
                 }
             }
 
