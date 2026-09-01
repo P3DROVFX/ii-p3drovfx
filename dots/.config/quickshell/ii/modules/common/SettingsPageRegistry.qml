@@ -238,8 +238,8 @@ Singleton {
             "icon": "instant_mix",
             "component": "modules/settings/configs/HyprlandConfig.qml",
             "subPages": [],
-            "searchSources": ["hyprland/InputTab.qml", "hyprland/LayoutTab.qml", "hyprland/ShortcutsTab.qml", "hyprland/RulesTab.qml", "hyprland/EnvironmentTab.qml", "hyprland/AllOptionsTab.qml"],
-            "aliases": ["Compositor", "Keyboard layout", "Key repeat", "Mouse", "Touchpad", "Cursor", "Dwindle", "Master layout", "Keybinds", "Window rules", "Layer rules", "Environment variables", "hyprland.conf", "custom lua"]
+            "searchSources": ["hyprland/InputTab.qml", "hyprland/LayoutTab.qml", "hyprland/ShortcutsTab.qml", "hyprland/DefaultAppsTab.qml", "hyprland/RulesTab.qml", "hyprland/EnvironmentTab.qml", "hyprland/AllOptionsTab.qml"],
+            "aliases": ["Compositor", "Keyboard layout", "Key repeat", "Mouse", "Touchpad", "Cursor", "Dwindle", "Master layout", "Keybinds", "Default apps", "Default applications", "XDG", "MIME types", "File associations", "Window rules", "Layer rules", "Environment variables", "hyprland.conf", "custom lua"]
         },
         {
             "id": "touchGestures",

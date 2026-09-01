@@ -14,8 +14,8 @@ import qs.modules.common.widgets
  * are never edited, so replacing a stock shortcut writes a release of that key followed by a new
  * bind into the block at the end of custom/keybinds.lua, which loads afterwards.
  *
- * Underneath is the other half of a shortcut: the app it opens. Those are a list of candidates
- * tried in order rather than a single command, so they get their own editor.
+ * The programs shortcuts open live on the neighbouring Default apps tab. Keeping the shortcut
+ * browser focused on keys makes both pages shorter and easier to scan.
  */
 ContentPage {
     id: tab
@@ -45,20 +45,6 @@ ContentPage {
     readonly property int shownCount: tab.allRows.filter(row => tab.shows(row)).length
 
     readonly property var groups: HyprlandBinds.grouped(tab.allRows)
-
-    /// The shell's own launch commands. Not keybinds, but the same question - which program
-    /// opens - so they belong on the same page rather than in a corner of their own.
-    readonly property var shellApps: [
-        { "key": "terminal", "icon": "terminal", "label": Translation.tr("Terminal for shell actions") },
-        { "key": "network", "icon": "wifi", "label": Translation.tr("Network settings") },
-        { "key": "networkEthernet", "icon": "settings_ethernet", "label": Translation.tr("Wired network settings") },
-        { "key": "bluetooth", "icon": "bluetooth", "label": Translation.tr("Bluetooth settings") },
-        { "key": "volumeMixer", "icon": "volume_up", "label": Translation.tr("Volume mixer") },
-        { "key": "taskManager", "icon": "monitoring", "label": Translation.tr("Task manager") },
-        { "key": "manageUser", "icon": "person", "label": Translation.tr("User accounts") },
-        { "key": "changePassword", "icon": "password", "label": Translation.tr("Change password") },
-        { "key": "update", "icon": "system_update", "label": Translation.tr("System update") }
-    ]
 
     function openSubPage(page: url) {
         let node = tab.parent;
@@ -99,11 +85,6 @@ ContentPage {
         function onPendingEditorChanged() {
             tab.takePendingEditor();
         }
-    }
-
-    function editApp(name: string) {
-        HyprlandBinds.beginEditApp(name);
-        tab.openSubPage(Qt.resolvedUrl("HyprAppChainPage.qml"));
     }
 
     // ── Finding one ───────────────────────────────────────────────────────────
@@ -243,99 +224,6 @@ ContentPage {
             text: Translation.tr("Nothing matches \"%1\".").arg(tab.rawQuery.trim())
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colSubtext
-        }
-    }
-
-    // ── Default apps ──────────────────────────────────────────────────────────
-    ContentSection {
-        title: Translation.tr("Apps these shortcuts open")
-        icon: "apps"
-
-        StyledText {
-            Layout.fillWidth: true
-            visible: tab.advanced
-            text: Translation.tr("Each of these is a list of programs tried in order, so the config works on a machine that has none of your usual ones. The first one installed is the one that opens.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
-        }
-
-        Repeater {
-            model: HyprlandBinds.appVariables
-
-            delegate: HyprNavRow {
-                required property var modelData
-
-                readonly property var chain: HyprlandBinds.readChain(HyprlandBinds.appValue(modelData.name))
-                readonly property string winner: HyprlandBinds.winningCandidate(chain.candidates)
-
-                buttonIcon: modelData.icon
-                text: modelData.label
-                value: {
-                    if (!chain.chain) return chain.plain;
-                    if (winner !== "") return winner;
-                    return chain.candidates.length === 0 ? Translation.tr("Empty")
-                        : Translation.tr("None installed");
-                }
-                onOpenSubPage: tab.editApp(modelData.name)
-            }
-        }
-
-        HyprOptionNote {
-            notes: {
-                const out = [];
-                const changed = HyprlandBinds.appVariables
-                    .filter(variable => HyprlandBinds.appSource(variable.name) === "managed");
-                if (changed.length > 0)
-                    out.push({ "icon": "edit", "text": Translation.tr("%1 of these are set by this page.").arg(changed.length) });
-                const empty = HyprlandBinds.appVariables.filter(variable => {
-                    const chain = HyprlandBinds.readChain(HyprlandBinds.appValue(variable.name));
-                    return chain.chain && HyprlandBinds.winningCandidate(chain.candidates) === "";
-                });
-                if (empty.length > 0)
-                    out.push({ "icon": "warning", "text": Translation.tr("%1 of them have nothing installed, so their shortcut does nothing when pressed.").arg(empty.length) });
-                return out;
-            }
-        }
-    }
-
-    // ── What the shell itself opens ───────────────────────────────────────────
-    ContentSection {
-        visible: tab.advanced
-        title: Translation.tr("Apps the shell opens")
-        icon: "widgets"
-
-        StyledText {
-            Layout.fillWidth: true
-            visible: tab.advanced
-            text: Translation.tr("These are not shortcuts. They are what opens when you press a button in the shell — the settings link on the Wi-Fi popup, the mixer on the volume slider — and they are kept here because it is the same question about the other half of the desktop.")
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colSubtext
-            wrapMode: Text.WordWrap
-        }
-
-        Repeater {
-            model: tab.advanced ? tab.shellApps : []
-
-            delegate: ConfigTextField {
-                id: shellAppField
-
-                required property var modelData
-
-                Layout.fillWidth: true
-                // MaterialTextField wraps, so a value wider than the field makes its own implicit
-                // width depend on its width and the layout never settles. Commands are long.
-                textField.wrapMode: TextInput.NoWrap
-                icon: modelData.icon
-                text: modelData.label
-                inputText: String(Config.options.apps[modelData.key] ?? "")
-                textField.onEditingFinished: Config.options.apps[shellAppField.modelData.key] =
-                    shellAppField.textField.text
-            }
-        }
-
-        HyprOptionNote {
-            notes: [{ "icon": "info", "text": Translation.tr("These live in the shell's own settings file, not in the Hyprland config, so they take effect at once and no reload happens.") }]
         }
     }
 

@@ -40,6 +40,7 @@ HyprOptionBrowserPage 1.0 HyprOptionBrowserPage.qml
 InputTab 1.0 InputTab.qml
 LayoutTab 1.0 LayoutTab.qml
 ShortcutsTab 1.0 ShortcutsTab.qml
+DefaultAppsTab 1.0 DefaultAppsTab.qml
 RulesTab 1.0 RulesTab.qml
 EnvironmentTab 1.0 EnvironmentTab.qml
 AllOptionsTab 1.0 AllOptionsTab.qml

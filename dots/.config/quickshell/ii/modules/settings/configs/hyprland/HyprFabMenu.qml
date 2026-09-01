@@ -13,9 +13,9 @@ import qs.modules.common.widgets
  * on every tab, it was four lines tall, and none of it was something you act on while changing
  * a setting - so it is now a menu you open when you want it, and nothing at all when you don't.
  *
- * One primary FAB opens a column of items above it, each an icon and a word; a scrim behind
- * them takes the next click so the menu closes wherever you press. `checkable` items stay open,
- * because a switch you have to reopen the menu to see the result of is a switch that lies.
+ * One primary FAB opens a column of items above it, each an icon and a word; a transparent
+ * outside-click target closes the menu wherever the next press lands. `checkable` items stay
+ * open, because a switch you have to reopen the menu to see the result of is a switch that lies.
  */
 Item {
     id: root
@@ -25,8 +25,8 @@ Item {
     property bool expanded: false
     property string icon: "code"
     property string tooltipText: ""
-    /// Where the scrim goes. The menu itself is a small item in a corner; the scrim has to cover
-    /// the page, which is several parents up.
+    /// Where the outside-click target goes. The menu itself is a small item in a corner; the
+    /// target has to cover the page, which is several parents up.
     property Item scrimParent: null
 
     signal triggered(int index)
@@ -38,27 +38,14 @@ Item {
         root.expanded = false;
     }
 
-    Rectangle {
+    MouseArea {
         parent: root.scrimParent ?? root
         anchors.fill: parent
         z: -1
-        color: Appearance.m3colors.m3scrim
-        opacity: root.expanded ? 0.32 : 0
-        visible: opacity > 0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            enabled: root.expanded
-            onClicked: root.close()
-        }
+        // Keep the outside-click target without dimming the settings page behind the menu.
+        visible: root.expanded
+        enabled: root.expanded
+        onClicked: root.close()
     }
 
     ColumnLayout {

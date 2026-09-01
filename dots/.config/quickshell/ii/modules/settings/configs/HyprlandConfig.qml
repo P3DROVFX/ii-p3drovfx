@@ -13,7 +13,7 @@ import qs.modules.settings.configs.hyprland
 /**
  * Settings -> Hyprland.
  *
- * One page over six tabs, because the compositor's settings do not split cleanly into six
+ * One page over a compact row of tabs, because the compositor's settings do not split cleanly into
  * sidebar entries and nothing else in Settings is this deep. The tabs are peers; anything
  * that needs a whole screen of its own - a rule editor, one keybind, the full option list -
  * opens as a sub-page instead, so drilling down stays a push and switching stays a tab.
@@ -68,6 +68,8 @@ Item {
           "advanced": false },
         { "id": "shortcuts", "name": "Shortcuts", "icon": "keyboard_command_key",
           "file": "hyprland/ShortcutsTab.qml", "advanced": false },
+        { "id": "defaultApps", "name": "Default apps", "icon": "apps",
+          "file": "hyprland/DefaultAppsTab.qml", "advanced": false },
         { "id": "rules", "name": "Rules", "icon": "filter_alt", "file": "hyprland/RulesTab.qml",
           "advanced": false },
         { "id": "environment", "name": "Environment", "icon": "terminal",
@@ -91,7 +93,7 @@ Item {
 
     /// A tab keeps its component tree while it stays among the last few used, so switching
     /// back is instant and the slide animates between two real pages instead of one and a
-    /// hole. Six tabs of controls all alive at once is most of this page's memory, so the
+    /// hole. Every tab of controls alive at once is most of this page's memory, so the
     /// count is capped: the least recently used one is unloaded, and rebuilds behind its
     /// placeholder when it is next visited.
     ///
@@ -290,8 +292,7 @@ Item {
             Layout.fillWidth: true
             implicitHeight: 52
 
-            // Six tabs fit at the window's normal width and stop fitting when it is dragged
-            // narrow, so the strip scrolls rather than spilling over the page.
+            // The tab strip scrolls when the window is narrow rather than spilling over the page.
             Flickable {
                 anchors.fill: parent
                 contentWidth: Math.max(width, toolbar.implicitWidth)

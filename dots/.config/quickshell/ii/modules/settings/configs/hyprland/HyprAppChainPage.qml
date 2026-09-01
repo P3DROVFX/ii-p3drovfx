@@ -2,6 +2,8 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -28,6 +30,7 @@ Item {
     readonly property var chain: HyprlandBinds.readChain(subPageRoot.value)
     readonly property string source: HyprlandBinds.appSource(subPageRoot.name)
     readonly property string winner: HyprlandBinds.winningCandidate(subPageRoot.chain.candidates)
+    readonly property string selectedCommand: subPageRoot.chain.chain ? subPageRoot.winner : subPageRoot.value
 
     function commit(candidates: var) {
         HyprlandBinds.saveApp(subPageRoot.name,
@@ -51,6 +54,10 @@ Item {
         const text = String(candidate ?? "").trim();
         if (text === "") return;
         subPageRoot.commit(Array.from(subPageRoot.chain.candidates).concat([text]));
+    }
+
+    function appIcon(candidate: string): string {
+        return AppSearch.guessIcon(HyprlandBinds.probeWord(candidate));
     }
 
     component RowButton: RippleButton {
@@ -150,7 +157,14 @@ Item {
                 color: candidateRow.installed === true
                     ? (candidateRow.winning ? Appearance.colors.colOnPrimaryContainer
                         : Appearance.colors.colPrimary)
-                    : Appearance.colors.colSubtext
+                        : Appearance.colors.colSubtext
+            }
+
+            IconImage {
+                Layout.alignment: Qt.AlignVCenter
+                implicitSize: 24
+                source: Quickshell.iconPath(subPageRoot.appIcon(candidateRow.candidate), "application-x-executable")
+                opacity: candidateRow.installed === false ? 0.4 : 1
             }
 
             StyledText {
@@ -199,6 +213,13 @@ Item {
                 }
             }
 
+            IconImage {
+                Layout.alignment: Qt.AlignVCenter
+                visible: subPageRoot.selectedCommand !== ""
+                implicitSize: 32
+                source: Quickshell.iconPath(subPageRoot.appIcon(subPageRoot.selectedCommand), "application-x-executable")
+            }
+
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
@@ -212,10 +233,10 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: subPageRoot.winner === "" ? Translation.tr("Nothing in this list is installed.")
-                        : Translation.tr("Opens %1").arg(subPageRoot.winner)
+                    text: subPageRoot.selectedCommand === "" ? Translation.tr("Nothing in this list is installed.")
+                        : Translation.tr("Opens %1").arg(subPageRoot.selectedCommand)
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: subPageRoot.winner === "" ? Appearance.colors.colError
+                    color: subPageRoot.selectedCommand === "" ? Appearance.colors.colError
                         : Appearance.colors.colSubtext
                     elide: Text.ElideRight
                 }
@@ -351,6 +372,7 @@ Item {
 
         // ── Where it comes from ───────────────────────────────────────────────
         ContentSection {
+            visible: Config.options.hyprland.advancedSettings
             title: Translation.tr("Where this comes from")
             icon: "history"
 

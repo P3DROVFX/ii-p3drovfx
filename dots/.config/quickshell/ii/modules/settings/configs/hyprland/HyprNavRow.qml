@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -19,6 +21,9 @@ RippleButton {
     id: root
 
     property string buttonIcon: ""
+    /// An actual desktop-app icon for a selected association. When absent, the category glyph
+    /// remains visible so ordinary navigation rows keep their established appearance.
+    property string appIcon: ""
     // `text` is AbstractButton's own and is FINAL, so declaring one here makes the whole type
     // fail to load. The inherited one is used instead; the row draws it itself.
     /// Shown on the right, before the chevron. The current setting, in words.
@@ -83,7 +88,7 @@ RippleButton {
             spacing: 12
 
             Loader {
-                active: root.buttonIcon.length > 0
+                active: root.appIcon.length === 0 && root.buttonIcon.length > 0
                 visible: active
                 Layout.alignment: Qt.AlignVCenter
                 opacity: root.enabled ? 1 : 0.4
@@ -97,6 +102,14 @@ RippleButton {
                     color: Appearance.colors.colLayer3
                     colSymbol: Appearance.colors.colOnLayer3
                 }
+            }
+
+            IconImage {
+                Layout.alignment: Qt.AlignVCenter
+                visible: root.appIcon.length > 0
+                implicitSize: 30
+                source: Quickshell.iconPath(root.appIcon, "application-x-executable")
+                opacity: root.enabled ? 1 : 0.4
             }
 
             ColumnLayout {

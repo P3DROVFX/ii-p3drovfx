@@ -181,6 +181,54 @@ ContentPage {
         }
     }
 
+    // ── Desktop portal ───────────────────────────────────────────────────────
+    ContentSection {
+        title: Translation.tr("Desktop portal")
+        icon: "hub"
+
+        Component.onCompleted: XdgDesktopPortal.refresh()
+
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("Choose the desktop backend used by XDG file choosers and other portal-aware applications. Hyprland remains the screen-sharing backend.")
+            font.pixelSize: Appearance.font.pixelSize.small
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.WordWrap
+        }
+
+        ContentSubsection {
+            title: Translation.tr("File chooser backend")
+            icon: "folder_open"
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                enabled: XdgDesktopPortal.ready && !XdgDesktopPortal.writing
+                    && !XdgDesktopPortal.restarting
+                currentValue: XdgDesktopPortal.selectedBackend
+                options: XdgDesktopPortal.portalOptions
+                onSelected: value => XdgDesktopPortal.setBackend(String(value))
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: XdgDesktopPortal.errorMessage !== ""
+            materialIcon: "error"
+            text: XdgDesktopPortal.errorMessage
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: XdgDesktopPortal.statusMessage !== ""
+            materialIcon: "check_circle"
+            text: XdgDesktopPortal.statusMessage
+        }
+
+        HyprOptionNote {
+            notes: [{ "icon": "restart_alt", "text": Translation.tr("Changing this restarts xdg-desktop-portal so new dialogs use the selection immediately. A dialog already open keeps its current backend.") }]
+        }
+    }
+
     // ── The honest part ───────────────────────────────────────────────────────
     ContentSection {
         visible: tab.advanced
