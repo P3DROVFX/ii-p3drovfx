@@ -448,6 +448,24 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertNotIn("imagePath", widget)
         self.assertEqual(widget["radius"], 12)
 
+    def test_weather_location_does_not_travel(self):
+        """A preset would otherwise say where its author lives. The city and
+        the GPS switch are dropped as a pair: dropping only the city would
+        leave the importer pinned to nowhere."""
+        data = {"weather": {"enable": True, "enableGPS": False, "city": "Grenoble",
+                            "fetchInterval": 10}}
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+        self.assertNotIn("city", sanitized["weather"])
+        self.assertNotIn("enableGPS", sanitized["weather"])
+        # Whether the widget is shown at all is a look, and it stays.
+        self.assertTrue(sanitized["weather"]["enable"])
+        self.assertEqual(sanitized["weather"]["fetchInterval"], 10)
+
+    def test_weather_units_are_never_applied(self):
+        """Like the interface language, units are the reader's choice: a
+        preset from a US author must not flip anyone to Fahrenheit."""
+        self.assertIn("weather.useUSCS", presets_helper.LOCAL_ONLY_PATHS)
+
 
 class TestPresetMerge(unittest.TestCase):
     """merge() layers a preset over a config instead of replacing it."""

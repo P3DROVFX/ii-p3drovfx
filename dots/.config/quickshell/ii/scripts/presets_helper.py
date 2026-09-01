@@ -94,6 +94,8 @@ PERSONAL_PATHS = (
     "vpn.defaultProfile",
     "vpn.defaultLocation",
     "vpn.recentProvider",
+    "weather.city",
+    "weather.enableGPS",
     "update.lastAutoCheck",
     "update.scriptPath",
 )
@@ -114,6 +116,7 @@ LOCAL_PREFERENCE_PATHS = (
     "appearance.iconTheme",
     "appearance.icons.enableThemed",
     "language",
+    "weather.useUSCS",
     "policies",
     "workSafety",
 )
