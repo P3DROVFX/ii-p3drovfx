@@ -71,7 +71,7 @@ ColumnLayout {
             onTextChanged: searchDebounce.restart()
             onAccepted: {
                 searchDebounce.stop();
-                PresetStore.discover(searchField.text, 30);
+                PresetStore.discover(searchField.text, 30, true);
             }
         }
 
@@ -86,7 +86,7 @@ ColumnLayout {
             enabled: !PresetStore.discovering
             onClicked: {
                 searchDebounce.stop();
-                PresetStore.discover(searchField.text, 30);
+                PresetStore.discover(searchField.text, 30, true);
                 PresetStore.checkUpdates(true);
             }
         }

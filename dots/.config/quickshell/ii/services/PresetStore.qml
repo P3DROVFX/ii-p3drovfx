@@ -111,15 +111,30 @@ Singleton {
         root._run("auth", "", ["auth", "status"]);
     }
 
-    function discover(query, limit) {
+    // GitHub allows a signed-out shell ten searches a minute, and opening the
+    // store tab is a search. The same question asked again inside a minute is
+    // answered with what is already on screen; `force` is the refresh button.
+    function discover(query, limit, force) {
         if (root._pending("discover", ""))
             return;
+        const wanted = (query ?? "").trim();
+        if (!force && root._lastDiscover > 0 && wanted === root._lastDiscoverQuery
+            && Date.now() - root._lastDiscover < root._discoverInterval) {
+            root.discoverFinished();
+            return;
+        }
         root.discovering = true;
         root.discoverError = "";
         let args = ["discover", "--limit", String(limit && limit > 0 ? limit : 30)];
-        if (query && query.trim().length > 0)
-            args = args.concat(["--query", query.trim()]);
-        root._run("discover", "", args);
+        if (wanted.length > 0)
+            args = args.concat(["--query", wanted]);
+        root._enqueue({
+            action: "discover",
+            name: "",
+            query: wanted,
+            json: true,
+            command: ["python3", root.storeScript].concat(args)
+        });
     }
 
     function fetchManifest(repo) {
@@ -318,6 +333,9 @@ Singleton {
     property var _current: null
     property real _lastUpdateCheck: 0
     readonly property int _updateInterval: 30 * 60 * 1000
+    property real _lastDiscover: 0
+    property string _lastDiscoverQuery: ""
+    readonly property int _discoverInterval: 60 * 1000
     // A backstop only. Every command already carries its own timeout; this is
     // for the case where the process never reports at all, which would
     // otherwise wedge the queue for the rest of the session.
@@ -441,6 +459,10 @@ Singleton {
             root.discovering = false;
             root.discoverResults = ok ? (result.results || []) : [];
             root.discoverError = error;
+            if (ok) {
+                root._lastDiscover = Date.now();
+                root._lastDiscoverQuery = job.query ?? "";
+            }
             root.discoverFinished();
             return;
         }
