@@ -51,6 +51,15 @@ Singleton {
             keywords: ["modes", "routines", "automation", "modos", "rotinas", "automacao", "focus"]
         },
         {
+            id: "keyboard",
+            name: "On-screen Keyboard",
+            icon: "keyboard_alt",
+            kind: "surface",
+            // First-class here rather than an accessory: this family assumes no physical
+            // keyboard, so the on-screen one needs a way in that is not itself a keybind.
+            keywords: ["keyboard", "osk", "onscreen", "teclado", "virtual"]
+        },
+        {
             id: "policies",
             name: "Policies",
             icon: "policy",
@@ -173,6 +182,9 @@ Singleton {
         case "elements":
         case "aminoAcids":
             GlobalStates.openCheatsheet(appId);
+            break;
+        case "keyboard":
+            GlobalStates.oskOpen = !GlobalStates.oskOpen;
             break;
         case "videoEditor":
             GlobalStates.videoEditorOpen = true;

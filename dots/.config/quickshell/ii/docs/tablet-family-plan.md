@@ -598,9 +598,7 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       - `surface` — o módulo é uma `PanelWindow` indivisível. Separar exigiria refatorar a
         ii, o que esta família não pode exigir; a entrada abre a superfície que o shell de
         desktop já tem. Continua sendo lançada pela gaveta, só usa a própria moldura.
-- [x] Aparecem na gaveta **só durante a busca**, para não diluir a grade A-Z de aplicativos
-      instalados com internals do shell, e renderizam como símbolo em placa tingida em vez
-      de fingir ser ícone de app.
+- [x] Renderizam como símbolo em placa tingida em vez de fingir ser ícone de app.
 - [x] Componentes de conteúdo são da ii → **injetados** pelo composition root.
 - [x] **Policies entrando da esquerda** como app window — largura de app, barra de título e
       voltar, e a borda esquerda reivindica o arrasto pelo `TouchGestureDragRegistry`.
@@ -616,10 +614,6 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       interno de sidebar de 460px.
 - [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
 - [ ] On-screen keyboard como cidadão de primeira classe.
-- [ ] Diálogos da shade: hoje redimensionados por fora (`dialogWidth`) mas com layout
-      interno de sidebar de 460px.
-- [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
-- [ ] On-screen keyboard vira cidadão de primeira classe.
 
 ### Fase 6 — Settings adaptado para toque
 
