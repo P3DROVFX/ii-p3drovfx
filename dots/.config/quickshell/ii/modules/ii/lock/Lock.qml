@@ -79,9 +79,6 @@ LockScreen {
         target: GlobalStates
         function onScreenLockedChanged() {
             if (GlobalStates.screenLocked) {
-                if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
-                    Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "lock"]);
-                }
                 restoreTimer.stop();
                 workspaceNumbersRevealTimer.stop();
                 GlobalStates.workspaceRestoreInProgress = false;
@@ -142,9 +139,6 @@ LockScreen {
                 }
             } else {
                 root.unlockFocusedMonitor = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-                if (Config.options && Config.options.background && Config.options.background.useSeparateLockscreenWallpaper) {
-                    Quickshell.execDetached(["bash", Directories.swapLockscreenColorsScriptPath, "unlock"]);
-                }
                 GlobalStates.workspaceRestoreInProgress = true;
                 restoreTimer.start();
             }

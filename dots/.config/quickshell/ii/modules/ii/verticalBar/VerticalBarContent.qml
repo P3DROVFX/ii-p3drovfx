@@ -17,6 +17,15 @@ Item { // Bar content region
 
     property var screen: root.QsWindow.window?.screen
     property int monitorIndex
+
+    // ── Edit Mode ─────────────────────────────────────────────────────────────
+    property var barEditController: editController
+    Bar.BarEditController {
+        id: editController
+        anchors.fill: parent
+        z: 100
+        vertical: true
+    }
     property var brightnessMonitor: Brightness.getMonitorForScreen(screen)
     property bool hasActiveWindows: false
     property bool showBarBackground: root.hasActiveWindows && Config.options.bar.barBackgroundStyle === 2 || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3

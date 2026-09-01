@@ -35,7 +35,8 @@ Scope {
 
             // Preserve the mapped PanelWindow through lock entry so the
             // compositor does not reflow the screen while WlSessionLock appears.
-            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            // Edit Mode holds the bar mapped and revealed, as Bar.qml does.
+            active: (GlobalStates.barOpen || GlobalStates.editMode) && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: Scope {
                 id: barScope
 
@@ -153,7 +154,7 @@ Scope {
                     }
 
                     property bool superShow: false
-                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
+                    property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode
                     property real hiddenAmount: (Config.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.verticalBarWindowWidth : 0
                     Behavior on hiddenAmount {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)

@@ -69,7 +69,6 @@ Singleton {
     property string generatedMaterialThemePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/colors.json`)
     property string wallpaperPreviewColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper_preview_colors.json`)
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
-    property string desktopColorsBackupPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/desktop_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
     // ESPN scoreboards and per-game summaries shared by the sports widgets
@@ -82,7 +81,6 @@ Singleton {
     property string gammaControlScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/brightness/ii-gamma-control`)
     property string displayColorFilterWriterPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/display/write_color_filter.py`)
     property string displayColorFilterGeneratedPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/display-color-filter`)
-    property string swapLockscreenColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/swap-lockscreen-colors.sh`)
     property string generatedWallpaperCategoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper/category.txt`)
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
     property string screenshotTemp: `/tmp/quickshell-${SystemInfo.username}/media/screenshot`

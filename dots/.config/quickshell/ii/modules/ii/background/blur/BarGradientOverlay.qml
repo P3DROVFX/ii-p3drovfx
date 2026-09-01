@@ -19,7 +19,7 @@ Item {
     readonly property bool shouldShow: Config.options.bar.barBackgroundStyle === 0
         && Config.options.bar.transparentGlow
         && GlobalStates.barOpen
-        && !GlobalStates.screenLocked
+        && !GlobalStates.lockLookActive
 
     Item {
         id: barBlurOverlay

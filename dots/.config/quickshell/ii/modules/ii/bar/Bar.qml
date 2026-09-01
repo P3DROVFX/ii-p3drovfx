@@ -30,7 +30,9 @@ Scope {
             // Destroying the PanelWindow here makes Wayland recompute the layer
             // geometry in the same frame as the lock animation, which produces a
             // visible slide when wrapped frame is enabled.
-            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            // Edit Mode holds the bar mapped and revealed: its viewport reserves the bar's edge
+            // whatever the bar is doing, and stage 6 edits the bar in place.
+            active: (GlobalStates.barOpen || GlobalStates.editMode) && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: BarWindow {
                 screen:       barLoader.modelData
                 monitorIndex: barLoader.monitorIndex

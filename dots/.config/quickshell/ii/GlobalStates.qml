@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 import QtQuick
 import Quickshell
@@ -163,7 +164,9 @@ Singleton {
     // Shared transition clock for the bar and wrapped-frame visuals. Their
     // PanelWindows stay mapped while this runs; each layer chooses fade or
     // slide based on whether the wrapped frame is active.
-    property real lockBarTransitionProgress: screenLocked ? 1.0 : 0.0
+    // Also driven by Edit Mode's Lockscreen tab, so the bar leaves the way
+    // it does on a real lock instead of being torn down per tab switch.
+    property real lockBarTransitionProgress: lockLookActive ? 1.0 : 0.0
     Behavior on lockBarTransitionProgress {
         // Use the non-overshooting effects curve for opacity. Spatial curves
         // overshoot and make a fade look like an abrupt blink.
@@ -347,6 +350,566 @@ Singleton {
     property int settingsNavigationRequest: 0
     property string activeLeftSidebarMonitor: ""
     property string activeRightSidebarMonitor: ""
+
+    // ── Edit Mode ────────────────────────────────────────────────────────────
+    // `editMode` is the switch: the keybind, the IPC target, the Escape ladder
+    // and the toolbar's Done flip it, and everything the mode does hangs off
+    // the change handler below.
+    // The history below is inert outside the mode: entries are only recorded
+    // while it is on and dropped when it ends, so an edit made on the plain
+    // desktop is exactly as unrecorded as it always was.
+    property bool editMode: false
+
+    // The screen the mode is on (decision D4: only the desktop focused at
+    // entry shrinks). Left pointing at it through the exit animation so the
+    // desktop that shrank is the one that grows back; the next entry re-points
+    // it.
+    property string editModeMonitor: ""
+    // The per-widget menu, one at a time shell-wide. It is drawn by the edit
+    // chrome of the screen it was summoned on (the canvas sits on Bottom, under
+    // the bar and dock, so a menu drawn there could be covered) and acts on
+    // the widget through the canvas that announced the right-click, which is
+    // the one that knows the widget by its instance id. Screen coordinates.
+    property bool editWidgetMenuOpen: false
+    property string editWidgetMenuInstanceId: ""
+    property string editWidgetMenuScreenName: ""
+    property real editWidgetMenuX: 0
+    property real editWidgetMenuY: 0
+    property var editWidgetMenuCanvas: null
+
+    // The drawer - the mode's catalogue - and its own animated scalar, beside
+    // `editProgress` rather than a second animation of it: this one carries
+    // the slide and the desktop's sideways travel, that one the shrink.
+    // `&& editMode` so the exit closes the drawer even if nothing wrote the
+    // flag back, and both scalars run down together on the same tier.
+    property bool editDrawerOpen: false
+    // Which of the drawer's catalogues it shows. Here rather than in the drawer
+    // itself because a right-click asks for one before the drawer that will
+    // show it exists: the chrome is built on the way into the mode.
+    property string editDrawerSection: "widgets"
+    // Whether the catalogue's search field holds the keyboard. The chrome's
+    // surface raises it while the field is focused; the desktop's canvas - the
+    // mode's real key surface - reads it to know when to take the keyboard back
+    // (BackgroundWidgetsWindow).
+    property bool editSearchFocused: false
+    // Ctrl+F. The key arrives on the canvas, which is the only surface in the
+    // mode holding a keyboard, and the drawer on the edited screen answers it.
+    signal editSearchFocusRequested()
+    // The other direction: a press that is not on the field lets it go. The
+    // chrome's own catcher answers presses on its surface; this carries the
+    // ones that land on the desktop, which is a surface the drawer cannot see.
+    signal editSearchReleaseRequested()
+    property real editDrawerProgress: root.editMode && root.editDrawerOpen ? 1 : 0
+    Behavior on editDrawerProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
+    // The drawer's reveal in screen coordinates, keyed by screen name and
+    // published by the chrome surface: the widget being carried back into it
+    // is on another layer surface and cannot read the chrome's items.
+    property var editDrawerReveals: ({})
+    // The screen whose drawer a dragged desktop widget is over, "" for none -
+    // what the drawer paints its remove tint from.
+    property string editDrawerDropScreen: ""
+    // The drop itself, answered by the chrome side. A signal, because dropping
+    // the same widget twice is two gestures.
+    signal editWidgetDroppedOnDrawer(string instanceId)
+
+    // The desktop's right-click menu: which screen, where on it. Session
+    // state like the widget menu's; exists in and out of Edit Mode.
+    property bool desktopMenuOpen: false
+    property string desktopMenuScreenName: ""
+    property real desktopMenuX: 0
+    property real desktopMenuY: 0
+    // Where the click landed. The bar asks for the menu too, and that decides
+    // both what the menu offers - a bar is not a place to pick a wallpaper
+    // from - and which catalogue its widgets row opens.
+    property bool desktopMenuOnBar: false
+
+    function openDesktopMenu(screenName, x, y, onBar = false) {
+        root.closeEditWidgetMenu();
+        root.closeEditBarMenu();
+        root.desktopMenuOnBar = onBar;
+        root.desktopMenuScreenName = screenName;
+        root.desktopMenuX = x;
+        root.desktopMenuY = y;
+        root.desktopMenuOpen = true;
+    }
+
+    function closeDesktopMenu() {
+        root.desktopMenuOpen = false;
+    }
+
+    // The bar, edited in place: a reorder drag in flight (a gesture for the
+    // Escape ladder) and the per-widget menu, which the chrome surface draws
+    // because the bar's own window is too thin to hold it. The point is in
+    // the bar window's coordinates with that window's size alongside, so the
+    // host can place it from whichever screen edge the bar sits on.
+    property bool editBarDragActive: false
+    signal editBarDragCancel()
+
+    // Which controller answers for a screen's bar. Edit Mode's catalogue is
+    // drawn on the chrome's surface and a row dragged out of it onto the bar
+    // crosses into another layer surface, which it has no way to reach; the
+    // chrome looks the bar up here and hands it the pointer. A list per screen
+    // because both orientations declare a controller and the plain bar window
+    // and Connect Mode's panel can hold one each - the drawn one is the one
+    // that reports itself usable.
+    property var editBarControllers: ({})
+
+    function registerBarEditController(screenName, controller) {
+        const next = {};
+        for (const key in root.editBarControllers) {
+            const kept = root.editBarControllers[key].filter(c => c && c !== controller);
+            if (kept.length > 0)
+                next[key] = kept;
+        }
+        if (screenName !== "")
+            next[screenName] = (next[screenName] ?? []).concat([controller]);
+        root.editBarControllers = next;
+    }
+
+    function unregisterBarEditController(controller) {
+        root.registerBarEditController("", controller);
+    }
+
+    function barEditControllerFor(screenName) {
+        return (root.editBarControllers[screenName] ?? []).find(c => c && c.usable) ?? null;
+    }
+    property bool editBarMenuOpen: false
+    property string editBarMenuScreenName: ""
+    property var editBarMenuController: null
+    property int editBarMenuBucket: -1
+    property int editBarMenuIndex: -1
+    property bool editBarMenuCentered: false
+    property real editBarMenuX: 0
+    property real editBarMenuY: 0
+    property real editBarMenuWindowWidth: 0
+    property real editBarMenuWindowHeight: 0
+
+    function openEditBarMenu(screenName, controller, bucket, index, centered, x, y, windowWidth, windowHeight) {
+        if (!root.editMode)
+            return;
+        root.closeDesktopMenu();
+        root.closeEditWidgetMenu();
+        root.editBarMenuScreenName = screenName;
+        root.editBarMenuController = controller;
+        root.editBarMenuBucket = bucket;
+        root.editBarMenuIndex = index;
+        root.editBarMenuCentered = centered;
+        root.editBarMenuX = x;
+        root.editBarMenuY = y;
+        root.editBarMenuWindowWidth = windowWidth;
+        root.editBarMenuWindowHeight = windowHeight;
+        root.editBarMenuOpen = true;
+    }
+
+    function closeEditBarMenu() {
+        root.editBarMenuOpen = false;
+        root.editBarMenuController = null;
+    }
+
+    // ── Bar widget name on hover ──────────────────────────────────────────
+    // Several bar widgets are a bare icon, and while Edit Mode is on the idle
+    // ones are standing in for something that is not happening, so the name is
+    // worth having under the pointer. It cannot be a tooltip drawn in the bar:
+    // Edit Mode's toolbar sits right under the bar on a surface of its own and
+    // covers it. The bar reports which widget is hovered and where, and the
+    // chrome draws the label on the surface that is on top.
+    property var editBarHoverSlot: null
+    property string editBarHoverName: ""
+    property string editBarHoverScreenName: ""
+    property real editBarHoverX: 0
+    property real editBarHoverY: 0
+    property real editBarHoverWindowWidth: 0
+    property real editBarHoverWindowHeight: 0
+    readonly property bool editBarHoverShown: root.editBarHoverSlot !== null && root.editBarHoverName.length > 0
+
+    function showEditBarHover(slot, screenName, name, x, y, windowWidth, windowHeight) {
+        if (!root.editMode || root.editBarDragActive)
+            return;
+        root.editBarHoverName = name;
+        root.editBarHoverScreenName = screenName;
+        root.editBarHoverX = x;
+        root.editBarHoverY = y;
+        root.editBarHoverWindowWidth = windowWidth;
+        root.editBarHoverWindowHeight = windowHeight;
+        root.editBarHoverSlot = slot;
+    }
+
+    function clearEditBarHover(slot) {
+        // Only whoever put the label up may take it down: crossing from one
+        // widget straight onto the next fires the arrival before the departure,
+        // and the departure would otherwise clear the label just raised.
+        if (slot !== null && root.editBarHoverSlot !== slot)
+            return;
+        root.editBarHoverSlot = null;
+    }
+
+    function openEditWidgetMenu(canvas, instanceId, screenName, x, y) {
+        if (!root.editMode)
+            return;
+        root.closeDesktopMenu();
+        root.closeEditBarMenu();
+        root.editWidgetMenuCanvas = canvas;
+        root.editWidgetMenuInstanceId = instanceId;
+        root.editWidgetMenuScreenName = screenName;
+        root.editWidgetMenuX = x;
+        root.editWidgetMenuY = y;
+        root.editWidgetMenuOpen = true;
+    }
+
+    function closeEditWidgetMenu() {
+        root.editWidgetMenuOpen = false;
+        root.editWidgetMenuCanvas = null;
+        root.editWidgetMenuInstanceId = "";
+    }
+
+    // The entry and the exit as ONE animated scalar. The desktop lives on two
+    // layer surfaces (the wallpaper and the widgets, two scene graphs) and the
+    // chrome framing it on a third; all three derive their geometry from this
+    // number, so a Behavior anywhere else would be two values that have to
+    // agree - and the frames where they do not are the ones where the chrome
+    // frames a rectangle the desktop is not at. `elementMove` whole, not an
+    // enter/exit tier: those carry alwaysRunToEnd, and a mode toggled twice
+    // inside its own duration would finish arriving before it started leaving.
+    property real editProgress: root.editMode ? 1 : 0
+    Behavior on editProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
+    }
+
+    // Which face of the desktop the viewport shows: a FILTER, never a mode of
+    // its own - one entry, one exit ladder. The Lockscreen tab arrives with
+    // stage 7b; until then this only ever holds the desktop.
+    property string editTab: EditModeLogic.desktopTab
+    readonly property bool editLockPreview: root.editMode && root.editTab === EditModeLogic.lockscreenTab
+    // "The lock's LOOK is on screen": the real lock session or the preview of
+    // it. The one derivation the theme sites are meant to read, so the preview
+    // can never show the lock's wallpaper under the desktop's palette.
+    readonly property bool lockLookActive: root.screenLocked || root.editLockPreview
+
+    // The edge each dock occupies, published by the dock window itself
+    // (screen name -> { side, thickness }). The dock is the one place that
+    // knows its padding and style, so the mode's viewport reads this rather
+    // than deriving the dock's size a second time.
+    property var dockInsets: ({})
+    function setDockInset(screenName, side, thickness) {
+        if (!screenName)
+            return;
+        const next = Object.assign({}, root.dockInsets);
+        if (!side || !(thickness > 0))
+            delete next[screenName];
+        else
+            next[screenName] = { "side": side, "thickness": thickness };
+        root.dockInsets = next;
+    }
+
+    // The screen a right-click asked the mode for, read once by the entry
+    // below and cleared there: the menu knows which desktop or bar was
+    // clicked, and it is not always the focused one.
+    property string _editRequestedMonitor: ""
+
+    function openEditMode(monitor = "") {
+        if (root.editMode)
+            return;
+        // Nothing to edit without a desktop, and nothing to see while the
+        // lock or media mode holds the screen.
+        if (!Config.options.background.enable || root.screenLocked || root.mediaModeActive)
+            return;
+        // Full-screen modes over the same desktop close first rather than
+        // having the mode layered under them.
+        root.overviewOpen = false;
+        root.sessionOpen = false;
+        root._editRequestedMonitor = monitor;
+        root.editMode = true;
+    }
+
+    // A right-click's way in: the mode, with the drawer already showing the
+    // catalogue for what was clicked. Also the way to change catalogues when
+    // the mode is already on, which is what a second right-click does.
+    function openEditCatalogue(section, screenName = "") {
+        root.editDrawerSection = section;
+        root.openEditMode(screenName);
+        if (!root.editMode)
+            return;
+        // The bar and the dock are no part of the lock's face: asking for one
+        // of them from the lock preview means the desktop.
+        if (root.editLockPreview && section !== "widgets" && section !== "lock")
+            root.editTab = EditModeLogic.desktopTab;
+        root.editDrawerOpen = true;
+    }
+
+    function closeEditMode() {
+        root.editMode = false;
+    }
+
+    function toggleEditMode() {
+        if (root.editMode)
+            root.closeEditMode();
+        else
+            root.openEditMode();
+    }
+
+    function _enterEditMode() {
+        root.editTab = EditModeLogic.desktopTab;
+        root.editModeMonitor = root._editRequestedMonitor !== "" ? root._editRequestedMonitor
+            : (Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "");
+        root._editRequestedMonitor = "";
+        // Panels covering the desktop being edited close, and stay closed: the
+        // sidebar open handlers refuse them for the length of the mode.
+        root.policiesPanelOpen = false;
+        root.dashboardPanelOpen = false;
+        root.mediaControlsOpen = false;
+        root._editClearWorkspace();
+    }
+
+    function _leaveEditMode() {
+        root.closeEditWidgetMenu();
+        root.closeEditBarMenu();
+        root.closeDesktopMenu();
+        root.clearEditBarHover(null);
+        root.editBarDragActive = false;
+        // The drawer and its drop hint are the mode's: one left open would
+        // greet the next entry mid-slide.
+        root.editDrawerOpen = false;
+        root.editDrawerSection = "widgets";
+        root.editDrawerDropScreen = "";
+        // The lock now owns every monitor's workspace - it parks them itself
+        // and restores its own record on unlock - so a restore fired here
+        // would fight it. The saved pair waits for the unlock instead.
+        if (root.screenLocked)
+            return;
+        root._editRestoreWorkspace();
+    }
+
+    // ---- the workspace under the mode ------------------------------------
+    //
+    // The mode can be entered over windows (the keybind), and windows cover
+    // the desktop being edited. The lock's route: the focused monitor moves to
+    // an empty workspace for the length of the mode and comes back on exit.
+    // The empty workspace is the lock's own temp id for the workspace it
+    // replaces (2147483647 - id), which the parallax and the workspace
+    // indicator already map back to the real one, so nothing visibly jumps.
+    // Pinned windows are ignored: they follow to the temp workspace anyway.
+    property int _editSavedWorkspace: 0
+    property int _editTempWorkspace: 0
+
+    function _editClearWorkspace() {
+        root._editSavedWorkspace = 0;
+        root._editTempWorkspace = 0;
+        const mon = root.editModeMonitor;
+        if (mon === "")
+            return;
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const ws = mData?.activeWorkspace?.id;
+        if (ws === undefined || ws === null)
+            return;
+        let batch = "";
+        // A special workspace is summoned over the desktop; close it first,
+        // as the lock does.
+        const specName = mData.specialWorkspace?.name ?? "";
+        if (specName !== "" && (mData.specialWorkspace?.id ?? 0) !== 0) {
+            let clean = specName.startsWith("special:") ? specName.substring(8) : specName;
+            if (!clean)
+                clean = "special";
+            batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.workspace.toggle_special('${clean}')`;
+        }
+        // Already parked on a temp workspace (the lock's, or ours): nothing to
+        // clear, and nothing of ours to restore.
+        if (ws <= 1000000) {
+            const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
+            if (hasWindows) {
+                const temp = 2147483647 - ws;
+                batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${temp}}`;
+                root._editSavedWorkspace = ws;
+                root._editTempWorkspace = temp;
+            }
+        }
+        if (batch !== "")
+            Quickshell.execDetached(["hyprctl", "--batch", batch.substring(3)]);
+    }
+
+    function _editRestoreWorkspace() {
+        const mon = root.editModeMonitor;
+        const saved = root._editSavedWorkspace;
+        const temp = root._editTempWorkspace;
+        root._editSavedWorkspace = 0;
+        root._editTempWorkspace = 0;
+        if (saved === 0 || mon === "")
+            return;
+        // Only put back a monitor still parked where the entry left it: a
+        // user who switched workspaces during the mode has moved on. The saved
+        // id is accepted too, because HyprlandData refreshes asynchronously
+        // and a mode left within that window still reads the pre-entry state;
+        // focusing a workspace the monitor is already on is a no-op.
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const current = mData?.activeWorkspace?.id ?? 0;
+        if (current !== temp && current !== saved)
+            return;
+        Quickshell.execDetached(["hyprctl", "--batch", `dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${saved}}`]);
+    }
+
+    Timer {
+        id: editUnlockRestoreTimer
+        // After the lock's own restore (Lock.qml waits 450 ms for its zoom-in
+        // before dispatching), so the two batches never race.
+        interval: 800
+        repeat: false
+        onTriggered: root._editRestoreWorkspace()
+    }
+
+    Connections {
+        target: root
+
+        // Anything that takes the desktop off the screen ends the mode: the
+        // lock repurposes the background as its own backdrop, the overview and
+        // the session menu cover it, media mode promotes the wallpaper over
+        // everything, and Connect mode rebuilds the bar the mode will edit.
+        function onScreenLockedChanged() {
+            if (root.screenLocked) {
+                root.editMode = false;
+                return;
+            }
+            if (root._editSavedWorkspace !== 0)
+                editUnlockRestoreTimer.restart();
+        }
+
+        function onOverviewOpenChanged() {
+            if (root.overviewOpen)
+                root.editMode = false;
+        }
+
+        function onSessionOpenChanged() {
+            if (root.sessionOpen)
+                root.editMode = false;
+        }
+
+        function onMediaModeActiveChanged() {
+            if (root.mediaModeActive)
+                root.editMode = false;
+        }
+
+        function onConnectModeActiveChanged() {
+            if (root.connectModeActive)
+                root.editMode = false;
+        }
+    }
+
+    // Undo and redo, as two stacks of {undo, redo} closures. Closures rather
+    // than diffs: each commit site knows how to reverse and replay its own
+    // store write, and no one serialiser covers every store the mode edits.
+    // The stacks are reassigned, never mutated in place - a `property var`
+    // only notifies on reassignment, so an in-place push would leave every
+    // observer of `editCanUndo` reading a depth that never moves.
+    property var editUndoStack: []
+    property var editRedoStack: []
+    readonly property bool editCanUndo: editUndoStack.length > 0
+    readonly property bool editCanRedo: editRedoStack.length > 0
+
+    // While a batch is open, pushes collect; closing it folds them into ONE
+    // entry, so a gesture that commits several writes (a group drag, a burst
+    // of arrow keys, a resize with its re-centre) is one Ctrl+Z. Undo replays
+    // a batch backwards and redo forwards: three arrow steps on one widget
+    // push "back to 36", "back to 48", "back to 60", and reversing them in
+    // push order would leave the widget at 60.
+    property var _editHistoryBatch: null
+    property bool _editHistoryReplaying: false
+
+    function editHistoryBeginBatch() {
+        if (root._editHistoryBatch === null)
+            root._editHistoryBatch = [];
+    }
+
+    function editHistoryEndBatch() {
+        const entries = root._editHistoryBatch;
+        root._editHistoryBatch = null;
+        if (entries === null || entries.length === 0)
+            return;
+        if (entries.length === 1) {
+            root._editHistoryCommit(entries[0]);
+            return;
+        }
+        root._editHistoryCommit({
+            "undo": () => {
+                for (let i = entries.length - 1; i >= 0; i--)
+                    entries[i].undo();
+            },
+            "redo": () => {
+                for (let i = 0; i < entries.length; i++)
+                    entries[i].redo();
+            }
+        });
+    }
+
+    // entry: {undo: function, redo: function}. Recorded only while the mode
+    // is on, and never while a replay runs - an undo that re-recorded the
+    // write it reverses would never converge.
+    function editHistoryPush(entry) {
+        if (!root.editMode || root._editHistoryReplaying)
+            return;
+        if (!entry || typeof entry.undo !== "function" || typeof entry.redo !== "function")
+            return;
+        if (root._editHistoryBatch !== null) {
+            root._editHistoryBatch.push(entry);
+            return;
+        }
+        root._editHistoryCommit(entry);
+    }
+
+    // A new edit invalidates the redo stack: what it held was a future the
+    // user has now diverged from.
+    function _editHistoryCommit(entry) {
+        root.editUndoStack = EditModeLogic.undoPush(root.editUndoStack, entry);
+        root.editRedoStack = [];
+    }
+
+    function editUndo() {
+        if (root._editHistoryBatch !== null)
+            root.editHistoryEndBatch();
+        const popped = EditModeLogic.undoPop(root.editUndoStack);
+        root.editUndoStack = popped.stack;
+        if (popped.entry === null)
+            return;
+        root._editHistoryReplay(popped.entry.undo);
+        root.editRedoStack = EditModeLogic.undoPush(root.editRedoStack, popped.entry);
+    }
+
+    function editRedo() {
+        const popped = EditModeLogic.undoPop(root.editRedoStack);
+        root.editRedoStack = popped.stack;
+        if (popped.entry === null)
+            return;
+        root._editHistoryReplay(popped.entry.redo);
+        root.editUndoStack = EditModeLogic.undoPush(root.editUndoStack, popped.entry);
+    }
+
+    function _editHistoryReplay(fn) {
+        root._editHistoryReplaying = true;
+        try {
+            fn();
+        } finally {
+            root._editHistoryReplaying = false;
+        }
+    }
+
+    function editHistoryClear() {
+        root._editHistoryBatch = null;
+        root.editUndoStack = [];
+        root.editRedoStack = [];
+    }
+
+    onEditModeChanged: {
+        if (root.editMode) {
+            root._enterEditMode();
+            return;
+        }
+        root._leaveEditMode();
+        // Done means "stop": the history is about this session of the mode,
+        // and a stack surviving it would let the next entry undo edits made
+        // outside it.
+        root.editHistoryClear();
+    }
 
     function isScreenAllowedForBar(screen) {
         if (!screen)
@@ -1146,6 +1709,15 @@ Singleton {
     onAnimatedRightSidebarWidthChanged: {}
 
     onPoliciesPanelOpenChanged: {
+        // Edit Mode refuses the sidebars for its whole length: its chrome is
+        // Overlay and the sidebars are Top, so an open one is painted over by
+        // the toolbar that shares its edge - and neither sidebar is something
+        // the mode edits. Refused here, on the flag, because the corners, the
+        // bar and the IPC handlers all open them through it.
+        if (policiesPanelOpen && root.editMode) {
+            policiesPanelOpen = false;
+            return;
+        }
         if (policiesPanelOpen) {
             if (root.activeLeftSidebarMonitor === "") {
                 root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -1157,6 +1729,12 @@ Singleton {
     }
 
     onDashboardPanelOpenChanged: {
+        // Before the notification sweep, not after: a refused open must not
+        // count as the user having read what it would have shown them.
+        if (dashboardPanelOpen && root.editMode) {
+            dashboardPanelOpen = false;
+            return;
+        }
         if (dashboardPanelOpen) {
             if (root.activeRightSidebarMonitor === "") {
                 root.activeRightSidebarMonitor = Hyprland.focusedMonitor?.name ?? "";
@@ -1255,5 +1833,29 @@ Singleton {
         onReleased: {
             root.superDown = false;
         }
+    }
+
+    // Edit Mode entry points. `qs -c ii ipc call editMode toggle|open|close`;
+    // the shortcut is what the Super+Shift+E bind reaches.
+    IpcHandler {
+        target: "editMode"
+
+        function toggle(): void {
+            root.toggleEditMode();
+        }
+
+        function open(): void {
+            root.openEditMode();
+        }
+
+        function close(): void {
+            root.closeEditMode();
+        }
+    }
+
+    GlobalShortcut {
+        name: "editModeToggle"
+        description: "Toggles the desktop layout editor"
+        onPressed: root.toggleEditMode()
     }
 }

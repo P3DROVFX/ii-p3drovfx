@@ -14,6 +14,10 @@ QtObject {
     property int widgetSizesVersion: 0  // bumped by widgets after mutating widgetSizes
     property int syncVersion: 0
     property bool staggerTransitionActive: false
+    // True while a widget is being dragged on any monitor. Written by each
+    // BackgroundWidgetsWindow from its canvas; BackgroundRoot reads it to dim
+    // the wallpaper under the drag.
+    property bool draggingActive: false
 
     property Timer staggerTransitionReset: Timer {
         interval: 2000
@@ -101,6 +105,11 @@ QtObject {
                 addCount++;
             } else {
                 let modelItem = widgetListModel.get(modelIndex);
+                // Back in the config before its exit finished (an undone
+                // removal): the delegate is still there, so un-flag it rather
+                // than let the reap drop it and a fresh one fade in.
+                if (modelItem.exiting)
+                    widgetListModel.setProperty(modelIndex, "exiting", false);
                 if (modelItem.widgetId !== configItem.widgetId) {
                     modelItem.widgetId = configItem.widgetId;
                 }

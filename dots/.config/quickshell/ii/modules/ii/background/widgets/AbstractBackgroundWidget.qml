@@ -17,6 +17,21 @@ AbstractWidget {
 
     property string configEntryName: ""
     property var widgetInstance: null
+    // Monitor this instance is drawn on; "" for previews and legacy callers.
+    // Every persisted write carries it so the per-monitor fork rule in
+    // WidgetPlacement applies (see Config.updateWidgetPosition).
+    readonly property string monitorName: widgetInstance !== null ? (widgetInstance.monitorName ?? "") : ""
+    // Per-instance pin: the widget stays put whatever the global lock says.
+    // The global lock itself is suppressed while Edit Mode is on - the stored
+    // preference is untouched and the desktop is locked again on the way out.
+    // The mode is read off the owning canvas rather than from a global, so a
+    // preview or an overlay canvas never follows it.
+    readonly property bool pinned: widgetInstance !== null && widgetInstance.pinned === true
+    readonly property bool editModeActive: {
+        const canvas = findCanvas(root.parent);
+        return canvas !== null && canvas.editMode === true;
+    }
+    readonly property bool interactionLocked: pinned || (_positionsLocked && !editModeActive)
     property bool isPreview: false
     property string styleOverride: widgetInstance ? (WidgetsRegistry.getStyleOverride(widgetInstance.widgetId) || "") : ""
 
@@ -32,7 +47,10 @@ AbstractWidget {
     property string placementStrategy: isPreview ? "free" : (widgetInstance !== null ? (widgetInstance.placementStrategy || "free") : (configEntry ? configEntry.placementStrategy : "free"))
     property string lockBehavior: widgetInstance ? (widgetInstance.lockBehavior || "hide") : "hide"
     property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "center" || lockBehavior === "lockOnly"
-    property bool forceCenter: (GlobalStates.lockScreenCentered || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
+    // The lock layout: the real lock once its wallpaper has centred, or Edit
+    // Mode's Lockscreen tab, which previews it without a lock session.
+    readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
+    property bool forceCenter: (lockLayoutActive || GlobalStates.workspaceRestoreInProgress) && lockBehavior === "center"
 
     function getCenteredWidgetsList() {
         if (!widgetListModel) return [];
@@ -240,6 +258,32 @@ AbstractWidget {
     property real _rawDragX: 0
     property real _rawDragY: 0
 
+    // ── Canvas selection / group drag (WidgetCanvas) ─────────────────────────
+    // The canvas owns the selection set and writes `selected`; the widget only
+    // renders it. `groupDragging` is true on every non-leader member while a
+    // group drag is in flight - a follower is not dragging itself, so without
+    // this second gate its position Behaviors would animate every step and the
+    // cluster would swim behind the pointer. The group bounds are set by the
+    // canvas on the leader so the whole selection stops when its first member
+    // reaches an edge; ±Infinity keeps a single-widget drag what it was.
+    property bool selected: false
+    property bool groupDragging: false
+    property real groupDragMinX: -Infinity
+    property real groupDragMaxX: Infinity
+    property real groupDragMinY: -Infinity
+    property real groupDragMaxY: Infinity
+    // Found once and kept: a widget destroyed mid-drag or while selected has
+    // to tell the canvas, and by then walking its parent chain is unsafe.
+    readonly property var ownerCanvas: findCanvas(root.parent)
+    Component.onDestruction: {
+        const canvas = root.ownerCanvas;
+        if (!canvas || !canvas.widgetRemoved)
+            return;
+        try {
+            canvas.widgetRemoved(root);
+        } catch (e) {}
+    }
+
     // ── Snap hysteresis state ─────────────────────────────────────────────────
     // This is a Schmitt trigger: acquire close to a guide, release farther away.
     readonly property int _snapEnter: 18
@@ -283,9 +327,15 @@ AbstractWidget {
         }
     }
 
+    // The first placement is not a move: the widget lands on its spot with the
+    // position Behaviors still shut, and they are armed a turn later. Armed
+    // through a flag the binding below reads, never by assigning that binding's
+    // property here - an assignment destroys a binding for the life of the
+    // object, and this one used to, which left the Behaviors on through every
+    // drag: a widget chased the pointer instead of following it, and a member
+    // of a dragged selection was committed wherever its animation had got to.
+    property bool _positionAnimReady: false
     Component.onCompleted: {
-        root.animateXPos = false;
-        root.animateYPos = false;
         if (root.isPreview) {
             root.x = 0;
             root.y = 0;
@@ -293,10 +343,7 @@ AbstractWidget {
             root.x = root.targetX;
             root.y = root.targetY;
         }
-        Qt.callLater(() => {
-            root.animateXPos = !root.isDragging;
-            root.animateYPos = !root.isDragging;
-        });
+        Qt.callLater(() => root._positionAnimReady = true);
     }
 
     Timer {
@@ -366,7 +413,12 @@ AbstractWidget {
     // activeWidgets entry and applied as a visual Item scale around the centre.
     readonly property bool _positionsLocked: Config.options.background.widgets.lockWidgetPositions ?? false
     readonly property var _scaleSection: Config.options.background.widgets[configEntryName] ?? null
-    readonly property bool _scaleHandleAvailable: !isPreview && draggable && !_positionsLocked && widgetInstance !== null
+    readonly property bool _scaleHandleAvailable: !isPreview && draggable && !interactionLocked && widgetInstance !== null
+    // The factor the widget is persisted at, whichever path stores it - what
+    // the menu's Size row reads and steps from.
+    readonly property real committedScaleFactor: _usesWidgetSizeKey
+        ? ((_scaleSection !== null && _scaleSection.widgetSize > 0) ? _scaleSection.widgetSize / 100 : 1.0)
+        : _persistedInstanceScale
     // Path selection is consumer-based, not declaration-based: sections like
     // clock_nothing declare `widgetSize` while their layout ignores it, and
     // writing it there changes nothing (the widget "snaps back"). Only widgets
@@ -392,21 +444,11 @@ AbstractWidget {
     // drives a persisted write. The commit happens once, on release.
     property real _liveScaleOverride: 0
     readonly property real _effectiveInstanceScale: _liveScaleOverride > 0 ? _liveScaleOverride : _persistedInstanceScale
-    // Authoritative source is the config list, not the ListModel role: roles
-    // freeze at first append, so models created before `scale` existed read
-    // back undefined and visually revert the widget on the next resync.
-    readonly property real _persistedInstanceScale: {
-        const id = widgetInstance !== null ? widgetInstance.id : "";
-        const list = Config.options.background.activeWidgets || [];
-        let result = 1.0;
-        for (let i = 0; i < list.length; i++) {
-            if (list[i].id === id) {
-                result = list[i].scale ?? 1.0;
-                break;
-            }
-        }
-        return result;
-    }
+    // Authoritative source is the placement WidgetDelegate resolves from the
+    // config entry for this monitor, not a ListModel role: roles freeze at
+    // first append, so models created before `scale` existed read back
+    // undefined and visually revert the widget on the next resync.
+    readonly property real _persistedInstanceScale: widgetInstance !== null ? (widgetInstance.scale ?? 1.0) : 1.0
 
 
     // ── Resize gesture ───────────────────────────────────────────────────────
@@ -538,14 +580,36 @@ AbstractWidget {
     }
 
     // Single commit point for both the grip release and the double-click reset.
+    // The size and the position it re-centres go into one history entry, so
+    // an undo puts the widget back at its old size AND its old spot.
     function commitResizeScale(factor) {
-        const target = WidgetDragMath.clamp(factor, 0.5, 2);
+        GlobalStates.editHistoryBeginBatch();
+        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, 2));
+        GlobalStates.editHistoryEndBatch();
+    }
+
+    function _commitResizeScale(target) {
         if (_usesWidgetSizeKey) {
             if (_scaleSection === null || _scaleSection.widgetSize === undefined)
                 return;
             const widthBefore = width;
             const heightBefore = height;
-            _scaleSection.widgetSize = Math.round(target * 100);
+            // This path writes the widget's own config section rather than
+            // its activeWidgets entry, so it records its own pair.
+            const section = _scaleSection;
+            const sizeBefore = section.widgetSize;
+            const sizeAfter = Math.round(target * 100);
+            section.widgetSize = sizeAfter;
+            if (sizeAfter !== sizeBefore) {
+                GlobalStates.editHistoryPush({
+                    "undo": () => {
+                        section.widgetSize = sizeBefore;
+                    },
+                    "redo": () => {
+                        section.widgetSize = sizeAfter;
+                    }
+                });
+            }
             // Keep the centre where the user left it while the box changes.
             x = WidgetDragMath.clamp(x - (width - widthBefore) / 2, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y - (height - heightBefore) / 2, dragMinimumY(), dragMaximumY());
@@ -553,22 +617,11 @@ AbstractWidget {
             if (isPreview || widgetInstance === null)
                 return;
             const rounded = Math.round(target * 100) / 100;
-            Config.updateWidgetScale(widgetInstance.id, rounded);
-            // Write the role directly too, so the scale binding re-evaluates
-            // even if the config resync hiccups.
-            if ((widgetInstance.scale ?? -1) !== rounded)
-                widgetInstance.scale = rounded;
+            Config.updateWidgetScale(widgetInstance.id, rounded, monitorName, GlobalStates.lockLookActive);
             x = WidgetDragMath.clamp(x, dragMinimumX(), dragMaximumX());
             y = WidgetDragMath.clamp(y, dragMinimumY(), dragMaximumY());
         }
-        if (!isPreview) {
-            if (widgetInstance !== null)
-                Config.updateWidgetPosition(widgetInstance.id, x, y);
-            else if (configEntry) {
-                configEntry.x = x;
-                configEntry.y = y;
-            }
-        }
+        commitPlacement(x, y);
     }
 
     function resetScaleFromHandle() {
@@ -596,7 +649,7 @@ AbstractWidget {
     }
 
     function beginPointerGesture(mouse) {
-        if (!draggable)
+        if (!draggable || mouse.button !== Qt.LeftButton)
             return;
 
         const canvas = findCanvas(root.parent);
@@ -628,6 +681,12 @@ AbstractWidget {
         _gridAnchorY = root.y;
         _lastGridX = WidgetDragMath.clamp(Math.round(root.x / _gridStep) * _gridStep, dragMinimumX(), gridMaximumX());
         _lastGridY = WidgetDragMath.clamp(Math.round(root.y / _gridStep) * _gridStep, dragMinimumY(), gridMaximumY());
+
+        // Reported from the press, not from the threshold crossing: nothing
+        // has moved yet, so the follower offsets and clamp bounds the canvas
+        // captures cannot bake a first-step jump into the cluster.
+        if (canvas.widgetDragStarted)
+            canvas.widgetDragStarted(root);
     }
 
     function updatePointerGesture(mouse) {
@@ -649,11 +708,17 @@ AbstractWidget {
             _dragMovementActive = true;
         }
 
-        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, dragMinimumX(), dragMaximumX());
-        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, dragMinimumY(), dragMaximumY());
+        // The group bounds are ±Infinity outside a group drag; inside one they
+        // stop the leader where the first member of the selection hits an edge.
+        _rawDragX = WidgetDragMath.clamp(_dragOriginX + deltaX, Math.max(dragMinimumX(), groupDragMinX), Math.min(dragMaximumX(), groupDragMaxX));
+        _rawDragY = WidgetDragMath.clamp(_dragOriginY + deltaY, Math.max(dragMinimumY(), groupDragMinY), Math.min(dragMaximumY(), groupDragMaxY));
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
-        root.x = applyGridAndSnapX(_rawDragX, _rawDragY);
-        root.y = applyGridAndSnapY(_rawDragY, _rawDragX);
+        // The drawer's remove tint follows the pointer, not the widget: the
+        // widget is clamped to the canvas while the pointer goes over the panel.
+        if (editModeActive)
+            GlobalStates.editDrawerDropScreen = root.pointOverDrawer(mouse) ? monitorName : "";
+        root.x = WidgetDragMath.clamp(applyGridAndSnapX(_rawDragX, _rawDragY), groupDragMinX, groupDragMaxX);
+        root.y = WidgetDragMath.clamp(applyGridAndSnapY(_rawDragY, _rawDragX), groupDragMinY, groupDragMaxY);
     }
 
     onPressed: mouse => beginPointerGesture(mouse)
@@ -686,8 +751,8 @@ AbstractWidget {
 
     visible: opacity > 0
     readonly property real lockOpacity: {
-        if (lockBehavior === "lockOnly") return GlobalStates.lockScreenCentered ? 1 : 0;
-        if (GlobalStates.lockScreenCentered && !visibleWhenLocked) return 0;
+        if (lockBehavior === "lockOnly") return lockLayoutActive ? 1 : 0;
+        if (lockLayoutActive && !visibleWhenLocked) return 0;
         return 1;
     }
     opacity: lockOpacity * lifecycleOpacity
@@ -758,19 +823,34 @@ AbstractWidget {
         return _lastGridY;
     }
 
+    // Every widget's placement on this monitor, keyed by instance id. The
+    // ListModel roles only carry the legacy, unforked coordinates.
+    function _placementsByInstance() {
+        const list = Config.options.background.activeWidgets || [];
+        const result = {};
+        for (let i = 0; i < list.length; i++)
+            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName);
+        return result;
+    }
+
     function snapCandidateX(rawX, rawY) {
         const candidates = [];
+        const placements = _placementsByInstance();
 
         if (widgetListModel) {
             const myCenterX = rawX + root.width / 2;
             const myCenterY = rawY + root.height / 2;
 
+            const followerIds = _groupFollowerIds();
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                if (followerIds.indexOf(widgetId) !== -1)
+                    continue;
+                const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
                 let otherScale = 1.0;
@@ -782,20 +862,20 @@ AbstractWidget {
                         otherHeight = widgetSizes[widgetId].height;
                     if (widgetSizes[widgetId].scale > 0)
                         otherScale = widgetSizes[widgetId].scale;
-                    else if (widget.scale !== undefined && widget.scale > 0)
-                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
-                } else if (widget.scale !== undefined && widget.scale > 0) {
-                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                    else if (other.scale > 0)
+                        otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (other.scale > 0) {
+                    otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
                 }
 
-                const otherCenterY = widget.widgetY + otherHeight / 2;
+                const otherCenterY = other.y + otherHeight / 2;
                 if (Math.abs(myCenterY - otherCenterY) >= _snapOrthogonalRange)
                     continue;
 
                 const otherLeftOffset = otherWidth * (1 - otherScale) / 2;
                 const otherRightOffset = otherWidth * (1 + otherScale) / 2;
-                const otherVisualLeft = widget.widgetX + otherLeftOffset;
-                const otherVisualRight = widget.widgetX + otherRightOffset;
+                const otherVisualLeft = other.x + otherLeftOffset;
+                const otherVisualRight = other.x + otherRightOffset;
 
                 // 1. Align dragged widget's visual left with other widget's visual left
                 const tLeftToLeft = otherVisualLeft - root.visualLeftOffset;
@@ -828,6 +908,23 @@ AbstractWidget {
                     "guide": otherVisualLeft,
                     "distance": Math.abs(rawX - tRightToLeft)
                 });
+
+                // 5./6. One lattice cell of air between the two, which is what
+                // "next to" usually means; the flush candidates above stay for
+                // widgets meant to touch. Ten pixels apart, the nearer wins.
+                const gapX = _gridStep;
+                const tLeftToRightGap = otherVisualRight + gapX - root.visualLeftOffset;
+                candidates.push({
+                    "target": tLeftToRightGap,
+                    "guide": otherVisualRight + gapX,
+                    "distance": Math.abs(rawX - tLeftToRightGap)
+                });
+                const tRightToLeftGap = otherVisualLeft - gapX - root.visualRightOffset;
+                candidates.push({
+                    "target": tRightToLeftGap,
+                    "guide": otherVisualLeft - gapX,
+                    "distance": Math.abs(rawX - tRightToLeftGap)
+                });
             }
         }
 
@@ -845,17 +942,22 @@ AbstractWidget {
 
     function snapCandidateY(rawY, rawX) {
         const candidates = [];
+        const placements = _placementsByInstance();
 
         if (widgetListModel) {
             const myCenterX = rawX + root.width / 2;
             const myCenterY = rawY + root.height / 2;
 
+            const followerIds = _groupFollowerIds();
             for (let i = 0; i < widgetListModel.count; i++) {
                 const widget = widgetListModel.get(i);
                 if (widgetInstance && widget.instanceId === widgetInstance.id)
                     continue;
 
                 const widgetId = widget.instanceId || widget.id;
+                if (followerIds.indexOf(widgetId) !== -1)
+                    continue;
+                const other = placements[widgetId] ?? { "x": widget.widgetX, "y": widget.widgetY, "scale": widget.scale ?? 1.0 };
                 let otherWidth = root.width;
                 let otherHeight = root.height;
                 let otherScale = 1.0;
@@ -867,20 +969,20 @@ AbstractWidget {
                         otherHeight = widgetSizes[widgetId].height;
                     if (widgetSizes[widgetId].scale > 0)
                         otherScale = widgetSizes[widgetId].scale;
-                    else if (widget.scale !== undefined && widget.scale > 0)
-                        otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
-                } else if (widget.scale !== undefined && widget.scale > 0) {
-                    otherScale = widget.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                    else if (other.scale > 0)
+                        otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
+                } else if (other.scale > 0) {
+                    otherScale = other.scale * (Config.options.background.widgets.widgetsScale ?? 1.0);
                 }
 
-                const otherCenterX = widget.widgetX + otherWidth / 2;
+                const otherCenterX = other.x + otherWidth / 2;
                 if (Math.abs(myCenterX - otherCenterX) >= _snapOrthogonalRange)
                     continue;
 
                 const otherTopOffset = otherHeight * (1 - otherScale) / 2;
                 const otherBottomOffset = otherHeight * (1 + otherScale) / 2;
-                const otherVisualTop = widget.widgetY + otherTopOffset;
-                const otherVisualBottom = widget.widgetY + otherBottomOffset;
+                const otherVisualTop = other.y + otherTopOffset;
+                const otherVisualBottom = other.y + otherBottomOffset;
 
                 // 1. Align dragged widget's visual top with other widget's visual top
                 const tTopToTop = otherVisualTop - root.visualTopOffset;
@@ -912,6 +1014,21 @@ AbstractWidget {
                     "target": tBottomToTop,
                     "guide": otherVisualTop,
                     "distance": Math.abs(rawY - tBottomToTop)
+                });
+
+                // 5./6. One lattice cell of air, as in snapCandidateX.
+                const gapY = _gridStep;
+                const tTopToBottomGap = otherVisualBottom + gapY - root.visualTopOffset;
+                candidates.push({
+                    "target": tTopToBottomGap,
+                    "guide": otherVisualBottom + gapY,
+                    "distance": Math.abs(rawY - tTopToBottomGap)
+                });
+                const tBottomToTopGap = otherVisualTop - gapY - root.visualBottomOffset;
+                candidates.push({
+                    "target": tBottomToTopGap,
+                    "guide": otherVisualTop - gapY,
+                    "distance": Math.abs(rawY - tBottomToTopGap)
                 });
             }
         }
@@ -998,13 +1115,22 @@ AbstractWidget {
         return targetYVal;
     }
 
-    draggable: !isPreview && !(Config.options.background.widgets.lockWidgetPositions ?? false) && (placementStrategy === "free" || placementStrategy === "draggable")
+    draggable: !isPreview && !interactionLocked && (placementStrategy === "free" || placementStrategy === "draggable")
     drag.target: undefined
     drag.threshold: 4
     preventStealing: true
     hoverEnabled: true
-    animateXPos: entryDone && !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
-    animateYPos: entryDone && !isDragging && !isDraggingOrSettling && (visibleWhenLocked || !GlobalStates.screenLocked)
+    // Right-click is announced to the canvas (requestContextMenu); the press
+    // itself never starts a drag, beginPointerGesture ignores it.
+    acceptedButtons: (allowMiddleClick ? Qt.MiddleButton : 0) | Qt.LeftButton | Qt.RightButton
+    onClicked: mouse => {
+        if (mouse.button === Qt.RightButton)
+            requestContextMenu(mouse.x, mouse.y);
+    }
+    animateXPos: _positionAnimReady && entryDone && !isDragging && !isDraggingOrSettling && !groupDragging
+        && (visibleWhenLocked || !GlobalStates.screenLocked)
+    animateYPos: _positionAnimReady && entryDone && !isDragging && !isDraggingOrSettling && !groupDragging
+        && (visibleWhenLocked || !GlobalStates.screenLocked)
 
     onReleased: mouse => {
         setCtrlBypass(Boolean(mouse.modifiers & Qt.ControlModifier));
@@ -1012,38 +1138,43 @@ AbstractWidget {
             isDraggingOrSettling = false;
             return;
         }
-        if (isPreview || !_dragMovementActive) {
+        const canvas = findCanvas(root.parent);
+        if (isPreview || !_dragMovementActive || releaseRemovesWidget(mouse)) {
+            // A press that never became a drag still told the canvas it
+            // started: hand the group bounds back without a commit. A drop
+            // that removes the widget commits nothing either.
+            if (canvas && canvas.widgetDragCancelled)
+                canvas.widgetDragCancelled(root);
             _pointerGestureReady = false;
             _dragMovementActive = false;
             isDraggingOrSettling = false;
             return;
         }
 
-        const finalX = applyGridAndSnapX(_rawDragX, _rawDragY);
-        const finalY = applyGridAndSnapY(_rawDragY, _rawDragX);
+        const finalX = WidgetDragMath.clamp(applyGridAndSnapX(_rawDragX, _rawDragY), groupDragMinX, groupDragMaxX);
+        const finalY = WidgetDragMath.clamp(applyGridAndSnapY(_rawDragY, _rawDragX), groupDragMinY, groupDragMaxY);
         root.x = finalX;
         root.y = finalY;
 
-        const canvas = findCanvas(root.parent);
         if (canvas) {
             canvas.snapLineX = -1;
             canvas.snapLineY = -1;
+            // Followers are committed by the canvas from here, inside one
+            // history batch with this widget's own commit below.
+            if (canvas.widgetDragEnded)
+                canvas.widgetDragEnded(root, finalX, finalY);
         }
-
-        if (widgetInstance !== null) {
-            Config.updateWidgetPosition(widgetInstance.id, finalX, finalY);
-        } else if (configEntry) {
-            configEntry.x = finalX;
-            configEntry.y = finalY;
-        }
+        commitPlacement(finalX, finalY);
 
         _pointerGestureReady = false;
         _dragMovementActive = false;
-        console.warn("[ResizeDebug]", "moveRelease id=", widgetInstance !== null ? widgetInstance.id : "?", "model.scale=", widgetInstance !== null ? widgetInstance.scale : null, "final=", finalX, finalY);
         settleTimer.restart();
     }
 
     onCanceled: {
+        const canvas = findCanvas(root.parent);
+        if (canvas && canvas.widgetDragCancelled)
+            canvas.widgetDragCancelled(root);
         if (_pointerGestureReady && _dragMovementActive) {
             root.x = _dragOriginX;
             root.y = _dragOriginY;
@@ -1053,21 +1184,123 @@ AbstractWidget {
         isDraggingOrSettling = false;
     }
 
+    // ── Cancel / canvas hooks ────────────────────────────────────────────────
+    // Put the widget back where the press found it and commit nothing. Called
+    // when something ends the gesture that is not the user finishing it -
+    // Escape while dragging, or Edit Mode ending mid-drag. The pointer is
+    // still grabbed, so a release is still coming; it finds no gesture and
+    // commits nothing, which is the point: what it would write is wherever
+    // the restore animation happened to be at that moment.
+    function cancelDrag() {
+        if (!_pointerGestureReady)
+            return;
+        const moved = _dragMovementActive;
+        _pointerGestureReady = false;
+        _dragMovementActive = false;
+        const canvas = findCanvas(root.parent);
+        if (canvas) {
+            canvas.snapLineX = -1;
+            canvas.snapLineY = -1;
+            if (canvas.widgetDragCancelled)
+                canvas.widgetDragCancelled(root);
+        }
+        isDraggingOrSettling = false;
+        if (moved) {
+            root.x = _dragOriginX;
+            root.y = _dragOriginY;
+        }
+    }
+
+    // Whether this release is a drop somewhere that removes the widget instead
+    // of placing it. Nothing answers yes yet; Edit Mode's drawer will.
+    function releaseRemovesWidget(mouse) {
+        GlobalStates.editDrawerDropScreen = "";
+        if (!editModeActive || widgetInstance === null)
+            return false;
+        if (!root.pointOverDrawer(mouse))
+            return false;
+        GlobalStates.editWidgetDroppedOnDrawer(widgetInstance.id);
+        return true;
+    }
+
+    // Whether a pointer event, in this widget's coordinates, is over the
+    // drawer's published reveal on this widget's screen. The window's
+    // coordinate space is the screen's; the reveal is published in it.
+    function pointOverDrawer(mouse) {
+        if (!editModeActive || monitorName === "")
+            return false;
+        const reveal = GlobalStates.editDrawerReveals[monitorName];
+        if (!reveal)
+            return false;
+        const p = root.mapToItem(null, mouse.x, mouse.y);
+        return EditModeLogic.pointInDrawerReveal(reveal, p.x, p.y);
+    }
+
+    // The one store write for a placement, shared by the drag's release, the
+    // resize commit, a keyboard nudge and a group follower, so the ways of
+    // moving a widget cannot disagree about what gets persisted or what an
+    // undo reverses.
+    function commitPlacement(newX, newY) {
+        if (isPreview)
+            return;
+        // Written to the surface being shown: the lock fork on the Lockscreen
+        // tab, the desktop's placement otherwise.
+        if (widgetInstance !== null)
+            Config.updateWidgetPosition(widgetInstance.id, newX, newY, monitorName, GlobalStates.lockLookActive);
+        else if (configEntry) {
+            configEntry.x = newX;
+            configEntry.y = newY;
+        }
+    }
+
+    // A keyboard step: drawn now, through the position Behavior; the canvas
+    // commits the whole run once it ends (WidgetCanvas.nudgeSelection).
+    function nudgeTo(newX, newY) {
+        settleTimer.stop();
+        staggerTimer.stop();
+        _pendingPosition = false;
+        root.x = newX;
+        root.y = newY;
+    }
+
+    // Right-click, announced rather than handled: only the surface owning the
+    // canvas knows what a menu about this widget looks like. Nothing listens
+    // yet; Edit Mode's widget menu will. Canvas coordinates.
+    function requestContextMenu(localX, localY) {
+        if (isPreview || widgetInstance === null)
+            return;
+        const canvas = findCanvas(root.parent);
+        if (!canvas || !canvas.contextMenuRequested)
+            return;
+        const point = root.mapToItem(canvas, localX, localY);
+        canvas.contextMenuRequested(widgetInstance.id, point.x, point.y);
+    }
+
+    // Instance ids of the widgets riding this one in a group drag: they move
+    // with it, so they are not snap targets for it.
+    function _groupFollowerIds() {
+        const canvas = findCanvas(root.parent);
+        const group = canvas ? (canvas.groupDrag ?? null) : null;
+        if (!group || group.leader !== root)
+            return [];
+        return group.followers.map(entry => entry.widget.widgetInstance ? entry.widget.widgetInstance.id : "");
+    }
+
     property bool needsColText: false
     property color dominantColor: Appearance.colors.colPrimary
     property bool dominantColorIsDark: dominantColor.hslLightness < 0.5
     property color colText: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }
     property color colTextSecondary: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colSecondary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }
     property color colTextTertiary: {
-        const onNormalBackground = (GlobalStates.lockScreenCentered && Config.options.lock.blur.enable)
+        const onNormalBackground = (lockLayoutActive && Config.options.lock.blur.enable)
         const adaptiveColor = ColorUtils.colorWithLightness(Appearance.colors.colTertiary, (dominantColorIsDark ? 0.8 : 0.12))
         return onNormalBackground ? Appearance.colors.colOnLayer0 : adaptiveColor;
     }
@@ -1122,6 +1355,26 @@ AbstractWidget {
         }
     }
 
+    // ── Selection halo ───────────────────────────────────────────────────────
+    // Selected-but-not-dragging feedback (WidgetCanvas marquee), distinct from
+    // the drag lift. Lives on the widget so it rides a group move with no
+    // coordinate mapping.
+    Rectangle {
+        id: selectionHalo
+        z: 97
+        visible: opacity > 0.001
+        opacity: root.selected ? 1 : 0
+        anchors.fill: parent
+        anchors.margins: -8
+        radius: Appearance.rounding.large
+        color: Qt.alpha(Appearance.colors.colPrimary, 0.08)
+        border.color: Appearance.colors.colPrimary
+        border.width: 2
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(selectionHalo)
+        }
+    }
+
     // ── Resize readout ───────────────────────────────────────────────────────
     // The widget itself is the preview now, so there is no outline — only the
     // number, which is the one thing the widget cannot tell you on its own.
@@ -1153,7 +1406,9 @@ AbstractWidget {
     Item {
         id: resizeHandle
         visible: opacity > 0.001
-        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging) ? 1 : 0
+        // Shown on hover, and throughout the mode: a grip you have to find
+        // by hovering is not an affordance in a layout editor.
+        opacity: root._scaleHandleAvailable && !root.isDragging && (root.containsMouse || resizeDragArea.dragging || root.editModeActive) ? 1 : 0
         // Grow into place instead of only fading: at this size a pure opacity
         // ramp reads as a glitch rather than as something arriving.
         scale: opacity > 0.5 ? 1 : 0.7

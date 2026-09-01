@@ -18,6 +18,9 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.lock
+import qs.modules.common.panels.lock
+import qs.modules.ii.editMode
 
 PanelWindow {
     id: bgWidgetsWindow
@@ -28,6 +31,25 @@ PanelWindow {
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
+
+    // Edit Mode's viewport: the same pure function, on the same inputs, on the same scalar as the
+    // wallpaper surface (BackgroundRoot), so the canvas and the wallpaper shrink as one rectangle
+    // across the two scene graphs. Only the screen the mode is on shrinks (decision D4).
+    readonly property string editScreenName: bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""
+    readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgWidgetsWindow.editScreenName
+    readonly property real editProgress: bgWidgetsWindow.isEditMonitor ? GlobalStates.editProgress : 0
+    readonly property var editViewport: EditModeInsets.viewportFor(bgWidgetsWindow.editScreenName, bgWidgetsWindow.width, bgWidgetsWindow.height)
+    // The desktop's sideways travel while the drawer is open: the shortfall
+    // between the card's free right margin and the drawer's width, on the
+    // drawer's own scalar. Zero when the card already leaves room.
+    readonly property real editShift: bgWidgetsWindow.isEditMonitor
+        ? CF.EditModeLogic.drawerTravel(bgWidgetsWindow.editViewport) * GlobalStates.editDrawerProgress : 0
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgWidgetsWindow.editViewport, bgWidgetsWindow.editProgress, bgWidgetsWindow.editShift)
+    readonly property matrix4x4 editMatrix: Qt.matrix4x4(
+        bgWidgetsWindow.editTransform.scale, 0, 0, bgWidgetsWindow.editTransform.x,
+        0, bgWidgetsWindow.editTransform.scale, 0, bgWidgetsWindow.editTransform.y,
+        0, 0, 1, 0,
+        0, 0, 0, 1)
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.namespace: "quickshell:backgroundWidgets"
@@ -36,7 +58,47 @@ PanelWindow {
     // makes the Ctrl-to-bypass-snap drag gesture undetectable. While a widget
     // drag is active we take OnDemand focus so real modifier events flow in;
     // dropping it on release hands focus back to the previously focused app.
-    WlrLayershell.keyboardFocus: widgetCanvas.draggingActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // A marquee selection and Edit Mode hold it the same way: the arrows,
+    // Escape and the mode's own keys arrive on this surface and nowhere else.
+    // Edit Mode's keys - Escape, the arrows, Ctrl+Z, Ctrl+F - arrive on this
+    // surface and nowhere else, but OnDemand focus is only granted once the
+    // user clicks THIS surface: entering the mode from a keybind left the whole
+    // Escape ladder dead until the wallpaper happened to be clicked. Exclusive
+    // takes the keyboard at once, and is downgraded a beat later because
+    // holding it also holds pointer focus, which would make the toolbar and the
+    // drawer unclickable ([[layershell-keyboardfocus-steals-pointer]]).
+    property bool editFocusSeed: false
+    Timer {
+        id: editFocusSeedTimer
+        interval: 120
+        onTriggered: bgWidgetsWindow.editFocusSeed = false
+    }
+    function seedEditFocus() {
+        if (!GlobalStates.editMode || !bgWidgetsWindow.isEditMonitor || GlobalStates.editSearchFocused)
+            return;
+        bgWidgetsWindow.editFocusSeed = true;
+        editFocusSeedTimer.restart();
+    }
+    Connections {
+        target: GlobalStates
+        function onEditModeChanged() {
+            if (GlobalStates.editMode) {
+                bgWidgetsWindow.seedEditFocus();
+                return;
+            }
+            bgWidgetsWindow.editFocusSeed = false;
+            editFocusSeedTimer.stop();
+        }
+        // The catalogue's search borrows the keyboard for the chrome's surface;
+        // this takes it straight back, so Escape works again on the next press
+        // rather than on the next click.
+        function onEditSearchFocusedChanged() {
+            if (!GlobalStates.editSearchFocused)
+                bgWidgetsWindow.seedEditFocus();
+        }
+    }
+    WlrLayershell.keyboardFocus: bgWidgetsWindow.editFocusSeed ? WlrKeyboardFocus.Exclusive
+        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {
@@ -92,6 +154,10 @@ PanelWindow {
     // WidgetDelegate's FadeLoader uses - and for the whole lock/unlock sequence so lock-only widgets
     // fade in and out exactly as before. Setups with an always-visible widget never unmap.
     readonly property bool anyWidgetShown: {
+        // Edit Mode needs the surface up even over an empty desktop: the
+        // marquee, and later the drop targets, live on it.
+        if (GlobalStates.editMode)
+            return true;
         if (!hasWidgets)
             return false;
         void widgetStateManager.syncVersion; // re-evaluate when the model's roles are rewritten
@@ -370,6 +436,12 @@ PanelWindow {
             Translate {
                 x: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateX : 0
                 y: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsTranslation ? bgWidgetsWindow.overviewController.translateY : 0
+            },
+            // Edit Mode's shrink, a third transform after the overview's pair rather than a
+            // replacement for it: the overview ends the mode, so the two only ever overlap for
+            // the frames of one exit, and composing keeps that exit continuous.
+            Matrix4x4 {
+                matrix: bgWidgetsWindow.editMatrix
             }
         ]
 
@@ -380,12 +452,58 @@ PanelWindow {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(transformContainer)
         }
 
+        // Edit Mode's Lockscreen tab: the lock's islands drawn over the widgets,
+        // inside the same shrunk desktop, on the monitor being edited. The
+        // context handed in is the plain preview object whose unlock paths are
+        // empty by contract - never the real LockContext, which builds PAM
+        // contexts the moment it exists. Nothing in here takes input: the
+        // surface is inert, so clicks reach the widgets underneath.
+        Loader {
+            id: lockPreview
+            anchors.fill: parent
+            z: 5
+            active: GlobalStates.editLockPreview && bgWidgetsWindow.isTargetMonitor
+                && GlobalStates.editModeMonitor === (bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+            sourceComponent: LockSurface {
+                interactive: false
+                context: LockPreviewContext {}
+            }
+        }
+
         WidgetCanvas {
             id: widgetCanvas
             layer.enabled: false
             antialiasing: true
             smooth: true
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
+            // In the mode the lattice is drawn on a card, not on a screen: the
+            // card is this window's own rect (the canvas sits off it by the
+            // parallax offset), and its corner is the one the wallpaper's card
+            // draws, divided back out of the shrink so both curves match.
+            gridCardRect: bgWidgetsWindow.editProgress > 0
+                ? Qt.rect(Math.round(-widgetCanvas.x), Math.round(-widgetCanvas.y), bgWidgetsWindow.width, bgWidgetsWindow.height)
+                : Qt.rect(0, 0, widgetCanvas.width, widgetCanvas.height)
+            gridCardRadius: bgWidgetsWindow.editTransform.scale > 0
+                ? Appearance.rounding.verylarge * bgWidgetsWindow.editProgress / bgWidgetsWindow.editTransform.scale : 0
+            // The desktop is the one canvas that opts into marquee selection;
+            // the mode is handed in so this canvas, and not the overlay's,
+            // follows it.
+            selectionEnabled: true
+            editMode: GlobalStates.editMode
+            // The widget menu, drawn by this screen's edit chrome. The point
+            // is mapped through the canvas's transform chain (the mode's
+            // shrink included), so it lands where the pointer is on screen.
+            onContextMenuRequested: (instanceId, atX, atY) => {
+                if (!GlobalStates.editMode)
+                    return;
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openEditWidgetMenu(widgetCanvas, instanceId, bgWidgetsWindow.monitor ? bgWidgetsWindow.monitor.name : "", p.x, p.y);
+            }
+            // The desktop's own menu, in and out of the mode; same mapping.
+            onCanvasContextMenuRequested: (atX, atY) => {
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+            }
 
             anchors {
                 left: parent.left
@@ -453,6 +571,7 @@ PanelWindow {
             Repeater {
                 model: widgetStateManager.model
                 delegate: WidgetDelegate {
+                    monitorName: bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : ""
                     widgetListModel: widgetStateManager.model
                     widgetSizes: widgetStateManager.widgetSizes
                     widgetSizesVersion: widgetStateManager.widgetSizesVersion

@@ -36,6 +36,7 @@ hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "S
 hl.bind("SUPER + Y", hl.dsp.global("quickshell:modesToggle"), { description = "Shell: Toggle modes & routines" })
 hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
 hl.bind("SUPER + SHIFT + D", hl.dsp.global("quickshell:dictationToggle"), { description = "Shell: Toggle dictation" })
+hl.bind("SUPER + SHIFT + E", hl.dsp.global("quickshell:editModeToggle"), { description = "Shell: Edit desktop layout" })
 hl.bind("SUPER + M", hl.dsp.global("quickshell:mediaControlsToggle"), { description = "Shell: Toggle media controls" })
 hl.bind("SUPER + G", hl.dsp.global("quickshell:overlayToggle"), { description = "Shell: Toggle widget overlay" })
 hl.bind("CTRL + ALT + Delete", hl.dsp.global("quickshell:sessionToggle"), { description = "Shell: Toggle session menu" })

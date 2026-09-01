@@ -512,6 +512,9 @@ Singleton {
 
     // Global animation speed multiplier — driven by Config.options.appearance.animationMultiplier
     readonly property real animMultiplier: Config.options?.appearance?.animationMultiplier ?? 1.0
+    // Below this the shell skips animations outright rather than running them absurdly fast (the
+    // sidebars' own convention); Edit Mode reads it as one flag instead of repeating the test.
+    readonly property bool reducedMotion: root.animMultiplier <= 0.25
 
     animationCurves: QtObject {
         readonly property list<real> expressiveFastSpatial: [0.42, 1.67, 0.21, 0.90, 1, 1] // Default, 350ms
@@ -787,6 +790,15 @@ Singleton {
         property real barShortenScreenWidthThreshold: 1200 // Shorten if screen width is at most this value
         property real barHellaShortenScreenWidthThreshold: 1000 // Shorten even more...
         property real elevationMargin: 10
+        // The M3 toolbar's height: one number the toolbar and the band Edit Mode reserves for it
+        // both read.
+        property real toolbarHeight: 52
+        // Edit Mode's viewport: the gap between the shrunk desktop and what surrounds it, the
+        // tighter gap between the chrome and the usable area's edge, and the width the widget
+        // drawer opens into (reserved from the first frame so the desktop never resizes mid-edit).
+        property real editModeMargin: 24
+        property real editModeEdgeMargin: 12
+        property real editModeDrawerWidth: 380
         property real fabShadowRadius: 5
         property real fabHoveredShadowRadius: 7
         property real hyprlandGapsOut: 5
