@@ -10,9 +10,15 @@ import qs.modules.common
 /**
  * The full-screen surface the app drawer is drawn on, one per monitor.
  *
- * The drawer uses a translucent colour wash rather than a snapshot. Unlike the shade, it
- * is not dragged frame by frame, so keeping the live application visible under a themed
- * scrim is both clearer and considerably cheaper than a continuous screencopy blur.
+ * The backdrop blurs a frozen screencopy rather than letting Hyprland blur the layer. A
+ * layer rule can only switch blur on or off; its strength is the surface's own alpha, and
+ * the shell's `ignore_alpha` rule turns even that into a threshold. So compositor blur
+ * arrived as a step part-way through the animation instead of ramping with it. Blurring a
+ * snapshot here is the only way the strength can follow the finger, and it is the same
+ * thing TabletShadeWindow does for the same reason.
+ *
+ * With `appearance.transparency` off there is no capture and no blur at all: the drawer
+ * sits on a solid surface colour, which is what that setting means everywhere else.
  */
 PanelWindow {
     id: root
@@ -41,6 +47,8 @@ PanelWindow {
     // settle animation on release.
     readonly property real openProgress: root.isTargetScreen
         ? TabletAppDrawerGestureController.progress : 0
+
+    readonly property bool useBlur: Config.options?.appearance?.transparency?.enable ?? false
 
     anchors {
         top: true
@@ -96,12 +104,58 @@ PanelWindow {
         GlobalStates.appDrawerOpen = false;
     }
 
+    // The snapshot has to be taken while this surface is still painting nothing, or the
+    // capture contains the drawer's own backdrop and the blur compounds every frame.
+    property bool _backdropArmed: false
+
+    onOpenProgressChanged: {
+        if (root.openProgress > 0.001 && !root._backdropArmed) {
+            root._backdropArmed = true;
+            if (root.useBlur)
+                backdropCapture.captureFrame();
+        } else if (root.openProgress <= 0.001) {
+            root._backdropArmed = false;
+        }
+        // The field is focused only once the drawer has settled, for the same reason the
+        // surface takes keyboard focus only then.
+        if (root.openProgress > 0.99)
+            contentLoader.item?.focusSearch();
+    }
+
+    Item {
+        id: backdrop
+        anchors.fill: parent
+        visible: root.useBlur && root.openProgress > 0.001 && backdropCapture.hasContent
+        layer.enabled: backdrop.visible
+        layer.effect: MultiEffect {
+            // Auto padding grows the effect item past its source and shifts the whole
+            // capture, which shows up as a sharp band along one edge.
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 64
+            blurMultiplier: 1.2
+            // Reaches full strength slightly before the sheet lands, so the last few
+            // frames are the drawer settling rather than the background still resolving.
+            blur: Math.min(1.0, root.openProgress * 1.15)
+        }
+
+        ScreencopyView {
+            id: backdropCapture
+            anchors.fill: parent
+            captureSource: root.useBlur ? root.screen : null
+            // A live capture would see this surface's own blurred output and smear.
+            live: false
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         color: Appearance.colors.colLayer0
-        // Never make this opaque: the current app remains part of the transition, just as it
-        // does below Android's app drawer.
-        opacity: root.openProgress * 0.72
+        // Blurred: a wash over the snapshot, never opaque — the current app stays part of
+        // the transition, just as it does below Android's app drawer. Unblurred: the same
+        // colour, but solid by the time the sheet lands, because that is what turning
+        // transparency off asks for.
+        opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress
 
         MouseArea {
             anchors.fill: parent
@@ -138,12 +192,5 @@ PanelWindow {
                     contentLoader.item.reset();
             }
         }
-    }
-
-    // The field is focused only once the drawer has settled, for the same reason the
-    // surface takes keyboard focus only then.
-    onOpenProgressChanged: {
-        if (root.openProgress > 0.99)
-            contentLoader.item?.focusSearch();
     }
 }

@@ -187,6 +187,10 @@ hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "s
 -- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.
 hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true})
+-- App drawer, same reasoning: the shell's `ignore_alpha` rule makes compositor blur a
+-- threshold, so it snapped in part-way through the open animation instead of ramping. The
+-- drawer blurs its own frozen screencopy so the strength can follow the gesture.
+hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

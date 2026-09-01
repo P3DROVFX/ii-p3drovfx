@@ -157,6 +157,17 @@ PanelWindow {
         && (!(root.tabletDock?.hidePageCounterOnOccupiedWorkspace ?? true) || root.workspaceEmpty)
     readonly property bool compactWhenPageCounterHidden: root.tabletDock?.compactWhenPageCounterHidden ?? true
     readonly property real dockContentHeight: dockColumn.implicitHeight + Appearance.sizes.elevationMargin * 2
+    /// What the dock actually occupies at rest, and therefore what it reserves.
+    readonly property real dockSurfaceHeight: root.pageCounterVisible || !root.compactWhenPageCounterHidden
+        ? Math.max(root.tabletDock?.height ?? root.appButtonSize, root.dockContentHeight)
+        : root.dockContentHeight
+    /// Empty, transparent space kept above the dock purely so it has somewhere to travel to.
+    ///
+    /// A layer surface has no overflow: anything translated past its top edge is cut off by
+    /// the compositor, so the dock rising with the app drawer was being sliced off a few
+    /// pixels in rather than lifting out of the screen. The headroom is masked out and
+    /// outside the exclusive zone, so it costs nothing but the room to move.
+    readonly property real liftHeadroom: root.dockContentHeight
 
     visible: root.surfaceVisible
 
@@ -166,14 +177,12 @@ PanelWindow {
         right: true
     }
     color: "transparent"
-    implicitHeight: root.pageCounterVisible || !root.compactWhenPageCounterHidden
-        ? Math.max(root.tabletDock?.height ?? root.appButtonSize, root.dockContentHeight)
-        : root.dockContentHeight
+    implicitHeight: root.dockSurfaceHeight + root.liftHeadroom
 
     // An explicit zone is used instead of ExclusionMode.Auto so the reserve follows the
     // tablet auto-hide state exactly. A hidden dock releases the work area in the same frame.
     exclusionMode: ExclusionMode.Normal
-    exclusiveZone: root.reservesSpace ? root.implicitHeight : 0
+    exclusiveZone: root.reservesSpace ? root.dockSurfaceHeight : 0
     WlrLayershell.namespace: "quickshell:tabletDock"
     WlrLayershell.layer: WlrLayer.Top
 
@@ -202,8 +211,13 @@ PanelWindow {
 
     ColumnLayout {
         id: dockColumn
-        anchors.fill: parent
+        // Bottom-anchored rather than filling: the surface is taller than the dock now, and
+        // the extra height is headroom above it, not around it.
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         anchors.margins: Appearance.sizes.elevationMargin
+        height: root.dockSurfaceHeight - Appearance.sizes.elevationMargin * 2
         spacing: Appearance.sizes.elevationMargin / 2
         // Rises with the sheet rather than dropping away from it: the drawer is pulled up
         // out of the dock, so the dock is part of what is being pulled.

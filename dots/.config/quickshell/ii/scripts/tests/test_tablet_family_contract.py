@@ -59,7 +59,9 @@ class TabletFamilyContractTests(unittest.TestCase):
 
         self.assertIn("id: drawerViewport", drawer)
         self.assertIn("y: (1 - root.openProgress) * root.height", drawer)
-        self.assertIn("opacity: root.openProgress * 0.72", drawer)
+        # The wash still rides the one progress. Which law it uses now depends on whether
+        # the drawer is blurring at all; both branches are that same number.
+        self.assertIn("opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress", drawer)
         self.assertIn("visible: !GlobalStates.screenLocked", drawer)
         self.assertNotIn("visible: (root.wantOpen || root.openProgress > 0.001)", drawer)
         self.assertIn("y: (1 - root.revealProgress) * root.searchHeight * 0.8", content)
@@ -71,6 +73,31 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("y: -root.drawerProgress * root.dockContentHeight", dock)
         self.assertIn("&& root.drawerProgress < 0.999", dock)
         self.assertNotIn("!GlobalStates.appDrawerOpen || root.drawerProgress < 0.999", dock)
+
+    def test_app_drawer_blurs_its_own_snapshot_so_the_blur_ramps_with_the_gesture(self):
+        drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
+
+        # Compositor blur is a threshold here (the shell ships ignore_alpha), so it arrived
+        # as a step part-way through the animation. The drawer blurs its own capture.
+        self.assertIn("ScreencopyView", drawer)
+        self.assertIn("blur: Math.min(1.0, root.openProgress * 1.15)", drawer)
+        self.assertIn("live: false", drawer)
+        # Transparency off means no capture, no blur, and a solid surface colour.
+        self.assertIn("readonly property bool useBlur: Config.options?.appearance?.transparency?.enable", drawer)
+        self.assertIn("captureSource: root.useBlur ? root.screen : null", drawer)
+        self.assertIn("visible: root.useBlur && root.openProgress > 0.001", drawer)
+
+    def test_dock_keeps_headroom_so_its_lift_is_not_clipped_by_its_own_surface(self):
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+
+        # A layer surface has no overflow: without headroom the rising dock was cut off at
+        # the surface's top edge a few pixels into the travel.
+        self.assertIn("readonly property real liftHeadroom: root.dockContentHeight", dock)
+        self.assertIn("implicitHeight: root.dockSurfaceHeight + root.liftHeadroom", dock)
+        # Headroom is empty space to move through, never reserved work area.
+        self.assertIn("exclusiveZone: root.reservesSpace ? root.dockSurfaceHeight : 0", dock)
+        self.assertNotIn("exclusiveZone: root.reservesSpace ? root.implicitHeight : 0", dock)
+        self.assertIn("anchors.bottom: parent.bottom", dock)
 
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
