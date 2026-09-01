@@ -29,7 +29,26 @@ Item {
     // Signals
     signal requestRipple(real x, real y)
 
+    // The lock state below is only ever picked up from a transition, so a controller that
+    // comes into existence while the screen is *already* locked would leave every background
+    // widget in its desktop state for the whole lock. That is not hypothetical: with
+    // `lock.launchOnStartup` the shell locks itself about 130 ms before the background windows
+    // are built, so at boot the edge is gone before anything can hear it. Adopt the current
+    // state on creation, without animating into it - the lock is already up.
+    property bool adoptingLockedState: false
+    Component.onCompleted: {
+        if (!GlobalStates.screenLocked)
+            return;
+        controller.adoptingLockedState = true;
+        controller.parallaxFrozen = false;
+        controller.lockAnimationActive = true;
+        controller.wallpaperCentered = true;
+        controller.effectiveWallpaperScale = 1.0;
+        Qt.callLater(() => controller.adoptingLockedState = false);
+    }
+
     Behavior on effectiveWallpaperScale {
+        enabled: !controller.adoptingLockedState
         NumberAnimation {
             duration: Math.round(860 * Appearance.animMultiplier)
             easing.type: Easing.OutCubic

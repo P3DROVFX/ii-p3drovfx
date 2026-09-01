@@ -216,28 +216,77 @@ Item {
     }
 
     function extractWidgets(text) {
-        return extractWidgetsWithOffset(text, 0);
+        return extractWidgetsWithOffset(text, 0, "", extractDeclaredIds(text));
     }
 
-    function extractWidgetsWithOffset(text, baseOffset, sourceKey) {
+    function extractDeclaredIds(text) {
+        let ids = [];
+        let match;
+        const idPattern = /\bid\s*:\s*([A-Za-z_][A-Za-z0-9_]*)/g;
+        const code = executableSource(text);
+        while ((match = idPattern.exec(code)) !== null) {
+            if (ids.indexOf(match[1]) === -1)
+                ids.push(match[1]);
+        }
+        return ids;
+    }
+
+    function executableSource(text) {
+        // Ignore prose when looking for page-local ids. Template strings stay
+        // intact because their ${...} expressions are executable QML/JS.
+        return text
+            .replace(/"(?:\\.|[^"\\])*"/g, " ")
+            .replace(/'(?:\\.|[^'\\])*'/g, " ")
+            .replace(/\/\*[\s\S]*?\*\//g, " ")
+            .replace(/\/\/[^\n]*/g, " ");
+    }
+
+    function usesExternalId(block, fileScopedIds) {
+        if (!fileScopedIds || fileScopedIds.length === 0)
+            return false;
+
+        const localIds = extractDeclaredIds(block);
+        const code = executableSource(block);
+        for (let id of fileScopedIds) {
+            if (localIds.indexOf(id) !== -1)
+                continue;
+            if (new RegExp("\\b" + id + "\\b").test(code))
+                return true;
+        }
+        return false;
+    }
+
+    function extractWidgetsWithOffset(text, baseOffset, sourceKey, fileScopedIds) {
         let items = [];
+        // Search results are live QML clones, so only compact, semantic
+        // settings controls belong here. Structural layouts and informational
+        // surfaces (NoticeBox, ShortcutBox, Flow, Row/ColumnLayout, service
+        // cards, etc.) either duplicate their descendants or depend on page-
+        // local ids and produce empty/broken result cards.
         let types = [
             "ConfigSwitch", "ConfigSpinBox", "ConfigSelectionArray", "ConfigTextField",
-            "ConfigSlider", "ConfigComboBox", "ConfigWallpaperSelector", "ConfigLightDarkToggle",
-            "ConfigPresetsView", "HelperLinkBox", "NoticeBox", "ShortcutBox",
-            "MaterialTextField", "Flow", "RowLayout", "ColumnLayout", "ServiceCard",
-            "RippleButtonWithIcon", "ConfigListView", "ColorPreviewButton", "StyledComboBox",
-            "MonitorPicker"
+            "ConfigSlider", "ConfigComboBox", "ConfigLightDarkToggle", "ConfigSubpageRow"
         ];
         for (let t of types) {
             let blocks = extractBlocks(text, t);
             for (let b of blocks) {
+                // Rows wired only through an `onClicked` closure usually refer
+                // to ids from the original page. A declarative configPage is
+                // self-contained and can be re-routed by the search section.
+                if (t === "ConfigSubpageRow" && !/\bconfigPage\s*:/.test(b.inner))
+                    continue;
+                // A cloned control has no access to ids declared by its source
+                // page or sibling controls. Skip it instead of rendering a
+                // half-working result that throws ReferenceError at runtime.
+                if (usesExternalId(b.inner, fileScopedIds))
+                    continue;
                 let textProp = extractProperty(b.inner, "text")
                             || extractProperty(b.inner, "title")
                             || extractProperty(b.inner, "tooltip")
                             || extractProperty(b.inner, "value")
                             || extractProperty(b.inner, "placeholderText")
-                            || extractProperty(b.inner, "description");
+                            || extractProperty(b.inner, "description")
+                            || extractProperty(b.inner, "summary");
                 items.push({
                     type: t,
                     text: textProp,
@@ -254,6 +303,7 @@ Item {
         if (!qmlText) return;
 
         const sourceKey = pageFile.files[pageFile.currentIndex];
+        const fileScopedIds = extractDeclaredIds(qmlText);
         let fileImports = extractImports(qmlText);
         let sectionsExtracted = extractBlocks(qmlText, "ContentSection");
 
@@ -278,7 +328,7 @@ Item {
                 let subTitle = extractProperty(subBlock.inner, "title");
                 let subIcon = extractProperty(subBlock.inner, "icon");
                 
-                let subItems = extractWidgetsWithOffset(subBlock.inner, subBlock.innerStart, sourceKey);
+                let subItems = extractWidgetsWithOffset(subBlock.inner, subBlock.innerStart, sourceKey, fileScopedIds);
 
                 sectionSubsections.push({
                     title: subTitle,
@@ -290,7 +340,7 @@ Item {
             }
 
             // 2. extract remaining widgets from sectionText
-            const allSectionItems = extractWidgetsWithOffset(sectionText, sectionBlock.innerStart, sourceKey);
+            const allSectionItems = extractWidgetsWithOffset(sectionText, sectionBlock.innerStart, sourceKey, fileScopedIds);
             for (let item of allSectionItems) {
                 let belongsToSubsection = false;
                 for (let sub of subsections) {
@@ -309,10 +359,26 @@ Item {
                 if (sub.title) searchStrings.push(sub.title);
             }
 
+            // A section whose title is computed - one a Repeater builds per group, say - has no
+            // title in the source to find. Indexing it as "Unknown" put a heading in the results
+            // that exists on no page, under which its widgets could not be recognised either.
+            if (!title)
+                continue;
+
+            // The registry's page name and aliases describe everything on the
+            // page, so they belong to each of its sections. They were indexed
+            // nowhere before, which left a page findable only under the words
+            // printed on its own sections.
+            const page = SettingsPageRegistry.pageById(pageId);
+            for (let term of [page?.name ?? "", ...(page?.aliases ?? [])]) {
+                if (term.length > 0 && searchStrings.indexOf(term) === -1)
+                    searchStrings.push(term);
+            }
+
             registerSection({
                 pageId: pageId,
                 subPage: subPage || "",
-                title: title || "Unknown",
+                title: title,
                 icon: icon || "",
                 searchStrings: searchStrings,
                 items: sectionItems,
@@ -436,18 +502,26 @@ Item {
         if (!text) return 0;
         let score = 0;
         let lower = text.toLowerCase();
-        
         let tokens = tokenize(lower);
-        
+
+        // Multi-word queries are conjunctive. Previously any one token was
+        // enough, so "bar popups" returned every setting containing "bar".
+        // Exact/prefix matching remains accent-agnostic and predictable.
         for (let qToken of queryTokens) {
+            let tokenScore = 0;
             for (let sToken of tokens) {
                 if (sToken === qToken) {
-                    score += 500;
+                    tokenScore = Math.max(tokenScore, 500);
                 } else if (sToken.startsWith(qToken)) {
-                    score += 200;
+                    tokenScore = Math.max(tokenScore, 200);
                 }
             }
+            if (tokenScore === 0)
+                return 0;
+            score += tokenScore;
         }
+        if (lower.indexOf(query) !== -1)
+            score += 1000;
         return score;
     }
 
@@ -458,7 +532,6 @@ Item {
         let results = [];
 
         for (let section of sections) {
-            let sectionMatches = false;
             let sectionScore = 0;
 
             let matchedItems = [];
@@ -473,20 +546,21 @@ Item {
                 }
             }
 
-            let sectionTitleMatched = (sectionTitleScore > 0 || searchStringScore > 0);
+            // Page names and aliases are context for ranking, not identity for
+            // every control on that page. Treating them as a direct match made
+            // searches such as "policy" or "bar" dump unrelated widgets.
+            let sectionTitleMatched = sectionTitleScore > 0;
             if (sectionTitleMatched) {
-                sectionMatches = true;
-                sectionScore += Math.max(sectionTitleScore, searchStringScore);
+                sectionScore += sectionTitleScore;
             }
 
             for (let item of section.items) {
                 let itemScore = getMatchScore(item.text, query, queryTokens);
-                if (itemScore > 0 || sectionTitleMatched) {
+                let contextualItemScore = getMatchScore(
+                    section.title + " " + item.text, query, queryTokens);
+                if (itemScore > 0 || contextualItemScore > 0 || sectionTitleMatched) {
                     matchedItems.push(item);
-                    if (itemScore > 0) {
-                        sectionScore += itemScore;
-                    }
-                    sectionMatches = true;
+                    sectionScore += Math.max(itemScore, contextualItemScore);
                 }
             }
 
@@ -501,13 +575,14 @@ Item {
 
                 for (let item of sub.items) {
                     let itemScore = getMatchScore(item.text, query, queryTokens);
-                    if (itemScore > 0 || subTitleScore > 0 || sectionTitleMatched) {
+                    let contextualItemScore = getMatchScore(
+                        section.title + " " + sub.title + " " + item.text,
+                        query, queryTokens);
+                    if (itemScore > 0 || contextualItemScore > 0
+                            || subTitleScore > 0 || sectionTitleMatched) {
                         subMatchedItems.push(item);
-                        if (itemScore > 0) {
-                            sectionScore += itemScore;
-                        }
+                        sectionScore += Math.max(itemScore, contextualItemScore);
                         subMatches = true;
-                        sectionMatches = true;
                     }
                 }
 
@@ -520,7 +595,13 @@ Item {
                 }
             }
 
-            if (sectionMatches) {
+            const hasRenderableItems = matchedItems.length > 0
+                || matchedSubsections.some(sub => sub.items.length > 0);
+            if (hasRenderableItems) {
+                // Context can break ties once the control proved its own
+                // relevance, but it can never create a result by itself.
+                if (!sectionTitleMatched && searchStringScore > 0)
+                    sectionScore += Math.round(searchStringScore / 4);
                 results.push({
                     pageId: section.pageId,
                     subPage: section.subPage || "",

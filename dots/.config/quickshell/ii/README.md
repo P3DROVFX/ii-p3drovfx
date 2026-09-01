@@ -64,9 +64,9 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
     5. Copy Client ID and Secret to `.env`.
 
     ### 🚀 Setup Instructions
-    1. **Env**: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REDIRECT_URI=http://localhost:8080`.
+    1. **Env**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` in `.env` (shared across Gmail, Google Tasks, and Google Drive).
     2. **Deps**: `pip install google-auth google-auth-oauthlib google-api-python-client python-dotenv`.
-    3. **Auth**: Run shell -> Email Tab -> "Connect Account".
+    3. **Auth**: Run shell -> Email Tab / Settings -> "Connect Google Tasks" / "Connect Account".
   </details>
 
 - **🔍 Revamped Search Launcher (Power-User)**: This repository includes a completely revamped search launcher widget (`Super + D` or `Super + Space`) designed for power-users.
@@ -256,6 +256,13 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
 
     #### 5. Vertical Support (`VerticalBarContent.qml`)
     [View VerticalBarContent.qml Diff](https://github.com/P3DROVFX/ii-vynx-fork/commit/8486eb4b4373ffbba5feceaf9cc2dc037f4b69f7#diff-79b59a8a73d9fe4e13613cf5e7ee4ea70c474d6796587e2e46734f36ac0e595b)
+  </details>
+
+- **🧠 AI Assistant**: A built-in chat assistant with local (Ollama) or cloud models, tool calling (settings, files, web search, tasks, Gmail read-only, ESPN, RAG over local folders), and per-tool approval controls.
+  <details>
+    <summary><b>🧠 AI Assistant Setup & Troubleshooting</b></summary>
+
+    Full setup instructions (local Ollama models, cloud providers, policy levels, RAG local retrieval) and troubleshooting are in the [AI Assistant Guide](AI_ASSISTANT_GUIDE.md).
   </details>
 
 - **🎥 OBS Integration**: Start/stop recordings directly from the bar with real-time status.

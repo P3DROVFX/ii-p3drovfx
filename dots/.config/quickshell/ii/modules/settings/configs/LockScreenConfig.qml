@@ -63,6 +63,19 @@ Item {
             title: Translation.tr("Security")
 
             ConfigSwitch {
+                buttonIcon: "fingerprint"
+                text: Translation.tr("Unlock with fingerprint")
+                checked: Config.options.lock.security.fingerprint.enable
+                configPage: Qt.resolvedUrl("widgets/FingerprintConfig.qml")
+                onCheckedChanged: {
+                    Config.options.lock.security.fingerprint.enable = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Unlock the screen with the fingerprint reader. Click button text to enroll fingerprints, rename or remove them, and test the reader.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "password"
                 text: Translation.tr("Require password to power off/restart")
                 checked: Config.options.lock.security.requirePasswordToPower

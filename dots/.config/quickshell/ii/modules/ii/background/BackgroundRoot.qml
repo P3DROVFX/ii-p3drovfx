@@ -28,6 +28,11 @@ PanelWindow {
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
+    // Those init values are the screen's, not the wallpaper file's, so the wallpaper plane changes
+    // size the moment the probe answers. Effects that capture the plane into a texture must wait
+    // for it: the capture is taken once, when the effect is created, and is never retaken, so a
+    // plane that grows underneath one leaves a band the blurred texture no longer reaches.
+    property bool wallpaperSizeKnown: false
 
     // State controllers
     WallpaperSizeProbe {
@@ -37,7 +42,20 @@ PanelWindow {
             bgRoot.wallpaperWidth = w;
             bgRoot.wallpaperHeight = h;
             bgRoot.recalcWallpaperScale();
+            bgRoot.wallpaperSizeKnown = true;
         }
+        // A missing or failing `magick` must never keep the wallpaper effects switched off for the
+        // whole session - let them capture the screen-sized guess instead.
+        onExited: (exitCode, exitStatus) => {
+            bgRoot.wallpaperSizeKnown = true;
+        }
+    }
+
+    Timer {
+        id: wallpaperProbeTimeout
+        interval: 3000
+        repeat: false
+        onTriggered: bgRoot.wallpaperSizeKnown = true
     }
 
     LockAnimController {
@@ -83,41 +101,25 @@ PanelWindow {
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
     }
 
-    // Gnome-like keeps the original single transform clock.  The shared
-    // controller remains the source for all other presets, but must not replace
-    // this legacy path or the transition layer can be mapped by two clocks.
-    OverviewZoomController {
-        id: gnomeOverviewController
-        wallpaperZoomedOut: overviewController.isGnomeLike
-            && GlobalStates.overviewBackgroundActive
-            && bgRoot.isMonitorFocused
-        minSafeScale: bgRoot.minSafeScale
-        zoomOutCoverScale: overviewController.overviewCoverScale
-        screenWidth: bgRoot.screen.width
-        screenHeight: bgRoot.screen.height
-    }
-
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
-    // Publish the legacy Gnome clock only for the focused monitor.  Modern
-    // presets use the per-monitor controller directly and leave this state at
-    // the neutral transform so no stale Gnome capture can be reused.
+    // Publish the overview background transform for the focused monitor.
     Binding {
         target: GlobalStates
         property: "overviewZoomScale"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : 1.0
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scale : 1.0
         when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginX"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : 0.5
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginX : 0.5
         when: bgRoot.isMonitorFocused
     }
     Binding {
         target: GlobalStates
         property: "overviewZoomOriginY"
-        value: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : 0.5
+        value: bgRoot.isGnomeLikeOverview ? overviewController.scaleOriginY : 0.5
         when: bgRoot.isMonitorFocused
     }
 
@@ -301,8 +303,13 @@ PanelWindow {
     // Keep the wallpaper below the dedicated widgets surface. Both used to be
     // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
     // wallpaper above the widgets after startup or a reload.
-    WlrLayershell.layer: bgRoot.mediaModeOpen ? WlrLayer.Overlay : WlrLayer.Background
-    WlrLayershell.keyboardFocus: bgRoot.mediaModeOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // Media Mode has its own short-lived Overlay window. Promoting this
+    // permanent fullscreen surface as well creates two competing input regions
+    // and can leave the wallpaper above the interactive media controls.
+    WlrLayershell.layer: WlrLayer.Background
+    // Media Mode owns focus in a short-lived dedicated PanelWindow. Keeping the
+    // persistent wallpaper window focusable would make both surfaces compete.
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     WlrLayershell.namespace: "quickshell:background"
     anchors {
         top: true
@@ -344,16 +351,88 @@ PanelWindow {
     function updateZoomScale() {
         getWallpaperSizeProc.path = bgRoot.wallpaperPath;
         getWallpaperSizeProc.running = true;
+        wallpaperProbeTimeout.restart();
     }
 
-    property bool mediaModeOpen: mediaModeLoader.active && MprisController.activePlayer
+    property bool mediaModeOpen: mediaModeLoader.active
+    property bool mediaModeRegistered: false
+    property string registeredMediaModeScreenName: ""
+
+    function registerMediaMode() {
+        if (bgRoot.mediaModeRegistered)
+            return;
+
+        const screenName = bgRoot.screen ? bgRoot.screen.name : "";
+        bgRoot.mediaModeRegistered = true;
+        bgRoot.registeredMediaModeScreenName = screenName;
+        GlobalStates.setMediaModeActiveForScreen(screenName, true);
+        GlobalStates.mediaModeCount++;
+        LyricsService.mediaModeOpenCount++;
+    }
+
+    function releaseMediaModeRegistration() {
+        if (!bgRoot.mediaModeRegistered)
+            return;
+
+        const screenName = bgRoot.registeredMediaModeScreenName;
+        bgRoot.mediaModeRegistered = false;
+        bgRoot.registeredMediaModeScreenName = "";
+        GlobalStates.setMediaModeActiveForScreen(screenName, false);
+        GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
+        LyricsService.mediaModeOpenCount = Math.max(0, LyricsService.mediaModeOpenCount - 1);
+    }
+
+    function openMediaMode() {
+        if (mediaModeLoader.active || !MprisController.activePlayer)
+            return;
+        mediaModeLoader.active = true;
+    }
+
+    // The media mode surface takes keyboard focus on demand, and it is a
+    // short-lived window: destroying it while it still holds that focus leaves
+    // the compositor routing input at a surface that no longer exists, and every
+    // click on the shell is swallowed until some other focus-taking window (the
+    // dashboard, a popup) resets the seat.
+    //
+    // Before media mode got its own window this could not happen: the surface
+    // was the wallpaper's, it outlived the mode, and its focus was bound to
+    // `mediaModeOpen ? OnDemand : None` — released while the surface was still
+    // alive. The dedicated window has to do that release explicitly.
+    property Timer mediaModeTeardown: Timer {
+        // One frame is enough for the set_keyboard_interactivity(none) commit to
+        // reach the compositor; this is deliberately a little longer.
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (mediaModeLoader.active)
+                mediaModeLoader.active = false;
+            bgRoot.releaseMediaModeRegistration();
+        }
+    }
+
+    function closeMediaMode() {
+        MusicVideoService.stopVideo();
+        if (!mediaModeLoader.active) {
+            // Idempotent: teardown also has to work while a monitor is
+            // disappearing, when the loader is already gone.
+            bgRoot.releaseMediaModeRegistration();
+            return;
+        }
+        if (mediaModeLoader.item) {
+            mediaModeLoader.item.releasingFocus = true;
+            bgRoot.mediaModeTeardown.restart();
+            return;
+        }
+        mediaModeLoader.active = false;
+        bgRoot.releaseMediaModeRegistration();
+    }
 
     function restoreWallpaperColors() {
         if (Config.options.appearance.palette.type.startsWith("scheme")
                 && !GlobalStates.mediaModeActive
                 && bgRoot.isMonitorFocused) {
-            // Restore only after the global close has completed and all loader
-            // destruction handlers have balanced mediaModeCount.
+            // Restore only after every BackgroundRoot has released its media
+            // mode registration.
             Quickshell.execDetached([
                 Directories.wallpaperSwitchScriptPath,
                 "--noswitch",
@@ -381,7 +460,55 @@ PanelWindow {
         }
     }
 
+    Connections {
+        target: MprisController
+        function onActivePlayerChanged() {
+            if (!MprisController.activePlayer)
+                bgRoot.closeMediaMode();
+        }
+    }
+
+    // ── Media mode entrance ──────────────────────────────────────────────────
+    // Promoting this window from WlrLayer.Background to WlrLayer.Overlay is a
+    // hard cut: the wallpaper lands in front of every window in a single frame,
+    // and the media UI fading in behind that reads as "no animation at all".
+    // Fading the surface content instead makes media mode dissolve in over
+    // whatever was on screen.
+    //
+    // Guarded on there being something behind us. On an empty workspace the
+    // promotion is invisible anyway, and fading from zero would flash the
+    // compositor's black through — this window *is* the wallpaper.
+    property real mediaModeContentFade: 1.0
+
+    SequentialAnimation {
+        id: mediaModeEnterFade
+        // Not a Behavior: the drop to zero has to land in the same frame as the
+        // promotion, and only the way back up is animated.
+        PropertyAction {
+            target: bgRoot
+            property: "mediaModeContentFade"
+            value: 0
+        }
+        NumberAnimation {
+            target: bgRoot
+            property: "mediaModeContentFade"
+            to: 1
+            duration: Math.round(320 * Appearance.animMultiplier)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
+
     onMediaModeOpenChanged: {
+        if (mediaModeOpen) {
+            if (bgRoot.hasWindowsInActiveWorkspace)
+                mediaModeEnterFade.restart();
+            else
+                bgRoot.mediaModeContentFade = 1;
+        } else {
+            mediaModeEnterFade.stop();
+            bgRoot.mediaModeContentFade = 1;
+        }
         if (!mediaModeOpen) {
             // Force widgets window to re-stack after our layer transition from
             // WlrLayer.Overlay → WlrLayer.Bottom. Without this, the compositor
@@ -397,9 +524,16 @@ PanelWindow {
         GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
+        // The path-changed handler cannot carry the first probe on its own: when the config is
+        // already loaded by the time this is created the path never changes, and the plane would
+        // keep the screen-sized guess for the whole session.
+        bgRoot.updateZoomScale();
     }
 
     Component.onDestruction: {
+        if (bgRoot.mediaModeRegistered)
+            MusicVideoService.stopVideo();
+        bgRoot.releaseMediaModeRegistration();
         GlobalStates.unregisterOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
     }
 
@@ -410,12 +544,12 @@ PanelWindow {
     Item {
         id: contentRoot
         anchors.fill: parent
+        opacity: bgRoot.mediaModeContentFade
         visible: GlobalStates.screenLocked || !bgRoot.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen)
 
         WallpaperImage {
             id: wallpaperImage
             overviewController: overviewController
-            legacyGnomeZoomedOut: gnomeOverviewController.wallpaperZoomedOut
             screen: bgRoot.screen
             wallpaperPath: bgRoot.wallpaperPath
             lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
@@ -427,6 +561,7 @@ PanelWindow {
             baseWallpaperScale: bgRoot.baseWallpaperScale
             wallpaperWidth: bgRoot.wallpaperWidth
             wallpaperHeight: bgRoot.wallpaperHeight
+            wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace
@@ -435,10 +570,10 @@ PanelWindow {
             parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
             effectiveValueX: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueX
             effectiveValueY: bgRoot.videoEffectsDisabled ? 0.5 : parallax.effectiveValueY
-            scaleValue: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleValue : overviewController.scale
-            scaleOriginX: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginX : overviewController.scaleOriginX
-            scaleOriginY: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleOriginY : overviewController.scaleOriginY
-            scaleProgress: bgRoot.isGnomeLikeOverview ? gnomeOverviewController.scaleProgress : overviewController.scaleProgress
+            scaleValue: overviewController ? overviewController.scale : 1.0
+            scaleOriginX: overviewController ? overviewController.scaleOriginX : bgRoot.screen.width / 2
+            scaleOriginY: overviewController ? overviewController.scaleOriginY : bgRoot.screen.height / 2
+            scaleProgress: overviewController ? overviewController.scaleProgress : 0.0
             anyWidgetIsDragging: bgRoot.anyWidgetIsDragging
             mediaModeOpen: bgRoot.mediaModeOpen
             lockAnimationActive: bgRoot.lockAnimationActive
@@ -453,12 +588,10 @@ PanelWindow {
             onPressed: {
                 if (!monitor.focused && Config.options.background.mediaMode.togglePerMonitor)
                     return;
-                mediaModeLoader.active = !mediaModeLoader.active;
-                if (!mediaModeLoader.active) {
-                    MusicVideoService.stopVideo();
-                }
-                GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount + (mediaModeLoader.active ? 1 : -1));
-                LyricsService.mediaModeOpenCount += mediaModeLoader.active ? 1 : -1;
+                if (mediaModeLoader.active)
+                    bgRoot.closeMediaMode();
+                else
+                    bgRoot.openMediaMode();
             }
         }
 
@@ -467,27 +600,73 @@ PanelWindow {
         Connections {
             target: GlobalStates
             function onMediaModeCloseAllTriggerChanged() {
-                if (GlobalStates.mediaModeCloseAllTrigger > bgRoot._lastCloseAllTrigger && mediaModeLoader.active) {
-                    bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
-                    MusicVideoService.stopVideo();
-                    mediaModeLoader.active = false;
-                    GlobalStates.mediaModeCount = Math.max(0, GlobalStates.mediaModeCount - 1);
-                }
+                if (GlobalStates.mediaModeCloseAllTrigger <= bgRoot._lastCloseAllTrigger)
+                    return;
+                bgRoot._lastCloseAllTrigger = GlobalStates.mediaModeCloseAllTrigger;
+                if (mediaModeLoader.active || bgRoot.mediaModeRegistered)
+                    bgRoot.closeMediaMode();
             }
         }
 
-        Loader {
-            id: mediaModeLoader
-            anchors.fill: parent
-            active: false
-            asynchronous: true
-            sourceComponent: MediaMode {}
-            opacity: mediaModeLoader.status === Loader.Ready ? 1 : 0
-            onActiveChanged: {
-                GlobalStates.setMediaModeActiveForScreen(bgRoot.screen ? bgRoot.screen.name : "", active);
-            }
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        // Fullscreen effects must not share the wallpaper's permanent QQuickWindow.
+        // Destroying only their Item tree leaves large render targets in that
+        // window's scenegraph/resource pools. A dedicated short-lived window gives
+        // Qt/RHI a real teardown boundary on every close.
+        Scope {
+            id: mediaModeWindowScope
+
+            LazyLoader {
+                id: mediaModeLoader
+
+                active: false
+                onActiveChanged: {
+                    if (active) {
+                        if (!MprisController.activePlayer) {
+                            active = false;
+                            return;
+                        }
+                        bgRoot.registerMediaMode();
+                    } else {
+                        bgRoot.releaseMediaModeRegistration();
+                    }
+                }
+
+                component: PanelWindow {
+                    id: mediaModeWindow
+
+                    screen: bgRoot.screen
+                    visible: true
+                    color: "transparent"
+                    exclusionMode: ExclusionMode.Ignore
+                    exclusiveZone: 0
+
+                    WlrLayershell.namespace: "quickshell:mediaMode"
+                    WlrLayershell.layer: WlrLayer.Overlay
+                    // Handed back before the window is destroyed — see
+                    // closeMediaMode(). A short-lived layer surface must never
+                    // die holding keyboard focus.
+                    property bool releasingFocus: false
+                    WlrLayershell.keyboardFocus: mediaModeWindow.releasingFocus
+                        ? WlrKeyboardFocus.None
+                        : WlrKeyboardFocus.OnDemand
+
+                    anchors {
+                        top: true
+                        bottom: true
+                        left: true
+                        right: true
+                    }
+
+                    MediaMode {
+                        anchors.fill: parent
+                        onCloseRequested: function(allMonitors) {
+                            if (allMonitors)
+                                GlobalStates.mediaModeCloseAllTrigger++;
+                            else
+                                bgRoot.closeMediaMode();
+                        }
+                    }
+                }
             }
         }
     }

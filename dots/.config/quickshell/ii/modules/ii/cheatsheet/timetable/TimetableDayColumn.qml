@@ -18,9 +18,12 @@ Item {
     property real dayColumnWidth
     property real contentHeight
     property real pixelsPerMinute
+    property real eventSpacing
     property int startHour
     property int startMinute
     property int snapInterval
+    property Item coordinateRoot: null
+    property var draggedEvent: null
     
     // Ghost state
     property bool ghostVisible
@@ -40,7 +43,6 @@ Item {
 
     // Colors
     property color todayHighlightFill
-    property color todayHighlightBorder
     property color dayBackgroundFill
     property color dayBackgroundFillVariant
 
@@ -49,19 +51,46 @@ Item {
     signal dragPositionChanged(int dayIndex, real currentY)
     signal dragReleased(int dayIndex, real startY, real currentY)
     signal editRequested(var event, int dayIndex)
+    signal deleteRequested(var event, int dayIndex)
+    signal eventMoveStarted(var event, real x, real y, real pointerOffsetY)
+    signal eventMoveMoved(real x, real y)
+    signal eventMoveEnded
+    signal eventMoveCanceled
+    signal eventResizeStarted(var event, real x, real y)
+    signal eventResizeMoved(real x, real y)
+    signal eventResizeEnded
+    signal eventResizeCanceled
 
     width: dayColumnWidth
     height: contentHeight
     clip: true
 
-    readonly property var timedEvents: H.getTimedEvents(dayData.events)
+    // Same weekend marker as the month grid: a texture, so it survives the
+    // today fill without changing the timed background through the day.
+    readonly property bool isWeekend: {
+        const date = dayColumn.dayData?.date;
+        if (!(date instanceof Date))
+            return false;
+        const weekday = date.getDay();
+        return weekday === 0 || weekday === 6;
+    }
+    readonly property color weekendHatchColor: {
+        const tertiary = Qt.color(Appearance.colors.colTertiary);
+        return Qt.hsla(tertiary.hslHue, tertiary.hslSaturation * 0.3, tertiary.hslLightness, 0.13);
+    }
 
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
         color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant
-        border.width: isToday ? 1 : 0
-        border.color: isToday ? todayHighlightBorder : "transparent"
+    }
+
+    DiagonalHatch {
+        anchors.fill: parent
+        visible: dayColumn.isWeekend
+        lineColor: dayColumn.weekendHatchColor
+        lineSpacing: 9
+        plateRadius: Appearance.rounding.windowRounding
     }
 
     // ─── Drag-to-create MouseArea ─────────────
@@ -69,6 +98,8 @@ Item {
         id: dayDragArea
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        preventStealing: true
         cursorShape: ghostVisible && ghostDayIndex === dayIdx ? Qt.ArrowCursor : Qt.CrossCursor
         z: 0
 
@@ -108,13 +139,15 @@ Item {
     // ─── Drag preview (during drag) ───────────
     Rectangle {
         id: dragPreview
-        visible: isDragging && dragDayIndex === dayIdx
+        visible: isDragging && dragDayIndex === dayIdx && Math.abs(dragCurrentY - dragStartY) >= 4
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
+        topLeftRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        topRightRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomLeftRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomRightRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
         color: H.withOpacity(Appearance.colors.colPrimary, 0.25)
-        border.width: 2
-        border.color: H.withOpacity(Appearance.colors.colPrimary, 0.6)
         z: 5
 
         y: {
@@ -151,9 +184,11 @@ Item {
         width: parent.width - 10
         anchors.horizontalCenter: parent.horizontalCenter
         radius: Appearance.rounding.normal
-        color: H.withOpacity(Appearance.colors.colPrimary, 0.35)
-        border.width: 2
-        border.color: Appearance.colors.colPrimary
+        topLeftRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        topRightRadius: y <= 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomLeftRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        bottomRightRadius: y + height >= parent.height - 4 ? Math.max(Appearance.rounding.normal, Appearance.rounding.windowRounding - 4) : Appearance.rounding.normal
+        color: Appearance.colors.colPrimary
         z: 8
         y: ghostTopY
         height: ghostHeight
@@ -188,7 +223,7 @@ Item {
 
     // ─── Existing event blocks ────────────────
     Repeater {
-        model: H.computeEventLayout(dayData.events, H.parseTimeToMinutes)
+        model: H.computeEventLayout(dayData.events, event => CalendarService.isAllDayEvent(event))
         delegate: EventBlock {
             eventData: modelData.event
             colIndex: modelData.colIndex
@@ -197,9 +232,21 @@ Item {
             nextEventData: dayColumn.nextEventData
             maxLogicalDistance: dayColumn.maxLogicalDistance
             pixelsPerMinute: dayColumn.pixelsPerMinute
+            eventSpacing: dayColumn.eventSpacing
             startHour: dayColumn.startHour
             startMinute: dayColumn.startMinute
+            coordinateRoot: dayColumn.coordinateRoot
+            manipulating: dayColumn.draggedEvent === modelData.event
             onEditRequested: (evt, dIdx) => dayColumn.editRequested(evt, dIdx)
+            onDeleteRequested: (evt, dIdx) => dayColumn.deleteRequested(evt, dIdx)
+            onMoveDragStarted: (evt, x, y, offsetY) => dayColumn.eventMoveStarted(evt, x, y, offsetY)
+            onMoveDragMoved: (x, y) => dayColumn.eventMoveMoved(x, y)
+            onMoveDragEnded: dayColumn.eventMoveEnded()
+            onMoveDragCanceled: dayColumn.eventMoveCanceled()
+            onResizeDragStarted: (evt, x, y) => dayColumn.eventResizeStarted(evt, x, y)
+            onResizeDragMoved: (x, y) => dayColumn.eventResizeMoved(x, y)
+            onResizeDragEnded: dayColumn.eventResizeEnded()
+            onResizeDragCanceled: dayColumn.eventResizeCanceled()
         }
     }
 }

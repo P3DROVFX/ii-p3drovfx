@@ -1,239 +1,167 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
-ContentPage {
-    id: page
-    forceWidth: false
+Item {
+    id: root
 
-    KeyboardShortcutBox {
-        Layout.fillWidth: true
-        Layout.bottomMargin: 8
-        text: Translation.tr("Toggle the Cheatsheet")
-        keys: ["Super", "/"]
+    property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
+
+    function openSubPage(url) {
+        subPageOverlay.open(Qt.resolvedUrl(url));
     }
 
-    ContentSection {
-        title: Translation.tr("General Options")
-        icon: "keyboard"
+    anchors.fill: parent
 
-        ColumnLayout {
+    ContentPage {
+        id: page
+
+        anchors.fill: parent
+        forceWidth: false
+        opacity: subPageOverlay.slideProgress
+        visible: opacity > 0
+
+        KeyboardShortcutBox {
             Layout.fillWidth: true
-            spacing: 4
+            Layout.bottomMargin: 8
+            text: Translation.tr("Toggle the Cheatsheet")
+            keys: ["Super", "/"]
+        }
 
-            ContentSubsection {
-                title: Translation.tr("Super key symbol")
-                icon: "keyboard_command_key"
+        // ── Cheatsheet Style & Layout ─────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Key Symbols & Typography")
+            icon: "keyboard"
+            tooltip: Translation.tr("Super key icons, modifier key symbols, split buttons, and font sizes.")
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                ConfigSelectionArray {
-                    currentValue: Config.options.cheatsheet.superKey
-                    onSelected: newValue => {
-                        Config.options.cheatsheet.superKey = newValue;
-                    }
-                    options: (["󰖳", "", "󰨡", "", "󰌽", "󰣇", "", "", "", "", "", "󱄛", "", "", "", "⌘", "󰀲", "󰟍", ""]).map(icon => {
-                        return {
-                            displayName: icon,
-                            value: icon
-                        };
-                    })
-                }
-            }
+                spacing: Appearance.sizes.elevationMargin / 2
 
-            ConfigSwitch {
-                buttonIcon: "󰘵"
-                text: Translation.tr("Use macOS-like symbols for mods keys")
-                checked: Config.options.cheatsheet.useMacSymbol
-                onCheckedChanged: {
-                    Config.options.cheatsheet.useMacSymbol = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "󱊶"
-                text: Translation.tr("Use symbols for function keys")
-                checked: Config.options.cheatsheet.useFnSymbol
-                onCheckedChanged: {
-                    Config.options.cheatsheet.useFnSymbol = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "󰍽"
-                text: Translation.tr("Use symbols for mouse")
-                checked: Config.options.cheatsheet.useMouseSymbol
-                onCheckedChanged: {
-                    Config.options.cheatsheet.useMouseSymbol = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "highlight_keyboard_focus"
-                text: Translation.tr("Split buttons")
-                checked: Config.options.cheatsheet.splitButtons
-                onCheckedChanged: {
-                    Config.options.cheatsheet.splitButtons = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "filter_alt"
-                text: Translation.tr("Filter unbinds")
-                checked: Config.options.cheatsheet.filterUnbinds
-                onCheckedChanged: {
-                    Config.options.cheatsheet.filterUnbinds = checked;
+                ConfigSubpageRow {
+                    buttonIcon: "keyboard_command_key"
+                    title: Translation.tr("Key symbols & typography")
+                    description: Translation.tr("Super glyph, mod symbols, mouse icons, split buttons and font size")
+                    summary: Translation.tr("Super: %1 · Key font: %2pt").arg(Config.options.cheatsheet.superKey).arg(Config.options.cheatsheet.fontSize.key)
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/CheatSheetAppearanceConfig.qml"))
                 }
             }
         }
 
-        Item { Layout.preferredHeight: 16 }
+        // ── Cheatsheet Widgets ────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Cheatsheet Widgets")
+            icon: "widgets"
+            tooltip: Translation.tr("Enable or configure interactive reference panels in the cheatsheet.")
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
 
-            ConfigSpinBox {
-                icon: "format_size"
-                text: Translation.tr("Keybind font size")
-                value: Config.options.cheatsheet.fontSize.key
-                from: 8
-                to: 30
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.cheatsheet.fontSize.key = value;
+                ConfigSwitch {
+                    buttonIcon: "calendar_month"
+                    text: Translation.tr("Enable Timetable")
+                    checked: Config.options.cheatsheet.enableTimetable
+                    configPage: Qt.resolvedUrl("widgets/TimetableConfig.qml")
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableTimetable = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Weekly and monthly calendar timetable with event scheduling, alarms, and sports integration.")
+                    }
                 }
-            }
 
-            ConfigSpinBox {
-                icon: "text_fields"
-                text: Translation.tr("Description font size")
-                value: Config.options.cheatsheet.fontSize.comment
-                from: 8
-                to: 30
-                stepSize: 1
-                onValueChanged: {
-                    Config.options.cheatsheet.fontSize.comment = value;
+                ConfigSwitch {
+                    buttonIcon: "mail"
+                    text: Translation.tr("Enable Gmail")
+                    checked: Config.options.cheatsheet.enableGmail
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableGmail = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("View and manage unread Gmail messages directly in the Cheatsheet.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "biotech"
+                    text: Translation.tr("Enable Amino acids")
+                    checked: Config.options.cheatsheet.enableAminoAcids
+                    configPage: Qt.resolvedUrl("widgets/CheatsheetAminoAcidsConfig.qml")
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableAminoAcids = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Reference guide for amino acids with structural formulas and classification schemes.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "terminal"
+                    text: Translation.tr("Enable Commands")
+                    checked: Config.options.cheatsheet.enableCommands
+                    configPage: Qt.resolvedUrl("widgets/CheatsheetCommandsConfig.qml")
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableCommands = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Quick reference cheatsheet for terminal commands and shell workflows.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "dashboard"
+                    text: Translation.tr("Enable Workspaces")
+                    checked: Config.options.cheatsheet.enableWorkspaceProfiles
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableWorkspaceProfiles = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Manage workspace profiles, saved application layouts, and monitor assignments.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "experiment"
+                    text: Translation.tr("Enable Elements")
+                    checked: Config.options.cheatsheet.enablePeriodicTable
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enablePeriodicTable = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Interactive periodic table of chemical elements with atomic properties.")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "speed"
+                    text: Translation.tr("Enable Typing test")
+                    checked: Config.options.cheatsheet.enableTypingTest
+                    onCheckedChanged: {
+                        Config.options.cheatsheet.enableTypingTest = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("The same offline typing test the Overview search hosts, as a full-size page. Its own settings and score history live inside it.")
+                    }
                 }
             }
         }
     }
 
-    ContentSection {
-        title: Translation.tr("Toggle Widgets")
-        icon: "widgets"
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                buttonIcon: "mail"
-                text: Translation.tr("Enable Gmail")
-                checked: Config.options.cheatsheet.enableGmail
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableGmail = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "calendar_month"
-                text: Translation.tr("Enable Timetable")
-                checked: Config.options.cheatsheet.enableTimetable
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableTimetable = checked;
-                }
-            }
-
-            ConfigSwitch {
-                enabled: Config.options.cheatsheet.enableTimetable
-                buttonIcon: "calendar_today"
-                text: Translation.tr("Timetable: start with today")
-                checked: Config.options.cheatsheet.timetableTodayFirst
-                onCheckedChanged: {
-                    Config.options.cheatsheet.timetableTodayFirst = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "experiment"
-                text: Translation.tr("Enable Elements")
-                checked: Config.options.cheatsheet.enablePeriodicTable
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enablePeriodicTable = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "biotech"
-                text: Translation.tr("Enable Amino acids")
-                checked: Config.options.cheatsheet.enableAminoAcids
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableAminoAcids = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "terminal"
-                text: Translation.tr("Enable Commands")
-                checked: Config.options.cheatsheet.enableCommands
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableCommands = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "dashboard"
-                text: Translation.tr("Enable Workspaces")
-                checked: Config.options.cheatsheet.enableWorkspaceProfiles
-                onCheckedChanged: {
-                    Config.options.cheatsheet.enableWorkspaceProfiles = checked;
-                }
-            }
-        }
-
-        Item { Layout.preferredHeight: 16 }
-
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-
-            ConfigSwitch {
-                enabled: Config.options.cheatsheet.enableCommands
-                buttonIcon: "table_rows_narrow"
-                text: Translation.tr("Commands: sidebar tag layout")
-                checked: Config.options.cheatsheet.commandsTagsSidebar
-                onCheckedChanged: {
-                    Config.options.cheatsheet.commandsTagsSidebar = checked;
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Amino acids: side chain classes")
-                icon: "palette"
-                Layout.fillWidth: true
-                ConfigSelectionArray {
-                    currentValue: Config.options.cheatsheet.aminoAcidScheme
-                    onSelected: newValue => {
-                        Config.options.cheatsheet.aminoAcidScheme = newValue;
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("5 classes"),
-                            value: "five"
-                        },
-                        {
-                            displayName: Translation.tr("7 classes"),
-                            value: "seven"
-                        },
-                        {
-                            displayName: Translation.tr("4 classes"),
-                            value: "four"
-                        }
-                    ]
-                }
-            }
-        }
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 }

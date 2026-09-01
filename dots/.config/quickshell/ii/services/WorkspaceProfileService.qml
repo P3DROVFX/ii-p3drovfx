@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * WorkspaceProfileService
@@ -526,7 +527,7 @@ Singleton {
     Component.onCompleted: {
         // Ensure profiles directory exists
         Quickshell.execDetached(["mkdir", "-p",
-            `${Directories.home}/.config/illogical-impulse/workspace_profiles`]);
+            FileUtils.trimFileProtocol(`${Directories.home}/.config/illogical-impulse/workspace_profiles`)]);
         checkBinaryProc.running = true;
         Qt.callLater(root.refresh);
     }

@@ -198,6 +198,9 @@ Item { // Window
                 source: root.iconPath
                 width: iconSize
                 height: iconSize
+                // The revision in the size is what makes a new theme redraw; without cache:false
+                // the size going back to one it already used serves the icon from before it.
+                cache: false
                 sourceSize: Qt.size(iconSize + TaskbarApps.iconThemeRevision, iconSize + TaskbarApps.iconThemeRevision)
 
                 Behavior on width {

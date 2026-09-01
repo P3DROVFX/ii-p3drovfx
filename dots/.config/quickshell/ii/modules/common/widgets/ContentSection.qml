@@ -19,11 +19,15 @@ ColumnLayout {
 
     property string pageId: ""
     property string subPage: ""
+    // Search results clone a small, safe subset of the original controls.
+    // Their original ConfigSubPageHost is not part of that clone, so child
+    // navigation controls use this marker to route through SettingsWindow.
+    property bool searchResult: false
     property bool collapsible: false
     property bool expanded: true
     readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
-    function navigateToPage() {
+    function navigateToPage(subPageOverride) {
         if (!root.pageId || root.pageId === "")
             return;
         const win = root.QsWindow.window;
@@ -33,17 +37,20 @@ ColumnLayout {
         if (idx < 0)
             return;
 
-        win.pendingSectionHighlight = root.title;
-        if (root.subPage && root.subPage.length > 0) {
-            win.pendingSubPage = root.subPage;
-        }
+        const targetSubPage = arguments.length > 0
+            ? String(subPageOverride ?? "")
+            : root.subPage;
+        // A section title belongs to the parent page, not necessarily to the
+        // destination sub-page. Highlight only page-level deep links.
+        win.pendingSectionHighlight = targetSubPage === "" ? root.title : "";
+        win.pendingSubPage = targetSubPage;
 
         if (win.currentPage === idx) {
             if (win.pendingSubPage && win.restoreSubPagePath) {
                 win.restoreSubPagePath(win.pendingSubPage);
                 win.pendingSubPage = "";
             }
-            SearchRegistry.currentSearch = root.title;
+            SearchRegistry.currentSearch = targetSubPage === "" ? root.title : "";
             win.pendingSectionHighlight = "";
         } else {
             win.currentPage = idx;
@@ -82,12 +89,7 @@ ColumnLayout {
     onParentChanged: findFlickable()
 
     readonly property string currentSearch: SearchRegistry.currentSearch
-    onCurrentSearchChanged: {
-        if (matchesCurrent(SearchRegistry.currentSearch)) {
-            doScrollAndHighlight();
-            SearchRegistry.currentSearch = "";
-        }
-    }
+    onCurrentSearchChanged: root.tryPendingHighlight()
 
     function matchesCurrent(query) {
         if (!query || query.length === 0)
@@ -96,10 +98,18 @@ ColumnLayout {
     }
 
     function tryPendingHighlight() {
-        if (matchesCurrent(SearchRegistry.currentSearch)) {
-            doScrollAndHighlight();
-            SearchRegistry.currentSearch = "";
-        }
+        if (!matchesCurrent(SearchRegistry.currentSearch))
+            return;
+        doScrollAndHighlight();
+        // Cleared on the next tick rather than here: `currentSearch` above is
+        // bound to the very property being written, so clearing it inside the
+        // change handler re-enters the binding and Qt reports a loop. It
+        // worked, loudly. Deferring the write takes it out of the binding's
+        // own evaluation.
+        Qt.callLater(() => {
+            if (SearchRegistry.currentSearch === root.title)
+                SearchRegistry.currentSearch = "";
+        });
     }
 
     function doScrollAndHighlight() {

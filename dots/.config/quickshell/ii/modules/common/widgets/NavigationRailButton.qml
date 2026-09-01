@@ -17,9 +17,13 @@ TabButton {
 
     property bool expanded: false
     property bool showToggledHighlight: true
+    // Keep the intrinsic size independent from root.width. When an expanded
+    // button fills a layout, visualWidth may use root.width for the painted
+    // highlight, but feeding that value back into the content item's
+    // implicitWidth creates a width -> visualWidth -> implicitWidth loop.
+    readonly property real contentWidth: root.baseSize + 20 + itemText.implicitWidth
     readonly property real visualWidth: {
-        const contentWidth = root.baseSize + 20 + itemText.implicitWidth;
-        return root.expanded && root.fillExpandedWidth ? Math.max(root.width, contentWidth) : (root.expanded ? contentWidth : root.baseSize);
+        return root.expanded && root.fillExpandedWidth ? Math.max(root.width, root.contentWidth) : (root.expanded ? root.contentWidth : root.baseSize);
     }
 
     property real baseSize: 56
@@ -64,7 +68,7 @@ TabButton {
             right: root.expanded && root.fillExpandedWidth ? parent.right : undefined
         }
 
-        implicitWidth: root.visualWidth
+        implicitWidth: root.expanded ? root.contentWidth : root.baseSize
         implicitHeight: root.expanded ? itemIconBackground.implicitHeight : itemIconBackground.implicitHeight + itemText.implicitHeight
 
         Rectangle {

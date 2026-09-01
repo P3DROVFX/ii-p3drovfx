@@ -11,14 +11,14 @@ ContentPage {
     forceWidth: false
 
     property string configEntryName: "photo"
-    property string widgetIdName: "photo_default"
+    property string widgetIdName: "photo"
     property string titleText: Translation.tr("Photo Widget Options")
 
     signal goBack
 
     Process {
         id: pickImageProc
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"Images | *.png *.jpg *.jpeg *.webp *.bmp\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.webp *.bmp\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then echo \"$FILE\"; fi"]
+        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.bmp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP *.BMP *.SVG\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then echo \"$FILE\"; fi"]
         stdout: SplitParser {
             onRead: data => {
                 let path = data.trim();
@@ -142,8 +142,9 @@ ContentPage {
                     return entry && entry.showOverlay !== undefined ? entry.showOverlay : true;
                 }
                 onCheckedChanged: {
+                    if (root.configEntryName === "photo") return;
                     let entry = Config.options.background.widgets[root.configEntryName];
-                    if (entry) {
+                    if (entry && entry.showOverlay !== undefined) {
                         entry.showOverlay = checked;
                     }
                 }

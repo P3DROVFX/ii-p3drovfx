@@ -96,6 +96,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "search"
+                cardShape: "SoftBurst"
+                cardHue: 210
+                title: Translation.tr("Search")
+                description: Translation.tr("Launcher button style, width, colour treatment, and shortcut hint")
+                onOpenCard: root.openComponentPage("search")
+            }
+
+            ServiceCard {
                 cardIcon: "label"
                 cardShape: "Circle"
                 cardHue: 210
@@ -158,19 +167,19 @@ ContentPage {
 
             ServiceCard {
                 cardIcon: "nest_clock_farsight_analog"
-                cardShape: "Circle"
+                cardShape: "Sunny"
                 cardHue: 35
                 title: Translation.tr("Clock")
-                description: Translation.tr("Clock format, timezones, analog/digital styles, and font sizes")
+                description: Translation.tr("Neural and Relief clock designs, die-cut variants, and colour treatment")
                 onOpenCard: root.openComponentPage("clock")
             }
 
             ServiceCard {
                 cardIcon: "date_range"
-                cardShape: "Circle"
+                cardShape: "Cookie9Sided"
                 cardHue: 35
                 title: Translation.tr("Date")
-                description: Translation.tr("Date formatting, calendar popup triggers, and layout")
+                description: Translation.tr("Expressive and Neural date designs, variants, colour treatment, and capitals")
                 onOpenCard: root.openComponentPage("date")
             }
 
@@ -188,7 +197,7 @@ ContentPage {
                 cardShape: "Circle"
                 cardHue: 35
                 title: Translation.tr("Weather")
-                description: Translation.tr("Weather location, provider settings, and forecast details")
+                description: Translation.tr("Compact Horizon and Tessera designs, visual variants, colours, and weather service")
                 onOpenCard: root.openComponentPage("weather")
             }
         }
@@ -233,6 +242,33 @@ ContentPage {
                 title: Translation.tr("System Monitor")
                 description: Translation.tr("CPU, RAM, disk, and network usage gauges and graphs")
                 onOpenCard: root.openComponentPage("system_monitor")
+            }
+
+            ServiceCard {
+                cardIcon: "neurology"
+                cardShape: "Circle"
+                cardHue: 165
+                title: Translation.tr("AI Plan Usage")
+                description: Translation.tr("ChatGPT, Claude, and Antigravity plan quotas and bar gauges")
+                onOpenCard: root.openComponentPage("ai_plan_usage")
+            }
+
+            ServiceCard {
+                cardIcon: "shield_lock"
+                cardShape: "Circle"
+                cardHue: 100
+                title: Translation.tr("Privacy pill")
+                description: Translation.tr("Android-style indicator for camera, microphone, screen and location access")
+                onOpenCard: root.openComponentPage("privacy_pill")
+            }
+
+            ServiceCard {
+                cardIcon: "lan"
+                cardShape: "Circle"
+                cardHue: 140
+                title: Translation.tr("Port Watcher")
+                description: Translation.tr("Listening ports, live connections, exposure filters, and process actions")
+                onOpenCard: root.openComponentPage("port_watcher")
             }
 
             ServiceCard {
@@ -321,6 +357,15 @@ ContentPage {
                 title: Translation.tr("Phone Indicator")
                 description: Translation.tr("Wireless debugging, phone screen mirroring, and scrcpy status")
                 onOpenCard: root.openComponentPage("phone_scrcpy_indicator")
+            }
+
+            ServiceCard {
+                cardIcon: "tune"
+                cardShape: "Circle"
+                cardHue: 280
+                title: Translation.tr("Mode Indicator")
+                description: Translation.tr("The active mode's name and colour; hidden while no mode is on")
+                onOpenCard: root.openComponentPage("mode_indicator")
             }
         }
     }

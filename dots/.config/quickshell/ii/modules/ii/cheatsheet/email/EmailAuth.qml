@@ -387,7 +387,7 @@ Item {
                     id: snippetText
                     anchors.centerIn: parent
                     width: parent.width - 40
-                    text: "GMAIL_CLIENT_ID=your_id_here\nGMAIL_CLIENT_SECRET=your_secret_here"
+                    text: "GOOGLE_CLIENT_ID=your_id_here\nGOOGLE_CLIENT_SECRET=your_secret_here"
                     font.family: Appearance.font.family.monospace
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: Appearance.colors.colOnSurfaceVariant

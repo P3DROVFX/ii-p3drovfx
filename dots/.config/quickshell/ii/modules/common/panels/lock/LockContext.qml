@@ -1,8 +1,8 @@
 import qs
 import qs.modules.common
+import qs.services
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.Pam
 
 Scope {
@@ -19,7 +19,18 @@ Scope {
     property string currentText: ""
     property bool unlockInProgress: false
     property bool showFailure: false
-    property bool fingerprintsConfigured: false
+    // Whether to arm pam_fprintd at all. The Fingerprint service owns the
+    // enrolled list and re-lists after every enrollment or deletion, so a print
+    // added from settings works on the very next lock instead of only after a
+    // shell restart. `busy` covers the reader being claimed by an enrollment or
+    // a test scan — arming PAM against a claimed device just yields
+    // PAM_AUTHINFO_UNAVAIL and starts the retry ladder for no reason.
+    readonly property bool fingerprintEnabled: Config.options?.lock?.security?.fingerprint?.enable ?? true
+    readonly property bool fingerprintsConfigured: root.fingerprintEnabled && Fingerprint.hasEnrolled && !Fingerprint.busy
+    // Shown on the lock screen instead of silently falling back to the password
+    // box: either the reader is gone, or the backoff ladder has given up on it.
+    readonly property bool fingerprintUnavailable: !Fingerprint.deviceAvailable || (root.fingerRetries >= root.fingerMaxRetries && !fingerPam.active)
+    readonly property bool fingerprintIndicatorVisible: root.fingerprintEnabled && (Config.options?.lock?.security?.fingerprint?.showIndicator ?? true) && Fingerprint.hasEnrolled
     // pam_fprintd default max-tries is 3 (pam/fprintd.conf passes no override)
     readonly property int fingerprintMaxTries: 3
     property int fingerprintTriesLeft: fingerprintMaxTries
@@ -110,6 +121,9 @@ Scope {
         fingerInhibitFailsafeTimer.stop();
         root.fingerSuspendInhibit = false;
         root.fingerRetries = 0;
+        // A resume is exactly when the reader may have gone away or come back,
+        // so re-check it rather than trusting what was probed at startup.
+        Fingerprint.probeDevice();
         if (!root.fingerprintsConfigured || !GlobalStates.screenLocked)
             return;
         stopFingerPam();
@@ -145,24 +159,17 @@ Scope {
         }
     }
 
-    Process {
-        id: fingerprintCheckProc
-        running: true
-        command: ["bash", "-c", "fprintd-list $(whoami)"]
-        stdout: StdioCollector {
-            id: fingerprintOutputCollector
-            onStreamFinished: {
-                root.fingerprintsConfigured = fingerprintOutputCollector.text.includes("Fingerprints for user");
-            }
+    // Turning fingerprint unlock off from settings, or claiming the reader for
+    // an enrollment, has to take effect on an already-showing lock screen too.
+    onFingerprintsConfiguredChanged: {
+        if (!root.fingerprintsConfigured) {
+            stopFingerPam();
+            return;
         }
-        onExited: (exitCode, exitStatus) => {
-            if (exitCode !== 0) {
-                // console.warn("[LockContext] fprintd-list command exited with error:", exitCode, exitStatus);
-                root.fingerprintsConfigured = false;
-            }
-        }
+        if (GlobalStates.screenLocked)
+            restartFingerUnlock();
     }
-    
+
     PamContext {
         id: pam
 

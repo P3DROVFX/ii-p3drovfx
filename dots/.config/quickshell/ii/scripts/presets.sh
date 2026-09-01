@@ -31,27 +31,66 @@ case $action in
         
         # Also copy the wallpaper if configured
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        wall_path="${wall_path#file://}"
+        wall_path="${wall_path%%\?*}"
         if [[ -f "$wall_path" ]]; then
             ext="${wall_path##*.}"
             cp "$wall_path" "$PRESETS_DIR/$name.$ext"
         fi
-        ;;
-        update)
-    if [[ -z "$name" ]]; then exit 1; fi
-    if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
-    # Remove stale wallpaper files for this preset before overwriting
-    for file in "$PRESETS_DIR/$name".*; do
-        if [[ -f "$file" && "${file##*.}" != "json" ]]; then
-            rm -f "$file"
+
+        # Also copy the profile picture if configured
+        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
+        profile_path="${profile_path#file://}"
+        profile_path="${profile_path%%\?*}"
+        if [[ -f "$profile_path" ]]; then
+            ext="${profile_path##*.}"
+            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
         fi
-    done
-    cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
-    wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-    if [[ -f "$wall_path" ]]; then
-        ext="${wall_path##*.}"
-        cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-    fi
-    ;;
+
+        # Also copy the sidebar dashboard banner image if configured
+        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
+        banner_path="${banner_path#file://}"
+        banner_path="${banner_path%%\?*}"
+        if [[ -f "$banner_path" ]]; then
+            ext="${banner_path##*.}"
+            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
+        fi
+        ;;
+    update)
+        if [[ -z "$name" ]]; then exit 1; fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        # Remove stale asset files for this preset before overwriting
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
+            if [[ -f "$file" && "${file##*.}" != "json" ]]; then
+                rm -f "$file"
+            fi
+        done
+        cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
+
+        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        wall_path="${wall_path#file://}"
+        wall_path="${wall_path%%\?*}"
+        if [[ -f "$wall_path" ]]; then
+            ext="${wall_path##*.}"
+            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
+        fi
+
+        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
+        profile_path="${profile_path#file://}"
+        profile_path="${profile_path%%\?*}"
+        if [[ -f "$profile_path" ]]; then
+            ext="${profile_path##*.}"
+            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
+        fi
+
+        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
+        banner_path="${banner_path#file://}"
+        banner_path="${banner_path%%\?*}"
+        if [[ -f "$banner_path" ]]; then
+            ext="${banner_path##*.}"
+            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
+        fi
+        ;;
     load)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ -f "$PRESETS_DIR/$name.json" ]]; then
@@ -72,8 +111,8 @@ case $action in
     delete)
         if [[ -z "$name" ]]; then exit 1; fi
         rm -f "$PRESETS_DIR/$name.json"
-        # Delete any associated wallpaper file
-        for file in "$PRESETS_DIR/$name".*; do
+        # Delete any associated asset files
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
             if [[ -f "$file" && "${file##*.}" != "json" ]]; then
                 rm -f "$file"
             fi
@@ -128,20 +167,69 @@ case $action in
                 fail_export "Could not sanitize the preset configuration."
             fi
             
-            # Find and copy wallpaper if it exists
-            # Look for MyPreset.* excluding .json and .zip
+            # 1. Find and copy wallpaper if it exists
             for file in "$PRESETS_DIR/$name".*; do
                 if [[ -f "$file" ]]; then
+                    base=$(basename "$file")
                     ext="${file##*.}"
-                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
-                        if ! cp "$file" "$TMP_DIR/wallpaper.$ext"; then
-                            rm -rf "$TMP_DIR"
-                            fail_export "Could not copy the preset wallpaper."
-                        fi
+                    if [[ "$ext" != "json" && "$ext" != "zip" && "$base" != "${name}_profile."* && "$base" != "${name}_banner."* ]]; then
+                        cp "$file" "$TMP_DIR/wallpaper.$ext"
                         break
                     fi
                 fi
             done
+            # Fallback if wallpaper is not in PRESETS_DIR but local path exists
+            if ! ls "$TMP_DIR"/wallpaper.* >/dev/null 2>&1; then
+                wall_path=$(jq -r '.background.wallpaperPath // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
+                wall_path="${wall_path#file://}"
+                wall_path="${wall_path%%\?*}"
+                if [[ -f "$wall_path" ]]; then
+                    ext="${wall_path##*.}"
+                    cp "$wall_path" "$TMP_DIR/wallpaper.$ext"
+                fi
+            fi
+
+            # 2. Find and copy profile picture if it exists
+            for file in "$PRESETS_DIR/${name}_profile".*; do
+                if [[ -f "$file" ]]; then
+                    ext="${file##*.}"
+                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
+                        cp "$file" "$TMP_DIR/profile.$ext"
+                        break
+                    fi
+                fi
+            done
+            # Fallback if profile is not in PRESETS_DIR but local path exists
+            if ! ls "$TMP_DIR"/profile.* >/dev/null 2>&1; then
+                profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
+                profile_path="${profile_path#file://}"
+                profile_path="${profile_path%%\?*}"
+                if [[ -f "$profile_path" ]]; then
+                    ext="${profile_path##*.}"
+                    cp "$profile_path" "$TMP_DIR/profile.$ext"
+                fi
+            fi
+
+            # 3. Find and copy sidebar dashboard banner image if it exists
+            for file in "$PRESETS_DIR/${name}_banner".*; do
+                if [[ -f "$file" ]]; then
+                    ext="${file##*.}"
+                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
+                        cp "$file" "$TMP_DIR/banner.$ext"
+                        break
+                    fi
+                fi
+            done
+            # Fallback if banner is not in PRESETS_DIR but local path exists
+            if ! ls "$TMP_DIR"/banner.* >/dev/null 2>&1; then
+                banner_path=$(jq -r '.sidebar.bannerImage // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
+                banner_path="${banner_path#file://}"
+                banner_path="${banner_path%%\?*}"
+                if [[ -f "$banner_path" ]]; then
+                    ext="${banner_path##*.}"
+                    cp "$banner_path" "$TMP_DIR/banner.$ext"
+                fi
+            fi
             
             # Zip everything
             if ! (cd "$TMP_DIR" && zip -r "$DEST_ZIP" .); then
@@ -203,14 +291,26 @@ case $action in
                     # Sanitize paths when importing config
                     python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$config_json" "$PRESETS_DIR/$preset_name.json"
                     
-                    # Find wallpaper
+                    # Find and unpack assets (wallpaper, profile, banner)
                     for f in "$TMP_DIR"/*; do
                         if [[ -f "$f" ]]; then
-                            f_ext="${f##*.}"
+                            fname=$(basename "$f")
+                            f_ext="${fname##*.}"
                             f_ext=$(echo "$f_ext" | tr '[:upper:]' '[:lower:]')
                             if [[ "$f_ext" != "json" && "$f_ext" != "zip" ]]; then
-                                cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
-                                break
+                                fname_lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+                                if [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_profile.$f_ext"
+                                elif [[ "$fname_lower" == banner.* || "$fname_lower" == *banner*.* ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_banner.$f_ext"
+                                elif [[ "$fname_lower" == wallpaper.* || "$fname_lower" == *wallpaper*.* || "$fname_lower" == "$preset_name".* ]]; then
+                                    cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
+                                else
+                                    # Fallback to main preset wallpaper if no specific match
+                                    if [[ ! -f "$PRESETS_DIR/$preset_name.$f_ext" ]]; then
+                                        cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
+                                    fi
+                                fi
                             fi
                         fi
                     done

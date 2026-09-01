@@ -18,12 +18,14 @@ Rectangle {
 
     property real contentWidth: {
         let total = 0;
+        let visibleCount = 0;
         for (let i = 0; i < rowLayout.children.length; ++i) {
             const child = rowLayout.children[i];
             if (!child.visible) continue;
             total += child.baseWidth ?? child.implicitWidth ?? child.width;
+            visibleCount++;
         }
-        return total + rowLayout.spacing * (rowLayout.children.length - 1);
+        return total + rowLayout.spacing * Math.max(0, visibleCount - 1);
     }
 
     topLeftRadius: rowLayout.children.length > 0 ? (rowLayout.children[0].radius + padding) : 

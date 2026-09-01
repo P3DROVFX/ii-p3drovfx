@@ -6,8 +6,7 @@ import qs
 import QtQuick
 
 QuickToggleButton {
-    visible: true
-    enabled: (Config.options?.tailscale?.enabled ?? true) && TailscaleService.available
+    interactive: (Config.options?.tailscale?.enabled ?? true) && TailscaleService.available
     toggled: (Config.options?.tailscale?.enabled ?? true) && TailscaleService.active
     buttonIcon: TailscaleService.active ? "hub" : (TailscaleService.backendState === "NeedsLogin" ? "key" : "vpn_lock")
     onClicked: {

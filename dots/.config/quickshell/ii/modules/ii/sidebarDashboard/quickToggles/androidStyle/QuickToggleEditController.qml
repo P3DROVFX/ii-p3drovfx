@@ -25,6 +25,18 @@ Item {
     property int candidateSizeW: 1
     property int candidateSizeH: 1
 
+    // Drag stability. Rounding the dragged rectangle to the nearest cell used
+    // to flip on sub-pixel jitter, so a pointer parked on the seam between two
+    // toggles swapped them again on every mouse sample. `reorderHysteresis` is
+    // the extra fraction of a cell the pointer must travel past the midpoint
+    // before the cell it currently owns concedes, and `reorderSettleMs` holds
+    // the layout still while the reflow animates unless the pointer covers
+    // `reorderSettleTravel` cells, which only a deliberate drag does.
+    property real reorderHysteresis: 0.25
+    property int reorderSettleMs: 0
+    property real reorderSettleTravel: 1.0
+    readonly property var dragCellState: QuickToggleLayout.createDragCellState()
+
     signal draftChanged
     signal committed
     signal cancelled
@@ -48,6 +60,7 @@ Item {
         candidateSizeH = 1;
         draftPages = [];
         originalPages = [];
+        QuickToggleLayout.resetDragCellState(dragCellState);
     }
 
     function beginTransaction(transactionMode) {
@@ -87,6 +100,7 @@ Item {
         targetPage = location.page;
         sourceIndex = location.index;
         targetIndex = location.index;
+        QuickToggleLayout.resetDragCellState(dragCellState);
         return true;
     }
 
@@ -130,42 +144,73 @@ Item {
     // Convert the prospective dragged rectangle into a row-major insertion
     // point using the same packed draft that renders the grid. The controller
     // owns the draft; delegates only provide pointer geometry.
+    //
+    // The cell resolution runs before any packing: a pointer sample that lands
+    // on the cell the drag already owns — the overwhelming majority of them —
+    // costs a couple of divisions instead of a deep clone of the page.
     function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing) {
         if (!active || mode !== "reorder")
             return false;
         if (pageIndex < 0 || pageIndex >= draftPages.length)
             return false;
 
-        var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
-        var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
-        var packed = QuickToggleLayout.pack(draftPages[pageIndex] || [], root.columns);
-        var draggedPackedIndex = QuickToggleLayout.findItem(packed.items, draggedId);
-        if (draggedPackedIndex < 0)
+        var page = draftPages[pageIndex] || [];
+        var draggedIndex = QuickToggleLayout.findItem(page, draggedId);
+        if (draggedIndex < 0)
             return false;
-        var dragged = packed.items[draggedPackedIndex];
-        var draggedPixelWidth = dragged.columnSpan * Number(cellWidth)
-            + Math.max(0, dragged.columnSpan - 1) * Number(spacing);
-        var draggedPixelHeight = dragged.rowSpan * Number(cellHeight)
-            + Math.max(0, dragged.rowSpan - 1) * Number(spacing);
-        var centerX = Number(pointerX);
-        var centerY = Number(pointerY);
-        if (!isFinite(centerX))
-            centerX = 0;
-        if (!isFinite(centerY))
-            centerY = 0;
-        var column = Math.max(0, Math.min(
-            root.columns - dragged.columnSpan,
-            Math.round((centerX - draggedPixelWidth / 2) / stepX)
-        ));
-        var row = Math.max(0, Math.round((centerY - draggedPixelHeight / 2) / stepY));
-        var index = QuickToggleLayout.findInsertionIndex(
+        var size = QuickToggleLayout.itemSize(page[draggedIndex]);
+
+        var cell = QuickToggleLayout.resolveDragCell({
+            pointerX: pointerX,
+            pointerY: pointerY,
+            cellWidth: cellWidth,
+            cellHeight: cellHeight,
+            spacing: spacing,
+            columns: root.columns,
+            columnSpan: size.width,
+            rowSpan: size.height
+        }, dragCellState, {
+            hysteresis: root.reorderHysteresis,
+            settleMs: root.reorderSettleMs,
+            settleTravel: root.reorderSettleTravel,
+            now: Date.now()
+        });
+        if (!cell.accepted) {
+            if (cell.locked)
+                QuickToggleLayout.deferDragCell(dragCellState, cell);
+            return false;
+        }
+
+        var moved = applyDragCell(pageIndex, page, cell.row, cell.column);
+        QuickToggleLayout.acceptDragCell(dragCellState, cell, pointerX, pointerY, Date.now(), moved);
+        return moved;
+    }
+
+    function applyDragCell(pageIndex, page, row, column) {
+        var packed = QuickToggleLayout.pack(page, root.columns);
+        return previewReorder(pageIndex, QuickToggleLayout.findInsertionIndex(
             packed.items,
             row,
             column,
             draggedId,
             root.columns
-        );
-        return previewReorder(pageIndex, index);
+        ));
+    }
+
+    // A drag released while the settle lock still held its last crossing must
+    // land where the pointer was aiming, not where the lock froze the preview.
+    function flushPendingReorder(pageIndex) {
+        if (!active || mode !== "reorder" || !dragCellState.pendingValid)
+            return false;
+        if (pageIndex < 0 || pageIndex >= draftPages.length)
+            return false;
+        var page = draftPages[pageIndex] || [];
+        if (QuickToggleLayout.findItem(page, draggedId) < 0)
+            return false;
+        var row = dragCellState.pendingRow;
+        var column = dragCellState.pendingColumn;
+        dragCellState.pendingValid = false;
+        return applyDragCell(pageIndex, page, row, column);
     }
 
     function moveToPage(pageIndex, index) {
@@ -175,6 +220,10 @@ Item {
     function setTargetPage(pageIndex) {
         if (!active || mode !== "reorder" || pageIndex < 0 || pageIndex >= draftPages.length)
             return false;
+        // A different page is a different grid: the cell the drag owned there
+        // must not steer the first sample taken on this one.
+        if (targetPage !== pageIndex)
+            QuickToggleLayout.resetDragCellState(dragCellState);
         targetPage = pageIndex;
         return true;
     }
@@ -272,6 +321,7 @@ Item {
     function commitReorder() {
         if (!active || mode !== "reorder")
             return false;
+        flushPendingReorder(targetPage);
         if (targetPage >= 0 && targetPage !== sourcePage) {
             var location = findItemInPages(draftPages, draggedId);
             if (location.page !== targetPage)

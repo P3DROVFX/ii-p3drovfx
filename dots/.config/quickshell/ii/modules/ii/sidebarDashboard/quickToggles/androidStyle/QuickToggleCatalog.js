@@ -21,6 +21,7 @@ var TOGGLE_TYPES = {
     colorPicker: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     videoEditor: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     onScreenKeyboard: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    keypressDisplay: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     mic: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     audio: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     notifications: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
@@ -33,11 +34,12 @@ var TOGGLE_TYPES = {
     systemSounds: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     localSend: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     keyboardBacklight: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    modes: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
-    volumeSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    micSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    brightnessSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
-    gammaSlider: { kind: "slider", defaultSize: [4, 1], fixedHeight: 1 },
+    volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    micSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    brightnessSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
+    gammaSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
 
     mediaWidget: {
         kind: "media",

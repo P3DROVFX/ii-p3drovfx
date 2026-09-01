@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -28,6 +29,11 @@ import qs.modules.ii.bar.widgets.policies
 import qs.modules.ii.bar.widgets.timer
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.dockToPanel
+import qs.modules.ii.bar.widgets.portWatcher
+import qs.modules.ii.bar.widgets.privacy
+import qs.modules.ii.bar.widgets.aiPlanUsage
+import "widgets/search"
+import "widgets/date"
 
 import qs.modules.ii.verticalBar as Vertical
 
@@ -43,8 +49,48 @@ Item {
     required property int index
     property var originalIndex: index
     property bool vertical: false
+
+    // ── Growth anchor ─────────────────────────────────────────────────────────
+    // Which edge a widget stays pinned to while it changes size. Every bar
+    // section is anchored to one edge of the bar and lays its widgets out from
+    // there, so a widget that grows from its own centre expands *backwards*
+    // over the neighbour before it instead of pushing the ones after it. Pin it
+    // to the same edge its section is anchored to and the growth reads as a
+    // push. Only the genuinely centred group grows both ways.
+    //
+    //   "leading"  → top (vertical bar) / left (horizontal bar)
+    //   "trailing" → bottom (vertical bar) / right (horizontal bar)
+    //
+    // barSection 0/2 are the edge groups. Section 1 is the centre list, which
+    // the styles split into three sub-columns with different anchors, so those
+    // set this explicitly.
+    property string growthEdge: barSection === 0 ? "leading" : (barSection === 2 ? "trailing" : "center")
+    readonly property bool growsFromLeading: rootItem.growthEdge === "leading"
+    readonly property bool growsFromTrailing: rootItem.growthEdge === "trailing"
+    readonly property bool growsFromCenter: !rootItem.growsFromLeading && !rootItem.growsFromTrailing
     property bool widgetSelfVisible: (modelData && modelData.hasOwnProperty("visible")) ? modelData.visible : true
     property bool highlighted: false
+
+    // An arrival gets the entry animation, a rebuild lands silently. See
+    // GlobalStates.isNewBarWidget for why every delegate in a group is recreated
+    // when one widget is added or removed.
+    //
+    // A plain property assigned once, NOT a binding. QML captures dependencies
+    // dynamically, including properties read inside a called function — so as a
+    // binding this re-evaluated when `barWidgetsIntroduced` or
+    // `barLayoutSnapshot` changed, flipped to false a frame later, and stopped
+    // `entryAnimation` mid-flight. That left `wrapper.opacity` frozen near zero
+    // and `entryTranslation` frozen at 15px: invisible, mispositioned widgets
+    // that only came back when something forced a rebuild.
+    property bool isNewWidget: false
+
+    Component.onCompleted: {
+        rootItem.isNewWidget = GlobalStates.isNewBarWidget(modelData ? modelData.id : "");
+        // Deferred on purpose: every delegate in this same build must still read
+        // `false` and animate in, so the bar keeps its entrance at startup.
+        if (!GlobalStates.barWidgetsIntroduced)
+            Qt.callLater(() => GlobalStates.barWidgetsIntroduced = true);
+    }
 
     // ── Smooth Slide and Move Animations ──────────────────────────────────────
     property real oldX: x
@@ -53,8 +99,12 @@ Item {
     resources: [
         Translate {
             id: entryTranslation
-            x: rootItem.vertical ? 15 : 0
-            y: rootItem.vertical ? 0 : 15
+            // Rests at zero. The entry animation declares its own `from: 15`, so
+            // a widget that never animates is simply in place — no binding here
+            // can strand a rebuilt widget 15px off, and nothing outside the
+            // animation can move it.
+            x: 0
+            y: 0
         },
         Translate {
             id: moveTranslation
@@ -67,7 +117,18 @@ Item {
 
     ParallelAnimation {
         id: entryAnimation
-        running: true
+        running: rootItem.isNewWidget
+
+        // Insurance. An entry animation must never be able to leave a widget
+        // invisible or displaced — that is exactly what happened when `running`
+        // flipped mid-flight. Whatever stops this, normally or not, the widget
+        // ends up where it belongs.
+        onStopped: {
+            wrapper.opacity = 1;
+            entryTranslation.x = 0;
+            entryTranslation.y = 0;
+        }
+
         NumberAnimation {
             target: entryTranslation
             property: rootItem.vertical ? "x" : "y"
@@ -91,8 +152,9 @@ Item {
         target: moveTranslation
         property: "x"
         to: 0
-        duration: 350
-        easing.type: Easing.OutExpo
+        duration: Appearance.animation.barResize.duration
+        easing.type: Appearance.animation.barResize.type
+        easing.bezierCurve: Appearance.animation.barResize.bezierCurve
     }
 
     NumberAnimation {
@@ -100,16 +162,36 @@ Item {
         target: moveTranslation
         property: "y"
         to: 0
-        duration: 350
-        easing.type: Easing.OutExpo
+        duration: Appearance.animation.barResize.duration
+        easing.type: Appearance.animation.barResize.type
+        easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+    }
+
+    // Catch-up slide, for a widget that is *teleported* to a new spot: a reorder
+    // in Settings, or a neighbour that appeared. It must not fire while a
+    // neighbour is animating its size, because there the layout is already
+    // moving this widget smoothly — restarting the catch-up every frame turned
+    // that smooth push into a lag that compounded down the row. So it only
+    // triggers on the first frame of a move, and a move that keeps going is
+    // treated as the layout doing its job.
+    property bool _slidingWithLayout: false
+    Timer {
+        id: slideSettle
+        interval: 60
+        repeat: false
+        onTriggered: rootItem._slidingWithLayout = false
     }
 
     onXChanged: {
         if (rootItem.isReady) {
             let delta = rootItem.oldX - x;
             if (Math.abs(delta) > 1) {
-                moveXAnimation.from = moveTranslation.x + delta;
-                moveXAnimation.restart();
+                if (!rootItem._slidingWithLayout) {
+                    moveXAnimation.from = moveTranslation.x + delta;
+                    moveXAnimation.restart();
+                }
+                rootItem._slidingWithLayout = true;
+                slideSettle.restart();
             }
         }
         rootItem.oldX = x;
@@ -119,8 +201,12 @@ Item {
         if (rootItem.isReady) {
             let delta = rootItem.oldY - y;
             if (Math.abs(delta) > 1) {
-                moveYAnimation.from = moveTranslation.y + delta;
-                moveYAnimation.restart();
+                if (!rootItem._slidingWithLayout) {
+                    moveYAnimation.from = moveTranslation.y + delta;
+                    moveYAnimation.restart();
+                }
+                rootItem._slidingWithLayout = true;
+                slideSettle.restart();
             }
         }
         rootItem.oldY = y;
@@ -139,6 +225,49 @@ Item {
             rootItem.isReady = true;
             rootItem.layoutReady = true;
         }
+    }
+
+    // itemLoader.item.visible reads *effective* visibility, so a transient hide of any
+    // bar ancestor (e.g. Connect Mode hides the whole bar layer while a window is
+    // fullscreen) latches hasLayoutContent — and this widget — off permanently: once
+    // rootItem hides itself in response, the loaded item can never read visible again.
+    // When the ancestor chain becomes visible again, re-run the startup grace period so
+    // the widget gets a frame to report its real visibility.
+    Connections {
+        target: rootItem.parent
+        function onVisibleChanged() {
+            if (!rootItem.parent || !rootItem.parent.visible)
+                return;
+            rootItem.layoutReady = false;
+            readyTimer.restart();
+        }
+    }
+
+    // The same latch also bites a widget that fills in *after* the grace period: the
+    // tray only receives its items about a second after startup, long after readyTimer
+    // hides this rootItem, and from then on the loaded item can never report visible
+    // again. Implicit size keeps changing while hidden, so use it to re-run the grace
+    // period once the widget actually has something to show.
+    Connections {
+        target: itemLoader.item
+        function onImplicitWidthChanged() {
+            rootItem.unlatchLayout();
+        }
+        function onImplicitHeightChanged() {
+            rootItem.unlatchLayout();
+        }
+    }
+
+    function unlatchLayout() {
+        if (!rootItem.layoutReady || rootItem.hasLayoutContent)
+            return;
+        // Only when content appeared. Re-running for a widget that just went empty
+        // would flip it visible for a frame and bounce off readyTimer forever.
+        const loadedItem = itemLoader.item;
+        if (!loadedItem || (loadedItem.implicitWidth <= 0 && loadedItem.implicitHeight <= 0))
+            return;
+        rootItem.layoutReady = false;
+        readyTimer.restart();
     }
 
     // ── Notch Mode Integration ───────────────────────────────────────────────
@@ -206,23 +335,55 @@ Item {
         return false;
     }
 
+    // This box only animates when the widget appears, disappears or changes notch
+    // state — a jump between 0 and its full size. Content growth is already
+    // animated by the widget itself on Appearance.animation.barResize, and a
+    // second animation here would chase a target that is still moving: the box
+    // ends up lagging behind its own content, which is what made a widget look
+    // like it grew out of its centre no matter where it was anchored.
+    property bool boxResizing: false
+    Timer {
+        id: boxResizeWindow
+        interval: Appearance.animation.barResize.duration + 120
+        repeat: false
+        onTriggered: rootItem.boxResizing = false
+    }
+    function beginBoxResize() {
+        rootItem.boxResizing = true;
+        boxResizeWindow.restart();
+    }
+    // The very first time content shows up is either this widget arriving — worth
+    // animating from zero — or the same widget being rebuilt, where growing from
+    // zero is exactly the reflow that reads as a flicker.
+    property bool _initialSizeSettled: false
+    onHasActiveLayoutContentChanged: {
+        if (!rootItem._initialSizeSettled) {
+            rootItem._initialSizeSettled = true;
+            if (!rootItem.isNewWidget)
+                return;
+        }
+        rootItem.beginBoxResize();
+    }
+    onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
+    onIsNotchModeChanged: rootItem.beginBoxResize()
+
     implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
     Behavior on implicitWidth {
-        enabled: !rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
+        enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
-            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
-            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
+            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : Appearance.animation.barResize.duration
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Appearance.animation.barResize.type
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : Appearance.animation.barResize.bezierCurve
         }
     }
 
     implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
     Behavior on implicitHeight {
-        enabled: rootItem.vertical && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
+        enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
-            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : 250
-            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Easing.OutCubic
-            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : [0, 0, 1, 1]
+            duration: rootItem.isNotchActive ? Config.options.bar.dynamicIsland.notchMode.expandAnimDuration : Appearance.animation.barResize.duration
+            easing.type: rootItem.isNotchActive ? Easing.BezierSpline : Appearance.animation.barResize.type
+            easing.bezierCurve: rootItem.isNotchActive ? Appearance.animationCurves.emphasizedDecel : Appearance.animation.barResize.bezierCurve
         }
     }
 
@@ -324,13 +485,13 @@ Item {
     readonly property bool isExpressive: {
         if (modelData.id === "clock" && Config.options.bar.styles.clock === "expressive")
             return true;
-        if (modelData.id === "music_player" && (Config.options.bar.styles.media === "expressive" || Config.options.bar.styles.media === "neural"))
+        if (modelData.id === "music_player" && ["expressive", "neural", "ring", "tonal"].includes(Config.options.bar.styles.media))
             return true;
         if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
             return true;
         if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons === "expressive")
             return true;
-        if (modelData.id === "weather" && Config.options.bar.styles.weather === "expressive")
+        if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
             return true;
         if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard === "expressive")
             return true;
@@ -354,7 +515,26 @@ Item {
             return true;
         if (modelData.id === "record_indicator")
             return true;
+        if (modelData.id === "dictation_indicator")
+            return true;
         if (modelData.id === "phone_scrcpy_indicator")
+            return true;
+        if (modelData.id === "shell_update_indicator")
+            return true;
+        if (modelData.id === "mode_indicator")
+            return true;
+        if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
+            return true;
+        if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
+            return true;
+        if (modelData.id === "search" && (Config.options.bar.styles.search === "expressive" || Config.options.bar.styles.search === "neural"))
+            return true;
+        if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
+            return true;
+        if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
+            return true;
+        // Bare indicator: no group chip, no padding around it.
+        if (modelData.id === "privacy_pill")
             return true;
         return false;
     }
@@ -373,13 +553,16 @@ Item {
     BarGroup {
         id: wrapper
         vertical: rootItem.vertical
+        // The cross axis always fills; the growth axis is pinned to the edge
+        // this widget's section grows away from (see growthEdge above). Notch
+        // mode keeps neither: it positions the wrapper by `x` below.
         anchors {
-            top: rootItem.vertical ? undefined : parent.top
-            bottom: rootItem.vertical ? undefined : parent.bottom
-            left: rootItem.vertical ? parent.left : undefined
-            right: rootItem.vertical ? parent.right : undefined
-            verticalCenter: rootItem.vertical ? rootItem.verticalCenter : undefined
-            horizontalCenter: (rootItem.isNotchMode || rootItem.vertical) ? undefined : rootItem.horizontalCenter
+            top: rootItem.vertical ? (rootItem.growsFromLeading ? parent.top : undefined) : parent.top
+            bottom: rootItem.vertical ? (rootItem.growsFromTrailing ? parent.bottom : undefined) : parent.bottom
+            left: rootItem.vertical ? parent.left : ((!rootItem.isNotchMode && rootItem.growsFromLeading) ? parent.left : undefined)
+            right: rootItem.vertical ? parent.right : ((!rootItem.isNotchMode && rootItem.growsFromTrailing) ? parent.right : undefined)
+            verticalCenter: (rootItem.vertical && rootItem.growsFromCenter) ? rootItem.verticalCenter : undefined
+            horizontalCenter: (!rootItem.vertical && !rootItem.isNotchMode && rootItem.growsFromCenter) ? rootItem.horizontalCenter : undefined
         }
 
         x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0
@@ -431,8 +614,27 @@ Item {
 
                         if (item.Layout !== undefined && item.Layout.fillHeight) {
                             item.height = Qt.binding(() => itemLoader.height);
-                        } else if (item.implicitWidth === item.implicitHeight) {
-                            item.height = Qt.binding(() => item.width);
+                        } else if (item.Layout !== undefined) {
+                            // Square-by-design widgets (icon buttons) follow the bar
+                            // width in vertical mode. Two things were wrong with the
+                            // old form, `else if (implicitWidth === implicitHeight)
+                            // item.height = width`:
+                            //
+                            //  • It was evaluated once, at load. A widget that has
+                            //    not measured itself yet reports 0x0 — "square" by
+                            //    that test — and got its height locked to the bar
+                            //    width forever. SysTray is `hasItems ? … : 0` and
+                            //    the keyboard pill is `visible ? … : 0`, so both
+                            //    started there and never recovered.
+                            //  • It wrote `height` on an item inside a layout, so
+                            //    the layout still reserved implicitHeight while the
+                            //    widget rendered at another one. That gap is the
+                            //    overlap: the group packed its children by a height
+                            //    none of them was actually drawn at.
+                            //
+                            // Reactive, and through the layout, so what is reserved
+                            // is what is drawn.
+                            item.Layout.preferredHeight = Qt.binding(() => (item.implicitWidth > 0 && item.implicitWidth === item.implicitHeight) ? item.width : item.implicitHeight);
                         }
                     }
                 }
@@ -463,6 +665,10 @@ Item {
                 return musicPlayerCompExpressive;
             if (style === "neural")
                 return isVert ? neuralMediaCompVert : neuralMediaComp;
+            if (style === "ring")
+                return ringMediaComp;
+            if (style === "tonal")
+                return tonalMediaComp;
             return isVert ? musicPlayerCompVert : musicPlayerComp;
         case "system_monitor":
             if (isExp)
@@ -471,6 +677,10 @@ Item {
         case "clock":
             if (isExp)
                 return clockCompExpressive;
+            if (style === "neural")
+                return clockCompNeural;
+            if (style === "relief")
+                return clockCompRelief;
             return isVert ? clockCompVert : clockComp;
         case "battery":
             if (isExp)
@@ -495,6 +705,10 @@ Item {
         case "weather":
             if (isExp)
                 return weatherCompExpressive;
+            if (style === "horizon")
+                return weatherCompHorizon;
+            if (style === "tessera")
+                return weatherCompTessera;
             return weatherComp;
         case "policies_panel_button":
             if (isExp)
@@ -517,17 +731,43 @@ Item {
                 return powerCompExpressive;
             return powerComp;
         case "date":
-            return dateCompVert;
+            if (isExp)
+                return dateCompExpressive;
+            if (style === "neural")
+                return dateCompNeural;
+            return dateComp;
         case "timer":
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
             return recordIndicatorComp;
+        case "dictation_indicator":
+            return dictationIndicatorComp;
         case "phone_scrcpy_indicator":
             return phoneScrcpyIndicatorComp;
+        case "shell_update_indicator":
+            return shellUpdateIndicatorComp;
+        case "mode_indicator":
+            return modeIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
         case "dock_to_panel":
             return dockToPanelComp;
+        case "port_watcher":
+            if (isExp)
+                return portWatcherCompExpressive;
+            return portWatcherComp;
+        case "ai_plan_usage":
+            if (isExp)
+                return aiPlanUsageCompExpressive;
+            return aiPlanUsageComp;
+        case "privacy_pill":
+            return privacyPillComp;
+        case "search":
+            if (isExp)
+                return searchCompExpressive;
+            if (style === "neural")
+                return searchCompNeural;
+            return searchComp;
         default:
             return null;
         }
@@ -599,8 +839,26 @@ Item {
         }
     }
     Component {
+        id: dictationIndicatorComp
+        DictationIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
         id: phoneScrcpyIndicatorComp
         PhoneScrcpyIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: shellUpdateIndicatorComp
+        ShellUpdateIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: modeIndicatorComp
+        ModeIndicator {
             vertical: rootItem.vertical
         }
     }
@@ -637,6 +895,18 @@ Item {
         Vertical.VerticalNeuralMedia {}
     }
     Component {
+        id: ringMediaComp
+        RingMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: tonalMediaComp
+        TonalMedia {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
         id: utilityButtonsComp
         UtilButtons {
             vertical: rootItem.vertical
@@ -665,8 +935,22 @@ Item {
         }
     }
     Component {
-        id: dateCompVert
-        Vertical.VerticalDateWidget {}
+        id: dateComp
+        DateWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dateCompExpressive
+        ExpressiveDateWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: dateCompNeural
+        NeuralDateWidget {
+            vertical: rootItem.vertical
+        }
     }
     Component {
         id: workspaceComp
@@ -733,11 +1017,71 @@ Item {
             vertical: rootItem.vertical
         }
     }
+    Component {
+        id: portWatcherComp
+        PortWatcherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: portWatcherCompExpressive
+        ExpressivePortWatcher {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: aiPlanUsageComp
+        AiPlanUsageWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: aiPlanUsageCompExpressive
+        ExpressiveAiPlanUsage {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: privacyPillComp
+        PrivacyPill {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: searchComp
+        SearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: searchCompExpressive
+        ExpressiveSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: searchCompNeural
+        NeuralSearchBarWidget {
+            vertical: rootItem.vertical
+        }
+    }
 
     // Expressive variants
     Component {
         id: weatherCompExpressive
         ExpressiveWeatherBar {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompHorizon
+        HorizonWeatherWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: weatherCompTessera
+        TesseraWeatherWidget {
             vertical: rootItem.vertical
         }
     }
@@ -756,6 +1100,18 @@ Item {
     Component {
         id: clockCompExpressive
         ExpressiveClockWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: clockCompNeural
+        NeuralClockWidget {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: clockCompRelief
+        ReliefClockWidget {
             vertical: rootItem.vertical
         }
     }

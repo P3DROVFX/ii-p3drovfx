@@ -346,6 +346,58 @@ cp target/release/workspace_compactor ../`
                 text: Translation.tr("Compact workspaces into 1..N")
                 keys: ["Ctrl", "Super", "C"]
             }
+
+            ConfigSwitch {
+                buttonIcon: "autorenew"
+                text: Translation.tr("Auto-Compact")
+                checked: Config.options.bar.workspaces.autoCompact
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.autoCompact = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Compact automatically whenever closing or moving a window leaves a gap on the focused monitor. The keybind above keeps working either way.")
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.bar.workspaces.autoCompact
+                icon: "timer"
+                text: Translation.tr("Auto-Compact delay (ms)")
+                value: Config.options.bar.workspaces.autoCompactDelay
+                from: 100
+                to: 5000
+                stepSize: 100
+                onValueChanged: {
+                    Config.options.bar.workspaces.autoCompactDelay = value;
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("When the gap is the current workspace")
+                icon: "conditions"
+                Layout.fillWidth: true
+                visible: Config.options.bar.workspaces.autoCompact
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.bar.workspaces.autoCompactCurrentGap
+                    onSelected: (newValue) => {
+                        Config.options.bar.workspaces.autoCompactCurrentGap = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Compact on switch"),
+                        "icon": "move_group",
+                        "value": "onswitch"
+                    }, {
+                        "displayName": Translation.tr("Immediately"),
+                        "icon": "bolt",
+                        "value": "immediate"
+                    }, {
+                        "displayName": Translation.tr("Never"),
+                        "icon": "block",
+                        "value": "never"
+                    }]
+                }
+            }
         }
     }
 

@@ -26,6 +26,26 @@ AbstractBackgroundWidget {
         visible: Config.options.background.widgets.enableShadows ?? true
     }
 
+    readonly property string cleanSource: {
+        let entry = Config.options.background.widgets[root.configEntryName];
+        let path = (entry && entry.imagePath && entry.imagePath !== "") ? entry.imagePath : Config.options.background.widgets.photo.imagePath;
+        if (!path || path === "") return "";
+        const qIdx = path.indexOf("?");
+        if (qIdx !== -1) path = path.substring(0, qIdx);
+        return path.startsWith("file://") ? path : ("file://" + path);
+    }
+
+    readonly property bool isAnimated: {
+        const lower = root.cleanSource.toLowerCase();
+        return lower.includes(".gif") || lower.includes(".webp");
+    }
+
+    readonly property bool shouldPlay: {
+        return root.visible && root.opacity > 0 && root.isAnimated
+            && !GlobalStates.screenLocked
+            && !GlobalStates.activeWorkspaceHasWindows;
+    }
+
     Rectangle {
         id: outerBorder
         anchors.fill: parent
@@ -40,39 +60,51 @@ AbstractBackgroundWidget {
             anchors.margins: outerBorder.border.width / 2
 
             Rectangle {
-                id: maskShape
-                anchors.fill: parent
-                radius: Appearance.rounding.windowRounding
-                visible: false
-            }
-
-            Rectangle {
                 id: fallbackBg
                 anchors.fill: parent
-                radius: maskShape.radius
+                radius: Appearance.rounding.windowRounding
                 color: WidgetColorScheme.innerShapeColor
             }
 
+            // Static Image loader (hardware-accelerated, zero QMovie overhead)
             Image {
-                id: photoImage
+                id: staticImg
                 anchors.fill: parent
-                source: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    let path = (entry && entry.imagePath && entry.imagePath !== "") ? entry.imagePath : Config.options.background.widgets.photo.imagePath;
-                    if (!path || path === "") return "";
-                    return path.startsWith("file://") ? path : ("file://" + path);
-                }
+                source: !root.isAnimated ? root.cleanSource : ""
                 fillMode: Image.PreserveAspectCrop
-                visible: false
+                asynchronous: true
+                visible: !root.isAnimated && status === Image.Ready
+
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: staticImg.width
+                        height: staticImg.height
+                        radius: Appearance.rounding.windowRounding
+                    }
+                }
             }
 
-            // Crisp clear image layer
-            OpacityMask {
-                id: maskedImage
+            // Animated GIF loader (only active when isAnimated is true)
+            AnimatedImage {
+                id: photoImage
                 anchors.fill: parent
-                source: photoImage
-                maskSource: maskShape
-                visible: photoImage.status === Image.Ready
+                source: root.isAnimated ? root.cleanSource : ""
+                fillMode: Image.PreserveAspectCrop
+                playing: root.shouldPlay
+                paused: !root.shouldPlay
+                asynchronous: true
+                cache: false
+                visible: root.isAnimated && status === Image.Ready
+
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: photoImage.width
+                        height: photoImage.height
+                        radius: Appearance.rounding.windowRounding
+                    }
+                }
             }
         }
     }

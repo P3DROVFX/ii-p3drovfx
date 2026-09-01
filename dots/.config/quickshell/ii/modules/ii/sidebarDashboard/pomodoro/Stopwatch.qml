@@ -1,7 +1,7 @@
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt5Compat.GraphicalEffects
+import qs.modules.ii.sidebarDashboard
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,32 +11,47 @@ Item {
     id: stopwatchTab
     Layout.fillWidth: true
     Layout.fillHeight: true
-
     property int entranceTrigger: -1
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+
+    function finishEntrance() {
+        if (entranceController.item)
+            entranceController.item.stop();
+        stopwatchTab.opacity = 1;
+        elapsedEntranceTranslate.y = 0;
+    }
 
     function beginEntrance() {
+        if (!entranceAnimationsEnabled || entranceTrigger < 0) {
+            finishEntrance();
+            return;
+        }
         stopwatchTab.opacity = 0;
+        elapsedEntranceTranslate.y = 30;
         Qt.callLater(function() {
-            entranceAnim.start();
+            if (stopwatchTab.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
         });
     }
 
-    Component.onCompleted: {
-        beginEntrance();
-    }
+    onEntranceTriggerChanged: beginEntrance()
+    onEntranceAnimationsEnabledChanged: entranceAnimationsEnabled ? beginEntrance() : finishEntrance()
+    Component.onCompleted: beginEntrance()
 
-    onEntranceTriggerChanged: {
-        stopwatchTab.opacity = 0;
-        elapsedEntranceTranslate.y = 30;
-        beginEntrance();
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: 50 }
-        ParallelAnimation {
-            NumberAnimation { target: stopwatchTab; property: "opacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
-            NumberAnimation { target: elapsedEntranceTranslate; property: "y"; from: 30; to: 0; duration: 300; easing.type: Easing.OutCubic }
+    Loader {
+        id: entranceController
+        active: stopwatchTab.entranceAnimationsEnabled
+        sourceComponent: Item {
+            function restart() { animation.restart(); }
+            function stop() { animation.stop(); }
+            SequentialAnimation {
+                id: animation
+                PauseAnimation { duration: Math.round(Appearance.animation.elementMove.duration * 0.1) }
+                ParallelAnimation {
+                    SidebarGroupAnimation { target: stopwatchTab; property: "opacity"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+                    SidebarGroupAnimation { target: elapsedEntranceTranslate; property: "y"; from: 30; to: 0; animationSpec: Appearance.animation.elementMove }
+                }
+            }
         }
     }
 
@@ -50,15 +65,15 @@ Item {
 
         RowLayout { // Elapsed
             id: elapsedIndicator
+            transform: Translate { id: elapsedEntranceTranslate; y: 0 }
 
-            transform: Translate {
-                id: elapsedEntranceTranslate
-                y: 30
-            }
-            
             anchors {
                 top: undefined
+                // Centred in what is left above the buttons, not in the whole
+                // box: the button row is anchored to the bottom, so centring on
+                // the box parks the time low, against them.
                 verticalCenter: parent.verticalCenter
+                verticalCenterOffset: -(controlButtons.height + 6) / 2
                 left: controlButtons.left
                 leftMargin: 6
             }
@@ -104,7 +119,6 @@ Item {
         // Laps
         StyledListView {
             id: lapsList
-            property int entranceTrigger: stopwatchTab.entranceTrigger
             anchors {
                 top: elapsedIndicator.bottom
                 bottom: controlButtons.top
@@ -125,47 +139,71 @@ Item {
                 id: lapItem
                 required property int index
                 required property var modelData
-                property int entranceTrigger: lapsList.entranceTrigger
                 property var horizontalPadding: 10
                 property var verticalPadding: 6
-                property real _entranceOffset: -20
+                property real _entranceOffset: 0
+                property bool _entranceDone: true
+
+                opacity: _entranceDone ? 1 : 0
+                transform: Translate { y: lapItem._entranceDone ? 0 : lapItem._entranceOffset }
+
+                function finishEntrance() {
+                    if (lapEntranceController.item)
+                        lapEntranceController.item.stop();
+                    _entranceDone = true;
+                    _entranceOffset = 0;
+                }
+
+                function beginEntrance() {
+                    if (!stopwatchTab.entranceAnimationsEnabled || stopwatchTab.entranceTrigger < 0) {
+                        finishEntrance();
+                        return;
+                    }
+                    _entranceDone = false;
+                    _entranceOffset = -20;
+                    Qt.callLater(function() {
+                        if (stopwatchTab.entranceAnimationsEnabled && lapEntranceController.item)
+                            lapEntranceController.item.restart();
+                    });
+                }
+
+                Component.onCompleted: beginEntrance()
+
+                Connections {
+                    target: stopwatchTab
+                    function onEntranceTriggerChanged() { lapItem.beginEntrance(); }
+                    function onEntranceAnimationsEnabledChanged() {
+                        if (!stopwatchTab.entranceAnimationsEnabled)
+                            lapItem.finishEntrance();
+                    }
+                }
+
+                Loader {
+                    id: lapEntranceController
+                    active: stopwatchTab.entranceAnimationsEnabled
+                    sourceComponent: Item {
+                        function restart() { animation.restart(); }
+                        function stop() { animation.stop(); }
+                        SequentialAnimation {
+                            id: animation
+                            PauseAnimation {
+                                duration: Math.round(Math.min(lapItem.index, 15)
+                                    * Appearance.animation.elementMove.duration * 0.08)
+                            }
+                            ParallelAnimation {
+                                SidebarGroupAnimation { target: lapItem; property: "opacity"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+                                SidebarGroupAnimation { target: lapItem; property: "_entranceOffset"; from: -20; to: 0; animationSpec: Appearance.animation.elementMove }
+                            }
+                            ScriptAction { script: lapItem._entranceDone = true }
+                        }
+                    }
+                }
 
                 width: lapsList.width
                 implicitHeight: lapRow.implicitHeight + verticalPadding * 2
                 implicitWidth: lapRow.implicitWidth + horizontalPadding * 2
                 color: Appearance.colors.colLayer2
                 radius: Appearance.rounding.small
-                opacity: 0
-
-                transform: Translate {
-                    y: lapItem._entranceOffset
-                }
-
-                Component.onCompleted: {
-                    lapItem.opacity = 0;
-                    lapItem._entranceOffset = -20;
-                    Qt.callLater(function() {
-                        lapEntranceAnim.start();
-                    });
-                }
-
-                onEntranceTriggerChanged: {
-                    lapItem.opacity = 0;
-                    lapItem._entranceOffset = -20;
-                    Qt.callLater(function() {
-                        lapEntranceAnim.start();
-                    });
-                }
-
-                SequentialAnimation {
-                    id: lapEntranceAnim
-                    PauseAnimation { duration: Math.min(lapItem.index, 15) * 35 }
-                    ParallelAnimation {
-                        NumberAnimation { target: lapItem; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-                        NumberAnimation { target: lapItem; property: "_entranceOffset"; from: -20; to: 0; duration: 300; easing.type: Easing.OutCubic }
-                    }
-                }
-
                 RowLayout {
                     id: lapRow
                     anchors {

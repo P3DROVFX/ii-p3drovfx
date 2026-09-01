@@ -9,7 +9,7 @@ Item {
     readonly property string screenName: root.QsWindow?.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
-    property bool aiChatEnabled: Config.options.policies.ai !== 0
+    property bool aiChatEnabled: Ai.enabled
     property bool translatorEnabled: Config.options.sidebar.translator.enable
     property bool animeEnabled: Config.options.policies.weeb !== 0
     visible: true

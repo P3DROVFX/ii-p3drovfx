@@ -244,7 +244,7 @@ Item {
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: root.activeTab === "spam" ? "report" : root.activeTab === "sent" ? "send" : root.activeTab === "search" ? "search" : root.activeTab.startsWith("label_") ? "label" : "inbox"
+                            text: (root.activeTab || "").toLowerCase() === "spam" ? "report" : (root.activeTab || "").toLowerCase() === "sent" ? "send" : (root.activeTab || "").toLowerCase() === "search" ? "search" : (root.activeTab || "").toLowerCase().startsWith("label_") ? "label" : "inbox"
                             iconSize: 80
                             color: Appearance.colors.colOnSurfaceVariant
                         }
@@ -260,7 +260,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: root.activeTab === "spam" ? Translation.tr("No Spam Found") : root.activeTab === "sent" ? Translation.tr("No Sent Messages") : root.activeTab === "search" ? Translation.tr("No Results Found") : root.activeTab.startsWith("label_") ? Translation.tr("No Messages for this Label") : Translation.tr("Your Inbox is Clean")
+                                text: (root.activeTab || "").toLowerCase() === "spam" ? Translation.tr("No Spam Found") : (root.activeTab || "").toLowerCase() === "sent" ? Translation.tr("No Sent Messages") : (root.activeTab || "").toLowerCase() === "search" ? Translation.tr("No Results Found") : (root.activeTab || "").toLowerCase().startsWith("label_") ? Translation.tr("No Messages for this Label") : Translation.tr("Your Inbox is Clean")
                                 font.pixelSize: 32
                                 font.weight: Font.Bold
                                 color: Appearance.colors.colOnSurface
@@ -268,7 +268,7 @@ Item {
 
                             StyledText {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: root.activeTab === "spam" ? Translation.tr("Looks like you're safe from junk for now.") : root.activeTab === "sent" ? Translation.tr("You haven't sent any emails from this account yet.") : root.activeTab === "search" ? Translation.tr("Try adjusting your filters or keywords.") : Translation.tr("You've cleared everything. Enjoy the peace!")
+                                text: (root.activeTab || "").toLowerCase() === "spam" ? Translation.tr("Looks like you're safe from junk for now.") : (root.activeTab || "").toLowerCase() === "sent" ? Translation.tr("You haven't sent any emails from this account yet.") : (root.activeTab || "").toLowerCase() === "search" ? Translation.tr("Try adjusting your filters or keywords.") : Translation.tr("You've cleared everything. Enjoy the peace!")
                                 font.pixelSize: Appearance.font.pixelSize.larger
                                 color: Appearance.colors.colOnSurfaceVariant
                                 opacity: 0.8
@@ -284,12 +284,12 @@ Item {
                             colBackground: Appearance.colors.colPrimary
                             colBackgroundHover: Appearance.colors.colPrimaryHover
                             colRipple: Appearance.colors.colPrimaryActive
-                            visible: root.activeTab === "inbox" || root.activeTab === "spam"
+                            visible: (root.activeTab || "").toLowerCase() === "inbox" || (root.activeTab || "").toLowerCase() === "spam"
 
                             onClicked: {
-                                if (root.activeTab === "inbox") {
+                                if ((root.activeTab || "").toLowerCase() === "inbox") {
                                     root.composeRequested();
-                                } else if (root.activeTab === "spam") {
+                                } else if ((root.activeTab || "").toLowerCase() === "spam") {
                                     EmailService.syncLabel("spam", 0, true);
                                 }
                             }
@@ -297,7 +297,7 @@ Item {
                             StyledText {
                                 id: ctaLabel
                                 anchors.centerIn: parent
-                                text: root.activeTab === "spam" ? Translation.tr("Sync Spam") : Translation.tr("Compose Email")
+                                text: (root.activeTab || "").toLowerCase() === "spam" ? Translation.tr("Sync Spam") : Translation.tr("Compose Email")
                                 font.weight: Font.Bold
                                 color: Appearance.colors.colOnPrimary
                             }
@@ -417,8 +417,8 @@ Item {
                         MaterialSymbol {
                             id: starIconSymbol
                             anchors.centerIn: parent
-                            text: root.activeTab === "trash" ? "restore" : "star"
-                            fill: root.activeTab === "trash" ? 1 : ((model.starred || cardRoot.swipeX >= cardRoot.starThreshold) ? 1 : 0)
+                            text: (root.activeTab || "").toLowerCase() === "trash" ? "restore" : "star"
+                            fill: (root.activeTab || "").toLowerCase() === "trash" ? 1 : ((model.starred || cardRoot.swipeX >= cardRoot.starThreshold) ? 1 : 0)
                             iconSize: cardRoot.swipeX >= cardRoot.starThreshold ? 42 : 32
                             color: Appearance.colors.colOnTertiary
                             Behavior on iconSize {
@@ -444,8 +444,8 @@ Item {
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: cardRoot.confirmDeleteMode ? "check" : (root.activeTab === "trash" ? "delete_forever" : "delete")
-                            fill: (cardRoot.confirmDeleteMode || root.activeTab === "trash" || cardRoot.swipeX <= cardRoot.deleteThreshold) ? 1 : 0
+                            text: cardRoot.confirmDeleteMode ? "check" : ((root.activeTab || "").toLowerCase() === "trash" ? "delete_forever" : "delete")
+                            fill: (cardRoot.confirmDeleteMode || (root.activeTab || "").toLowerCase() === "trash" || cardRoot.swipeX <= cardRoot.deleteThreshold) ? 1 : 0
                             iconSize: (cardRoot.swipeX <= cardRoot.deleteThreshold || cardRoot.confirmDeleteMode) ? 42 : 32
                             color: Appearance.colors.colOnError
                             Behavior on iconSize {
@@ -769,7 +769,7 @@ Item {
                                         spacing: EmailService.compactMode ? 2 : 4
 
                                         StyledText {
-                                            visible: root.activeTab === "all_inboxes" && model.recipientAccount !== "" && !EmailService.compactMode
+                                            visible: (root.activeTab || "").toLowerCase() === "all_inboxes" && model.recipientAccount !== "" && !EmailService.compactMode
                                             text: model.recipientAccount
                                             font.pixelSize: Appearance.font.pixelSize.smallest
                                             font.weight: Font.DemiBold
@@ -957,7 +957,7 @@ Item {
                                         dismissAnim.start();
                                     }
                                 } else if (cardRoot.swipeX >= cardRoot.starThreshold) {
-                                    if (root.activeTab === "trash") {
+                                    if ((root.activeTab || "").toLowerCase() === "trash") {
                                         restoreAnim.start();
                                     } else {
                                         starAnim.start();
@@ -973,7 +973,7 @@ Item {
                                     cardRoot.dismissed = true;
                                     dismissAnim.start();
                                 } else if (cardRoot.swipeX > 20 && event.x < cardRoot.swipeX) {
-                                    if (root.activeTab === "trash") {
+                                    if ((root.activeTab || "").toLowerCase() === "trash") {
                                         restoreAnim.start();
                                     } else {
                                         starAnim.start();
@@ -1042,7 +1042,7 @@ Item {
                             script: {
                                 root.swipingIndex = -1;
                                 root.activeSwipeX = 0;
-                                if (root.activeTab === "trash") {
+                                if ((root.activeTab || "").toLowerCase() === "trash") {
                                     EmailService.deleteMessagePermanent(dismissAnim.targetId);
                                 } else {
                                     EmailService.trashMessage(dismissAnim.targetId);

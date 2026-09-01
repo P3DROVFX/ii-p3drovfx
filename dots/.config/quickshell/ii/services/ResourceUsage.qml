@@ -40,6 +40,9 @@ Singleton {
     property real gpuUsage: 0
     property real gpuPowerW: 0
     property real gpuTemp: 0
+    // A bounded, presentation-safe sample for the assistant and resource
+    // views. This is deliberately not a general process table or argv dump.
+    property list<var> topProcesses: []
 
     property string cpuModel: "--"
     property string gpuModel: "--"
@@ -55,6 +58,32 @@ Singleton {
 
     function kbToGbString(kb) {
         return (kb / (1024 * 1024)).toFixed(1) + " GB";
+    }
+
+    function parseTopProcesses(output) {
+        const processes = [];
+        for (const line of String(output ?? "").split("\n")) {
+            const match = line.trim().match(/^(\d+)\s+(.*?)\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)$/);
+            if (!match)
+                continue;
+            const pid = Number(match[1]);
+            const name = String(match[2]).trim()
+                .replace(/[^\p{L}\p{N} ._+:-]/gu, "")
+                .slice(0, 80);
+            const cpuPercent = Number(match[3]);
+            const memoryPercent = Number(match[4]);
+            if (!Number.isInteger(pid) || pid <= 1 || name.length === 0 || !Number.isFinite(cpuPercent))
+                continue;
+            processes.push({
+                pid: pid,
+                name: name,
+                cpuPercent: Math.max(0, Math.round(cpuPercent * 10) / 10),
+                memoryPercent: Math.max(0, Math.round(memoryPercent * 10) / 10)
+            });
+            if (processes.length >= 5)
+                break;
+        }
+        root.topProcesses = processes;
     }
 
     function updateMemoryUsageHistory() {
@@ -82,7 +111,14 @@ Singleton {
     }
 
 	property bool resourcePopupMonitoringEnabled: false
-	property bool gpuMonitoringEnabled: resourcePopupMonitoringEnabled
+	// Other consumers (GameDetector's fullscreen+GPU heuristic) hold a
+	// refcount so GPU sampling runs only while somebody needs it.
+	property int gpuMonitoringRequests: 0
+	readonly property bool gpuMonitoringEnabled: resourcePopupMonitoringEnabled || gpuMonitoringRequests > 0
+
+	function requestGpuMonitoring(on: bool): void {
+		gpuMonitoringRequests = Math.max(0, gpuMonitoringRequests + (on ? 1 : -1))
+	}
 
 	readonly property int popupSampleIntervalMs: 1000
 	readonly property int popupHistoryWindowMs: 12000
@@ -99,7 +135,7 @@ Singleton {
 	signal gpuSampled(real usage)
 
 	function requestGpuSample() {
-		if (!resourcePopupMonitoringEnabled) return
+		if (!gpuMonitoringEnabled) return
 		if (root.gpuVendor === "nvidia" || root.gpuVendor === "intel") {
 			if (!gpuMonitorProc.running) {
 				gpuMonitorProc.running = true
@@ -107,8 +143,8 @@ Singleton {
 		}
 	}
 
-	onResourcePopupMonitoringEnabledChanged: {
-		if (resourcePopupMonitoringEnabled) {
+	onGpuMonitoringEnabledChanged: {
+		if (gpuMonitoringEnabled) {
 			requestGpuSample()
 		} else {
 			gpuUsage = 0
@@ -204,7 +240,7 @@ Singleton {
 			root.cpuSampled(root.cpuUsage)
 
 			// AMD GPU stats via sysfs (zero-cost, no fork)
-			if (root.gpuVendor === "amd" && root.resourcePopupMonitoringEnabled) {
+			if (root.gpuVendor === "amd" && root.gpuMonitoringEnabled) {
 				if (root.amdUsagePath) {
 					amdUsageFileView.reload()
 					const usage = Number(amdUsageFileView.text().trim() || 0)
@@ -224,6 +260,30 @@ Singleton {
 
 	FileView { id: fileMeminfo; path: "/proc/meminfo" }
 	FileView { id: fileStat; path: "/proc/stat" }
+
+    // The process list is sampled independently of the fast CPU tick. `comm`
+    // contains only an executable name (not argv), and the result is bounded
+    // before it is published, so a health answer cannot turn into `top`.
+    Process {
+        id: topProcessesProc
+        command: ["bash", "-c", "ps -u \"$(id -u)\" -o pid=,comm=,pcpu=,pmem= --sort=-pcpu"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.parseTopProcesses(text)
+        }
+    }
+
+    Timer {
+        id: topProcessesTimer
+        interval: 15000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: {
+            if (!topProcessesProc.running)
+                topProcessesProc.running = true;
+        }
+    }
 
     Process {
         id: findCpuMaxFreqProc
@@ -554,9 +614,9 @@ Singleton {
         id: gpuMonitorTimer
         interval: root.effectiveGpuInterval
         repeat: true
-        running: root.resourcePopupMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
+        running: root.gpuMonitoringEnabled && (root.gpuVendor === "nvidia" || root.gpuVendor === "intel")
         onTriggered: {
-            if (!root.resourcePopupMonitoringEnabled) return
+            if (!root.gpuMonitoringEnabled) return
             if (root.gpuVendor !== "nvidia" && root.gpuVendor !== "intel") return
             root.requestGpuSample()
         }

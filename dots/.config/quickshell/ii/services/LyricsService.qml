@@ -37,6 +37,89 @@ Singleton {
     readonly property string statusText: lrclib.displayText
     readonly property bool hasSyncedLines: lrclib.lines.length > 0
 
+    // Single source of truth for "where the lyrics think we are": player
+    // position corrected by the user's sync offset. Used by the sync itself and
+    // by anything that has to reason about gaps between lines.
+    readonly property real syncPosition: Math.max(0,
+        (root.activePlayer?.position ?? 0)
+        + ((Config.options.background.mediaMode.lyricsOffsetMs ?? 0) / 1000))
+
+    // LRCLib flags a track as instrumental. That is a real answer, not a
+    // failure, and deserves its own UI state instead of "no lyrics found".
+    readonly property bool instrumental: lrclib.instrumental && !root.hasSyncedLines
+    readonly property bool hasPlainLyrics: root.plainLyrics.trim().length > 0
+    readonly property bool hasAnyLyrics: root.hasSyncedLines || root.hasPlainLyrics
+    readonly property bool usingCustomLyrics: lrclib.hasOverride
+
+    // True while any provider still has a request in flight, plus a grace
+    // window after a track change so the UI never flashes "not found" during
+    // the fetch debounce.
+    property bool searchGraceElapsed: false
+    readonly property bool searching: root.isInitialized
+        && (root.activePlayer?.trackTitle?.length > 0)
+        && !root.usingCustomLyrics
+        && (!root.searchGraceElapsed || lrclib.loading || genius.fetching || ytmusic.fetching)
+
+    // Per-provider outcome, for the "nothing found" state to show what was tried.
+    readonly property var providerStates: [
+        {
+            key: "lrclib",
+            label: "LRCLib",
+            icon: "timer",
+            enabled: root.lrclibEnabled,
+            searching: lrclib.loading,
+            found: lrclib.lines.length > 0 || lrclib.plainLyricsText.length > 0
+        },
+        {
+            key: "ytmusic",
+            label: "YouTube Music",
+            icon: "smart_display",
+            enabled: root.ytmusicEnabled,
+            searching: ytmusic.fetching,
+            found: ytmusic.lyricsString.length > 0
+        },
+        {
+            key: "genius",
+            label: "Genius",
+            icon: "music_note",
+            enabled: root.geniusEnabled,
+            searching: genius.fetching,
+            found: genius.lyricsString.length > 0
+        }
+    ]
+
+    Timer {
+        id: searchGraceTimer
+        interval: 1600
+        onTriggered: root.searchGraceElapsed = true
+    }
+
+    function beginSearchGrace() {
+        root.searchGraceElapsed = false;
+        searchGraceTimer.restart();
+    }
+
+    // Hand-written LRC for the current track, applied on top of any fetch.
+    function saveCustomLyrics(lrcText) {
+        if (!root.activePlayer)
+            return;
+        CustomLyricsStore.set(root.activePlayer.trackTitle ?? "",
+            root.activePlayer.trackArtist ?? "", lrcText);
+    }
+
+    function clearCustomLyrics() {
+        if (!root.activePlayer)
+            return;
+        CustomLyricsStore.remove(root.activePlayer.trackTitle ?? "",
+            root.activePlayer.trackArtist ?? "");
+    }
+
+    function retrySearch() {
+        root.beginSearchGrace();
+        lrclib.retryFetch();
+        root.initiliazeLyrics();
+    }
+
     readonly property alias geniusHasLyrics: genius.hasString
 
     // Resolved plain lyrics based on active provider setting:
@@ -64,6 +147,8 @@ Singleton {
     // Function to initialize the lyrics service, to prevent unnecessary API calls when no lyrics UI is being use
     // Its being called in LyricsStatic, LyricsScroller and LyricsFlickable files
     function initiliazeLyrics() {
+        if (!root.isInitialized)
+            root.beginSearchGrace();
         root.isInitialized = true
         if (root.activePlayer) {
             if (effectiveGeniusEnabled)
@@ -130,7 +215,9 @@ Singleton {
         title: root.activePlayer?.trackTitle ?? ""
         artist: root.activePlayer?.trackArtist ?? ""
         duration: root.activePlayer?.length ?? 0
-        position: Math.max(0, (root.activePlayer?.position ?? 0) + ((Config.options.background.mediaMode.lyricsOffsetMs ?? 0) * 1000))
+        position: root.syncPosition
+        overrideLyrics: CustomLyricsStore.get(root.activePlayer?.trackTitle ?? "",
+            root.activePlayer?.trackArtist ?? "")
     }
 
     GeniusLyrics {
@@ -180,6 +267,7 @@ Singleton {
     
     onCurrentTrackIdChanged: {
         shellColorChanged = false // reseting at each track change
+        root.beginSearchGrace();
 
         if (!currentTrackId) {
             genius.lyricsString = ""

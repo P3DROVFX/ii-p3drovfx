@@ -1,4 +1,6 @@
 import QtQuick
+import "."
+import qs.services
 
 DesktopPhotoWidgetConfig {
     configEntryName: "photo_weather_2x1"

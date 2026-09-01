@@ -23,19 +23,11 @@ Item {
     readonly property int animDuration: Math.round(120 * Appearance.animMultiplier)
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: root.animDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: [0.34, 0.80, 0.34, 1.00, 1, 1]
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: root.animDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: [0.34, 0.80, 0.34, 1.00, 1, 1]
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Rectangle {

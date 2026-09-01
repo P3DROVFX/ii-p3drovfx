@@ -204,10 +204,10 @@ Item {
     implicitHeight: vertical ? pill.implicitHeight : root.btnSize
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on blur {
@@ -242,10 +242,10 @@ Item {
             implicitHeight: flow.implicitHeight + (root.vertical ? 4 : 0)
 
             Behavior on implicitWidth {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
             Behavior on implicitHeight {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
 
             // ── Active workspace indicator ───────────────────────────────
@@ -369,8 +369,10 @@ Item {
                                         visible: wsItem.icon !== ""
                                             && Config.options.bar.workspaces.dockShowAppIcons
 
-                                        // Force reload when the icon theme regenerates
-                                        asynchronous: true
+                                        // Force reload when the icon theme regenerates. Resolved on this
+                                        // thread: the shared icon loader is not safe to read from Qt's
+                                        // image thread while the theme is changing under it.
+                                        asynchronous: false
                                         backer.cache: false
                                         backer.sourceSize: Qt.size(root.iconSize + TaskbarApps.iconThemeRevision,
                                                                    root.iconSize + TaskbarApps.iconThemeRevision)
@@ -426,10 +428,7 @@ Item {
                                     visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
 
                                     Behavior on width {
-                                        NumberAnimation {
-                                            duration: 200
-                                            easing.type: Easing.OutQuint
-                                        }
+                                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                     }
                                     Behavior on color {
                                         ColorAnimation {
@@ -547,8 +546,10 @@ Item {
                 implicitSize: root.iconSize
                 visible: activeOverlay._activeIcon !== "" && Config.options.bar.workspaces.dockShowAppIcons
 
-                // Force reload when the icon theme regenerates
-                asynchronous: true
+                // Force reload when the icon theme regenerates. Resolved on this thread: the
+                // shared icon loader is not safe to read from Qt's image thread while the
+                // theme is changing under it.
+                asynchronous: false
                 backer.cache: false
                 backer.sourceSize: Qt.size(root.iconSize + TaskbarApps.iconThemeRevision,
                                            root.iconSize + TaskbarApps.iconThemeRevision)

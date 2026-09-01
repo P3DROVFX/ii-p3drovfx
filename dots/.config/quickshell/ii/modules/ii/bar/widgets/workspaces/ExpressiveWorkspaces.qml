@@ -106,18 +106,10 @@ Item {
     implicitHeight: vertical ? container.implicitHeight : Appearance.sizes.baseBarHeight
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: Appearance.animation.elementResize.duration
-            easing.type: Appearance.animation.elementResize.type
-            easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: Appearance.animation.elementResize.duration
-            easing.type: Appearance.animation.elementResize.type
-            easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on blur {
@@ -262,18 +254,10 @@ Item {
         implicitHeight: vertical ? (listView.contentHeight + 10) : containerThickness
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: Appearance.animation.elementResize.duration
-                easing.type: Appearance.animation.elementResize.type
-                easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Appearance.animation.elementResize.duration
-                easing.type: Appearance.animation.elementResize.type
-                easing.bezierCurve: Appearance.animation.elementResize.bezierCurve
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         ListView {
@@ -352,18 +336,10 @@ Item {
                 height: root.vertical ? (isActive ? pillLength : shapeDiameter) : shapeDiameter
 
                 Behavior on width {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveSmall.duration
-                        easing.type: Appearance.animation.elementMoveSmall.type
-                        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
-                    }
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
                 Behavior on height {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveSmall.duration
-                        easing.type: Appearance.animation.elementMoveSmall.type
-                        easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
-                    }
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
 
                 Behavior on x {

@@ -3,6 +3,7 @@ import qs.modules.ii.bar.shared
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.common.widgets.bluetooth
 import qs.services
 import QtQuick
 import QtQuick.Layouts
@@ -26,10 +27,39 @@ StyledPopup {
         if (!device)
             return "";
         
-        let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
-        if (custom) {
-            return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+        if (Config.options && Config.options.bluetoothDeviceImages) {
+            let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
+            if (custom && custom.image) {
+                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+            }
         }
+
+        const mac = (device.address || "").replace(/:/g, "_").toUpperCase();
+        const name = (device.name || device.alias || "").toLowerCase();
+        const basePath = Directories.assetsPath ? ("file://" + Directories.assetsPath + "/images/devices/") : "";
+
+        if (mac === "E8_EE_CC_96_31_3A" || name.includes("q30") || name.includes("soundcore life q30") || name.includes("soundcore")) {
+            return basePath + "anker_q30_.png";
+        }
+        if (mac === "68_7D_6B_94_0B_C2" || name.includes("buds 3 pro") || name.includes("buds3 pro") || name.includes("galaxy buds 3 pro")) {
+            return basePath + "galaxy_buds_3_pro.png";
+        }
+        if (name.includes("galaxy buds 3") || name.includes("buds 3") || name.includes("buds3")) {
+            return basePath + "galaxy_buds_3.png";
+        }
+        if (mac === "64_1B_2F_9B_95_CE" || name.includes("s23")) {
+            return basePath + "samsung_s23.png";
+        }
+        if (name.includes("s24")) {
+            return basePath + "samsung_s24_ultra.png";
+        }
+        if (name.includes("pixel buds") || name.includes("buds pro") || name.includes("buds fe") || name.includes("buds")) {
+            return basePath + "pixel_buds.png";
+        }
+        if (name.includes("xbox") || name.includes("elite")) {
+            return basePath + "xbox_elite_series_2.png";
+        }
+
         return "";
     }
 
@@ -83,7 +113,7 @@ StyledPopup {
         // Scalable list of devices
         Item {
             Layout.fillWidth: true
-            Layout.minimumWidth: 320
+            Layout.minimumWidth: 380
             visible: root.hasDevices
 
             // Calculate total height needed for the children + spacing
@@ -341,9 +371,23 @@ StyledPopup {
                                 Layout.fillWidth: true
                             }
 
-                            // Battery Bar (StyledProgressBar)
+                            readonly property var devBattery: EarbudsControlService.batteryInfo(modelData)
+                            readonly property var devNoise: EarbudsControlService.noiseControl(modelData)
+                            readonly property var devCa: EarbudsControlService.conversationAwareness(modelData)
+
+                            // Battery: Breakdown if multiple components, else single progress bar
+                            BluetoothBatteryBreakdown {
+                                visible: detailsCol.devBattery && detailsCol.devBattery.available && detailsCol.devBattery.components.length > 1
+                                batteryInfo: detailsCol.devBattery
+                                compact: true
+                                showCase: true
+                                Layout.alignment: Qt.AlignRight
+                                Layout.topMargin: 8
+                            }
+
+                            // Single Battery Bar Fallback (StyledProgressBar)
                             RowLayout {
-                                visible: modelData.batteryAvailable
+                                visible: (!detailsCol.devBattery || !detailsCol.devBattery.available || detailsCol.devBattery.components.length <= 1) && modelData.batteryAvailable
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignRight
                                 spacing: 8
@@ -376,85 +420,30 @@ StyledPopup {
                                 }
                             }
 
-                            // ANC Modes (Supported Headsets Only)
-                            RowLayout {
+                            // Dynamic Noise Modes (via EarbudsControlService)
+                            EarbudsNoiseControlSelector {
+                                visible: detailsCol.devNoise && detailsCol.devNoise.available && detailsCol.devNoise.modes.length > 0
                                 Layout.fillWidth: true
-                                Layout.topMargin: 12
-                                Layout.alignment: Qt.AlignRight
-                                visible: SoundcoreService.isHeadsetSupported(modelData) || BudsService.isHeadsetSupported(modelData)
-                                spacing: 0
-
-                                readonly property var service: {
-                                    if (SoundcoreService.isHeadsetSupported(modelData)) return SoundcoreService;
-                                    if (BudsService.isHeadsetSupported(modelData)) return BudsService;
-                                    return null;
+                                Layout.topMargin: 10
+                                compact: true
+                                modes: detailsCol.devNoise ? detailsCol.devNoise.modes : []
+                                currentMode: detailsCol.devNoise ? detailsCol.devNoise.currentMode : "off"
+                                onModeRequested: modeKey => {
+                                    EarbudsControlService.setNoiseMode(modelData, modeKey);
                                 }
-                                readonly property string currentMode: service ? service.getModeForMac(modelData.address) : "Normal"
-                                
-                                // ANC (Noise Canceling)
-                                RippleButton {
-                                    id: ancBtn
-                                    implicitWidth: 32
-                                    implicitHeight: 32
-                                    buttonRadius: 16
-                                    colBackground: parent.currentMode === "NoiseCanceling" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                                    colBackgroundHover: parent.currentMode === "NoiseCanceling" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                                    onClicked: parent.service.setMode(modelData.address, "NoiseCanceling")
+                            }
 
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "noise_control_off"
-                                        iconSize: 18
-                                        color: ancBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                                    }
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 2
-                                    color: Appearance.colors.colSurfaceContainerHighest
-                                }
-
-                                // Normal
-                                RippleButton {
-                                    id: normalBtn
-                                    implicitWidth: 32
-                                    implicitHeight: 32
-                                    buttonRadius: 16
-                                    colBackground: parent.currentMode === "Normal" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                                    colBackgroundHover: parent.currentMode === "Normal" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                                    onClicked: parent.service.setMode(modelData.address, "Normal")
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "hearing"
-                                        iconSize: 18
-                                        color: normalBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                                    }
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    height: 2
-                                    color: Appearance.colors.colSurfaceContainerHighest
-                                }
-
-                                // Transparency
-                                RippleButton {
-                                    id: transBtn
-                                    implicitWidth: 32
-                                    implicitHeight: 32
-                                    buttonRadius: 16
-                                    colBackground: parent.currentMode === "Transparency" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                                    colBackgroundHover: parent.currentMode === "Transparency" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                                    onClicked: parent.service.setMode(modelData.address, "Transparency")
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "visibility"
-                                        iconSize: 18
-                                        color: transBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                                    }
+                            // Conversation Awareness (Speak-to-Chat)
+                            EarbudsConversationAwareness {
+                                visible: detailsCol.devCa && detailsCol.devCa.available
+                                Layout.fillWidth: true
+                                Layout.topMargin: 6
+                                compact: true
+                                enabled: detailsCol.devCa ? detailsCol.devCa.enabled : false
+                                available: detailsCol.devCa ? detailsCol.devCa.available : false
+                                title: (detailsCol.devCa && detailsCol.devCa.title) ? detailsCol.devCa.title : Translation.tr("Conversation Awareness")
+                                onToggled: en => {
+                                    EarbudsControlService.setConversationAwareness(modelData, en);
                                 }
                             }
                         }

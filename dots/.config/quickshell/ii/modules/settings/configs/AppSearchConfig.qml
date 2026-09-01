@@ -94,21 +94,77 @@ ContentPage {
                 checked: Config.options.search.alwaysListApps
                 onCheckedChanged: {
                     Config.options.search.alwaysListApps = checked;
+                    if (checked)
+                        Config.options.overview.enable = false;
                 }
                 StyledToolTip {
                     text: Translation.tr("Opens the app list immediately when search is opened with no query, bypassing the workspace overview")
                 }
             }
 
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.search.alwaysListApps
+                materialIcon: "apps"
+                text: Translation.tr("Search now opens directly with applications. The workspace Overview has been disabled and remains locked until this option is turned off.")
+            }
+
             ConfigSwitch {
                 buttonIcon: "music_note"
-                text: Translation.tr("Show now playing media bubble")
-                checked: Config.options.search.showNowPlayingBubble
+                text: Translation.tr("Show now playing media row")
+                checked: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
                 onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.enable = checked;
                     Config.options.search.showNowPlayingBubble = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Shows a floating media player bubble in the search launcher when media is playing")
+                    text: Translation.tr("Shows a media player row in the search launcher when media is playing")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "play_circle"
+                text: Translation.tr("Show inline playback controls")
+                checked: Config.options.search.nowPlaying?.showInlineControls ?? true
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.showInlineControls = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows previous, play/pause and next buttons directly on the now playing row")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "badge"
+                text: Translation.tr("Show player name when multiple players exist")
+                checked: Config.options.search.nowPlaying?.showPlayerName ?? true
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.showPlayerName = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Displays the source app name next to the artist if multiple players are active")
+                }
+            }
+
+            ConfigSwitch {
+                indent: true
+                visible: Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble
+                buttonIcon: "palette"
+                text: Translation.tr("Tint row from album artwork")
+                checked: Config.options.search.nowPlaying?.tintFromArtwork ?? false
+                onCheckedChanged: {
+                    if (Config.options.search.nowPlaying)
+                        Config.options.search.nowPlaying.tintFromArtwork = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Extracts the dominant color from the album artwork to tint the row background")
                 }
             }
 
@@ -121,6 +177,106 @@ ContentPage {
                 stepSize: 10
                 usePercentTooltip: false
                 onValueChanged: Config.options.search.baseWidth = value
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "keyboard"
+        title: Translation.tr("Typing test")
+        tooltip: Translation.tr("Defaults for the offline Monkeytype-style test in Search. Changes apply to the next test so an active run stays deterministic.")
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            TipBox {
+                Layout.fillWidth: true
+                materialIcon: "tune"
+                text: Translation.tr("Caret style, text size, keyboard preview, key sounds, shortcuts and score history live in the test itself — press Ctrl+, while it is open. They write these same settings.")
+            }
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.language
+                options: [
+                    { displayName: Translation.tr("English"), value: "english_1k" },
+                    { displayName: Translation.tr("Português"), value: "portuguese" },
+                    { displayName: Translation.tr("Español"), value: "spanish" },
+                    { displayName: Translation.tr("Français"), value: "french" },
+                    { displayName: Translation.tr("Deutsch"), value: "german" },
+                    { displayName: Translation.tr("Italiano"), value: "italian" },
+                    { displayName: Translation.tr("Русский"), value: "russian" }
+                ]
+                onSelected: value => Config.options.search.typingTest.language = value
+            }
+
+            ConfigSelectionArray {
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.mode
+                options: [
+                    { displayName: Translation.tr("Time"), value: "time" },
+                    { displayName: Translation.tr("Words"), value: "words" },
+                    { displayName: Translation.tr("Zen"), value: "zen" }
+                ]
+                onSelected: value => Config.options.search.typingTest.mode = value
+            }
+
+            ConfigSelectionArray {
+                visible: Config.options.search.typingTest.mode === "time"
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.time
+                options: [
+                    { displayName: "15s", value: 15 },
+                    { displayName: "30s", value: 30 },
+                    { displayName: "60s", value: 60 },
+                    { displayName: "120s", value: 120 }
+                ]
+                onSelected: value => Config.options.search.typingTest.time = value
+            }
+
+            ConfigSelectionArray {
+                visible: Config.options.search.typingTest.mode === "words"
+                Layout.fillWidth: true
+                currentValue: Config.options.search.typingTest.words
+                options: [
+                    { displayName: "10", value: 10 },
+                    { displayName: "25", value: 25 },
+                    { displayName: "50", value: 50 },
+                    { displayName: "100", value: 100 }
+                ]
+                onSelected: value => Config.options.search.typingTest.words = value
+            }
+
+            ConfigSwitch {
+                buttonIcon: "format_quote"
+                text: Translation.tr("Punctuation by default")
+                checked: Config.options.search.typingTest.punctuation
+                onCheckedChanged: Config.options.search.typingTest.punctuation = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "123"
+                text: Translation.tr("Numbers by default")
+                checked: Config.options.search.typingTest.numbers
+                onCheckedChanged: Config.options.search.typingTest.numbers = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "speed"
+                text: Translation.tr("Show live WPM")
+                checked: Config.options.search.typingTest.showLiveWpm
+                onCheckedChanged: Config.options.search.typingTest.showLiveWpm = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "percent"
+                text: Translation.tr("Show live accuracy")
+                checked: Config.options.search.typingTest.showLiveAccuracy
+                onCheckedChanged: Config.options.search.typingTest.showLiveAccuracy = checked
+            }
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Smooth caret")
+                checked: Config.options.search.typingTest.smoothCaret
+                onCheckedChanged: Config.options.search.typingTest.smoothCaret = checked
             }
         }
     }
@@ -204,6 +360,11 @@ ContentPage {
                         name: Translation.tr("Material Symbols"),
                         icon: "font_download",
                         prop: "materialSymbols"
+                    },
+                    {
+                        name: Translation.tr("Typing test"),
+                        icon: "keyboard",
+                        prop: "typingTest"
                     }
                 ]
                 delegate: Rectangle {
@@ -214,8 +375,8 @@ ContentPage {
 
                     topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                     topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomLeftRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                    bottomRightRadius: index === 13 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                    bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                     RowLayout {
                         anchors.fill: parent
@@ -246,16 +407,11 @@ ContentPage {
                             Layout.preferredWidth: 120
                         }
 
-                        TextField {
+                        ToolbarTextField {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 36
                             text: Config.options.search.prefix[modelData.prop]
-                            color: Appearance.colors.colOnSurface
-                            background: Rectangle {
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                radius: Appearance.rounding.full
-                            }
-                            font.pixelSize: Appearance.font.pixelSize.small
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
                             onTextChanged: Config.options.search.prefix[modelData.prop] = text
                         }
                     }
@@ -266,7 +422,7 @@ ContentPage {
 
     ContentSection {
         icon: "label"
-        title: Translation.tr("App Aliases")
+        title: Translation.tr("Search Aliases")
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -347,6 +503,23 @@ ContentPage {
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 font.pixelSize: Appearance.font.pixelSize.small
+
+                                StyledTextContextMenu {
+                                    id: aliasEditContextMenu
+                                    targetField: aliasEditInput
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.IBeamCursor
+                                    acceptedButtons: Qt.RightButton
+                                    onPressed: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            aliasEditInput.forceActiveFocus();
+                                            aliasEditContextMenu.popup(mouse.x, mouse.y);
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -519,6 +692,23 @@ ContentPage {
                             color: Appearance.colors.colOnSecondaryContainer
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
+
+                            StyledTextContextMenu {
+                                id: newAliasContextMenu
+                                targetField: newAliasInput
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.IBeamCursor
+                                acceptedButtons: Qt.RightButton
+                                onPressed: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        newAliasInput.forceActiveFocus();
+                                        newAliasContextMenu.popup(mouse.x, mouse.y);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -543,6 +733,23 @@ ContentPage {
                             color: Appearance.colors.colOnSecondaryContainer
                             background: null
                             font.pixelSize: Appearance.font.pixelSize.small
+
+                            StyledTextContextMenu {
+                                id: newTargetContextMenu
+                                targetField: newTargetInput
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.IBeamCursor
+                                acceptedButtons: Qt.RightButton
+                                onPressed: mouse => {
+                                    if (mouse.button === Qt.RightButton) {
+                                        newTargetInput.forceActiveFocus();
+                                        newTargetContextMenu.popup(mouse.x, mouse.y);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -637,6 +844,23 @@ ContentPage {
                                     background: null
                                     clip: true
                                     onTextChanged: addAliasArea.appFilter = text
+
+                                    StyledTextContextMenu {
+                                        id: appFilterContextMenu
+                                        targetField: appFilterInput
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.IBeamCursor
+                                        acceptedButtons: Qt.RightButton
+                                        onPressed: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                appFilterInput.forceActiveFocus();
+                                                appFilterContextMenu.popup(mouse.x, mouse.y);
+                                            }
+                                        }
+                                    }
                                 }
 
                                 IconToolbarButton {
@@ -651,7 +875,9 @@ ContentPage {
                         }
 
                         Flow {
+                            id: appTargetFlow
                             Layout.fillWidth: true
+                            Layout.preferredHeight: appTargetFlow.implicitHeight
                             spacing: 8
 
                             Repeater {
@@ -696,41 +922,14 @@ ContentPage {
 
                     // Builtin suggestion area
                     Flow {
+                        id: builtinFlow
                         Layout.fillWidth: true
+                        Layout.preferredHeight: builtinFlow.implicitHeight
                         spacing: 8
                         visible: addAliasArea.selectedType === "builtin"
-                        property var builtins: [
-                            {
-                                id: "clipboard",
-                                name: Translation.tr("Clipboard"),
-                                icon: "content_paste"
-                            },
-                            {
-                                id: "emojis",
-                                name: Translation.tr("Emoji Picker"),
-                                icon: "mood"
-                            },
-                            {
-                                id: "math",
-                                name: Translation.tr("Calculator Mode"),
-                                icon: "calculate"
-                            },
-                            {
-                                id: "bluetooth",
-                                name: Translation.tr("Bluetooth Manager"),
-                                icon: "bluetooth"
-                            },
-                            {
-                                id: "translator",
-                                name: Translation.tr("Translator"),
-                                icon: "translate"
-                            },
-                            {
-                                id: "settings",
-                                name: Translation.tr("Settings"),
-                                icon: "settings"
-                            }
-                        ]
+                        property var builtins: SearchPanelRegistry.aliasTargets.concat([
+                            { "id": "math", "name": Translation.tr("Calculator Mode"), "icon": "calculate", "enabled": true }
+                        ])
                         Repeater {
                             model: parent.builtins
                             delegate: Rectangle {
@@ -751,7 +950,9 @@ ContentPage {
                                         color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                     }
                                     StyledText {
-                                        text: modelData.name
+                                        text: modelData.name + (modelData.enabled === false
+                                            ? " · " + Translation.tr("Disabled")
+                                            : "")
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                         font.bold: builtinChip.selected

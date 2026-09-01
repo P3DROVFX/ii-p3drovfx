@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 Item {
@@ -64,89 +65,24 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
-    // Entrance animation
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
-    property bool _entranceDone: false
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    readonly property bool entrancePageActive: root.pageIndex === -1 || !root.panel
+        || root.panel.currentPage === root.pageIndex
 
-    property real currentSliderValue: 0
-
-    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-
-    function resetAndAnimateSlider() {
-        if (_animationsDisabled) {
-            quickSlider.valueAnimationDuration = 0;
-            currentSliderValue = root.sliderValue;
-            return;
-        }
-        // Step 1: Instant reset to 0 without animation
-        quickSlider.valueAnimationDuration = 0;
-        currentSliderValue = 0;
-        
-        // Step 2: Set animation duration and assign final target value after entrance delay
-        sliderDelayTimer.restart();
+    DashboardEntranceProgress {
+        id: entranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        pageActive: root.entrancePageActive
+        delayIndex: Math.min(Math.max(root.buttonIndex, 0), 15)
+        baseDelayRatio: 0.35
+        staggerRatio: 0.1
     }
 
-    Timer {
-        id: sliderDelayTimer
-        interval: 180 + Math.min(Math.max(root.buttonIndex, 0), 15) * 40
-        repeat: false
-        onTriggered: {
-            quickSlider.valueAnimationDuration = _animationsDisabled ? 0 : 650;
-            currentSliderValue = root.sliderValue;
-        }
-    }
-
-    onEntranceTriggerChanged: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceTranslateY = 0;
-            resetAndAnimateSlider();
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        resetAndAnimateSlider();
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    Component.onCompleted: {
-        if (_animationsDisabled) {
-            _entranceDone = true;
-            _entranceOpacity = 1;
-            _entranceScale = 1;
-            _entranceTranslateY = 0;
-            resetAndAnimateSlider();
-            return;
-        }
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        resetAndAnimateSlider();
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: 150 + Math.min(Math.max(root.buttonIndex, 0), 15) * 55 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
-        }
-        PropertyAction { target: root; property: "_entranceDone"; value: true }
-    }
+    property real currentSliderValue: root.sliderValue * entranceProgress.progress
+    property int _activeValueAnimDuration: 0
 
     property string tooltipText: ""
 
@@ -161,6 +97,7 @@ Item {
     // Effective sizes for live preview during resize
     readonly property int effectiveSizeW: root.catalogSize[0]
     readonly property int effectiveSizeH: root.catalogSize[1]
+    readonly property bool isVertical: root.effectiveSizeH > root.effectiveSizeW
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editableItem.containsMouse)
 
@@ -200,9 +137,9 @@ Item {
         width: root.width
         height: root.height
 
-        scale: (root.isDragging ? 1.05 : 1.0) * (root._entranceDone ? 1.0 : root._entranceScale)
+        scale: (root.isDragging ? 1.05 : 1.0) * (0.85 + 0.15 * entranceProgress.progress)
         opacity: {
-            if (!root._entranceDone) return root._entranceOpacity;
+            if (entranceProgress.progress < 1) return entranceProgress.progress;
             if (root.isUnused) return 0.5;
             if (root.editMode && !root.isDragging) return 0.9;
             if (root.isDragging) return 0.95;
@@ -212,28 +149,41 @@ Item {
         
         transform: Translate {
             x: root.isDragging ? root.dragOffsetX : 0
-            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceTranslateY)
+            y: (root.isDragging ? root.dragOffsetY : 0) + 20 * (1 - entranceProgress.progress)
         }
         
         Behavior on scale {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 
+        Loader {
+            id: sliderLoader
+            anchors.fill: parent
+            sourceComponent: root.isVertical ? verticalSliderComponent : horizontalSliderComponent
+        }
+
+        Component {
+            id: horizontalSliderComponent
+
             StyledSlider {
-                id: quickSlider
+                id: quickSliderHorizontal
                 anchors.fill: parent
                 // Touch-sized cells get a track proportional to the cell; the ii grid
                 // (touchScale === 1) keeps the fixed M track.
                 configuration: root.touchScale > 1 ? Math.round(root.baseCellHeight * 0.62) : StyledSlider.Configuration.M
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
+                valueAnimationDuration: root._activeValueAnimDuration
                 value: root.currentSliderValue
-                onMoved: root.moved(value)
+                onMoved: {
+                    root._activeValueAnimDuration = 0;
+                    root.moved(value);
+                }
                 
                 // To prevent flickable dragging when using slider
                 MouseArea {
@@ -244,74 +194,113 @@ Item {
                     onClicked: root.openMenu()
                 }
 
-            MaterialShapeWrappedMaterialSymbol {
-                id: icon
-                property bool nearFull: quickSlider.value >= 0.82
-                anchors {
-                    verticalCenter: quickSlider.verticalCenter
-                    right: nearFull ? quickSlider.handle.right : quickSlider.right
-                    rightMargin: nearFull ? 10 : 4
-                }
-                iconSize: root.scaled(16)
-                padding: 4
-                shape: MaterialShape.Shape.Cookie7Sided
-                text: root.materialSymbol
+                MaterialShapeWrappedMaterialSymbol {
+                    id: horizIcon
+                    property bool nearFull: quickSliderHorizontal.value >= 0.82
+                    anchors {
+                        verticalCenter: parent.verticalCenter
+                        right: nearFull ? quickSliderHorizontal.handle.right : parent.right
+                        rightMargin: nearFull ? 10 : 4
+                    }
+                    iconSize: root.scaled(16)
+                    padding: 4
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    text: root.materialSymbol
 
-                rotation: quickSlider.value * 360
+                    color: {
+                        if (quickSliderHorizontal.value > 1.0) {
+                            return Appearance.colors.colErrorContainer;
+                        }
+                        return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
+                    }
 
-                Behavior on rotation {
-                    NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.5
+                    colSymbol: {
+                        if (quickSliderHorizontal.value > 1.0) {
+                            return Appearance.m3colors.m3onErrorContainer;
+                        }
+                        return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+                    }
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                    Behavior on colSymbol {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                    Behavior on anchors.rightMargin {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                 }
 
-                color: {
-                    if (quickSlider.value > 1.0) {
-                        return Appearance.colors.colErrorContainer;
+                MaterialSymbol {
+                    id: secondaryIcon
+                    visible: root.secondaryMaterialSymbol.length > 0
+                    property real iconLocation: 0.3
+                    property bool nearIcon: iconLocation - quickSliderHorizontal.value <= 0.1 && iconLocation - quickSliderHorizontal.value > (quickSliderHorizontal.handleWidth + 8 - 14) / quickSliderHorizontal.effectiveDraggingWidth
+                    anchors {
+                        verticalCenter: parent.verticalCenter
+                        right: nearIcon ? quickSliderHorizontal.handle.right : parent.right
+                        rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSliderHorizontal.effectiveDraggingWidth + quickSliderHorizontal.rightPadding + 8
                     }
-                    return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
-                }
+                    iconSize: root.scaled(20)
+                    color: quickSliderHorizontal.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    text: root.secondaryMaterialSymbol
 
-                colSymbol: {
-                    if (quickSlider.value > 1.0) {
-                        return Appearance.m3colors.m3onErrorContainer;
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
-                    return nearFull ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
-                }
-
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-                Behavior on colSymbol {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-                Behavior on anchors.rightMargin {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-            }
-
-            MaterialSymbol {
-                id: secondaryIcon
-                visible: root.secondaryMaterialSymbol.length > 0
-                property real iconLocation: 0.3
-                property bool nearIcon: iconLocation - quickSlider.value <= 0.1 && iconLocation - quickSlider.value > (quickSlider.handleWidth + 8 - 14) / quickSlider.effectiveDraggingWidth
-                anchors {
-                    verticalCenter: quickSlider.verticalCenter
-                    right: nearIcon ? quickSlider.handle.right : quickSlider.right
-                    rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSlider.effectiveDraggingWidth + quickSlider.rightPadding + 8
-                }
-                iconSize: root.scaled(20)
-                color: quickSlider.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                text: root.secondaryMaterialSymbol
-
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                 }
             }
         }
 
+        Component {
+            id: verticalSliderComponent
+
+            StyledVerticalSlider {
+                id: quickSliderVertical
+                anchors.fill: parent
+                configuration: 48
+                showValueLabel: false
+                stopIndicatorValues: []
+                valueAnimationDuration: root._activeValueAnimDuration
+                value: root.currentSliderValue
+                onMoved: {
+                    root._activeValueAnimDuration = 0;
+                    root.moved(value);
+                }
+
+                // To prevent flickable dragging when using slider
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.RightButton
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onClicked: root.openMenu()
+                }
+
+                MaterialSymbol {
+                    id: vertIcon
+                    anchors {
+                        horizontalCenter: parent.horizontalCenter
+                        bottom: parent.bottom
+                        bottomMargin: 8
+                    }
+                    iconSize: root.scaled(20)
+                    text: root.materialSymbol
+
+                    color: {
+                        if (quickSliderVertical.value > 1.0) {
+                            return Appearance.m3colors.m3onErrorContainer;
+                        }
+                        return quickSliderVertical.value > 0.12 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer;
+                    }
+
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                }
+            }
+        }
     }
 
     EditableQuickToggleItem {

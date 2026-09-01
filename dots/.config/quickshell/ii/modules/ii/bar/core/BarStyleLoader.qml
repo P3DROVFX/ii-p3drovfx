@@ -29,7 +29,19 @@ Item {
         anchors.fill: parent
         sourceComponent: resolveStyle()
 
+        // Switching corner style rebuilds the whole bar in one frame. Fading the
+        // new style in turns that hard cut into a dissolve — the old one is
+        // already gone by then, so there is nothing to cross-fade against, but
+        // arriving softly still reads as the same bar changing shape.
+        property bool styleSettled: false
+        opacity: styleSettled ? 1 : 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(styleLoader)
+        }
+
         onLoaded: {
+            styleLoader.styleSettled = false;
+            Qt.callLater(() => styleLoader.styleSettled = true);
             console.log("[BarStyleLoader] onLoaded triggered for style: " + root.cornerStyle + " item: " + item + " Loader size: " + styleLoader.width + "x" + styleLoader.height);
             item.width = Qt.binding(() => styleLoader.width);
             item.height = Qt.binding(() => styleLoader.height);

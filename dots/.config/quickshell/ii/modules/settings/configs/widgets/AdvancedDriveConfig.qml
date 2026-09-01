@@ -46,7 +46,7 @@ ContentPage {
 
     readonly property var driveOptions: (Persistent.ready ? Persistent.states.googleDrive : null) || Config.options.googleDrive
 
-    function updateDriveOption(key: string, value: var): void {
+    function updateDriveOption(key, value) {
         if (Persistent.ready) {
             Persistent.states.googleDrive[key] = value;
         }

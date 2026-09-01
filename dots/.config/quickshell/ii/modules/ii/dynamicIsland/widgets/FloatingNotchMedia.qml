@@ -1468,7 +1468,7 @@ Item {
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
                         handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                         onMoved: if (root.player)
                             root.player.position = value * root.player.length
                     }
@@ -1486,7 +1486,7 @@ Item {
                         wavy: root.player ? root.playing : false
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                        value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                     }
                 }
             }

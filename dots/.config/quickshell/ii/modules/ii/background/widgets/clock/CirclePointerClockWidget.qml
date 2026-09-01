@@ -66,12 +66,20 @@ AbstractBackgroundWidget {
         }
 
         // 2. Dial & Pointer Canvas Overlay
-        CirclePointerClock {
+        // Supersampled: this dial is a Canvas, so it rasterises at its own
+        // item size. Without this it would be a stretched bitmap the moment
+        // the widget is scaled up.
+        Supersampled {
             anchors.fill: parent
-            useBlackBg:            root.cfgUseBlackBg
-            enableGlassReflection: root.cfgEnableGlassReflection
-            showDots:              root.cfgShowDots
-            boldFont:              root.cfgBoldFont
+            factor: root.renderScale
+        
+            CirclePointerClock {
+                anchors.fill: parent
+                useBlackBg:            root.cfgUseBlackBg
+                enableGlassReflection: root.cfgEnableGlassReflection
+                showDots:              root.cfgShowDots
+                boldFont:              root.cfgBoldFont
+            }
         }
 
         // ── 3D Glass Dome Reflection ──────────────────────────────────────────

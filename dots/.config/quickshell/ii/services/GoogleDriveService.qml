@@ -102,7 +102,7 @@ Singleton {
     }
 
     function parseEnv(text: string): var {
-        const values = ({ "GMAIL_CLIENT_ID": "", "GMAIL_CLIENT_SECRET": "" });
+        const values = ({ "GOOGLE_CLIENT_ID": "", "GOOGLE_CLIENT_SECRET": "", "GMAIL_CLIENT_ID": "", "GMAIL_CLIENT_SECRET": "" });
         for (const rawLine of String(text || "").split(/\r?\n/)) {
             const line = rawLine.trim();
             if (!line || line.startsWith("#"))
@@ -114,7 +114,10 @@ Singleton {
             if (values[key] !== undefined)
                 values[key] = line.substring(separator + 1).trim();
         }
-        return values;
+        return {
+            "clientId": values.GOOGLE_CLIENT_ID || values.GMAIL_CLIENT_ID || "",
+            "clientSecret": values.GOOGLE_CLIENT_SECRET || values.GMAIL_CLIENT_SECRET || ""
+        };
     }
 
     function checkRclone(): void {
@@ -199,16 +202,16 @@ Singleton {
 
     function _startSetup(envText: string): void {
         const env = root.parseEnv(envText);
-        if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+        if (!env.clientId || !env.clientSecret) {
             root.setupRunning = false;
-            root.errorMessage = Translation.tr("Gmail OAuth credentials were not found in .env");
+            root.errorMessage = Translation.tr("Google OAuth credentials were not found in .env (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)");
             return;
         }
         setupProcess.command = [
             "python3",
             root.scriptRoot + "/setup_rclone.py",
-            env.GMAIL_CLIENT_ID,
-            env.GMAIL_CLIENT_SECRET
+            env.clientId,
+            env.clientSecret
         ];
         setupProcess.running = true;
     }
@@ -683,6 +686,11 @@ Singleton {
         target: options
         function onSyncIntervalChanged() {
             syncTimer.restart();
+        }
+        function onEnabledChanged() {
+            if (options.enabled && root.configured && !root.syncing) {
+                root.startScheduledSync();
+            }
         }
     }
 

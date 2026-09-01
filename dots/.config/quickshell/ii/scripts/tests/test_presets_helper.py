@@ -212,6 +212,181 @@ class TestPresetsHelper(unittest.TestCase):
         self.assertEqual(sanitized["bar"]["height"], 42)
         self.assertEqual(sanitized["bar"]["position"], "top")
 
+    def test_dock_blacklist_and_sanitization(self):
+        """Teste 7: Verify dock apps and dock widgets are sanitized/blacklisted while visual styles remain."""
+        input_data = {
+            "dock": {
+                "enable": True,
+                "dockStyle": "floating",
+                "height": 64,
+                "dockRadius": 20,
+                "enableShapeMask": True,
+                "shapeMask": "Circle",
+                "enableMagnification": True,
+                "magnificationScale": 1.7,
+                # Blacklisted dock apps and user items:
+                "pinnedApps": ["kitty", "discord", "obsidian"],
+                "pinnedFiles": ["/home/testuser/notes.txt"],
+                "appGroups": [{"id": "work", "apps": ["slack", "zoom"]}],
+                "order": ["pin", "app:kitty", "app:discord", "runningApps", "media", "trash"],
+                "ignoredAppRegexes": ["^steam_app_.*"],
+                "livePreviewAppId": "org.mozilla.firefox",
+                # Blacklisted dock widgets:
+                "enableMediaWidget": True,
+                "enableWeatherWidget": True,
+                "enableSportsWidget": True,
+                "enableLivePreviewWidget": True,
+                "livePreviewSlots": 3,
+                "livePreviewPaintCursor": True,
+                "livePreviewCaptureMode": "visible",
+                "livePreviewFollowActiveWindow": True,
+                "showPhoneButton": True,
+                "showTrashButton": True,
+                "showOverviewButton": True,
+                "showPinButton": True
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
+        dock = sanitized.get("dock", {})
+        # Visual styling preserved
+        self.assertTrue(dock.get("enable"))
+        self.assertEqual(dock.get("dockStyle"), "floating")
+        self.assertEqual(dock.get("height"), 64)
+        self.assertEqual(dock.get("dockRadius"), 20)
+        self.assertTrue(dock.get("enableShapeMask"))
+        self.assertEqual(dock.get("shapeMask"), "Circle")
+        self.assertTrue(dock.get("enableMagnification"))
+        self.assertEqual(dock.get("magnificationScale"), 1.7)
+
+        # Blacklisted dock items and widgets stripped
+        for key in presets_helper.DOCK_BLACKLIST_KEYS:
+            self.assertNotIn(key, dock, f"Key {key} should have been blacklisted and stripped from dock preset")
+
+    def test_dock_preserved_on_expand(self):
+        """Teste 8: Verify that expanding a preset preserves the importing user's existing dock configuration."""
+        import tempfile
+        import json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_file = os.path.join(tmpdir, "MyPreset.json")
+            target_config = os.path.join(tmpdir, "config.json")
+
+            # Preset with theme styling but sanitized dock (no pinnedApps or dock widgets)
+            preset_data = {
+                "appearance": {"palette": "catppuccin"},
+                "dock": {
+                    "enable": True,
+                    "dockStyle": "islands",
+                    "height": 50
+                }
+            }
+            with open(preset_file, 'w', encoding='utf-8') as f:
+                json.dump(preset_data, f)
+
+            # User B's existing config with their own dock apps and widgets
+            user_b_config = {
+                "appearance": {"palette": "nord"},
+                "dock": {
+                    "pinnedApps": ["firefox", "alacritty"],
+                    "pinnedFiles": [f"{self.home_dir}/Documents"],
+                    "appGroups": [{"id": "dev", "apps": ["code", "nvim"]}],
+                    "order": ["pin", "app:firefox", "app:alacritty", "runningApps"],
+                    "enableMediaWidget": True,
+                    "enableWeatherWidget": False,
+                    "showTrashButton": True
+                }
+            }
+            with open(target_config, 'w', encoding='utf-8') as f:
+                json.dump(user_b_config, f)
+
+            # Expand preset into target config
+            presets_helper.expand(preset_file, target_config, tmpdir, "MyPreset")
+
+            with open(target_config, 'r', encoding='utf-8') as f:
+                expanded = json.load(f)
+
+            # Preset visual properties applied
+            self.assertEqual(expanded["appearance"]["palette"], "catppuccin")
+            self.assertEqual(expanded["dock"]["dockStyle"], "islands")
+            self.assertEqual(expanded["dock"]["height"], 50)
+
+            # User B's dock items and widgets preserved
+            self.assertEqual(expanded["dock"]["pinnedApps"], ["firefox", "alacritty"])
+            self.assertEqual(expanded["dock"]["pinnedFiles"], [f"{self.home_dir}/Documents"])
+            self.assertEqual(len(expanded["dock"]["appGroups"]), 1)
+            self.assertEqual(expanded["dock"]["order"], ["pin", "app:firefox", "app:alacritty", "runningApps"])
+            self.assertTrue(expanded["dock"]["enableMediaWidget"])
+            self.assertFalse(expanded["dock"]["enableWeatherWidget"])
+            self.assertTrue(expanded["dock"]["showTrashButton"])
+
+    def test_user_profile_and_banner_path_normalization(self):
+        """Teste 9: Verify userProfile and sidebar banner paths are normalized to $HOME."""
+        input_data = {
+            "userProfile": {
+                "imageStyle": "custom",
+                "imagePath": "/home/testuser/Pictures/avatars/user.gif"
+            },
+            "sidebar": {
+                "enableBanner": True,
+                "bannerImage": "/var/home/otheruser/Pictures/banner.png",
+                "dashboardHeader": {
+                    "profileImagePath": "/home/testuser/Pictures/avatars/user.gif"
+                }
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
+        self.assertEqual(sanitized["userProfile"]["imagePath"], "$HOME/Pictures/avatars/user.gif")
+        self.assertEqual(sanitized["sidebar"]["bannerImage"], "$HOME/Pictures/banner.png")
+        self.assertEqual(sanitized["sidebar"]["dashboardHeader"]["profileImagePath"], "$HOME/Pictures/avatars/user.gif")
+
+    def test_user_profile_and_banner_fallback_on_expand(self):
+        """Teste 10: Verify expand falls back to {name}_profile and {name}_banner when original paths do not exist."""
+        import tempfile
+        import json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preset_file = os.path.join(tmpdir, "NeonTheme.json")
+            target_config = os.path.join(tmpdir, "config.json")
+            
+            # Create companion asset files in preset directory
+            profile_asset = os.path.join(tmpdir, "NeonTheme_profile.gif")
+            banner_asset = os.path.join(tmpdir, "NeonTheme_banner.jpg")
+            wall_asset = os.path.join(tmpdir, "NeonTheme.png")
+            open(profile_asset, 'w').close()
+            open(banner_asset, 'w').close()
+            open(wall_asset, 'w').close()
+
+            # Preset with non-existent foreign paths
+            preset_data = {
+                "background": {
+                    "wallpaperPath": "/home/foreignuser/wallpaper.png"
+                },
+                "userProfile": {
+                    "imageStyle": "custom",
+                    "imagePath": "/home/foreignuser/avatar.gif"
+                },
+                "sidebar": {
+                    "enableBanner": True,
+                    "bannerImage": "/home/foreignuser/banner.jpg",
+                    "dashboardHeader": {
+                        "profileImagePath": "/home/foreignuser/avatar.gif"
+                    }
+                }
+            }
+            with open(preset_file, 'w', encoding='utf-8') as f:
+                json.dump(preset_data, f)
+
+            presets_helper.expand(preset_file, target_config, tmpdir, "NeonTheme")
+
+            with open(target_config, 'r', encoding='utf-8') as f:
+                expanded = json.load(f)
+
+            self.assertEqual(expanded["background"]["wallpaperPath"], wall_asset)
+            self.assertEqual(expanded["userProfile"]["imagePath"], profile_asset)
+            self.assertEqual(expanded["sidebar"]["dashboardHeader"]["profileImagePath"], profile_asset)
+            self.assertEqual(expanded["sidebar"]["bannerImage"], banner_asset)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -202,6 +202,9 @@ Item {
     property real dragCursorX: 0
     property real dragStartCursorX: 0
     property real slotWidth: root.btnSize + root.btnSpacing
+    // Half of the padding the pill adds around the icon flow, so the flow can be
+    // anchored to the leading edge and still sit where centring used to put it.
+    readonly property real flowPadding: root.isMaterial ? 5 : 2
 
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
@@ -362,18 +365,10 @@ Item {
                     : Appearance.sizes.barHeight
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
         }
 
         MouseArea {
@@ -395,9 +390,33 @@ Item {
 
         Flow {
             id: flow
-            anchors.centerIn: parent
+            // Pinned to the leading edge instead of centred. A Flow re-lays out
+            // the instant an item is added or removed, so its own width jumps in
+            // one frame; centring it inside a pill that is still animating threw
+            // every icon sideways by half the delta before anything moved — the
+            // "brusque" shift when an app opens. Anchored to the edge, the pill's
+            // growth and the icons' `move` transition are the only motion left,
+            // and both run on Appearance.animation.barResize.
+            anchors.left: root.vertical ? undefined : parent.left
+            anchors.leftMargin: root.vertical ? 0 : root.flowPadding
+            anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
+            anchors.top: root.vertical ? parent.top : undefined
+            anchors.topMargin: root.vertical ? root.flowPadding : 0
+            anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
             flow:    root.vertical ? Flow.TopToBottom : Flow.LeftToRight
             spacing: root.btnSpacing
+
+            // Reordering during a drag is already driven by the per-slot
+            // Translate below, so the positioner must stay out of the way there.
+            move: Transition {
+                enabled: !root._suppressTranslateAnim && !root.dragging
+                NumberAnimation {
+                    properties: "x,y"
+                    duration: Appearance.animation.barResize.duration
+                    easing.type: Appearance.animation.barResize.type
+                    easing.bezierCurve: Appearance.animation.barResize.bezierCurve
+                }
+            }
 
             // ── 1. PINNED APPS ───────────────────────────────────────────
             Repeater {
@@ -531,18 +550,10 @@ Item {
                         colBackgroundActive: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Active ?? colBackgroundHover)
 
                         Behavior on width {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                         }
                         Behavior on height {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                         }
 
                         enteredAction: () => {
@@ -606,11 +617,7 @@ Item {
                                 ) : undefined
 
                                 Behavior on implicitSize {
-                                    NumberAnimation {
-                                        duration: Appearance.animation.elementMoveFast.duration
-                                        easing.type: Appearance.animation.elementMoveFast.type
-                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                    }
+                                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                 }
                             }
 
@@ -660,18 +667,10 @@ Item {
                                             : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.75)
 
                                         Behavior on implicitWidth {
-                                            NumberAnimation {
-                                                duration: Appearance.animation.elementMoveFast.duration
-                                                easing.type: Appearance.animation.elementMoveFast.type
-                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                            }
+                                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                         }
                                         Behavior on implicitHeight {
-                                            NumberAnimation {
-                                                duration: Appearance.animation.elementMoveFast.duration
-                                                easing.type: Appearance.animation.elementMoveFast.type
-                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                            }
+                                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                         }
                                         Behavior on color {
                                             ColorAnimation {
@@ -760,18 +759,10 @@ Item {
                         colBackgroundActive: root.enableMacOsMagnification ? "transparent" : (Appearance?.colors.colLayer1Active ?? colBackgroundHover)
 
                         Behavior on width {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                         }
                         Behavior on height {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                         }
 
                         enteredAction: () => {
@@ -834,11 +825,7 @@ Item {
                                 ) : undefined
 
                                 Behavior on implicitSize {
-                                    NumberAnimation {
-                                        duration: Appearance.animation.elementMoveFast.duration
-                                        easing.type: Appearance.animation.elementMoveFast.type
-                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                    }
+                                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                 }
                             }
 
@@ -888,18 +875,10 @@ Item {
                                             : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.45)
 
                                         Behavior on implicitWidth {
-                                            NumberAnimation {
-                                                duration: Appearance.animation.elementMoveFast.duration
-                                                easing.type: Appearance.animation.elementMoveFast.type
-                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                            }
+                                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                         }
                                         Behavior on implicitHeight {
-                                            NumberAnimation {
-                                                duration: Appearance.animation.elementMoveFast.duration
-                                                easing.type: Appearance.animation.elementMoveFast.type
-                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                            }
+                                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                         }
                                         Behavior on color {
                                             ColorAnimation {

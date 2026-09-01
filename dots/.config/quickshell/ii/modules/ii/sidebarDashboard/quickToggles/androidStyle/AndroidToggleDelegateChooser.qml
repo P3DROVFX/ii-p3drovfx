@@ -30,6 +30,7 @@ DelegateChooser {
     signal openDnsOverTlsDialog
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
+    signal openModesDialog
 
     role: "toggleType"
 
@@ -259,6 +260,30 @@ DelegateChooser {
     }
 
     DelegateChoice {
+        roleValue: "modes"
+        AndroidModesToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+            onOpenMenu: {
+                root.openModesDialog();
+            }
+        }
+    }
+
+    DelegateChoice {
         roleValue: "idleInhibitor"
         AndroidIdleInhibitorToggle {
             required property int index
@@ -439,6 +464,27 @@ DelegateChooser {
     }
 
     DelegateChoice {
+        roleValue: "keypressDisplay"
+        AndroidKeypressDisplayToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
         roleValue: "powerProfile"
         AndroidPowerProfileToggle {
             required property int index
@@ -518,6 +564,7 @@ DelegateChooser {
             gridColumns: root.gridColumns
             panel: root.panel
             gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
         }
     }
 

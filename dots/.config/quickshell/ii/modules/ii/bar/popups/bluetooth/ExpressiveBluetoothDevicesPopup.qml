@@ -2,6 +2,7 @@ import qs.modules.ii.bar.shared
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.common.widgets.bluetooth
 import qs.services
 import QtQuick
 import QtQuick.Layouts
@@ -45,6 +46,46 @@ StyledPopup {
     readonly property string iconCameraBase: pixelPath + "camera_base.svg"
     readonly property string iconCameraDetails: pixelPath + "camera_details.svg"
 
+    function getDeviceImageSource(device) {
+        if (!device)
+            return "";
+        
+        if (Config.options && Config.options.bluetoothDeviceImages) {
+            let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
+            if (custom && custom.image) {
+                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+            }
+        }
+
+        const mac = (device.address || "").replace(/:/g, "_").toUpperCase();
+        const name = (device.name || device.alias || "").toLowerCase();
+        const basePath = Directories.assetsPath ? ("file://" + Directories.assetsPath + "/images/devices/") : "";
+
+        if (mac === "E8_EE_CC_96_31_3A" || name.includes("q30") || name.includes("soundcore life q30") || name.includes("soundcore")) {
+            return basePath + "anker_q30_.png";
+        }
+        if (mac === "68_7D_6B_94_0B_C2" || name.includes("buds 3 pro") || name.includes("buds3 pro") || name.includes("galaxy buds 3 pro")) {
+            return basePath + "galaxy_buds_3_pro.png";
+        }
+        if (name.includes("galaxy buds 3") || name.includes("buds 3") || name.includes("buds3")) {
+            return basePath + "galaxy_buds_3.png";
+        }
+        if (mac === "64_1B_2F_9B_95_CE" || name.includes("s23")) {
+            return basePath + "samsung_s23.png";
+        }
+        if (name.includes("s24")) {
+            return basePath + "samsung_s24_ultra.png";
+        }
+        if (name.includes("pixel buds") || name.includes("buds pro") || name.includes("buds fe") || name.includes("buds")) {
+            return basePath + "pixel_buds.png";
+        }
+        if (name.includes("xbox") || name.includes("elite")) {
+            return basePath + "xbox_elite_series_2.png";
+        }
+
+        return "";
+    }
+
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 12
@@ -53,7 +94,7 @@ StyledPopup {
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 140
-            Layout.minimumWidth: 280
+            Layout.minimumWidth: 320
             visible: !root.hasDevices
 
             ColumnLayout {
@@ -88,7 +129,7 @@ StyledPopup {
         // Scalable list of devices
         Item {
             Layout.fillWidth: true
-            Layout.minimumWidth: 280
+            Layout.minimumWidth: 320
             visible: root.hasDevices
 
             implicitHeight: {
@@ -113,21 +154,45 @@ StyledPopup {
                 delegate: Rectangle {
                     id: deviceCard
                     width: parent.width
-                    implicitHeight: root.cardHeight
+                    implicitHeight: (deviceCard.hasNoise && !deviceCard.isPhone) ? 220 : root.cardHeight
                     radius: Appearance.rounding.large
                     color: root.colCard
                     clip: true
 
+                    readonly property var devBattery: EarbudsControlService.batteryInfo(modelData)
+                    readonly property var devNoise: EarbudsControlService.noiseControl(modelData)
+                    readonly property var leftComp: devBattery ? devBattery.left : null
+                    readonly property var rightComp: devBattery ? devBattery.right : null
+                    readonly property var caseComp: devBattery ? devBattery.case : null
+                    readonly property bool hasIndividualBatteries: devBattery && devBattery.available && (leftComp !== null && leftComp.available) && (rightComp !== null && rightComp.available)
+                    readonly property int aggregatePercent: EarbudsControlService.primaryBatteryPercent(modelData) ?? Math.round((modelData.battery ?? 0) * 100)
+                    readonly property bool hasNoise: devNoise && devNoise.available && devNoise.modes.length > 0
+                    readonly property string customDeviceImg: root.getDeviceImageSource(modelData)
+                    readonly property bool hasCustomImg: customDeviceImg !== ""
+
                     readonly property bool isEarbud: {
-                        let icon = (modelData.icon || "").toLowerCase();
-                        return icon.includes("headset") || icon.includes("headphone") || icon.includes("audio") || modelData.name.toLowerCase().includes("buds");
+                        if (hasIndividualBatteries) return true;
+                        let name = (modelData.name || "").toLowerCase();
+                        if (name.includes("q30") || name.includes("soundcore") || name.includes("wh-") || name.includes("headphones") || name.includes("headset"))
+                            return false;
+                        return name.includes("buds") || name.includes("airpods") || name.includes("ear") || name.includes("linkbuds") || name.includes("wf-");
                     }
 
                     readonly property bool isPhone: {
+                        if (isEarbud) return false;
                         let icon = (modelData.icon || "").toLowerCase();
                         let name = (modelData.name || "").toLowerCase();
-                        return icon.includes("phone") || name.includes("phone") || name.includes("pixel") || name.includes("galaxy") || name.includes("iphone") || name.includes("moto") || name.includes("xperia");
+                        return icon.includes("phone") || name.includes("phone") || name.includes("pixel") || name.includes("galaxy s") || name.includes("iphone") || name.includes("moto") || name.includes("xperia");
                     }
+
+                    readonly property bool isHeadphone: !isEarbud && !isPhone && (
+                        (modelData.icon || "").toLowerCase().includes("headphone") ||
+                        (modelData.icon || "").toLowerCase().includes("headset") ||
+                        (modelData.icon || "").toLowerCase().includes("audio") ||
+                        (modelData.name || "").toLowerCase().includes("q30") ||
+                        (modelData.name || "").toLowerCase().includes("soundcore") ||
+                        (modelData.name || "").toLowerCase().includes("wh-")
+                    )
 
                     readonly property int totalCount: BluetoothStatus.connectedDevices.length
                     property int vIndex: {
@@ -234,25 +299,64 @@ StyledPopup {
                     // Layout for Earbuds
                     Item {
                         anchors.fill: parent
-                        anchors.margins: 18
+                        anchors.margins: 16
                         visible: deviceCard.isEarbud
 
-                        StyledText {
+                        RowLayout {
                             anchors.top: parent.top
                             anchors.left: parent.left
-                            text: modelData.name || Translation.tr("Unknown device")
-                            font.pixelSize: root.nameSize
-                            font.weight: Font.Medium
-                            font.family: Appearance.font.family.title
-                            color: root.colName
-                            elide: Text.ElideRight
-                            width: parent.width * 0.7
+                            anchors.right: parent.right
+                            spacing: 8
+
+                            StyledText {
+                                text: modelData.name || Translation.tr("Unknown device")
+                                font.pixelSize: root.nameSize
+                                font.weight: Font.Medium
+                                font.family: Appearance.font.family.title
+                                color: root.colName
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            // Case battery badge if reported
+                            RowLayout {
+                                visible: deviceCard.caseComp !== null && deviceCard.caseComp.available
+                                spacing: 4
+
+                                Rectangle {
+                                    implicitWidth: caseBadgeRow.implicitWidth + 10
+                                    implicitHeight: 20
+                                    radius: Appearance.rounding.full
+                                    color: (deviceCard.caseComp && deviceCard.caseComp.charging) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+
+                                    RowLayout {
+                                        id: caseBadgeRow
+                                        anchors.centerIn: parent
+                                        spacing: 2
+
+                                        MaterialSymbol {
+                                            visible: Boolean(deviceCard.caseComp && deviceCard.caseComp.charging)
+                                            text: "bolt"
+                                            iconSize: 12
+                                            color: Appearance.colors.colPrimary
+                                        }
+
+                                        StyledText {
+                                            text: "Case " + (deviceCard.caseComp ? deviceCard.caseComp.level : 0) + "%"
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            color: (deviceCard.caseComp && deviceCard.caseComp.charging) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurfaceVariant
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         Item {
                             anchors.top: parent.top
-                            anchors.topMargin: 50
-                            anchors.bottom: parent.bottom
+                            anchors.topMargin: 38
+                            anchors.bottom: deviceCard.hasNoise ? noiseSelectorEarbuds.top : parent.bottom
+                            anchors.bottomMargin: deviceCard.hasNoise ? 8 : 0
                             anchors.left: parent.left
                             anchors.right: parent.right
 
@@ -262,7 +366,7 @@ StyledPopup {
                                 height: 76
                                 anchors.bottom: parent.bottom
                                 anchors.left: parent.left
-                                anchors.leftMargin: 5
+                                anchors.leftMargin: 8
 
                                 opacity: 0.0
                                 scale: 0.8
@@ -302,13 +406,46 @@ StyledPopup {
                                 }
                             }
 
+                            // Left bud badge (cleanly positioned above earbud 1)
+                            Rectangle {
+                                id: leftBadge
+                                visible: deviceCard.hasIndividualBatteries
+                                anchors.bottom: earbud1.top
+                                anchors.bottomMargin: 4
+                                anchors.horizontalCenter: earbud1.horizontalCenter
+                                implicitWidth: leftBadgeRow.implicitWidth + 10
+                                implicitHeight: 20
+                                radius: Appearance.rounding.full
+                                color: (deviceCard.leftComp && deviceCard.leftComp.charging) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+
+                                RowLayout {
+                                    id: leftBadgeRow
+                                    anchors.centerIn: parent
+                                    spacing: 3
+
+                                    MaterialSymbol {
+                                        visible: Boolean(deviceCard.leftComp && deviceCard.leftComp.charging)
+                                        text: "bolt"
+                                        iconSize: 11
+                                        color: Appearance.colors.colPrimary
+                                    }
+
+                                    StyledText {
+                                        text: "L " + (deviceCard.leftComp ? deviceCard.leftComp.level : 0) + "%"
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                        color: (deviceCard.leftComp && deviceCard.leftComp.charging) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+
                             Item {
                                 id: earbud2
                                 width: 48
                                 height: 76
                                 anchors.bottom: earbud1.top
                                 anchors.left: earbud1.right
-                                anchors.leftMargin: 2
+                                anchors.leftMargin: 4
                                 anchors.bottomMargin: -35
 
                                 opacity: 0.0
@@ -351,14 +488,172 @@ StyledPopup {
                                 }
                             }
 
+                            // Right bud badge (cleanly positioned under elevated earbud 2)
+                            Rectangle {
+                                id: rightBadge
+                                visible: deviceCard.hasIndividualBatteries
+                                anchors.top: earbud2.bottom
+                                anchors.topMargin: 4
+                                anchors.horizontalCenter: earbud2.horizontalCenter
+                                implicitWidth: rightBadgeRow.implicitWidth + 10
+                                implicitHeight: 20
+                                radius: Appearance.rounding.full
+                                color: (deviceCard.rightComp && deviceCard.rightComp.charging) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+
+                                RowLayout {
+                                    id: rightBadgeRow
+                                    anchors.centerIn: parent
+                                    spacing: 3
+
+                                    MaterialSymbol {
+                                        visible: Boolean(deviceCard.rightComp && deviceCard.rightComp.charging)
+                                        text: "bolt"
+                                        iconSize: 11
+                                        color: Appearance.colors.colPrimary
+                                    }
+
+                                    StyledText {
+                                        text: "R " + (deviceCard.rightComp ? deviceCard.rightComp.level : 0) + "%"
+                                        font.pixelSize: 10
+                                        font.weight: Font.Bold
+                                        color: (deviceCard.rightComp && deviceCard.rightComp.charging) ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+
+                            // Primary battery percentage text
                             StyledText {
                                 anchors.bottom: parent.bottom
                                 anchors.right: parent.right
-                                text: Math.round((modelData.battery ?? 0) * 100) + "%"
+                                anchors.bottomMargin: 4
+                                text: deviceCard.aggregatePercent + "%"
                                 font.pixelSize: root.batterySize
                                 font.weight: Font.Black
                                 font.family: Appearance.font.family.main
-                                color: (modelData.battery <= 0.15) ? Appearance.m3colors.m3error : root.colBattery
+                                color: (deviceCard.aggregatePercent <= 15) ? Appearance.m3colors.m3error : root.colBattery
+                            }
+                        }
+
+                        // Noise modes selector inside earbud card
+                        EarbudsNoiseControlSelector {
+                            id: noiseSelectorEarbuds
+                            visible: deviceCard.hasNoise
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            compact: true
+                            modes: deviceCard.devNoise ? deviceCard.devNoise.modes : []
+                            currentMode: deviceCard.devNoise ? deviceCard.devNoise.currentMode : "off"
+                            onModeRequested: modeKey => {
+                                EarbudsControlService.setNoiseMode(modelData, modeKey);
+                            }
+                        }
+                    }
+
+                    // Layout for Headphones
+                    Item {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        visible: deviceCard.isHeadphone
+
+                        RowLayout {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            spacing: 8
+
+                            StyledText {
+                                text: modelData.name || Translation.tr("Unknown device")
+                                font.pixelSize: root.nameSize
+                                font.weight: Font.Medium
+                                font.family: Appearance.font.family.title
+                                color: root.colName
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+
+                            StyledText {
+                                text: Translation.tr("Connected")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
+
+                        Item {
+                            anchors.top: parent.top
+                            anchors.topMargin: 35
+                            anchors.bottom: deviceCard.hasNoise ? noiseSelectorHeadphone.top : parent.bottom
+                            anchors.bottomMargin: deviceCard.hasNoise ? 8 : 0
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+
+                            Item {
+                                width: 84
+                                height: 84
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+
+                                MaterialShape {
+                                    anchors.centerIn: parent
+                                    implicitSize: 80
+                                    shapeString: "Cookie6Sided"
+                                    color: Appearance.colors.colPrimaryContainer
+
+                                    RotationAnimation on rotation {
+                                        from: 0; to: 360
+                                        duration: 15000
+                                        loops: Animation.Infinite
+                                        running: root.active
+                                    }
+                                }
+
+                                Loader {
+                                    anchors.centerIn: parent
+                                    active: deviceCard.hasCustomImg
+                                    sourceComponent: Image {
+                                        source: deviceCard.customDeviceImg
+                                        width: 64
+                                        height: 64
+                                        fillMode: Image.PreserveAspectFit
+                                        smooth: true
+                                        mipmap: true
+                                    }
+                                }
+
+                                Loader {
+                                    anchors.centerIn: parent
+                                    active: !deviceCard.hasCustomImg
+                                    sourceComponent: MaterialSymbol {
+                                        text: Icons.getBluetoothDeviceMaterialSymbol(modelData.icon || "headphones")
+                                        iconSize: 42
+                                        color: Appearance.colors.colOnPrimaryContainer
+                                    }
+                                }
+                            }
+
+                            StyledText {
+                                anchors.bottom: parent.bottom
+                                anchors.right: parent.right
+                                anchors.bottomMargin: 4
+                                text: deviceCard.aggregatePercent + "%"
+                                font.pixelSize: root.batterySize
+                                font.weight: Font.Black
+                                font.family: Appearance.font.family.main
+                                color: (deviceCard.aggregatePercent <= 15) ? Appearance.m3colors.m3error : root.colBattery
+                            }
+                        }
+
+                        EarbudsNoiseControlSelector {
+                            id: noiseSelectorHeadphone
+                            visible: deviceCard.hasNoise
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            compact: true
+                            modes: deviceCard.devNoise ? deviceCard.devNoise.modes : []
+                            currentMode: deviceCard.devNoise ? deviceCard.devNoise.currentMode : "off"
+                            onModeRequested: modeKey => {
+                                EarbudsControlService.setNoiseMode(modelData, modeKey);
                             }
                         }
                     }
@@ -473,7 +768,7 @@ StyledPopup {
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 4
-                        visible: !deviceCard.isEarbud && !deviceCard.isPhone
+                        visible: !deviceCard.isEarbud && !deviceCard.isPhone && !deviceCard.isHeadphone
 
                         StyledText {
                             Layout.fillWidth: true

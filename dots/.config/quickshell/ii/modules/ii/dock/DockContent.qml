@@ -12,6 +12,7 @@ import qs.modules.common.functions
 import Quickshell.Services.Mpris
 
 import "./widgets"
+import "DockReorder.js" as DockReorder
 
 Item {
     id: root
@@ -25,23 +26,37 @@ Item {
 
     readonly property real dockPadding: 0
     readonly property bool isVertical: dock.isVertical
-    readonly property real dotMargin: (Config.options?.dock.height ?? 60) * 0.2 - 2
+    readonly property real dotMargin: ((Config.options && Config.options.dock) ? Config.options.dock.height : 60) * 0.2 - 2
     readonly property real dotMarginV: dotMargin
     readonly property real sepThickness: Math.max(3, Math.round(Appearance.sizes.dockButtonSize * 0.06))
     readonly property real buttonSlotSize: Appearance.sizes.dockButtonSize + dotMargin * 2
     readonly property real buttonSlotHeight: Appearance.sizes.dockButtonSize + dotMarginV * 2
     readonly property real sportsWidgetSlots: 4
-    readonly property real livePreviewWidgetSlots: Math.max(2, Math.min(6, Config.options?.dock?.livePreviewSlots ?? 2))
+    readonly property real livePreviewWidgetSlots: {
+        const slots = (Config.options && Config.options.dock) ? Config.options.dock.livePreviewSlots : 2
+        return Math.max(2, Math.min(6, slots !== undefined ? slots : 2))
+    }
     readonly property string dockPos: dock.dockEffectivePosition
-    readonly property bool islandsStyle: Config.options?.dock?.islandsStyle ?? false
-    readonly property real islandSpacing: Math.max(0, Config.options?.dock?.islandSpacing ?? 8)
+    readonly property string effectiveDockStyle: {
+        const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+            return st
+        return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
+    }
+    readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
+    readonly property bool isHug: effectiveDockStyle === "hug"
+    readonly property bool isAttachedToEdge: isDynamicIsland || isHug
+    readonly property bool islandsStyle: effectiveDockStyle === "islands"
+    readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
     readonly property real islandExtraGap: islandsStyle
-        ? Math.max(0, islandSpacing - (Config.options?.dock?.iconSpacing ?? 0))
+        ? Math.max(0, islandSpacing - ((Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0))
         : 0
-    readonly property bool effectiveShowDividers: (Config.options?.dock?.showDividers ?? true) && !islandsStyle
-    readonly property real dockCornerRadius: (Config.options?.dock?.dockRadius ?? -1) >= 0
-        ? Config.options.dock.dockRadius
-        : Appearance.rounding.windowRounding + 12
+    readonly property bool effectiveShowDividers: ((Config.options && Config.options.dock && Config.options.dock.showDividers !== undefined) ? Config.options.dock.showDividers : true) && !islandsStyle
+    readonly property real dockCornerRadius: {
+        const rad = (Config.options && Config.options.dock && Config.options.dock.dockRadius !== undefined) ? Config.options.dock.dockRadius : -1
+        if (rad >= 0) return rad
+        return isAttachedToEdge ? Appearance.rounding.windowRounding : Appearance.rounding.windowRounding + 12
+    }
 
     readonly property real layoutVisualMainExtent: isVertical ? unifiedColumn.height : unifiedRow.width
     readonly property real animatedVisualMainExtent: layoutVisualMainExtent
@@ -50,7 +65,12 @@ Item {
     readonly property real baseVisualWidth: isVertical ? buttonSlotSize : baseMetrics.totalMainExtent
     readonly property real baseVisualHeight: isVertical ? baseMetrics.totalMainExtent : buttonSlotHeight
 
-    readonly property bool requestDockShow: previewPopupLoader.item?.visible || anyContextMenuOpen
+    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.visible) || anyContextMenuOpen
+
+    // PanelWindow.visible stays true while the auto-hide surface is moved off
+    // screen. Expensive visual widgets must follow reveal, not only the
+    // lifetime of the panel window.
+    readonly property bool dockWidgetsActive: root.dockRevealed && root.dockWindowVisible
 
     readonly property real maxWindowPreviewHeight: 200
     readonly property real maxWindowPreviewWidth: 300
@@ -87,16 +107,16 @@ Item {
     property string externalDragIcon: ""
     property bool externalDragOver: false
 
-    readonly property bool enableMagnification: Config.options?.dock?.enableMagnification ?? false
-    readonly property real magnificationScale: Config.options?.dock?.magnificationScale ?? 1.5
-    readonly property real magnificationInfluenceRadiusSlots: Config.options?.dock?.magnificationInfluenceRadius ?? 2.35
+    readonly property bool enableMagnification: (Config.options && Config.options.dock && Config.options.dock.enableMagnification !== undefined) ? Config.options.dock.enableMagnification : false
+    readonly property real magnificationScale: (Config.options && Config.options.dock && Config.options.dock.magnificationScale !== undefined) ? Config.options.dock.magnificationScale : 1.5
+    readonly property real magnificationInfluenceRadiusSlots: (Config.options && Config.options.dock && Config.options.dock.magnificationInfluenceRadius !== undefined) ? Config.options.dock.magnificationInfluenceRadius : 2.35
     readonly property real magnificationInfluenceRadiusPx: Math.max(
         Appearance.sizes.dockButtonSize,
         buttonSlotSize * magnificationInfluenceRadiusSlots
     )
-    readonly property string magnificationCurve: Config.options?.dock?.magnificationCurve ?? "cosine"
-    readonly property string magnificationMotion: Config.options?.dock?.magnificationMotion ?? "balanced"
-    readonly property bool magnificationDynamicSpacing: Config.options?.dock?.magnificationDynamicSpacing ?? true
+    readonly property string magnificationCurve: (Config.options && Config.options.dock && Config.options.dock.magnificationCurve !== undefined) ? Config.options.dock.magnificationCurve : "cosine"
+    readonly property string magnificationMotion: (Config.options && Config.options.dock && Config.options.dock.magnificationMotion !== undefined) ? Config.options.dock.magnificationMotion : "balanced"
+    readonly property bool magnificationDynamicSpacing: (Config.options && Config.options.dock && Config.options.dock.magnificationDynamicSpacing !== undefined) ? Config.options.dock.magnificationDynamicSpacing : true
     readonly property var magnificationMotionProfile: {
         switch (magnificationMotion) {
         case "fast":
@@ -185,6 +205,7 @@ Item {
     readonly property real maximumMagnificationCrossExtra: enableMagnification
         ? Math.ceil(Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0))
         : 0
+    readonly property real effectiveIconSpacing: Config.options?.dock?.iconSpacing ?? 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
     readonly property int groupAnimationDuration: Appearance.animation.elementMoveFast.duration
@@ -677,12 +698,8 @@ Item {
     function updateMagnificationPointerFrom(item, x, y) {
         if (!item)
             return;
-        const mapped = item.mapToItem(root, x, y);
-        // The visible tray is centered inside a stable PanelWindow and grows
-        // as wrappers animate. Mapping directly into `root` therefore makes
-        // the same physical cursor position move in content coordinates on
-        // every animation frame. Keep the proximity field anchored to the
-        // unscaled layout instead of feeding that recentering back into it.
+        const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
+        const mapped = item.mapToItem(targetContainer, x, y);
         const visualExtra = root.isVertical
             ? Math.max(0, root.visualHeight - root.baseVisualHeight)
             : Math.max(0, root.visualWidth - root.baseVisualWidth);
@@ -748,18 +765,66 @@ Item {
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
 
-    // ── Drag-to-reorder state (dots-hyprland pattern, adapted for variable-width items) ──
+    // ── Drag-to-reorder state ────────────────────────────────────────────
+    // The gesture resolves against a snapshot of the layout taken when the
+    // drag starts (`_dragSlots`), never against live delegate geometry: the
+    // preview translations, magnification and apps launching in the background
+    // all move delegates around, and the old cumulative walk from the press
+    // point drifted away from what the user could see.
     property bool dragging: false
     property bool _reordering: false
     property bool _suppressTranslateAnim: false
     property int dragSourceIndex: -1
     property real dragCursorX: 0
     property real dragStartCursorX: 0
-    property real slotWidth: 0
     property int _dragTargetIndex: -1
     property int _groupDropTargetIndex: -1
     property bool _groupDropWillCreate: false
     property bool _groupDropBlocked: false
+    property var _dragSlots: []
+    property var _dragGroupable: []
+    property var _dragState: DockReorder.createDragState()
+    property real _groupDropProgress: 0
+
+    // The pointer must penetrate a neighbour by this fraction of that
+    // neighbour's own extent before it takes over as the drop target. Without
+    // it a pointer resting on a boundary re-decides on every mouse sample.
+    readonly property real reorderHysteresis: 0.25
+    // Grouping is a deliberate hold over the middle of an icon. The old test
+    // armed on the whole slot with no dwell, so sliding an app across the dock
+    // kept latching onto grouping and reordering could not be finished.
+    readonly property real groupDropCenterZone: 0.5
+    readonly property int groupDropDwellMs: 220
+
+    // Drop settling. The offset lives on the root rather than the delegate so
+    // it survives the Repeater rebuild that the committed model triggers: the
+    // dropped item keeps the position the pointer left it at and slides into
+    // its new slot instead of the dock snapping to the new order.
+    property string _dropSettleKey: ""
+    property real _dropSettleOffset: 0
+    NumberAnimation {
+        id: dropSettleAnimation
+        target: root
+        property: "_dropSettleOffset"
+        to: 0
+        duration: Appearance.animation.elementMoveFast.duration
+        easing.type: Appearance.animation.elementMoveFast.type
+        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        onFinished: root._dropSettleKey = ""
+    }
+
+    function _settleDropAt(orderKey, offset) {
+        dropSettleAnimation.stop();
+        const key = String(orderKey ?? "");
+        if (key === "" || !isFinite(offset) || Math.abs(offset) < 0.5) {
+            root._dropSettleKey = "";
+            root._dropSettleOffset = 0;
+            return;
+        }
+        root._dropSettleKey = key;
+        root._dropSettleOffset = offset;
+        dropSettleAnimation.restart();
+    }
 
     // Islands are reordered as contiguous blocks of the existing dock.order.
     // This keeps item-level ordering and grouping data in one persistent model.
@@ -778,55 +843,54 @@ Item {
         return repeater ? repeater.itemAt(index) : null;
     }
 
-    // Return the layout slot without the delegate's temporary drag transform.
-    // Grouping should only lock the order when the pointer is actually over
-    // the target item; crossing the gap between items must still allow normal
-    // reordering to resume.
-    function _getUntransformedSlot(index) {
-        var wrapper = getItemWrapper(index);
-        if (!wrapper)
-            return null;
+    // Snapshot every item's body box in root coordinates, once, when the drag
+    // begins.
+    //
+    // The geometry comes from `baseMetrics` — the model's own layout — and not
+    // from live delegates. Delegates are still carrying the magnified sizes on
+    // the frame the drag starts (magnification only switches off with the next
+    // layout pass) and they pick up preview translations right afterwards, so
+    // reading them back would snapshot a layout that never existed.
+    function _buildDragSlots() {
+        const metrics = root.baseMetrics.items;
+        const container = root.isVertical ? unifiedColumn : unifiedRow;
+        const origin = container ? container.mapToItem(root, 0, 0) : Qt.point(0, 0);
+        const originMain = root.isVertical ? origin.y : origin.x;
 
-        var parentItem = wrapper.parent;
-        var mapped = parentItem
-            ? parentItem.mapToItem(root, wrapper.x, wrapper.y)
-            : wrapper.mapToItem(root, 0, 0);
-        var start = root.isVertical ? mapped.y : mapped.x;
-        var size = root.isVertical ? wrapper.height : wrapper.width;
-        return {
-            start: start,
-            end: start + size
-        };
+        var slots = [];
+        for (var i = 0; i < metrics.length; i++) {
+            const metric = metrics[i];
+            if (!metric) {
+                slots.push({ start: originMain, end: originMain });
+                continue;
+            }
+            const start = originMain + metric.bodyStart;
+            slots.push({ start: start, end: start + metric.bodyExtent });
+        }
+        return slots;
     }
 
-    function _isPointerOverSlot(index) {
-        var slot = root._getUntransformedSlot(index);
-        if (!slot)
+    // Which items the dragged one could be dropped onto to form or join a
+    // group. Types cannot change mid-gesture, so this is computed once too.
+    function _canGroupWithIndex(source, index) {
+        if (!root.enableAppGroups || !source || source.type !== "app")
             return false;
-        return root.dragCursorX >= slot.start && root.dragCursorX <= slot.end;
+        if (index === root.dragSourceIndex)
+            return false;
+        var target = root.flattenedItems[index];
+        if (!target || target.__exiting === true)
+            return false;
+        if (target.type === "app")
+            return target.appId !== source.appId;
+        return target.type === "appGroup";
     }
 
-    // ── Helper: estimate item width in the current orientation ───────────
-    function getItemWidth(index) {
-        var wrapper = getItemWrapper(index);
-        if (wrapper) {
-            return root.isVertical ? wrapper.height : wrapper.width;
-        }
-        // Fallback: estimate from model data
-        var entry = flattenedItems[index];
-        if (!entry)
-            return buttonSlotSize;
-        switch (entry.type) {
-        case "media":
-        case "weather":
-            return root.isVertical ? buttonSlotSize : buttonSlotSize * 3;
-        case "sports":
-            return root.isVertical ? buttonSlotSize : buttonSlotSize * root.sportsWidgetSlots;
-        case "livePreview":
-            return root.isVertical ? buttonSlotSize : buttonSlotSize * root.livePreviewWidgetSlots;
-        default:
-            return buttonSlotSize;
-        }
+    function _buildGroupableFlags() {
+        var source = root.flattenedItems[root.dragSourceIndex];
+        var flags = [];
+        for (var i = 0; i < root.flattenedItems.length; i++)
+            flags.push(root._canGroupWithIndex(source, i));
+        return flags;
     }
 
     function _orderEntryAppId(entry) {
@@ -868,33 +932,119 @@ Item {
         return root.isGroupDropTarget(index) && root._groupDropWillCreate && !root._groupDropBlocked;
     }
 
-    function updateGroupDropTarget() {
+    // Resolve the grouping gesture from the pointer itself: hovering the middle
+    // of a groupable icon for `groupDropDwellMs` arms it, anything else leaves
+    // the drag as a plain reorder. Returns the armed index, or -1.
+    //
+    // A dwell cannot be driven by mouse events alone — holding still produces
+    // none — so entering a candidate starts a timer that re-runs this once the
+    // hold is complete, and an animation that shows the hold building.
+    property int _groupDropCandidateIndex: -1
+
+    NumberAnimation {
+        id: groupDwellAnimation
+        target: root
+        property: "_groupDropProgress"
+        to: 1
+        duration: root.groupDropDwellMs
+        easing.type: Easing.Linear
+    }
+
+    Timer {
+        id: groupArmTimer
+        interval: root.groupDropDwellMs + 20
+        onTriggered: root._refreshGroupDwell()
+    }
+
+    function _refreshGroupDwell() {
+        if (!root.dragging)
+            return;
+        root.updateGroupDropTarget();
+        if (root._groupDropTargetIndex >= 0)
+            root._dragTargetIndex = root.dragSourceIndex;
+    }
+
+    function _resolveGroupIntent() {
+        const intent = DockReorder.resolveGroupIntent(
+            root._dragSlots,
+            root.dragCursorX,
+            root.dragSourceIndex,
+            root._dragGroupable,
+            root._dragState,
+            {
+                enabled: root.enableAppGroups && root.dragging,
+                centerZone: root.groupDropCenterZone,
+                dwellMs: root.groupDropDwellMs,
+                now: Date.now()
+            }
+        );
+
+        if (intent.candidate !== root._groupDropCandidateIndex) {
+            root._groupDropCandidateIndex = intent.candidate;
+            groupDwellAnimation.stop();
+            groupArmTimer.stop();
+            if (intent.candidate >= 0 && !intent.armed) {
+                root._groupDropProgress = 0;
+                groupDwellAnimation.restart();
+                groupArmTimer.restart();
+            } else {
+                root._groupDropProgress = intent.armed ? 1 : 0;
+            }
+        } else if (intent.armed) {
+            groupDwellAnimation.stop();
+            groupArmTimer.stop();
+            root._groupDropProgress = 1;
+        }
+        return intent.index;
+    }
+
+    // True while the pointer is holding over a groupable item but the hold is
+    // not complete yet. The dock shows the intent building instead of springing
+    // the whole affordance on at once.
+    function isGroupDropCandidate(index) {
+        return root.enableAppGroups && root.dragging
+            && root._groupDropCandidateIndex === index
+            && index >= 0;
+    }
+
+    function _clearGroupDropTarget() {
         root._groupDropTargetIndex = -1;
         root._groupDropWillCreate = false;
         root._groupDropBlocked = false;
+    }
 
-        if (!root.enableAppGroups || !root.dragging)
+    function _clearGroupDwell() {
+        groupDwellAnimation.stop();
+        groupArmTimer.stop();
+        root._groupDropCandidateIndex = -1;
+        root._groupDropProgress = 0;
+    }
+
+    function updateGroupDropTarget() {
+        root._clearGroupDropTarget();
+
+        if (!root.enableAppGroups || !root.dragging) {
+            root._clearGroupDwell();
+            return;
+        }
+
+        const armedIndex = root._resolveGroupIntent();
+        if (armedIndex < 0)
             return;
 
         const source = root.flattenedItems[root.dragSourceIndex];
-        const target = root.flattenedItems[root._dragTargetIndex];
-        if (!source || source.type !== "app" || !target || root.dragSourceIndex === root._dragTargetIndex)
+        const target = root.flattenedItems[armedIndex];
+        if (!source || source.type !== "app" || !target)
             return;
 
         if (target.type === "app") {
-            if (source.appId === target.appId)
-                return;
-            if (!root._isPointerOverSlot(root._dragTargetIndex))
-                return;
-            root._groupDropTargetIndex = root._dragTargetIndex;
+            root._groupDropTargetIndex = armedIndex;
             root._groupDropWillCreate = true;
             return;
         }
 
         if (target.type === "appGroup") {
-            if (!root._isPointerOverSlot(root._dragTargetIndex))
-                return;
-            root._groupDropTargetIndex = root._dragTargetIndex;
+            root._groupDropTargetIndex = armedIndex;
             root._groupDropBlocked = target.appIds.length >= root.maxGroupApps
                 || target.appIds.includes(source.appId);
         }
@@ -1206,48 +1356,71 @@ Item {
             return false;
 
         Config.options.dock.order = nextOrder;
+        root._rememberManualPlacement(sourceItem);
         TaskbarApps.syncPinnedFileOrder();
         return true;
     }
 
-    // ── Compute drag target by walking through variable-width items ──────
+    // Smart grouping keeps arranging whatever the user has not touched, and
+    // leaves every hand-placed item exactly where it was dropped. Without this
+    // the category sort silently reverted each drag — a widget is alone in its
+    // category, so it always snapped straight back.
+    function _rememberManualPlacement(item) {
+        if (!Config.options?.dock?.smartGrouping || !item)
+            return;
+        const key = String(item.orderKey ?? "");
+        if (key === "")
+            return;
+        const next = DockReorder.withManualKey(Config.options.dock.manualOrder ?? [], key);
+        if (next.length !== (Config.options.dock.manualOrder ?? []).length)
+            Config.options.dock.manualOrder = next;
+    }
+
+    // Anchors for items that are no longer in the dock would keep holding slots
+    // that nothing can fill, so they are dropped as the model settles.
+    function _pruneManualPlacements() {
+        if (!Config.options?.dock?.smartGrouping || !Config.ready)
+            return;
+        const current = Config.options.dock.manualOrder ?? [];
+        // An empty model means the dock has not been built yet, never that the
+        // user's anchors are all stale — pruning against it would wipe them.
+        if (current.length === 0 || root.modelItems.length === 0)
+            return;
+        const live = root.modelItems.map(function (item) { return String(item?.orderKey ?? ""); });
+        const next = DockReorder.pruneManualKeys(current, live);
+        if (next.length !== current.length)
+            Config.options.dock.manualOrder = next;
+    }
+
+    // ── Resolve the drop target from the pointer against the drag snapshot ──
     function recomputeDragTarget() {
         if (!dragging) {
             _dragTargetIndex = dragSourceIndex;
             root.updateGroupDropTarget();
             return;
         }
-        var delta = dragCursorX - dragStartCursorX;
-        var src = dragSourceIndex;
-        var count = flattenedItems.length;
-        if (count <= 1 || Math.abs(delta) < 5) {
+
+        const src = dragSourceIndex;
+        if (root._dragSlots.length <= 1) {
             _dragTargetIndex = src;
             root.updateGroupDropTarget();
             return;
         }
-        var spacing = Config.options.dock.iconSpacing;
-        var step = delta > 0 ? 1 : -1;
-        var remaining = Math.abs(delta);
-        var current = src;
-        while (remaining > 0) {
-            var next = current + step;
-            if (next < 0 || next >= count)
-                break;
-            // Distance from current item's center to next item's center
-            var curHalf = (getItemWidth(current) + spacing) / 2;
-            var nextHalf = (getItemWidth(next) + spacing) / 2;
-            var threshold = curHalf + nextHalf;
-            if (remaining < threshold)
-                break;
-            remaining -= threshold;
-            current = next;
-        }
-        _dragTargetIndex = current;
+
+        const drop = DockReorder.resolveDropIndex(
+            root._dragSlots,
+            root.dragCursorX,
+            src,
+            root._dragState,
+            { hysteresis: root.reorderHysteresis }
+        );
+        _dragTargetIndex = drop.index;
+
         root.updateGroupDropTarget();
-        // While the cursor is inside a valid group target, keep the layout in
-        // its original order. Leaving the target slot restores the calculated
-        // reorder target, so moving farther continues to behave like a normal
-        // dock reorder gesture.
+        // Once grouping is actually armed the dock returns to its resting
+        // order, which is the signal that releasing now groups instead of
+        // reordering. Until then the reorder preview keeps following the
+        // pointer, so merely passing over an icon costs nothing.
         if (root._groupDropTargetIndex >= 0)
             _dragTargetIndex = src;
     }
@@ -1261,16 +1434,61 @@ Item {
         _groupDropBlocked = false;
         dragCursorX = 0;
         dragStartCursorX = 0;
+        _dragSlots = [];
+        _dragGroupable = [];
+        root._clearGroupDwell();
+        DockReorder.resetDragState(root._dragState);
+    }
+
+    // Where the dragged item's body will start once `target` has been
+    // committed, derived from the same snapshot the drag was resolved against.
+    // Reinserting the item pushes the run between the two positions by exactly
+    // one footprint, so the landing point is exact rather than measured after
+    // the fact from a delegate that no longer exists.
+    function _settledStartFor(source, target) {
+        const slots = root._dragSlots;
+        if (!slots[source] || !slots[target])
+            return NaN;
+        if (target <= source)
+            return slots[target].start;
+        const sourceExtent = slots[source].end - slots[source].start;
+        const targetExtent = slots[target].end - slots[target].start;
+        return slots[target].start + targetExtent - sourceExtent;
+    }
+
+    // Hand the drop to the settle animation: the item keeps the position the
+    // pointer released it at and slides into its committed slot.
+    function _beginDropSettle(orderKey, source, target) {
+        const slots = root._dragSlots;
+        if (!slots[source]) {
+            root._settleDropAt("", 0);
+            return;
+        }
+        const releasedStart = slots[source].start + (root.dragCursorX - root.dragStartCursorX);
+        const settledStart = root._settledStartFor(source, Math.max(0, target));
+        if (!isFinite(settledStart)) {
+            root._settleDropAt("", 0);
+            return;
+        }
+        root._settleDropAt(orderKey, releasedStart - settledStart);
     }
 
     function finishDrag() {
-        _suppressTranslateAnim = true;
         var src = dragSourceIndex;
         var tgt = _dragTargetIndex;
+        var srcEntry = (src >= 0 && src < flattenedItems.length) ? flattenedItems[src] : null;
+        var droppedKey = srcEntry ? String(srcEntry.orderKey ?? "") : "";
+
+        // The preview translation of every other item must snap the instant the
+        // committed model moves them, or they would animate the same distance
+        // twice. Only the dropped item keeps a visible transition, owned by the
+        // settle animation.
+        _suppressTranslateAnim = true;
 
         if (dragging && _groupDropTargetIndex >= 0 && !_groupDropBlocked) {
             _reordering = true;
             if (root.completeGroupDrop()) {
+                root._settleDropAt("", 0);
                 root._resetDragState();
                 buttonHovered = false;
                 lastHoveredButton = null;
@@ -1284,15 +1502,23 @@ Item {
             }
         }
 
+        // The settle has to aim at where the item really lands, so the move is
+        // committed first and a refused move settles the item back home.
+        var landedIndex = src;
         if (dragging && src !== tgt) {
             _reordering = true;
             if (src >= 0 && src < flattenedItems.length && tgt >= 0 && tgt < flattenedItems.length) {
-                var srcEntry = flattenedItems[src];
                 var tgtEntry = flattenedItems[tgt];
-                if (srcEntry && tgtEntry)
-                    root.moveDockItem(srcEntry, tgtEntry);
+                // An entry that is mid-exit no longer has a place in the order.
+                if (srcEntry && tgtEntry && tgtEntry.__exiting !== true && srcEntry.__exiting !== true
+                        && root.moveDockItem(srcEntry, tgtEntry))
+                    landedIndex = tgt;
             }
         }
+
+        if (dragging && srcEntry)
+            root._beginDropSettle(droppedKey, src, landedIndex);
+
         root._resetDragState();
         buttonHovered = false;
         lastHoveredButton = null;
@@ -1305,6 +1531,13 @@ Item {
     }
 
     function cancelDrag() {
+        // A cancelled drag is still a drag that ends somewhere: send the item
+        // home with the same settle instead of teleporting it.
+        if (dragging && dragSourceIndex >= 0 && dragSourceIndex < flattenedItems.length) {
+            const entry = flattenedItems[dragSourceIndex];
+            if (entry)
+                root._beginDropSettle(String(entry.orderKey ?? ""), dragSourceIndex, dragSourceIndex);
+        }
         _suppressTranslateAnim = true;
         root._resetDragState();
         Qt.callLater(function () {
@@ -1314,19 +1547,24 @@ Item {
 
     function startItemDrag(delegateIndex, child, eventX, eventY) {
         _suppressTranslateAnim = true;
+        dropSettleAnimation.stop();
+        root._dropSettleKey = "";
+        root._dropSettleOffset = 0;
         dragSourceIndex = delegateIndex;
         _dragTargetIndex = delegateIndex;
         var mapped = child.mapToItem(root, eventX, eventY);
         var mappedCoord = isVertical ? mapped.y : mapped.x;
         dragStartCursorX = mappedCoord;
         dragCursorX = mappedCoord;
-        // Get the dragged item's actual wrapper for slotWidth
-        var wrapper = getItemWrapper(delegateIndex);
-        slotWidth = (wrapper ? (isVertical ? wrapper.height : wrapper.width) : buttonSlotSize) + 2;
         _groupDropTargetIndex = -1;
         _groupDropWillCreate = false;
         _groupDropBlocked = false;
+        root._clearGroupDwell();
         dragging = true;
+        DockReorder.resetDragState(root._dragState);
+        root._dragState.targetIndex = delegateIndex;
+        root._dragSlots = root._buildDragSlots();
+        root._dragGroupable = root._buildGroupableFlags();
         buttonHovered = false;
         if (previewPopupLoader.item)
             previewPopupLoader.item.show = false;
@@ -1462,7 +1700,7 @@ Item {
         return result;
     }
 
-    readonly property var flattenedItems: {
+    readonly property var modelItems: {
         var result = [];
         var order = Config.options.dock.order ?? [];
         var allApps = TaskbarApps.apps ?? [];
@@ -1798,24 +2036,96 @@ Item {
         }
 
         if (Config.options?.dock?.smartGrouping) {
-            var mapped = result.map(function (el, i) {
-                return {
-                    index: i,
-                    value: el,
-                    cat: root.getItemCategory(el)
-                };
-            });
-            mapped.sort(function (a, b) {
-                if (a.cat !== b.cat)
-                    return a.cat - b.cat;
-                return a.index - b.index;
-            });
-            result = mapped.map(function (el) {
-                return el.value;
-            });
+            result = DockReorder.applySmartGrouping(
+                result,
+                result.map(function (el) { return root.getItemCategory(el); }),
+                Config.options?.dock?.manualOrder ?? []
+            );
         }
 
         return root._coalesceLauncherItems(result);
+    }
+
+    // ── Presence transitions ───────────────────────────────────────────────
+    // A Repeater destroys a delegate the moment its entry leaves the model, so
+    // an app closing used to blink out of existence. Removed entries are handed
+    // back here for one animation cycle, flagged and pinned to the index they
+    // held, which gives their delegate time to shrink out of the row before the
+    // model really loses them.
+    readonly property int itemTransitionDuration: Appearance.animation.elementMoveFast.duration
+    property bool _itemTransitionsReady: false
+    property var _modelSnapshot: []
+    property var _exitingRecords: []
+    property var _enteringKeys: ({})
+
+    // Only an item that is genuinely new to the dock plays an entrance. Every
+    // delegate is rebuilt whenever the model array is replaced — a running app
+    // gaining a window is enough — and without this the whole dock would
+    // re-animate on each of those.
+    function _isEnteringKey(orderKey) {
+        const at = root._enteringKeys[String(orderKey ?? "")];
+        return at !== undefined && (Date.now() - at) < root.itemTransitionDuration;
+    }
+
+    // Deliberately assigned, not bound. A binding on `modelItems` would be
+    // re-evaluated before the handler below records what just disappeared, so
+    // the Repeater would rebuild once without the removed item and again with
+    // it — the icon would blink out and only then start animating away.
+    property var flattenedItems: []
+
+    function _refreshFlattenedItems() {
+        root.flattenedItems = root._exitingRecords.length === 0
+            ? root.modelItems
+            : DockReorder.mergeExitingItems(
+                root.modelItems,
+                root._exitingRecords,
+                Date.now(),
+                root.itemTransitionDuration + 200
+            );
+    }
+
+    onModelItemsChanged: {
+        const previous = root._modelSnapshot;
+        root._modelSnapshot = root.modelItems.slice();
+        if (!root._itemTransitionsReady) {
+            root._enteringKeys = ({});
+            root._refreshFlattenedItems();
+            return;
+        }
+
+        const now = Date.now();
+        root._enteringKeys = DockReorder.collectAddedKeys(previous, root.modelItems, now);
+
+        const removed = DockReorder.collectRemovedItems(previous, root.modelItems, now);
+        if (removed.length > 0) {
+            root._exitingRecords = root._exitingRecords.concat(removed);
+            exitPurgeTimer.restart();
+        }
+        root._refreshFlattenedItems();
+    }
+
+    Component.onCompleted: root._refreshFlattenedItems()
+
+    Timer {
+        id: exitPurgeTimer
+        interval: root.itemTransitionDuration + 80
+        onTriggered: {
+            root._exitingRecords = [];
+            root._refreshFlattenedItems();
+            root._pruneManualPlacements();
+        }
+    }
+
+    // Nothing animates in during the first build: the dock arriving one icon at
+    // a time on startup is noise, not feedback.
+    Timer {
+        id: itemTransitionsReadyTimer
+        interval: 700
+        running: true
+        onTriggered: {
+            root._itemTransitionsReady = true;
+            root._pruneManualPlacements();
+        }
     }
 
     // ── Separator helpers ──────────────────────────────────────────────────
@@ -2059,7 +2369,7 @@ Item {
         Row {
             id: unifiedRow
             visible: !root.isVertical
-            spacing: Config.options.dock.iconSpacing
+            spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
 
             Repeater {
                 id: itemRepeater
@@ -2071,7 +2381,7 @@ Item {
         Column {
             id: unifiedColumn
             visible: root.isVertical
-            spacing: Config.options.dock.iconSpacing
+            spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
 
             Repeater {
                 id: columnItemRepeater
@@ -2121,7 +2431,51 @@ Item {
             readonly property real layoutExtra: magnifiable && root.magnificationDynamicSpacing
                 ? root.magnificationLayoutExtraForFactor((animatedMagScale - 1.0) / Math.max(0.001, root.magnificationScale - 1.0))
                 : 0
-            readonly property real bodyMainExtent: baseBodyMainExtent + layoutExtra
+
+            // ── Presence transition ─────────────────────────────────────────
+            // An item joining or leaving the dock grows and collapses its own
+            // slot, so its neighbours slide over instead of jumping. The scale
+            // is not decoration: it is the item's presence, and without it a
+            // full-size icon would overlap the row while its slot shrinks.
+            readonly property bool isExiting: delegateWrapper.itemData?.__exiting === true
+            property real revealProgress: 1
+
+            NumberAnimation {
+                id: revealAnimation
+                target: delegateWrapper
+                property: "revealProgress"
+                duration: root.itemTransitionDuration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+
+            function playReveal(to) {
+                revealAnimation.stop();
+                revealAnimation.from = delegateWrapper.revealProgress;
+                revealAnimation.to = to;
+                revealAnimation.start();
+            }
+
+            onIsExitingChanged: {
+                if (isExiting)
+                    delegateWrapper.playReveal(0);
+            }
+
+            Component.onCompleted: {
+                if (delegateWrapper.isExiting) {
+                    delegateWrapper.revealProgress = 1;
+                    delegateWrapper.playReveal(0);
+                    return;
+                }
+                if (!root._itemTransitionsReady || root.dragging || root._reordering)
+                    return;
+                if (!root._isEnteringKey(delegateWrapper.itemData?.orderKey))
+                    return;
+                delegateWrapper.revealProgress = 0;
+                delegateWrapper.playReveal(1);
+            }
+
+            readonly property real bodyMainExtent: (baseBodyMainExtent + layoutExtra) * revealProgress
             readonly property real bodyMainStart: (root.isVertical ? y : x) + leadingIslandGap
             readonly property real bodyMainEnd: bodyMainStart + bodyMainExtent
             readonly property real _magnificationScale: animatedMagScale
@@ -2141,25 +2495,28 @@ Item {
                 }
             }
 
-            // Drag translation (adapted from dots-hyprland, variable-width support)
+            // Drag translation. Displaced items move by the dragged item's real
+            // footprint read from the drag snapshot, so a 4-slot widget pushes
+            // its neighbours exactly as far as it will actually occupy.
             readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
+            readonly property bool isSettling: !root.dragging
+                && root._dropSettleKey !== ""
+                && root._dropSettleKey === String(delegateWrapper.itemData?.orderKey ?? "")
             readonly property real dragTranslate: {
                 if (!root.dragging)
-                    return 0;
+                    return isSettling ? root._dropSettleOffset : 0;
                 if (isDragged)
                     return root.dragCursorX - root.dragStartCursorX;
-                var src = root.dragSourceIndex;
-                var tgt = root._dragTargetIndex;
-                var idx = delegateIndex;
-                var sw = root.slotWidth;
-                if (src < tgt && idx > src && idx <= tgt)
-                    return -sw;
-                if (src > tgt && idx >= tgt && idx < src)
-                    return sw;
-                return 0;
+                return DockReorder.previewShift(
+                    root._dragSlots,
+                    root.dragSourceIndex,
+                    root._dragTargetIndex,
+                    delegateIndex,
+                    root.effectiveIconSpacing
+                );
             }
             readonly property real itemMagScale: animatedMagScale
-            z: isDragged ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
+            z: (isDragged || isSettling) ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
             opacity: isDragged ? 0.85 : 1
             scale: isDragged ? 1.05 : 1
 
@@ -2176,11 +2533,11 @@ Item {
                 x: root.isVertical ? 0 : delegateWrapper.dragTranslate
                 y: root.isVertical ? delegateWrapper.dragTranslate : 0
                 Behavior on x {
-                    enabled: !delegateWrapper.isDragged && !root._suppressTranslateAnim
+                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on y {
-                    enabled: !delegateWrapper.isDragged && !root._suppressTranslateAnim
+                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }
@@ -2270,6 +2627,12 @@ Item {
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: root.isVertical ? 0 : delegateWrapper.leadingIslandGap / 2 + (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2
                 anchors.verticalCenterOffset: root.isVertical ? delegateWrapper.leadingIslandGap / 2 + (delegateWrapper._separatorBeforeSpace - delegateWrapper._separatorAfterSpace) / 2 : 0
+                // The slot collapses to nothing; the content has to come with
+                // it or it would spill over the neighbours on the way out.
+                opacity: Math.max(0, Math.min(1, delegateWrapper.revealProgress))
+                scale: 0.55 + 0.45 * Math.max(0, Math.min(1, delegateWrapper.revealProgress))
+                visible: delegateWrapper.revealProgress > 0.01
+                enabled: !delegateWrapper.isExiting
 
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
@@ -2306,18 +2669,18 @@ Item {
             }
 
             Rectangle {
-                visible: root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                readonly property bool _dropArmed: root.isGroupDropTarget(delegateWrapper.delegateIndex)
+                readonly property bool _dropBuilding: root.isGroupDropCandidate(delegateWrapper.delegateIndex)
+                visible: _dropArmed || _dropBuilding
                 anchors.fill: parent
                 z: 5
                 radius: Appearance.rounding.normal
                 color: root.groupDropIsBlocked(delegateWrapper.delegateIndex)
                     ? Appearance.colors.colErrorContainer
                     : Appearance.colors.colPrimaryContainer
-                opacity: visible ? 0.28 : 0.0
-
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
+                // Fills in as the hold builds, so the gesture reads as "keep
+                // holding to group" rather than appearing out of nowhere.
+                opacity: _dropArmed ? 0.28 : (_dropBuilding ? 0.28 * root._groupDropProgress : 0.0)
             }
 
             Rectangle {
@@ -2511,11 +2874,15 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockMediaWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                delegateIndex: mediaItemRoot._index
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockMediaWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    delegateIndex: mediaItemRoot._index
+                }
             }
         }
     }
@@ -2559,15 +2926,19 @@ Item {
             width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * root.livePreviewWidgetSlots
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             readonly property int _index: parent._index
-            DockLivePreviewWidget {
-                anchors.centerIn: parent
-                isVertical: root.isVertical
-                dockContent: root
-                dockRevealed: root.dockRevealed
-                dockWindowVisible: root.dockWindowVisible
-                delegateIndex: livePreviewItemRoot._index
-                onPickerRequested: {
-                    // Picker wiring belongs to the following live-preview phase.
+            Loader {
+                anchors.fill: parent
+                active: root.dockWidgetsActive
+                sourceComponent: DockLivePreviewWidget {
+                    anchors.centerIn: parent
+                    isVertical: root.isVertical
+                    dockContent: root
+                    dockRevealed: root.dockRevealed
+                    dockWindowVisible: root.dockWindowVisible
+                    delegateIndex: livePreviewItemRoot._index
+                    onPickerRequested: {
+                        // Picker wiring belongs to the following live-preview phase.
+                    }
                 }
             }
         }

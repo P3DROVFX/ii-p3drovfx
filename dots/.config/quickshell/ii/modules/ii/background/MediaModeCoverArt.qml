@@ -230,34 +230,103 @@ Item {
                 Layout.maximumWidth: 540
                 Layout.alignment: Qt.AlignHCenter
 
-                property real currentPosition: root.player?.position ?? 0
-                Connections {
-                    target: root.player
-                    function onPositionChanged() {
-                        positionSlider.currentPosition = root.player?.position ?? 0;
+                readonly property real trackLength: root.player?.length ?? 0
+                // MPRIS players can briefly report a position past the end of the
+                // track (most visibly right after a seek). Clamping here keeps a
+                // 3 minute song from ever displaying as 15 minutes.
+                readonly property real reportedPosition: Math.max(0,
+                    Math.min(trackLength, root.player?.position ?? 0))
+                // While a drag is in flight, and until the player confirms the new
+                // position, the slider owns its own value.
+                property real pendingSeekPosition: -1
+                property real dragValue: 0
+                property bool seekDirty: false
+                readonly property bool seeking: pressed || pendingSeekPosition >= 0
+                readonly property real displayPosition: seeking
+                    ? Math.max(0, Math.min(trackLength, value * trackLength))
+                    : reportedPosition
+
+                // One absolute seek per gesture. Seeking on every onMoved fires
+                // dozens of requests per drag, and each one is resolved against a
+                // position the player has not caught up to yet, so they compound
+                // and run the track far past its own length.
+                function commitSeek() {
+                    if (positionSlider.trackLength <= 0 || !(root.player?.canSeek ?? false))
+                        return;
+
+                    const target = Math.max(0, Math.min(positionSlider.trackLength,
+                        positionSlider.dragValue * positionSlider.trackLength));
+                    positionSlider.seekDirty = false;
+                    positionSlider.pendingSeekPosition = target;
+                    positionSlider.value = target / positionSlider.trackLength;
+                    root.player.position = target;
+                    seekSettleTimer.restart();
+                }
+
+                // A groove click can emit moved() on either side of the release,
+                // so the commit is driven by "the value changed" rather than by a
+                // single handler, and fires exactly once either way.
+                onMoved: {
+                    positionSlider.dragValue = value;
+                    positionSlider.seekDirty = true;
+                    if (!pressed)
+                        positionSlider.commitSeek();
+                }
+                onPressedChanged: {
+                    if (pressed) {
+                        positionSlider.dragValue = value;
+                        positionSlider.seekDirty = false;
+                    } else if (positionSlider.seekDirty) {
+                        positionSlider.commitSeek();
                     }
                 }
+                onReportedPositionChanged: {
+                    if (positionSlider.pendingSeekPosition >= 0
+                            && Math.abs(reportedPosition - positionSlider.pendingSeekPosition) < 1.5) {
+                        positionSlider.pendingSeekPosition = -1;
+                        seekSettleTimer.stop();
+                    }
+                }
+
+                // Assigning value during a drag would otherwise destroy the
+                // binding permanently and freeze the track after the first seek.
+                Binding {
+                    target: positionSlider
+                    property: "value"
+                    value: positionSlider.trackLength > 0
+                        ? positionSlider.reportedPosition / positionSlider.trackLength : 0
+                    when: !positionSlider.seeking
+                    restoreMode: Binding.RestoreNone
+                }
+
+                // Give up waiting for confirmation if the player never reports the
+                // seeked position, rather than freezing the track forever.
+                Timer {
+                    id: seekSettleTimer
+                    interval: 1500
+                    onTriggered: positionSlider.pendingSeekPosition = -1
+                }
+
                 Timer {
                     interval: 250
                     running: (root.player?.isPlaying ?? false) && !positionSlider.pressed
                     repeat: true
                     onTriggered: {
-                        positionSlider.currentPosition += 0.25;
+                        if (root.player) {
+                            root.player.positionChanged();
+                        }
                     }
                 }
 
                 configuration: StyledSlider.Configuration.Wavy
+                // Media Mode is the foreground experience itself. The desktop
+                // widget pauses this animation behind application windows, but
+                // that optimization must not apply to this dedicated surface.
+                animateWave: root.player?.isPlaying ?? false
                 trackWidth: 14 // Increased thickness for prominent M3 wavy track!
                 highlightColor: coverArt.accentColor
                 trackColor: ColorUtils.transparentize(coverArt.accentColor, 0.25)
                 handleColor: coverArt.accentColor
-                value: (root.player?.length > 0) ? Math.min(1.0, Math.max(0, positionSlider.currentPosition / root.player.length)) : 0
-                onMoved: {
-                    if (root.player?.length > 0) {
-                        positionSlider.currentPosition = value * root.player.length;
-                        root.player.position = positionSlider.currentPosition;
-                    }
-                }
             }
 
             RowLayout {
@@ -266,7 +335,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
 
                 StyledText {
-                    text: coverArt.formatTime(positionSlider.currentPosition || 0)
+                    text: coverArt.formatTime(positionSlider.displayPosition)
                     font.pixelSize: Appearance.font.pixelSize.smaller
                     color: coverArt.onAccentContainerColor
                     opacity: 0.8

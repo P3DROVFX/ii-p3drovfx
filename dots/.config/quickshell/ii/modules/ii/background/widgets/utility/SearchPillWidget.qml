@@ -61,11 +61,12 @@ AbstractBackgroundWidget {
 
     readonly property string activeAiLogo: {
         if (root.aiLogo !== "auto") return root.aiLogo;
-        const provider = String(Ai.currentModelId || "").toLowerCase();
+        const provider = String(Ai.currentProvider || "").toLowerCase();
         if (provider === "google") return "gemini";
         if (provider === "openrouter") return "openrouter";
         if (provider === "deepseek") return "deepseek";
         if (provider === "opencode") return "opencode";
+        if (provider === "ollama") return "ollama";
         return "gemini";
     }
 
@@ -115,8 +116,10 @@ AbstractBackgroundWidget {
         } else if (key === "music_rec") {
             SongRec.toggleRunning();
         } else if (key === "ai_chat") {
-            Persistent.states.sidebar.policies.tab = 0;
-            GlobalStates.sidebarLeftOpen = true;
+            Ai.surfaceRouter.open({
+                surface: "sidebar",
+                focusIntent: "composer"
+            });
         } else if (key === "translator") {
             Persistent.states.sidebar.policies.tab = 1;
             GlobalStates.sidebarLeftOpen = true;

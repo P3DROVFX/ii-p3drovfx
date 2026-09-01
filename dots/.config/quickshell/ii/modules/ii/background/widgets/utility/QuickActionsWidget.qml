@@ -26,7 +26,7 @@ AbstractBackgroundWidget {
 
     // Sidebar Policies tabs (same order as SidebarPoliciesContent.qml)
     readonly property var policiesTabs: [
-        { "name": "Intelligence", "enabled": Config.options.policies.ai !== 0 },
+        { "name": "Intelligence", "enabled": Ai.enabled },
         { "name": "Translator", "enabled": Config.options.policies.translator !== 0 },
         { "name": "Media", "enabled": Config.options.policies.player !== 0 },
         { "name": "Wallpapers", "enabled": Config.options.policies.wallpapers !== 0 },

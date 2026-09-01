@@ -12,7 +12,7 @@ import gmail_config
 
 CLIENT_ID, CLIENT_SECRET = gmail_config.get_credentials()
 if not CLIENT_ID or not CLIENT_SECRET:
-    print(json.dumps({"error": "Missing GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET in .env"}), flush=True)
+    print(json.dumps({"error": "Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET in .env"}), flush=True)
     exit(1)
 
 REDIRECT_URI  = "http://localhost:42069/callback"

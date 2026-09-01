@@ -29,7 +29,7 @@ WindowDialog {
         if (!Bluetooth.defaultAdapter)
             return;
         if (BluetoothStatus.enabled) {
-            Bluetooth.defaultAdapter.startDiscovery();
+            BluetoothStatus.startDiscovery();
             return;
         }
         // Powering on is asynchronous, so defer the scan until the adapter is up.
@@ -39,8 +39,7 @@ WindowDialog {
 
     function cleanupAfterClose() {
         root._scanWhenEnabled = false;
-        if (Bluetooth.defaultAdapter?.discovering)
-            Bluetooth.defaultAdapter.stopDiscovery();
+        BluetoothStatus.stopDiscovery();
     }
 
     property bool _scanWhenEnabled: false
@@ -51,7 +50,7 @@ WindowDialog {
             if (!BluetoothStatus.enabled || !root._scanWhenEnabled)
                 return;
             root._scanWhenEnabled = false;
-            Bluetooth.defaultAdapter?.startDiscovery();
+            BluetoothStatus.startDiscovery();
         }
     }
 
@@ -358,7 +357,7 @@ WindowDialog {
                         cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
                             if (!Bluetooth.defaultAdapter?.discovering) {
-                                Bluetooth.defaultAdapter?.startDiscovery();
+                                BluetoothStatus.startDiscovery();
                             }
                         }
                     }
@@ -441,7 +440,7 @@ WindowDialog {
                 Behavior on color { ColorAnimation { duration: 150 } }
             }
             onClicked: {
-                Quickshell.execDetached(["bash", "-c", `${Config.options.apps.bluetooth}`]);
+                GlobalStates.openSettingsPage("network", "", "Bluetooth");
                 root.detailsRequested();
                 if (root.closeOwningSidebarOnDetails)
                     GlobalStates.sidebarRightOpen = false;

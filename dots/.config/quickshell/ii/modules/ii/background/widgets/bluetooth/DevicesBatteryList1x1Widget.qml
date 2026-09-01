@@ -44,7 +44,7 @@ AbstractBackgroundWidget {
         // 2. KDE Connect Mobile Phone
         if (KdeConnectService.activeDevice && KdeConnectService.activeDevice.reachable) {
             list.push({
-                name: KdeConnectService.activeDevice.name || "Phone",
+                name: KdeConnectService.activeDeviceDisplayName || "Phone",
                 battery: (KdeConnectService.activeDevice.charge ?? 100) / 100.0,
                 charging: KdeConnectService.activeDevice.isCharging ?? false,
                 symbol: "smartphone",

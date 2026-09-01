@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.ii.background
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
+import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.dock
 import qs.modules.ii.lock
@@ -33,9 +34,12 @@ import qs.modules.ii.videoEditor
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
+import qs.modules.ii.keypressDisplay
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
+import qs.modules.ii.modes
+import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
@@ -101,6 +105,16 @@ Scope {
         component: Usage {}
     }
     PanelLoader {
+        extraCondition: Config.options.modes.overlayEnabled
+        component: ModesOverlay {}
+    }
+    // The mode start/end banner; the dynamic island draws it when a notch is on.
+    PanelLoader {
+        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+            && !Config.options.bar.floatingNotch.centerInBar
+        component: ModeFlashPopup {}
+    }
+    PanelLoader {
         extraCondition: Config.options.dock.enable
         component: Dock {}
     }
@@ -131,6 +145,12 @@ Scope {
         extraCondition: Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")
         component: MinimalistOsd {}
     }
+    PanelLoader {
+        // Kept loaded rather than gated on the service: the windows are empty
+        // and invisible until a recording or the quick toggle asks for them.
+        extraCondition: Config.ready
+        component: KeypressDisplay {}
+    }
     PanelLoader { component: OnScreenKeyboard {} }
     PanelLoader { component: OledSaver {} }
     PanelLoader { component: Overlay {} }
@@ -141,6 +161,9 @@ Scope {
     OverviewWindowTransition {}
 
     PanelLoader { component: Polkit {} }
+    // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
+    // is asking anything, and nothing is built until it is.
+    PanelLoader { component: BluetoothPairing {} }
     PanelLoader { component: RegionSelector {} }
     PanelLoader {
         extraCondition: root.screenCornersComponent !== null

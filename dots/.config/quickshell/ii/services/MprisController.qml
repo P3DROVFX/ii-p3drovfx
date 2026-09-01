@@ -63,7 +63,7 @@ Singleton {
 			if (priority) {
 				root.trackedPlayer = priority;
 			} else {
-				const playing = players.find(p => p.isPlaying);
+                const playing = players.find(p => p && p.isPlaying);
 				if (playing) {
 					root.trackedPlayer = playing;
 				} else if (players.length > 0) {

@@ -25,7 +25,13 @@ Item {
     property bool loading: false
     property string error: ""
     property bool instrumental: false
-    property var lines: []
+    // Lines as returned by LRCLib.
+    property var fetchedLines: []
+    // A hand-written .lrc for this track always wins over the fetched result.
+    property string overrideLyrics: ""
+    property var overrideLines: []
+    readonly property bool hasOverride: root.overrideLines.length > 0
+    property var lines: root.hasOverride ? root.overrideLines : root.fetchedLines
     property string plainLyricsText: ""  // plain (unsynced) lyrics from LRCLib as fallback
     property var _cache: ({})
 
@@ -50,6 +56,8 @@ Item {
     readonly property string displayText: {
         if (!root.enabled)
             return "";
+        if (root.hasOverride)
+            return root.currentLineText && root.currentLineText.length > 0 ? root.currentLineText : "♪";
         if (root.loading)
             return "Fetching lyrics…";
         if (root.instrumental)
@@ -98,6 +106,10 @@ Item {
         cleaned = cleaned.split(/ & /)[0];
         cleaned = cleaned.split(/ x /i)[0];
         return cleaned.trim();
+    }
+
+    onOverrideLyricsChanged: {
+        root.overrideLines = root.parseSyncedLyrics(root.overrideLyrics);
     }
 
     function parseSyncedLyrics(lrcText) {
@@ -306,12 +318,28 @@ Item {
         root.loading = false;
         root.error = "";
         root.instrumental = false;
-        root.lines = [];
+        root.fetchedLines = [];
         root.plainLyricsText = "";
         root.loadedKey = "";
         root.requestKey = "";
         root.attempt = 0;
         root.startPending = false;
+    }
+
+    // Explicit user retry: drop the cached answer for this track so the request
+    // actually leaves the machine again instead of replaying the stored miss.
+    function retryFetch() {
+        const key = `${root.queryTitle}||${root.queryArtist}||${root.queryDuration}`;
+        if (root._cache[key]) {
+            const next = Object.assign({}, root._cache);
+            delete next[key];
+            root._cache = next;
+            root.saveCache();
+        }
+
+        root.resetState();
+        if (root.enabled)
+            root.ensureFetched();
     }
 
     function ensureFetched() {
@@ -338,7 +366,7 @@ Item {
         root.loading = true;
         root.error = "";
         root.instrumental = false;
-        root.lines = [];
+        root.fetchedLines = [];
 
         if (fetcher.running) {
             root.startPending = true;
@@ -386,7 +414,7 @@ Item {
         const cached = getCached(root.queryTitle, root.queryArtist, root.queryDuration);
         if (cached) {
             root.instrumental = cached.instrumental || false;
-            root.lines = cached.lines || [];
+            root.fetchedLines = cached.lines || [];
             root.plainLyricsText = cached.plainLyrics || "";
             root.loading = false;
             root.error = "";
@@ -440,7 +468,7 @@ Item {
                     const cached = getCached(root.queryTitle, root.queryArtist, root.queryDuration);
                     if (cached) {
                         root.instrumental = cached.instrumental || false;
-                        root.lines = cached.lines || [];
+                        root.fetchedLines = cached.lines || [];
                         root.plainLyricsText = cached.plainLyrics || "";
                         root.loading = false;
                         root.error = "";
@@ -519,7 +547,7 @@ Item {
                     }
 
                     root.instrumental = best.instrumental ?? false;
-                    root.lines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
+                    root.fetchedLines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
 
                     if (root.lines.length === 0 && !root.instrumental) {
                         root.attempt += 1;
@@ -532,7 +560,7 @@ Item {
                     root.loadedKey = requestKey;
 
                     root.instrumental = best.instrumental ?? false;
-                    root.lines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
+                    root.fetchedLines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
 
                     if (root.lines.length === 0 && !root.instrumental) {
                         root.attempt += 1;

@@ -10,6 +10,10 @@ import QtQuick.Controls
  */
 Button {
     id: root
+    // The inner MouseArea owns pointer input and follows this flag. Controls
+    // default it to false, which otherwise suppresses both the hand cursor
+    // and the hover state used by tooltips for every ordinary button.
+    hoverEnabled: true
     property bool toggled
     property string buttonText
     property bool pointingHandCursor: true
@@ -242,7 +246,10 @@ Button {
         }
     }
 
+    property bool rippleEverStarted: false
+
     function startRipple(x, y) {
+        root.rippleEverStarted = true;
         const stateY = buttonBackground.y;
         rippleAnim.x = x;
         rippleAnim.y = y - stateY;
@@ -257,6 +264,21 @@ Button {
         duration: rippleDuration
         easing.type: Appearance?.animation.elementMoveEnter.type
         easing.bezierCurve: Appearance?.animationCurves.standardDecel
+    }
+
+    // The cursor belongs to the topmost item under the pointer, and a caller's
+    // label or icon lands in `data` after this component's own children — so it
+    // outranks the MouseArea below and the button kept the arrow. This claims
+    // the hand by z instead. `Qt.NoButton` keeps it out of the way of every
+    // real click, and it stays out of hover so the button's own hover, ripple
+    // and tooltip are untouched.
+    MouseArea {
+        z: 9999
+        anchors.fill: parent
+        enabled: root.pointingHandCursor && root.enabled
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: false
+        cursorShape: Qt.PointingHandCursor
     }
 
     MouseArea {
@@ -314,6 +336,12 @@ Button {
             if (!root.rippleEnabled)
                 return;
             rippleFadeAnim.restart();
+        }
+        // The MouseArea replaces Button's built-in pointer handling, so its
+        // double-click must be forwarded explicitly just like clicked above.
+        onDoubleClicked: event => {
+            if (event.button === Qt.LeftButton)
+                root.doubleClicked();
         }
         onPositionChanged: event => {
             if (root.positionChangedAction)
@@ -375,12 +403,17 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
+        // The layer below no longer runs permanently, so the corners are drawn
+        // by the rectangle itself most of the time.
+        antialiasing: true
         border.width: root.borderWidth
         border.color: root.borderColor
         Behavior on color {
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-        layer.enabled: true
+        // The mask exists only to clip the ripple to the rounded corners, so
+        // the layer is worth its cost only while a ripple is actually painted.
+        layer.enabled: root.rippleEnabled && ripple.rippling
         layer.samples: 8
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -399,26 +432,32 @@ Button {
             width: ripple.implicitWidth
             height: ripple.implicitHeight
             opacity: 0
-            visible: width > 0 && height > 0
+            visible: ripple.rippling
+            readonly property bool rippling: opacity > 0 && width > 0 && height > 0
             property real implicitWidth: 0
             property real implicitHeight: 0
             Behavior on opacity {
                 animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
             }
-            RadialGradient {
+            // Built on the first press instead of with the button: a settings
+            // page holds hundreds of these and most are never clicked.
+            Loader {
                 anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.3
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.5
-                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                active: root.rippleEverStarted
+                sourceComponent: RadialGradient {
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.3
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.5
+                            color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                        }
                     }
                 }
             }

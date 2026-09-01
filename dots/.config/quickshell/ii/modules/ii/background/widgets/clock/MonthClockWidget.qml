@@ -97,18 +97,26 @@ AbstractBackgroundWidget {
             clip: true
 
             // 1. Main Calendar Dial Canvas
-            MonthClock {
+            // Supersampled: this dial is a Canvas, so it rasterises at its own
+            // item size. Without this it would be a stretched bitmap the moment
+            // the widget is scaled up.
+            Supersampled {
                 anchors.fill: parent
-                useBlackBg:            root.cfgUseBlackBg
-                enableGlassReflection: root.cfgEnableGlassReflection
-                showMonthRing:         root.cfgShowMonthRing
-                showDayRing:           root.cfgShowDayRing
-                showWeekRing:          root.cfgShowWeekRing
-                showMonthPill:         root.cfgShowMonthPill
-                showDayPill:           root.cfgShowDayPill
-                showWeekPill:          root.cfgShowWeekPill
-                showTickMarks:         root.cfgShowTickMarks
-                boldFont:              root.cfgBoldFont
+                factor: root.renderScale
+            
+                MonthClock {
+                    anchors.fill: parent
+                    useBlackBg:            root.cfgUseBlackBg
+                    enableGlassReflection: root.cfgEnableGlassReflection
+                    showMonthRing:         root.cfgShowMonthRing
+                    showDayRing:           root.cfgShowDayRing
+                    showWeekRing:          root.cfgShowWeekRing
+                    showMonthPill:         root.cfgShowMonthPill
+                    showDayPill:           root.cfgShowDayPill
+                    showWeekPill:          root.cfgShowWeekPill
+                    showTickMarks:         root.cfgShowTickMarks
+                    boldFont:              root.cfgBoldFont
+                }
             }
 
             // 2. Minute Hand (Distinct color: subtextColorOnBg)

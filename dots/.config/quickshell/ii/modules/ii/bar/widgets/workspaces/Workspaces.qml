@@ -218,7 +218,7 @@ Item {
     implicitHeight: root.vertical ? contentLayout.implicitHeight : Appearance.sizes.baseBarHeight
 
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on blur {
@@ -632,10 +632,10 @@ Item {
                 readonly property bool isShowingScratchpad: root.scratchpadOpen && (index === root.workspaceIndexInGroup)
 
                 Behavior on implicitWidth {
-                    animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
                 Behavior on implicitHeight {
-                    animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
+                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
 
                 Item {
@@ -707,9 +707,10 @@ Item {
                                     implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.numbersByInteractionVisible ? 1 / 1.5 : 1)
 
                                     // Force reload when the icon theme regenerates; decode at the stable
-                                    // base size so hover animations don't re-decode every frame, async
-                                    // so the re-decode doesn't stall the UI thread
-                                    asynchronous: true
+                                    // base size so hover animations don't re-decode every frame. Resolved
+                                    // on this thread: the shared icon loader is not safe to read from Qt's
+                                    // image thread while the theme is changing under it.
+                                    asynchronous: false
                                     backer.cache: false
                                     backer.sourceSize: Qt.size(
                                         root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision,
@@ -722,7 +723,7 @@ Item {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                                     }
                                     Behavior on implicitSize {
-                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                                     }
 
                                     layer.enabled: Config.options.appearance.icons.enableShapeMask

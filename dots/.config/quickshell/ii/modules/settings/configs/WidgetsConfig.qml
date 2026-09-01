@@ -12,6 +12,11 @@ Item {
 
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    // Every gallery card re-runs mapToItem() when this changes. Quantising the
+    // scroll position keeps that off the per-pixel path: the load/unload
+    // margins below are an order of magnitude larger than one step.
+    readonly property int scrollStep: Math.floor(widgetsConfigRoot.contentY / 120)
     // When non-empty, opens the extension config schema sub-page for this extId
     property string extensionConfigExtId: ""
 
@@ -158,6 +163,12 @@ Item {
                     onCheckedChanged: {
                         Config.options.background.widgets.enableSnap = checked;
                     }
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "info"
+                    text: Translation.tr("Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement")
                 }
 
                 ConfigSlider {
@@ -514,11 +525,12 @@ Item {
             property bool _previewQueued: false
             property bool hovered: cardMouseArea.containsMouse
 
-            readonly property bool previewNearViewport: {
-                // These explicit dependencies make the binding react to
-                // scrolling and Flow relayouts; mapToItem itself is not a
-                // reactive dependency in QML.
-                widgetsConfigRoot.contentY;
+            // How far outside the viewport this card sits, in pixels; 0 while
+            // any part of it is on screen. One mapToItem() feeds both the load
+            // and the unload decision.
+            readonly property real viewportDistance: {
+                // Explicit dependencies: mapToItem is not reactive in QML.
+                widgetsConfigRoot.scrollStep;
                 widgetsConfigRoot.width;
                 widgetsConfigRoot.height;
                 cardItem.x;
@@ -526,22 +538,43 @@ Item {
                 cardItem.height;
 
                 if (!cardItem.visible || widgetsConfigRoot.height <= 0)
-                    return false;
+                    return Number.MAX_VALUE;
 
                 const point = cardItem.mapToItem(widgetsConfigRoot, 0, 0);
-                const lookahead = Math.max(cardItem.height, widgetsConfigRoot.height * 0.25);
-                return point.y < widgetsConfigRoot.height + lookahead
-                    && point.y + cardItem.height > -lookahead;
+                if (point.y > widgetsConfigRoot.height)
+                    return point.y - widgetsConfigRoot.height;
+                if (point.y + cardItem.height < 0)
+                    return -(point.y + cardItem.height);
+                return 0;
             }
+
+            readonly property real previewLoadMargin: Math.max(cardItem.height, widgetsConfigRoot.height * 0.25)
+            readonly property bool previewNearViewport: cardItem.viewportDistance < cardItem.previewLoadMargin
+            // Unloading uses a wider margin than loading so a card sitting near
+            // the edge cannot thrash between the two states while scrolling.
+            readonly property bool previewFarFromViewport: cardItem.viewportDistance > widgetsConfigRoot.height * 1.5
 
             function requestPreviewIfVisible() {
                 if (previewNearViewport)
                     widgetsConfigRoot._enqueuePreview(cardItem);
             }
 
+            // A preview is a live instance of the real widget. Without this the
+            // gallery kept every card the user ever scrolled past running for
+            // the rest of the session.
+            function releasePreview() {
+                widgetsConfigRoot._removePreview(cardItem);
+                cardItem._previewQueued = false;
+                cardItem._previewActive = false;
+            }
+
             Component.onCompleted: Qt.callLater(requestPreviewIfVisible)
             Component.onDestruction: widgetsConfigRoot._removePreview(cardItem)
             onPreviewNearViewportChanged: requestPreviewIfVisible()
+            onPreviewFarFromViewportChanged: {
+                if (cardItem.previewFarFromViewport)
+                    cardItem.releasePreview();
+            }
 
             readonly property var widgetData: modelData
             readonly property var _activeWidgets: Config.options.background.activeWidgets

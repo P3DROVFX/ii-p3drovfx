@@ -107,13 +107,15 @@ Item {
         }
     }
 
-
-
     // ── focus ─────────────────────────────────────────────────────────────────
     onFocusChanged: if (focus)
         searchField.forceActiveFocus()
     onVisibleChanged: if (visible)
         searchField.forceActiveFocus()
+
+    // Injected by Cheatsheet.qml so the search field can hand focus to
+    // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
+    property Item keyNavTarget: null
 
     Item {
         id: inboxContent
@@ -252,9 +254,10 @@ Item {
                             delegate: ProfileCard {
                                 id: card
 
-                                 hasMatches: {
+                                hasMatches: {
                                     let q = root.filter.toLowerCase().trim();
-                                    if (!q) return true;
+                                    if (!q)
+                                        return true;
                                     let nameMatch = (card.name || "").toLowerCase().includes(q);
                                     let descMatch = (card.description || "").toLowerCase().includes(q);
                                     return nameMatch || descMatch;
@@ -491,6 +494,7 @@ Item {
                 clip: true
                 font.pixelSize: Appearance.font.pixelSize.small
                 onTextChanged: root.filter = text
+                keyNavTarget: root.keyNavTarget
 
                 Component.onCompleted: forceActiveFocus()
             }

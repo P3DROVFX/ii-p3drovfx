@@ -154,15 +154,17 @@ Item {
         visible: Config.options.sounds.enable
         icon: "notifications_active"
         title: Translation.tr("Events")
+        tooltip: Translation.tr("Sound effects for notifications, battery, volume, lock, screenshot, and alarms.")
 
-        ConfigSwitch {
-            buttonIcon: "notifications_active"
-            text: Translation.tr("Event sound triggers")
-            checked: true
-            subPageOnly: true
-            configPage: Qt.resolvedUrl("widgets/SoundEventsConfig.qml")
-            StyledToolTip {
-                text: Translation.tr("Click button text to configure sound effects for notifications, battery, volume, lock, screenshot, and alarms.")
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            ConfigSubpageRow {
+                buttonIcon: "notifications_active"
+                title: Translation.tr("Event sound triggers")
+                description: Translation.tr("Configure sound effects for notifications, battery, volume, lock, screenshot, and alarms")
+                onClicked: soundAlertsRoot.activeSubPage = Qt.resolvedUrl("widgets/SoundEventsConfig.qml")
             }
         }
     }
@@ -182,14 +184,15 @@ Item {
         title: Translation.tr("Custom sounds")
         tooltip: Translation.tr("Override the theme sound for any event with your own audio file.")
 
-        ConfigSwitch {
-            buttonIcon: "tune"
-            text: Translation.tr("Custom sound overrides")
-            checked: true
-            subPageOnly: true
-            configPage: Qt.resolvedUrl("widgets/CustomSoundsConfig.qml")
-            StyledToolTip {
-                text: Translation.tr("Choose a custom audio file for each shell sound event.")
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            ConfigSubpageRow {
+                buttonIcon: "tune"
+                title: Translation.tr("Custom sound overrides")
+                description: Translation.tr("Choose a custom audio file for each shell sound event")
+                onClicked: soundAlertsRoot.activeSubPage = Qt.resolvedUrl("widgets/CustomSoundsConfig.qml")
             }
         }
     }
@@ -477,25 +480,27 @@ Item {
     ContentSection {
         icon: "alarm"
         title: Translation.tr("Alarm & Audio Controls")
+        tooltip: Translation.tr("Alarm popup display, volume limits, and hearing protection.")
 
-        ConfigSwitch {
-            buttonIcon: "alarm"
-            text: Translation.tr("Alarm popup display")
-            checked: true
-            subPageOnly: true
-            configPage: Qt.resolvedUrl("widgets/AlarmAudioConfig.qml")
-            StyledToolTip {
-                text: Translation.tr("Configure the alarm popup, world clocks, and alarm section visibility.")
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
+
+            ConfigSubpageRow {
+                buttonIcon: "alarm"
+                title: Translation.tr("Alarm popup display")
+                description: Translation.tr("Configure the alarm popup, world clocks, and alarm section visibility")
+                onClicked: soundAlertsRoot.activeSubPage = Qt.resolvedUrl("widgets/AlarmAudioConfig.qml")
             }
-        }
 
-        ConfigSwitch {
-            buttonIcon: "hearing"
-            text: Translation.tr("Earbang & volume limits")
-            checked: Config.options.audio.protection.enable
-            configPage: Qt.resolvedUrl("widgets/AudioProtectionConfig.qml")
-            onCheckedChanged: {
-                Config.options.audio.protection.enable = checked;
+            ConfigSwitch {
+                buttonIcon: "hearing"
+                text: Translation.tr("Earbang & volume limits")
+                checked: Config.options.audio.protection.enable
+                configPage: Qt.resolvedUrl("widgets/AudioProtectionConfig.qml")
+                onCheckedChanged: {
+                    Config.options.audio.protection.enable = checked;
+                }
             }
         }
     }

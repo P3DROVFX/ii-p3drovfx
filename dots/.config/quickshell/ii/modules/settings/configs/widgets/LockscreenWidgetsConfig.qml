@@ -117,6 +117,13 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "sports_soccer"
+                text: Translation.tr("Show sports widget")
+                checked: Config.options.lock.sports ?? true
+                onCheckedChanged: Config.options.lock.sports = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "alarm"
                 text: Translation.tr("Show next alarm")
                 checked: Config.options.lock.showAlarm ?? true

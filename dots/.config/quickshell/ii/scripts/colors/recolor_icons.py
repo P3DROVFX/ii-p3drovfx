@@ -12,6 +12,7 @@ This extends icon pack coverage to 100% — apps without themed icons
 (e.g. Zen Browser, AppImages) get gowall-recolored versions automatically.
 """
 import os
+import sys
 import json
 import re
 import shutil
@@ -23,6 +24,9 @@ import hashlib
 import fcntl
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+
+# --force skips the "nothing changed" early-exit and always regenerates
+FORCE = "--force" in sys.argv
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -193,14 +197,24 @@ def recolor_svg(content, colors):
 
 
 def process_file(args):
-    src_file, dst_file, colors = args
+    src_file, dst_file, colors, luts = args
     try:
         if src_file.endswith(".svg"):
             with open(src_file, 'r', errors='ignore') as f:
                 content = f.read()
             new_content = recolor_svg(content, colors)
+            # Icons that are just an SVG shell around a base64 PNG (common in
+            # macOS-style packs) pass through the hex recolor untouched
+            if luts and "base64," in new_content:
+                new_content = recolor_embedded_images(new_content, luts)
             with open(dst_file, 'w') as f:
                 f.write(new_content)
+        elif luts and src_file.endswith(".png"):
+            try:
+                from PIL import Image
+                recolor_raster_image(Image.open(src_file), luts).save(dst_file, "PNG")
+            except Exception:
+                shutil.copy2(src_file, dst_file)
         else:
             shutil.copy2(src_file, dst_file)
         return True
@@ -406,16 +420,13 @@ def hex_to_rgb(hex_color):
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
-def recolor_raster_icons(raster_icons, colors, target_apps_dir):
-    import base64
+def build_raster_luts(colors):
+    """Build the 256-entry gradient-map LUTs used for raster recoloring.
+    Returns (r_lut, g_lut, b_lut), or None when Pillow is unavailable."""
     try:
-        from PIL import Image
+        from PIL import Image  # probe only; callers import what they need
     except ImportError:
-        print("  Pillow not installed, skipping accurate raster recoloring")
-        return []
-
-    if not raster_icons:
-        return []
+        return None
 
     def get_luminance(rgb):
         return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
@@ -453,23 +464,62 @@ def recolor_raster_icons(raster_icons, colors, target_apps_dir):
         g_lut.append(c[1])
         b_lut.append(c[2])
 
+    return r_lut, g_lut, b_lut
+
+
+def recolor_raster_image(img, luts):
+    """Gradient-map a PIL image onto the Material palette, preserving alpha."""
+    from PIL import Image
+    r_lut, g_lut, b_lut = luts
+    img = img.convert("RGBA")
+    alpha = img.split()[3]
+    gray = img.convert("L")
+    mapped = Image.merge("RGB", (gray.point(r_lut), gray.point(g_lut), gray.point(b_lut)))
+    mapped.putalpha(alpha)
+    return mapped
+
+
+# Matches base64-embedded rasters in SVGs (quotes end the match: not in charset)
+DATA_IMAGE_RE = re.compile(r'data:image/(?:png|jpe?g);base64,([A-Za-z0-9+/=\s]+)')
+
+
+def recolor_embedded_images(svg_content, luts):
+    """Recolor base64-embedded rasters inside an SVG. macOS-style icon packs
+    ship PNGs wrapped in SVG, which the hex-color text pass can't touch."""
+    import base64
+    import io
+
+    def repl(match):
+        try:
+            raw = base64.b64decode(match.group(1), validate=False)
+            from PIL import Image
+            img = Image.open(io.BytesIO(raw))
+            out = io.BytesIO()
+            recolor_raster_image(img, luts).save(out, "PNG")
+            return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode('ascii')
+        except Exception:
+            return match.group(0)
+
+    return DATA_IMAGE_RE.sub(repl, svg_content)
+
+
+def recolor_raster_icons(raster_icons, colors, target_apps_dir):
+    import base64
+    luts = build_raster_luts(colors)
+    if luts is None:
+        print("  Pillow not installed, skipping accurate raster recoloring")
+        return []
+
+    if not raster_icons:
+        return []
+    from PIL import Image
+
     successful_names = []
     with tempfile.TemporaryDirectory() as tmpdir:
         for icon_name, source_path in raster_icons:
             try:
-                img = Image.open(source_path).convert("RGBA")
-                alpha = img.split()[3]
-                gray = img.convert("L")
-                
-                # Apply gradient map
-                r = gray.point(r_lut)
-                g = gray.point(g_lut)
-                b = gray.point(b_lut)
-                
-                mapped = Image.merge("RGB", (r, g, b))
-                mapped.putalpha(alpha)
-                img = mapped
-                
+                img = recolor_raster_image(Image.open(source_path), luts)
+
                 # Save full res for SVG wrapping
                 out_path = os.path.join(tmpdir, icon_name + ".png")
                 img.save(out_path, "PNG")
@@ -600,6 +650,24 @@ def create_lowercase_symlinks(theme_path):
     print(f"  Created {symlink_count} lowercase symlinks.")
 
 
+def get_theme_fingerprint(theme_path):
+    """Cheap content fingerprint of a theme dir: file count + newest mtime.
+    Directory mtimes are included because archive extraction preserves file
+    mtimes but always touches the directories entries were written into."""
+    count = 0
+    newest = 0
+    for root, dirs, files in os.walk(theme_path):
+        count += len(files)
+        for path in [root] + [os.path.join(root, f) for f in files]:
+            try:
+                mtime = int(os.lstat(path).st_mtime)
+                if mtime > newest:
+                    newest = mtime
+            except OSError:
+                pass
+    return f"{count}:{newest}"
+
+
 # ── Main Generation ─────────────────────────────────────────────────────────
 def generate():
     # Rapid wallpaper switching spawns overlapping recolor processes that race
@@ -639,6 +707,12 @@ def _generate_locked():
 
     # Get icon theme from config or default
     icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
+    # A caller that just changed the config passes the base explicitly: the config write is
+    # debounced, so reading it back from disk here would race with it.
+    if "--base" in sys.argv:
+        at = sys.argv.index("--base")
+        if at + 1 < len(sys.argv):
+            icon_theme_name = sys.argv[at + 1]
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -666,18 +740,23 @@ def _generate_locked():
 
     print(f"Generating DynamicTheme using {icon_theme_name} as base from {base_theme_path}...")
 
-    # ── Skip if colors haven't changed ───────────────────────────────────
+    # ── Skip if colors, base theme name AND base theme content unchanged ──
+    # The content fingerprint catches the base theme being updated/reinstalled
+    # in place (same name, different files), which the name tag alone misses.
     colors_hash = hashlib.md5(json.dumps(colors, sort_keys=True).encode()).hexdigest()
     hash_file = TARGET_THEME_PATH + ".colhash"
-    try:
-        if os.path.isfile(hash_file) and open(hash_file).read().strip() == colors_hash and os.path.isdir(TARGET_THEME_PATH):
-            # Check same base theme too
-            base_tag = TARGET_THEME_PATH + ".basetheme"
-            if os.path.isfile(base_tag) and open(base_tag).read().strip() == icon_theme_name:
-                print(f"Colors unchanged (hash={colors_hash[:8]}), skipping regeneration.")
-                return
-    except Exception:
-        pass
+    base_fingerprint = get_theme_fingerprint(base_theme_path)
+    fp_file = TARGET_THEME_PATH + ".basefp"
+    if not FORCE:
+        try:
+            if os.path.isfile(hash_file) and open(hash_file).read().strip() == colors_hash and os.path.isdir(TARGET_THEME_PATH):
+                base_tag = TARGET_THEME_PATH + ".basetheme"
+                if os.path.isfile(base_tag) and open(base_tag).read().strip() == icon_theme_name:
+                    if os.path.isfile(fp_file) and open(fp_file).read().strip() == base_fingerprint:
+                        print(f"Colors and base theme unchanged (hash={colors_hash[:8]}), skipping regeneration.")
+                        return
+        except Exception:
+            pass
 
     # ── Phase 0: Generate into temp dir, then atomic swap ─────────────────
     # We generate into TARGET_THEME_PATH + ".new" and rename at the end
@@ -708,6 +787,11 @@ def _generate_locked():
                     f.write(f"Inherits={icon_theme_name},hicolor\n")
                 elif line.startswith("Comment="):
                     f.write(f"Comment=Dynamic Material You icons from {icon_theme_name}\n")
+                elif line.startswith("KDE-Extensions="):
+                    # KIconLoader only probes the listed extensions. SVG-only themes
+                    # ship this as ".svg", which would hide every PNG we generate
+                    # (recolored base rasters, scavenged icons) from KDE/Qt apps.
+                    pass
                 else:
                     f.write(line)
     else:
@@ -720,9 +804,12 @@ def _generate_locked():
                     f"[128x128/apps]\nSize=128\nType=Fixed\nContext=Applications\n\n"
                     f"[48x48/apps]\nSize=48\nType=Fixed\nContext=Applications\n")
 
-    # ── Phase 1: Recolor base theme SVGs ─────────────────────────────────
+    # ── Phase 1: Recolor base theme icons (vector, raster, base64-in-SVG) ─
     tasks = []
     processed_folders = set()
+    luts = build_raster_luts(colors)
+    if luts is None:
+        print("  Pillow not installed — base theme rasters will be copied untinted")
 
     for root_dir, dirs, files in os.walk(base_theme_path):
         if any(x in root_dir.lower() for x in ["apps", "places", "categories", "devices", "status", "actions"]):
@@ -733,7 +820,7 @@ def _generate_locked():
 
             for filename in files:
                 if filename.endswith(".svg") or filename.endswith(".png"):
-                    tasks.append((os.path.join(root_dir, filename), os.path.join(dst_folder, filename), colors))
+                    tasks.append((os.path.join(root_dir, filename), os.path.join(dst_folder, filename), colors, luts))
 
     print(f"[Phase 1] Processing {len(tasks)} base theme icons from {len(processed_folders)} folders...")
 
@@ -777,12 +864,18 @@ def _generate_locked():
     # Update index.theme Directories if needed (ensure scavenged dirs are listed)
     _ensure_directories_in_index(dst_index)
 
-    print("[Phase 3] Updating icon cache...")
-    subprocess.run(["gtk-update-icon-cache", "-f", TARGET_THEME_PATH], capture_output=True)
-
     # ── Atomic swap: replace old DynamicTheme with new one ───────────────
     # Restores TARGET_THEME_PATH global to original value before swapping
     TARGET_THEME_PATH = OLD_TARGET
+    # The caches are built on the staging copy, before the swap: rewriting them inside the
+    # live directory hands a half-written cache to anything resolving icons at that moment,
+    # which crashes it (bad_alloc in KIconTheme) rather than just missing.
+    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
+    if shutil.which("gtk4-update-icon-cache"):
+        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+
     OLD_PATH = TARGET_THEME_PATH + ".old"
     if os.path.exists(TARGET_THEME_PATH):
         if os.path.exists(OLD_PATH):
@@ -792,18 +885,30 @@ def _generate_locked():
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
 
-    # Save hash so next run can skip if colors unchanged
+    # Point every copy of the icon theme setting at DynamicTheme and tell running apps to
+    # re-read it. This used to set gsettings alone, which left kdeglobals naming whatever pack
+    # was picked before themed icons were turned on - and since that is the copy Qt reads, the
+    # first refresh after a wallpaper change dropped the whole desktop back onto that old pack,
+    # uncoloured. The same script does this for the pack picker, so the two cannot drift.
+    #
+    # It also has to run before the hash file below: the shell watches that file and redraws
+    # every icon on screen when it changes, and a redraw that happens before the loader has
+    # been pointed at the new theme draws the old one.
+    subprocess.run(["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "apply_icon_theme.sh"), "DynamicTheme"],
+                   capture_output=True)
+
+    # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:
         with open(hash_file, 'w') as f:
             f.write(colors_hash)
         base_tag = TARGET_THEME_PATH + ".basetheme"
         with open(base_tag, 'w') as f:
             f.write(icon_theme_name)
+        with open(fp_file, 'w') as f:
+            f.write(base_fingerprint)
     except Exception:
         pass
-
-    # Notify system
-    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DynamicTheme"], capture_output=True)
 
     total = base_count + svg_count + raster_count
     print(f"Generation complete. {total} total icons in DynamicTheme.")

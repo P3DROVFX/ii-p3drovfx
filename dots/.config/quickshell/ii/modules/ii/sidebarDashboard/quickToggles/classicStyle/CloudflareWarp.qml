@@ -8,7 +8,7 @@ import Quickshell
 QuickToggleButton {
     id: root
     toggled: false
-    visible: false
+    available: false
     
     contentItem: CustomIcon {
         id: distroIcon
@@ -74,7 +74,7 @@ QuickToggleButton {
             id: warpStatusCollector
             onStreamFinished: {
                 if (warpStatusCollector.text.length > 0) {
-                    root.visible = true
+                    root.available = true
                 }
                 if (warpStatusCollector.text.includes("Unable")) {
                     registrationProc.running = true

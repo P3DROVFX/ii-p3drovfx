@@ -290,7 +290,7 @@ Singleton {
     }
     
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
-        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         let args = [
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
@@ -315,7 +315,7 @@ Singleton {
         }
         Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
@@ -332,7 +332,7 @@ Singleton {
         }
         Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
@@ -354,7 +354,7 @@ Singleton {
         }
         Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
-        const envBinPath = `${Directories.home}/.local/bin:${Directories.home}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
             "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
             `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,

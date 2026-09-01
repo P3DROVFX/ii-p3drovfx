@@ -13,14 +13,14 @@ ContentPage {
     id: page
     forceWidth: false
 
-    // ── Active-fork state (read from state files in ~/.config/quickshell/ii/) ──
-    property string activeRemote: ""
-    property string activeBranch: "main"
-    property string activeFork: "p3drovfx"
-    property string activeCommit: ""
-    property string remoteCommit: ""
-    property bool hasUpdate: activeCommit !== "" && remoteCommit !== "" && activeCommit !== remoteCommit
-    property bool checkingUpdates: false
+    // ── Active-fork state (owned by ShellUpdates so the bar indicator sees it too) ──
+    readonly property string activeRemote: ShellUpdates.activeRemote
+    readonly property string activeBranch: ShellUpdates.activeBranch
+    readonly property string activeFork: ShellUpdates.activeFork
+    readonly property string activeCommit: ShellUpdates.activeCommit
+    readonly property string remoteCommit: ShellUpdates.remoteCommit
+    readonly property bool hasUpdate: ShellUpdates.hasUpdate
+    readonly property bool checkingUpdates: ShellUpdates.checking
     property bool logAutoScroll: true
 
     // ── Custom fork URL input for the Fork Switcher ──
@@ -67,63 +67,13 @@ ContentPage {
         }
     }
 
-    // ── Read state files: .active-remote | .active-branch | .active-fork | .active-commit ──
-    Process {
-        id: stateReadProc
-command: ["bash", "-c",
-            "dir=\"$HOME/.config/quickshell/ii\"; " +
-            "out=\"\"; " +
-            "[ -f \"$dir/.active-remote\" ] && out+=\"$(cat \"$dir/.active-remote\")\"; " +
-            "out+=\"---\"; " +
-            "[ -f \"$dir/.active-branch\" ] && out+=\"$(cat \"$dir/.active-branch\")\"; " +
-            "out+=\"---\"; " +
-            "[ -f \"$dir/.active-fork\" ] && out+=\"$(cat \"$dir/.active-fork\")\"; " +
-            "out+=\"---\"; " +
-            "[ -f \"$dir/.active-commit\" ] && out+=\"$(cat \"$dir/.active-commit\")\"; " +
-            "printf '%s' \"$out\""]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var parts = text.split("---");
-                page.activeRemote = (parts[0] || "").trim();
-                page.activeBranch = (parts[1] || "main").trim() || "main";
-                page.activeFork   = (parts[2] || "p3drovfx").trim() || "p3drovfx";
-                page.activeCommit = (parts[3] || "").trim();
-                // After loading state, kick off the remote-head probe to compute hasUpdate.
-                remoteHeadProc.running = true;
-            }
-        }
-    }
-
-    // ── Remote HEAD probe: shows SHA of origin/<branch> so we can compute hasUpdate ──
-    Process {
-        id: remoteHeadProc
-                command: ["bash", "-c",
-            "if [ -z \"" + page.activeRemote + "\" ] || [ -z \"" + page.activeBranch + "\" ]; then exit 0; fi; " +
-            "git ls-remote --heads \"" + page.activeRemote + "\" \"" + page.activeBranch + "\" 2>/dev/null | awk '{print $1; exit}'"]
-        onStarted: page.checkingUpdates = true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                page.remoteCommit = text.trim();
-                page.checkingUpdates = false;
-            }
-        }
-        stderr: StdioCollector {
-            onStreamFinished: {
-                if (text.trim() !== "") {
-                    page.checkingUpdates = false;
-                    page.remoteCommit = "";
-                }
-            }
-        }
-    }
-
     Component.onCompleted: {
-        stateReadProc.running = true;
+        ShellUpdates.reloadState();
     }
 
     onVisibleChanged: {
         if (visible) {
-            stateReadProc.running = true;
+            ShellUpdates.reloadState();
         }
     }
 
@@ -149,7 +99,7 @@ command: ["bash", "-c",
             if (code === 0) {
                 actionProc.logOutput += "✓ Done\n";
                 // Re-read state in case the fork/branch changed.
-                stateReadProc.running = true;
+                ShellUpdates.reloadState();
             } else {
                 actionProc.logOutput += "✗ Exited with code " + code + "\n";
             }
@@ -572,6 +522,14 @@ command: ["bash", "-c",
                     }
 
                     StatusChip {
+                        visible: page.hasUpdate && ShellUpdates.commitsBehind > 0
+                        iconText: "commit"
+                        chipText: Translation.tr("%1 behind").arg(ShellUpdates.commitsBehind)
+                        chipColor: Appearance.colors.colErrorContainer
+                        textColor: Appearance.colors.colOnErrorContainer
+                    }
+
+                    StatusChip {
                         visible: page.activeFork === "p3drovfx" || page.activeFork === "mine"
                         iconText: page.activeBranch === "main" ? "verified" : "science"
                         chipText: page.activeBranch === "main" ? Translation.tr("Stable") : Translation.tr("Dev (New Features)")
@@ -753,6 +711,77 @@ command: ["bash", "-c",
                             });
                         }
                     }
+                }
+            }
+        }
+
+        // ── Automatic check for new commits on the active fork + branch ──
+        ContentSubsection {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            title: Translation.tr("Automatic update check")
+            icon: "schedule"
+            tooltip: Translation.tr("How often the shell probes this fork's remote for new commits, plus once a few seconds after every shell start. The check is a single git ls-remote plus one GitHub API request — it never touches your config. Only the bar indicator and the badge above react to it; nothing updates on its own.")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.update.autoCheckInterval
+                onSelected: newValue => {
+                    Config.options.update.autoCheckInterval = newValue;
+                }
+                options: [
+                    {
+                        "displayName": Translation.tr("Disabled"),
+                        "icon": "block",
+                        "value": "disabled"
+                    },
+                    {
+                        "displayName": Translation.tr("Every 10 min"),
+                        "icon": "bolt",
+                        "value": "10min"
+                    },
+                    {
+                        "displayName": Translation.tr("Hourly"),
+                        "icon": "avg_pace",
+                        "value": "hourly"
+                    },
+                    {
+                        "displayName": Translation.tr("Daily"),
+                        "icon": "today",
+                        "value": "daily"
+                    },
+                    {
+                        "displayName": Translation.tr("Weekly"),
+                        "icon": "date_range",
+                        "value": "weekly"
+                    }
+                ]
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.leftMargin: 4
+                spacing: 10
+
+                StyledText {
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideRight
+                    text: {
+                        if (page.checkingUpdates)
+                            return Translation.tr("Checking…");
+                        if (ShellUpdates.lastCheck <= 0)
+                            return Translation.tr("Never checked");
+                        return Translation.tr("Last checked %1").arg(new Date(ShellUpdates.lastCheck).toLocaleString(Qt.locale(), Locale.ShortFormat));
+                    }
+                }
+
+                RippleButtonWithIcon {
+                    materialIcon: "refresh"
+                    mainText: Translation.tr("Check now")
+                    enabled: !page.checkingUpdates
+                    onClicked: ShellUpdates.refresh()
                 }
             }
         }

@@ -120,9 +120,30 @@ Singleton {
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature;
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "";
+        root.migrateAiModelId();
         if (root.ready && Config.ready) {
             root.tryMigrateAndSyncUserData();
         }
+    }
+
+    /**
+     * The AI provider and model used to be two keys, and half a pair aimed one
+     * provider's endpoint at a model it did not serve. They are one id now.
+     *
+     * states.json has no raw pass the way config.json does — nothing reads it
+     * except the adapter — so the only way to read a retired key is to keep it
+     * declared. Both are emptied here once their value has been folded in, and
+     * an empty pair is what tells this it has already run.
+     */
+    function migrateAiModelId() {
+        const legacyProvider = root.states.ai.provider;
+        const legacyModel = root.states.ai.model;
+        if (legacyProvider.length === 0 || legacyModel.length === 0)
+            return;
+        root.states.ai.modelId = `${legacyProvider}:${legacyModel}`;
+        root.states.ai.provider = "";
+        root.states.ai.model = "";
+        console.log(`[Persistent] Migrated states.ai to modelId ${root.states.ai.modelId}`);
     }
 
     Timer {
@@ -213,6 +234,27 @@ Singleton {
 
             property JsonObject search: JsonObject {
                 property list<var> aliases: []
+                property list<string> recentEmojis: []
+                property list<string> recentQueries: []
+                property list<string> pinnedEntries: []
+                property list<var> panelUsage: []
+            }
+
+            // Typing test scores. Only aggregate metrics are kept — never the
+            // target text and never the keys that were actually pressed.
+            property JsonObject typingTest: JsonObject {
+                property list<var> recentResults: []
+                property list<var> personalBests: []
+                // Lifetime tallies. They outlive `recentResults`, which is
+                // capped, so "tests completed" stays true after the oldest
+                // results have been pruned away.
+                property int testsStarted: 0
+                property int testsCompleted: 0
+                property real secondsTyping: 0
+                // [{ d: "YYYY-MM-DD", n: tests }], one entry per active day,
+                // bounded to roughly a year — enough for the activity map and
+                // far smaller than keeping every result to derive it.
+                property list<var> activity: []
             }
 
             property JsonObject googleDrive: JsonObject {
@@ -241,9 +283,31 @@ Singleton {
             }
 
             property JsonObject ai: JsonObject {
-                property string provider: "google" // AI providers such as google, open router, mistral
-                property string model: "gemini-2.5-flash" // The model of the ai such as 2.5-flash
+                // Catalog id of the model that answers, "provider:model".
+                property string modelId: "google:gemini-3.6-flash"
+                // Defaults for a new chat. The older fields below are kept so
+                // states written by the first AI rebuild can be migrated.
+                property string defaultModelId: ""
+                property real defaultTemperature: -1
+                property string defaultThinkingLevel: ""
+                property string defaultPersonaId: ""
+                // Retired in favour of modelId, kept declared only so an old
+                // file can be read once. See migrateAiModelId().
+                property string provider: ""
+                property string model: ""
                 property real temperature: 0.5
+                // How hard the model is asked to think: off, low, medium or
+                // high. Each provider maps it to its own knob.
+                property string thinkingLevel: "medium"
+                // Catalog ids of the last few models picked, newest first, so
+                // the picker can offer them without scrolling the whole list.
+                property list<string> recentModels: []
+                // Provider groups folded away in the model picker, so a long
+                // list of accounts stays folded between openings.
+                property list<string> collapsedModelGroups: []
+                // Which persona new chats open with. Empty means the system
+                // prompt from the settings, as before personas existed.
+                property string personaId: ""
             }
 
             property JsonObject background: JsonObject {
@@ -257,10 +321,47 @@ Singleton {
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
+                // Empty selects the generated Hyprland page. User page ids are
+                // stable across edits and imports, so the last collection can
+                // be restored without coupling it to its list position.
+                property string keybindPageId: ""
+                // The page rail follows the timetable sidebar pattern and
+                // remembers whether the user left it expanded.
+                property bool keybindSidebarVisible: true
+                // "day" | "threeDay" | "week" | "month" — timetable range.
+                property string timetableView: "month"
+                property bool timetableShowUpcoming: true
+                // "comfortable" | "compact" | "dots" — month-cell density.
+                property string timetableMonthDensity: "compact"
+                property bool timetableCollapseRecurring: true
+                // Horizon buckets hidden in the month view's upcoming rail.
+                property list<string> timetableCollapsedUpcomingGroups: []
+                // Pixels per hour in the timetable grid. WeekView constrains
+                // writes to its discrete zoom scale.
+                property int timetableSlotHeight: 168
+                // One-shot migrations can change the comfortable default
+                // without overwriting a later zoom choice on every reopen.
+                property int timetableSlotHeightVersion: 0
+                // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
+                // CalendarNotifier so notifications do not repeat after reload.
+                property list<string> timetableNotified: []
+                // Pending calendar reminder snoozes. Each DTO is reconstructed
+                // by CalendarNotifier; no CalendarService object crosses disk.
+                property list<var> timetableSnoozes: []
+                // Gmail account + attachment identity for calendar files the
+                // user opted into importing. Keeps periodic scans idempotent.
+                property list<string> timetableGmailIcsImports: []
+                // The Outlook equivalent. Each entry includes the account,
+                // message attachment identity and a content digest.
+                property list<string> timetableOutlookIcsImports: []
             }
 
             property JsonObject clipboard: JsonObject {
                 property list<string> pinnedEntries: []
+                // cliphist exposes stable IDs but no timestamps. These compact
+                // records let its opt-in retention policy age entries without
+                // guessing from their content or deleting pinned data.
+                property list<var> historySeen: []
             }
 
             property JsonObject sidebar: JsonObject {
@@ -311,6 +412,32 @@ Singleton {
                 property int gamma: 100
                 property string gammaByMonitorJson: "{}"
                 property string sessionId: ""
+            }
+
+            property JsonObject displayColorFilter: JsonObject {
+                property string profilesJson: "{}"
+            }
+
+            // Runtime state of services/Modes.qml: what is running and what
+            // to put back when it ends. Definitions are in Config.
+            property JsonObject modes: JsonObject {
+                property string activeId: ""
+                property string activeSource: "" // manual | schedule | app | game | …
+                property real activeSince: 0 // Epoch ms; must be real
+                property real activeEndsAt: 0 // Epoch ms, 0 = open-ended
+                property list<var> snapshot: [] // [{type, was, set, extra, action}] in apply order
+                property list<string> failed: []
+                property string lastUsedModeId: ""
+                property list<string> suppressed: [] // stopped by hand while triggers still held
+                property list<string> suppressedRoutines: [] // same, for `while` routines
+                property list<var> history: [] // newest first, capped
+                // Running `while` routines: [{id, source, since, snapshot, failed}]
+                property list<var> routineRuns: []
+                // Last fire time of `once` routines for cooldowns: [{id, t}]
+                property list<var> routineFired: []
+                // Action sequences paused on a wait or a delay, resumed by the
+                // engine when due: [{kind, id, index, dueAt, resumed, source, failed}]
+                property list<var> pendingSteps: []
             }
 
             property JsonObject overlay: JsonObject {
@@ -438,6 +565,13 @@ Singleton {
                     property bool running: false
                     property int start: 0
                     property list<var> laps: []
+                }
+                property list<var> countdowns: []
+                // Last duration dialled into the sidebar's timer picker.
+                property JsonObject countdownDraft: JsonObject {
+                    property int hours: 0
+                    property int minutes: 5
+                    property int seconds: 0
                 }
             }
             property list<var> alarms: []

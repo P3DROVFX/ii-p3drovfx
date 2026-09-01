@@ -46,6 +46,37 @@ Singleton {
         return result;
     }
 
+    /**
+     * `value` as JSON with the keys of every object sorted, so two objects that hold the same
+     * data in a different order serialise the same. What every content comparison below the
+     * settings pages uses: a map rebuilt from scratch reads equal to the one it replaces.
+     */
+    function canon(value) {
+        return JSON.stringify(value, (key, item) => {
+            if (item === null || typeof item !== "object" || Array.isArray(item)) return item;
+            const sorted = {};
+            for (const name of Object.keys(item).sort()) sorted[name] = item[name];
+            return sorted;
+        });
+    }
+
+    /**
+     * `next`, unless `memo[name]` already holds something with the same content - then that one.
+     *
+     * A `var` property whose binding hands back the object it already holds does not notify,
+     * and a Repeater whose model is a fresh array rebuilds every delegate even when nothing in
+     * it changed. So a binding that builds its answer from scratch returns it through here, with
+     * a plain `property var memo: ({})` on the component as the store, and the answer only
+     * changes hands when it actually differs.
+     */
+    function keep(memo, name, next) {
+        const json = canon(next);
+        const held = memo[name];
+        if (held !== undefined && held.json === json) return held.value;
+        memo[name] = { "json": json, "value": next };
+        return next;
+    }
+
     function applyToQtObject(qtObj, jsonObj) {
         // console.log("applyToQtObject", JSON.stringify(qtObj, null, 2), "<<", JSON.stringify(jsonObj, null, 2));
         if (!qtObj || typeof jsonObj !== "object" || jsonObj === null) return;

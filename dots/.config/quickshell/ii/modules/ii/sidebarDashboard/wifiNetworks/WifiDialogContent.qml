@@ -106,6 +106,8 @@ StyledFlickable {
             Layout.bottomMargin: 12
         }
 
+        WiredConnectionSection {}
+
         // ── Section: connected ────────────────────────────
         StyledText {
             Layout.fillWidth: true
@@ -516,5 +518,7 @@ StyledFlickable {
                 && Network.friendlyWifiNetworks.length === 0
                 && !Network.wifiScanning
         }
+
+        NetworkConnectionInfoGrid {}
     }
 }

@@ -43,7 +43,7 @@ Singleton {
     }
 
     // Monitor internal built-in Ai service activity
-    readonly property bool internalAiActive: typeof Ai !== "undefined" && Ai.isGenerating
+    readonly property bool internalAiActive: AiAttentionService.active
 
     onInternalAiActiveChanged: {
         if (internalAiActive) {
@@ -73,6 +73,7 @@ Singleton {
             let msg = Ai.messageByID[lastId];
             let nowSecs = Math.floor(Date.now() / 1000);
             let runtime = root._internalStartTime > 0 ? (nowSecs - root._internalStartTime) : 0;
+            const attention = AiAttentionService.snapshot();
 
             list.push({
                 "id": "internal_ai",
@@ -81,9 +82,12 @@ Singleton {
                 "icon": "google-gemini-symbolic",
                 "color": Appearance.colors.colPrimary,
                 "runtime": runtime,
-                "state": (msg && msg.thinking) ? "thinking" : "streaming",
+                "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "streaming"),
+                "priority": attention.needsAction ? 0 : 10,
+                "requiresAttention": attention.needsAction,
+                "deepLink": attention.deepLink,
                 "source": "internal",
-                "model": Ai.currentModelId || "built-in",
+                "model": Ai.currentModelEntry?.title || "built-in",
                 "tokensIn": Ai.tokenCount.input > 0 ? Ai.tokenCount.input : 0,
                 "tokensOut": Ai.tokenCount.output > 0 ? Ai.tokenCount.output : 0
             });
@@ -94,6 +98,6 @@ Singleton {
             list.push(root.cliAgents[i]);
         }
 
-        root.agents = list;
+        root.agents = list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
     }
 }

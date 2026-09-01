@@ -6,8 +6,7 @@ import qs
 import QtQuick
 
 QuickToggleButton {
-    visible: true
-    enabled: (Config.options?.vpn?.enabled ?? true) && VpnService.available
+    interactive: (Config.options?.vpn?.enabled ?? true) && VpnService.available
     toggled: (Config.options?.vpn?.enabled ?? true) && VpnService.displayActive
     buttonIcon: VpnService.displayActive ? "key" : (VpnService.errorMessage ? "error" : "vpn_key")
     onClicked: {

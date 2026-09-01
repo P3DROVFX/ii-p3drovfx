@@ -19,4 +19,5 @@ Rectangle {
     signal openDnsOverTlsDialog
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
+    signal openModesDialog
 }

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: root
@@ -90,17 +91,8 @@ ContentPage {
                 }
             }
 
-            ContentSubsectionLabel {
-                text: Translation.tr("Visual Options")
-            }
-
-            ConfigSwitch {
-                buttonIcon: "wb_sunny"
-                text: Translation.tr("Enable Shadows")
-                checked: Config.options.background.widgets.enableShadows ?? false
-                onCheckedChanged: {
-                    Config.options.background.widgets.enableShadows = checked;
-                }
+            DesktopWidgetVisualOptions {
+                Layout.fillWidth: true
             }
         }
     }

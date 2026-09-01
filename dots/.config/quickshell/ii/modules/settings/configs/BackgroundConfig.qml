@@ -69,6 +69,24 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Wallpaper Quality & Performance")
+            icon: "high_quality"
+
+            ConfigSwitch {
+                buttonIcon: "memory"
+                text: Translation.tr("Downscale wallpaper to reduce VRAM usage")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.scaleLargeWallpapers ?? false
+                onCheckedChanged: {
+                    Config.options.background.scaleLargeWallpapers = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("When enabled, decodes large wallpapers at screen resolution to save VRAM. When disabled (default, like upstream end-4), loads wallpapers at full native resolution for maximum sharpness.")
+                }
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("Wallpaper Transitions")
             icon: "animation"
 

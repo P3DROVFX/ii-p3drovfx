@@ -15,14 +15,18 @@ Singleton {
     id: root
     property string filePath: Directories.generatedMaterialThemePath
 
+    // FileView.reload() only emits loadedChanged on the initial load, so a
+    // reapply has to read the file itself instead of waiting for a signal that
+    // never arrives once the view is loaded.
     function reapplyTheme() {
         themeFileView.reload();
+        delayedFileRead.restart();
     }
 
     function applyColors(fileContent) {
         try {
             if (!fileContent || fileContent.trim() === "") {
-                console.log("[MaterialThemeLoader] applyColors: empty content, skipping")
+                console.warn("[MaterialThemeLoader] colors.json is empty, keeping current palette")
                 return;
             }
 
@@ -35,9 +39,8 @@ Singleton {
             }
 
             root.updateDarkMode(json)
-            console.log("[MaterialThemeLoader] applyColors: darkmode=", Appearance.m3colors.darkmode, "bg=", Appearance.m3colors.m3background)
         } catch (e) {
-            console.log("[MaterialThemeLoader] Error parsing colors.json:", e)
+            console.warn("[MaterialThemeLoader] Error parsing colors.json:", e)
         }
     }
 
@@ -58,8 +61,6 @@ Singleton {
         return `m3${camelCaseKey}`
     }
 
-    property int retryCount: 0
-
     function resetFilePathNextTime() {
         resetFilePathNextWallpaperChange.enabled = true
     }
@@ -72,25 +73,6 @@ Singleton {
             root.filePath = ""
             root.filePath = Directories.generatedMaterialThemePath
             resetFilePathNextWallpaperChange.enabled = false
-        }
-    }
-
-    Timer {
-        id: retryTimer
-        interval: 150
-        repeat: false
-        running: false
-        onTriggered: {
-            if (root.retryCount < 5) {
-                root.retryCount++
-                console.log("[MaterialThemeLoader] Retrying file reload, attempt:", root.retryCount)
-                themeFileView.reload()
-            } else {
-                console.log("[MaterialThemeLoader] Max retries reached, resetting path to re-establish watch")
-                root.filePath = ""
-                root.filePath = Directories.generatedMaterialThemePath
-                root.retryCount = 0
-            }
         }
     }
 
@@ -109,22 +91,14 @@ Singleton {
         path: Qt.resolvedUrl(root.filePath)
         watchChanges: true
         onFileChanged: {
-            console.log("[MaterialThemeLoader] onFileChanged triggered, reloading...")
             this.reload();
             delayedFileRead.restart();
         }
         onLoadedChanged: {
-            console.log("[MaterialThemeLoader] onLoadedChanged, loaded=", themeFileView.loaded)
-            if (themeFileView.loaded) {
-                root.retryCount = 0
-                retryTimer.stop()
+            if (themeFileView.loaded)
                 root.applyColors(themeFileView.text())
-            }
         }
-        onLoadFailed: {
-            console.log("[MaterialThemeLoader] onLoadFailed, starting retry timer")
-            retryTimer.start()
-        }
+        onLoadFailed: root.resetFilePathNextTime()
     }
 
     function toggleLightDark() {

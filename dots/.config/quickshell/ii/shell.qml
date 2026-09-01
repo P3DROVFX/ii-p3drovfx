@@ -2,6 +2,10 @@
 //@ pragma Env QS_NO_RELOAD_POPUP=1
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 //@ pragma Env QT_QUICK_FLICKABLE_WHEEL_DECELERATION=10000
+// Qt allocates a depth-stencil renderbuffer per window (and per layer) for 2D opaque batching. The rendered
+// output is identical without it; it only trades a little GPU time on heavy overdraw for ~20 MB per
+// fullscreen window on HiDPI.
+//@ pragma Env QSG_NO_DEPTH_BUFFER=1
 
 // Remove two slashes below and adjust the value to change the UI scale
 ////@ pragma Env QT_SCALE_FACTOR=1
@@ -32,20 +36,33 @@ ShellRoot {
         }
         MaterialThemeLoader.reapplyTheme();
         Hyprsunset.load();
+        DisplayColorFilter.load();
         ConflictKiller.load();
         Cliphist.refresh();
         Wallpapers.load();
         Updates.load();
+        ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
         DarkModeService.automatic;
         ChangelogService.load();
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
+        CalendarNotifier.enabled; // Touch singleton: evaluates calendar VALARMs every minute
+        CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
+        GmailCalendarImport.enabled; // Touch singleton: imports opted-in Gmail ICS attachments idempotently
+        OutlookCalendarImport.enabled; // Touch singleton: mirrors opted-in Outlook events into a read-only calendar
+        OutlookIcsImport.enabled; // Touch singleton: imports opted-in Outlook ICS attachments idempotently
+        BirthdaysService.enabled; // Touch singleton: projects contact birthdays into timetable items
         GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
+        Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
         TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
+        WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
         IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
+        DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
+        BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
+        EarbudsControlService.connected; // Touch singleton: provider-priority earbuds router
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
@@ -72,7 +89,7 @@ ShellRoot {
         if (!(Config.options && Config.options.appearance && Config.options.appearance.openrgb && Config.options.appearance.openrgb.applyOnStartup))
             return;
         openRgbStartupApplied = true;
-        openRgbApplyProc.command = ["python", openRgbApplyScript];
+        openRgbApplyProc.command = ["python3", openRgbApplyScript];
         openRgbApplyProc.running = false;
         openRgbApplyProc.running = true;
     }
@@ -89,15 +106,26 @@ ShellRoot {
         id: openRgbApplyProc
     }
 
+    // Families are loaded by URL rather than as inline components: an inline `component: X {}`
+    // compiles X and its whole import closure (for Waffle: 144 files plus the FluentWinUI3/Fusion
+    // style and Kirigami plugins) at startup even when that family is never active. With a URL,
+    // nothing is compiled until the family is wanted.
+    //
+    // LazyLoader.setSource() compiles the component but never incubates it, and setActive(true)
+    // before a component exists is a silent no-op, so `active` must depend on `source` to avoid
+    // the family never loading when the two bindings settle in the wrong order.
     component PanelFamilyLoader: LazyLoader {
         required property string identifier
+        required property string familyUrl
         property bool extraCondition: true
-        active: Config.ready && Config.options.panelFamily === identifier && extraCondition
+        readonly property bool wanted: Config.ready && Config.options.panelFamily === identifier && extraCondition
+        source: wanted ? familyUrl : ""
+        active: wanted && source !== ""
     }
 
     PanelFamilyLoader {
         identifier: "ii"
-        component: IllogicalImpulseFamily {}
+        familyUrl: Qt.resolvedUrl("panelFamilies/IllogicalImpulseFamily.qml")
     }
 
     PanelFamilyLoader {
@@ -107,7 +135,7 @@ ShellRoot {
 
     PanelFamilyLoader {
         identifier: "waffle"
-        component: WaffleFamily {}
+        familyUrl: Qt.resolvedUrl("panelFamilies/WaffleFamily.qml")
     }
 
     // Settings app loaded in-process once requested, then kept alive briefly

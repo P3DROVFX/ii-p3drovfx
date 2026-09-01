@@ -19,7 +19,7 @@ MouseArea {
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Component.onCompleted: {

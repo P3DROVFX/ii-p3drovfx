@@ -3,7 +3,6 @@ import qs.modules.common
 import qs.modules.ii.bar.popups.weather
 import qs.modules.common.widgets
 import qs.services
-import Quickshell
 import QtQuick
 import QtQuick.Layouts
 
@@ -24,14 +23,7 @@ MouseArea {
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.RightButton
-        onPressed: {
-            Weather.getData();
-            Quickshell.execDetached(["notify-send",
-                Translation.tr("Weather"),
-                Translation.tr("Refreshing (manually triggered)"),
-                "-a", "Shell"
-            ])
-        }
+        onPressed: Weather.refreshManually()
     }
 
     // Default Row (Non-Material)

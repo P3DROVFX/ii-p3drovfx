@@ -20,7 +20,7 @@ Item {
         
         // 1. Try desktopEntry.icon directly if valid
         if (root.desktopEntry && root.desktopEntry.icon) {
-            let path = Quickshell.iconPath(root.desktopEntry.icon, "").toString();
+            let path = Quickshell.iconPath(root.desktopEntry.icon, true).toString();
             if (path !== "" && !path.includes("image-missing"))
                 return path;
         }
@@ -29,7 +29,7 @@ Item {
         if (root.appId) {
             let guessed = TaskbarApps.getCachedIcon(root.appId);
             if (guessed && guessed !== "image-missing") {
-                let path = Quickshell.iconPath(guessed, "").toString();
+                let path = Quickshell.iconPath(guessed, true).toString();
                 if (path !== "" && !path.includes("image-missing"))
                     return path;
             }
@@ -39,7 +39,7 @@ Item {
         if (root.desktopEntry && root.desktopEntry.icon) {
             let guessed = AppSearch.guessIcon(root.desktopEntry.icon);
             if (guessed && guessed !== "image-missing") {
-                let path = Quickshell.iconPath(guessed, "").toString();
+                let path = Quickshell.iconPath(guessed, true).toString();
                 if (path !== "" && !path.includes("image-missing"))
                     return path;
             }
@@ -102,9 +102,12 @@ Item {
             opacity: root.iconOpacity
 
             // Force reload when icon theme regenerates; cache: false so the reload
-            // re-decodes from disk instead of resurrecting a stale cached pixmap,
-            // async so the re-decode doesn't stall the UI thread
-            asynchronous: true
+            // re-decodes from disk instead of resurrecting a stale cached pixmap.
+            // Loaded on this thread on purpose: an asynchronous icon is resolved on Qt's
+            // image thread, and the icon loader underneath it is one shared, unguarded
+            // object - reading it there while the theme changes returned the theme before
+            // the change, and sometimes took the whole shell down with it.
+            asynchronous: false
             backer.cache: false
             backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision, parent.height + TaskbarApps.iconThemeRevision)
 

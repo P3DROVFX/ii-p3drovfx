@@ -1,0 +1,157 @@
+# AI Assistant — Setup & Troubleshooting Guide
+
+The shell has a built-in AI chat assistant, reachable from two places:
+
+- **Sidebar** (`Ctrl+Shift+O` for a new chat, or your configured sidebar-left keybind).
+- **Search overview**, by typing the `&` prefix (or letting the search auto-detect a
+  question with the `auto` trigger mode — see *Settings → Search*).
+
+Both surfaces share the same conversation, sessions, models, and permissions — there is
+only one assistant, presented in two places.
+
+## 1. Turning it on: the policy level
+
+Everything is gated by **Settings → Privacy → AI** (`Config.options.policies.ai`), one of
+three levels:
+
+| Level    | Value | What it allows |
+|----------|-------|-----------------|
+| **No**     | `0` | The assistant is fully disabled. No model, no tools, no requests. |
+| **Local**  | `2` | Only models running on your own machine (Ollama on `127.0.0.1`/`unix://`). Tools that need the internet (web search, ESPN, Gmail, TickTick, Google Tasks) are refused before they run. |
+| **Yes**    | `1` | Local and remote models both work. Tools may reach the network when the tool itself needs it, independent of whether the *model* is local — a local model can still search the web under this level. |
+
+The default is **Yes**. If you never want the assistant talking to a remote API, set it
+to **Local** — this is enforced in the code path that actually dispatches requests and
+tools, not just hidden in the UI.
+
+## 2. Picking a model
+
+Open the model picker (composer's model chip, or *Settings → AI Assistant → Models &
+advanced*). Three families are available:
+
+- **Ollama (local)** — anything you have pulled locally. No API key, fully private,
+  works under both **Local** and **Yes** policy.
+- **Built-in cloud providers** — Gemini, Anthropic, OpenRouter, DeepSeek. Needs an API
+  key, stored in the system keyring (GNOME Keyring / KWallet), never in `config.json`.
+- **Your own OpenRouter models** — *Models & advanced → Browse and add OpenRouter
+  models* lets you search OpenRouter's live catalogue and import exactly the model you
+  want, with its real context window, pricing, and capabilities (tools, vision,
+  reasoning) pulled from the API instead of guessed.
+
+### Setting up a local model (recommended first step)
+
+1. Install [Ollama](https://ollama.com) and make sure the daemon is running
+   (`systemctl --user status ollama` or `ollama serve`).
+2. Pull a model that supports tool calling, since most of the shell's integrations are
+   exposed as tools:
+   ```bash
+   ollama pull qwen3.5:9b
+   ```
+   Any recent Ollama model with `tools` in its reported capabilities works
+   (`ollama show <model>` lists them). Models without tool support still chat normally,
+   they just can't search, read settings, or touch anything else in the shell.
+3. Pick it in the model chip. The shell detects `tools`, `vision`, `thinking`, and
+   `embeddings` capabilities straight from Ollama's own `/api/show` — nothing is
+   inferred from the model's name.
+
+## 3. What the assistant can actually do
+
+Every capability is a declared **tool**, listed with its risk and network requirement in
+*Settings → AI Assistant → Models & advanced → Tools*. Nothing here is a blanket
+"give the AI access to my computer" switch — each tool is scoped:
+
+- **Settings** — search, read, and (with your approval) change a specific option by key.
+  Never dumps the whole configuration file into the conversation.
+- **Files** — search and read files **only inside folders you explicitly configured**
+  (empty by default — nothing is reachable until you add a folder). Reading a file's
+  contents into the chat still asks for approval; secrets, keys, and dotfiles like
+  `.ssh` are refused outright, not just discouraged.
+- **Local retrieval (RAG)** — see [section 4](#4-local-retrieval-rag) below.
+- **Web search / page fetch** — real search results and page text, with private/internal
+  addresses (localhost, your router, link-local, Tailscale's own range) blocked even if
+  a redirect tries to sneak through one.
+- **Tasks** (TickTick / Google Tasks / local list), **Gmail** (read-only: search, read a
+  message or thread, open in the mail client — never send, delete, or modify anything),
+  **ESPN scores**, **system status** (battery, volume, DND, CPU/memory), **reminders and
+  alarms**, **keybind lookup**.
+- **Shell commands** — off by default, and always shown before it runs, with a chance to
+  reject it.
+
+Each tool has a permission: **ask every time**, **always allow**, or **always deny**,
+configurable per tool in the Tools page. A mutation (creating a task, changing a
+setting) always shows a preview card before anything is written, whether the permission
+is "ask" or "allow" — "always allow" skips the click, not the visibility.
+
+## 4. Local retrieval (RAG)
+
+Lets the assistant search **folders you pick**, entirely on your machine — nothing is
+uploaded anywhere, embeddings are generated by the same local Ollama instance you
+already use for chat.
+
+**Setup** (*Settings → AI Assistant → Models & advanced → Local retrieval (RAG)*):
+
+1. Pull an embedding model. A small one is enough:
+   ```bash
+   ollama pull all-minilm
+   ```
+   The RAG settings page detects it automatically (it recognizes common embedding model
+   names — `minilm`, `nomic-embed`, `mxbai-embed`, `bge-`, `gte-`, `e5-`, or anything with
+   `embed` in the name) and lists it as a candidate; pick it from the dropdown.
+2. Click **Add a folder** and choose a directory to index.
+3. Wait for indexing to finish — the page shows file/chunk counts and progress live.
+4. Ask a question that needs it: *"Search my indexed notes for what compositor
+   Hyprland uses"*. The assistant calls the `rag_search` tool itself when relevant; you
+   don't need to name the tool.
+
+Nothing is indexed until you add a folder — there is no default or "index my whole
+home" behavior, on purpose. Re-index, pause, or delete a collection from the same page
+at any time.
+
+## 5. Troubleshooting
+
+### "AI is busy with another conversation" that never goes away
+
+This was a real bug, fixed as of this guide. If you still see it: check
+`qs log -c ii -t 100 | grep -i AiRunCoordinator` for a run stuck in `"preparing"`, and
+restart the shell (`ii-restart`) as an immediate workaround while filing what you asked
+right before it happened.
+
+### The chat looks dead after closing the sidebar/overview mid-answer
+
+The assistant is a background singleton — closing the panel that shows it should never
+stop generation. If a response never appears when you reopen the panel, check
+`qs -c ii ipc call ai lastAnswer` for the actual state, and `qs log -c ii -t 100` for
+errors.
+
+### A tool call (e.g. web search) never finishes
+
+Every tool call has a deadline; a genuinely hung one is swept and reported as an error
+rather than left spinning forever. If a tool call takes unusually long, check whether
+the backend it needs is actually reachable — e.g. `curl -s http://127.0.0.1:11434/api/tags`
+for Ollama, or your configured web search backend (SearXNG/Brave/DuckDuckGo — see
+`AI_SEARCH_II_INTEGRATIONS_PLAN.md` §9 for the exact fallback order).
+
+### RAG says "no embedding model detected"
+
+The dropdown only lists models whose name matches a known embedding-model pattern (see
+[section 4](#4-local-retrieval-rag)). If your model isn't listed, pull one of the
+suggested ones, or rename-tag it locally with `ollama cp <model> <name-with-embed-in-it>`.
+
+### General log/debug commands
+
+```bash
+qs log -c ii -t 100                 # last 100 lines
+qs log -f -c ii                     # follow live
+qs -c ii ipc call ai ask "ping"     # send a message from the terminal
+qs -c ii ipc call ai lastAnswer     # inspect the most recent completed answer
+```
+
+## 6. Privacy notes
+
+- Nothing leaves your machine under the **Local** policy level, enforced at the tool
+  dispatch layer, not just hidden in the UI.
+- API keys live in the system keyring, never in `config.json`, never in a preset export,
+  and never appear in the conversation the model sees.
+- Gmail access is read-only by construction: the tool registry only ever exposes
+  search/read/open, and there is no send/modify/delete tool to accidentally enable.
+- RAG collections are folders you explicitly added; nothing is indexed by default.

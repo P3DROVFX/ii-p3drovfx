@@ -1,7 +1,7 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import qs.services
-import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -16,10 +16,15 @@ Item {
     property int todoListItemPadding: 8
     property int listBottomPadding: 80
     property int entranceTrigger: -1
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     StyledListView {
         id: listView
         anchors.fill: parent
+        // The add and sync buttons float over the bottom corners of this list.
+        // Without the reserve the last task sits underneath them with no way to
+        // scroll it clear - the property existed for this and was never applied.
+        bottomMargin: taskListRoot.listBottomPadding
         spacing: taskListRoot.todoListItemSpacing
         animateAppearance: false
         model: ScriptModel {
@@ -29,55 +34,76 @@ Item {
             id: todoItem
             required property var modelData
             required property int index
-            property int entranceTrigger: taskListRoot.entranceTrigger
             property bool pendingDoneToggle: false
             property bool pendingDelete: false
             property bool enableHeightAnimation: false
+            property real _entranceOpacity: 1
+            property real _entranceOffset: 0
+            property bool _entranceDone: true
+
+            opacity: _entranceDone ? 1 : _entranceOpacity
+            transform: Translate { y: todoItem._entranceDone ? 0 : todoItem._entranceOffset }
+
+            function finishEntrance() {
+                if (entranceController.item)
+                    entranceController.item.stop();
+                _entranceDone = true;
+                _entranceOpacity = 1;
+                _entranceOffset = 0;
+            }
+
+            function startEntrance() {
+                if (!taskListRoot.entranceAnimationsEnabled || taskListRoot.entranceTrigger < 0) {
+                    finishEntrance();
+                    return;
+                }
+                _entranceDone = false;
+                _entranceOpacity = 0;
+                _entranceOffset = 20;
+                Qt.callLater(function() {
+                    if (taskListRoot.entranceAnimationsEnabled && entranceController.item)
+                        entranceController.item.restart();
+                });
+            }
+
+            Component.onCompleted: startEntrance()
+
+            Connections {
+                target: taskListRoot
+                function onEntranceTriggerChanged() { todoItem.startEntrance(); }
+                function onEntranceAnimationsEnabledChanged() {
+                    if (!taskListRoot.entranceAnimationsEnabled)
+                        todoItem.finishEntrance();
+                }
+            }
+
+            Loader {
+                id: entranceController
+                active: taskListRoot.entranceAnimationsEnabled
+                sourceComponent: Item {
+                    function restart() { animation.restart(); }
+                    function stop() { animation.stop(); }
+                    SequentialAnimation {
+                        id: animation
+                        PauseAnimation {
+                            duration: Math.round(Math.min(Math.max(todoItem.index, 0), 20)
+                                * Appearance.animation.elementMove.duration * 0.1)
+                        }
+                        ParallelAnimation {
+                            SidebarGroupAnimation { target: todoItem; property: "_entranceOpacity"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+                            SidebarGroupAnimation { target: todoItem; property: "_entranceOffset"; from: 20; to: 0; animationSpec: Appearance.animation.elementMove }
+                        }
+                        ScriptAction { script: todoItem._entranceDone = true }
+                    }
+                }
+            }
 
             property bool _optimisticDone: modelData.done
             onModelDataChanged: _optimisticDone = modelData.done
 
-            property real _entranceOpacity: 0
-            property real _entranceOffset: 20
-            property bool _entranceDone: false
-
-            opacity: _entranceDone ? 1.0 : _entranceOpacity
-
             implicitHeight: todoItemRectangle.implicitHeight
             width: ListView.view.width
             clip: true
-
-            transform: Translate {
-                y: _entranceDone ? 0 : _entranceOffset
-            }
-
-            onEntranceTriggerChanged: {
-                _entranceDone = false;
-                _entranceOpacity = 0;
-                _entranceOffset = 20;
-                Qt.callLater(function() {
-                    entranceAnim.start();
-                });
-            }
-
-            Component.onCompleted: {
-                _entranceDone = false;
-                _entranceOpacity = 0;
-                _entranceOffset = 20;
-                Qt.callLater(function() {
-                    entranceAnim.start();
-                });
-            }
-
-            SequentialAnimation {
-                id: entranceAnim
-                PauseAnimation { duration: Math.min(Math.max(todoItem.index, 0), 20) * 45 }
-                ParallelAnimation {
-                    NumberAnimation { target: todoItem; property: "_entranceOpacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
-                    NumberAnimation { target: todoItem; property: "_entranceOffset"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                }
-                PropertyAction { target: todoItem; property: "_entranceDone"; value: true }
-            }
 
             Behavior on implicitHeight {
                 enabled: enableHeightAnimation

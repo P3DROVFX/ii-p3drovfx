@@ -4,7 +4,8 @@ Premium Material 3 / Material You dotfiles for Hyprland, powered by Quickshell.
 
 ## System Preview
 
-<img width="1966" height="1137" alt="Frame 178" src="https://github.com/user-attachments/assets/82761533-92bc-4e9a-9805-3d6945d46d36" />
+<img width="1924" height="1095" alt="SCreenshots_ii-p3drovfx" src="https://github.com/user-attachments/assets/dd08c71b-0965-4f9c-9c58-01271fd24e67" />
+
 
 ## Overview
 
@@ -19,6 +20,7 @@ It aims to provide a state-of-the-art Linux desktop experience by strictly adher
 
 - **Hyprland 0.56.1 or newer**
 - **Matugen 4.1.0 or newer**
+- **quickshell-git 0.3.0 or newer**
 
 > [!NOTE]
 > Matugen **4.1.0+ is the supported/recommended version**. The lightweight scheme-switching path still detects Matugen 3 and avoids the Matugen 4-only `--source-color-index` option, preserving scheme changes on older installations. On Fedora, the installer enables `avengemedia/danklinux` to source the current Matugen package.
@@ -49,7 +51,69 @@ cd ii-p3drovfx
 
 ## Documentation
 
-Please refer to the **[upstream ii-vynx wiki](https://github.com/vaguesyntax/ii-vynx/wiki)** for detailed component descriptions.
+Please refer to the **[ii-p3drovfx wiki](https://github.com/P3DROVFX/ii-p3drovfx/wiki)** for detailed component descriptions.
+
+<details> <summary><strong>🛠 Common Issues</strong></summary>
+
+<br>
+
+### Dynamic colors / Matugen are not working
+
+If wallpaper colors are not being applied and you see an error such as:
+
+> matugen exited with an error, so the shell kept its previous palette.
+
+First, make sure you are running:
+
+- **Matugen** 4.1.0 or newer
+- **quickshell-git** 0.3.0 or newer
+
+You can check the installed versions with:
+
+```bash
+matugen --version
+quickshell --version
+```
+
+#### Arch Linux / CachyOS
+
+Make sure you are using the AUR `quickshell-git` package, rather than another Quickshell build provided by a third-party repository.
+
+A reported case on CachyOS was caused by the system using the Noctalia Quickshell package from the CachyOS repositories instead of `aur/quickshell-git`. Replacing it with the AUR package fixed Matugen and dynamic colors.
+
+```bash
+yay -S aur/quickshell-git
+```
+
+If another Quickshell package is installed, your package manager may ask to replace the conflicting package.
+
+---
+
+### Quickshell stopped working after a Qt update
+
+Quickshell may stop starting correctly after a Qt update if the installed `quickshell-git` package was compiled against the previous Qt version.
+
+For example, this can happen after updates such as:
+
+```
+Qt 6.11.1 -> Qt 6.11.2
+```
+
+Rebuild `quickshell-git` against the newly installed Qt libraries:
+
+```bash
+yay -S --rebuild aur/quickshell-git
+```
+
+Then restart Quickshell.
+
+If rebuilding does not solve the problem, completely reinstall `quickshell-git` using your AUR helper.
+
+> **💡 Tip**
+>
+> If the shell suddenly stops working immediately after a Qt system update, rebuilding `quickshell-git` should be one of the first troubleshooting steps.
+
+</details>
 
 ## Credits
 

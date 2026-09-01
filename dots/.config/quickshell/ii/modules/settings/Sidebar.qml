@@ -220,8 +220,8 @@ Item {
                                     isFirst:      index === 0
                                     isLast:       index === pageRepeater.count - 1
                                     isActive:     sidebarRoot.currentPage === modelData.pageIndex
-                                    prevIsActive: index > 0 && sidebarRoot.currentPage === pageRepeater.itemAt(index - 1)?.modelData?.pageIndex
-                                    nextIsActive: index < pageRepeater.count - 1 && sidebarRoot.currentPage === pageRepeater.itemAt(index + 1)?.modelData?.pageIndex
+                                    prevIsActive: index > 0 && sidebarRoot.currentPage === groupDelegate.modelData.pages[index - 1]?.pageIndex
+                                    nextIsActive: index < (groupDelegate.modelData.pages?.length ?? 0) - 1 && sidebarRoot.currentPage === groupDelegate.modelData.pages[index + 1]?.pageIndex
                                     prevIsPressed: pageRepeater.pressedIndex === index - 1
                                     nextIsPressed: pageRepeater.pressedIndex === index + 1
 

@@ -107,7 +107,7 @@ Singleton {
 
     // ── 8. KDE Connect Device ─────────────────────────────────────────────────
     readonly property bool kdeConnectActive: (options.enableKdeConnect ?? true) && KdeConnectService.available && KdeConnectService.activeDevice !== null && ((KdeConnectService.activeDevice.isReachable ?? KdeConnectService.activeDevice.reachable) ?? false)
-    readonly property string kdeConnectDeviceName: kdeConnectActive ? KdeConnectService.activeDevice.name : ""
+    readonly property string kdeConnectDeviceName: kdeConnectActive ? KdeConnectService.activeDeviceDisplayName : ""
     readonly property int kdeConnectBattery: kdeConnectActive ? (KdeConnectService.activeDevice.batteryCharge ?? -1) : -1
 
     // ── 9. Active Targets & Helper Functions ──────────────────────────────────

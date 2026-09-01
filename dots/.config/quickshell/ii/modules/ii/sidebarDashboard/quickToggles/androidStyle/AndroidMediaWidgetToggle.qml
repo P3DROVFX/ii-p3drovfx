@@ -6,6 +6,7 @@ import qs.modules.common
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 import "QuickToggleCatalog.js" as QuickToggleCatalog
 import Quickshell.Services.Mpris
 import Quickshell.Io
@@ -62,40 +63,18 @@ Item {
     }
 
     property int entranceTrigger: -1
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.85
-    property real _entranceTranslateY: 20
-    property bool _entranceDone: false
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    readonly property bool entrancePageActive: root.pageIndex === -1 || !root.panel
+        || root.panel.currentPage === root.pageIndex
 
-    onEntranceTriggerChanged: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    Component.onCompleted: {
-        _entranceDone = false;
-        _entranceOpacity = 0;
-        _entranceScale = 0.85;
-        _entranceTranslateY = 20;
-        Qt.callLater(function() {
-            entranceAnim.start();
-        });
-    }
-
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: Math.min(Math.max(root.buttonIndex, 0), 15) * 35 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "_entranceScale"; from: 0.85; to: 1.0; duration: 350; easing.type: Easing.OutBack }
-            NumberAnimation { target: root; property: "_entranceTranslateY"; from: 20; to: 0; duration: 320; easing.type: Easing.OutCubic }
-        }
-        PropertyAction { target: root; property: "_entranceDone"; value: true }
+    DashboardEntranceProgress {
+        id: entranceProgress
+        animationSpec: Appearance.animation.elementMove
+        animationsEnabled: root.entranceAnimationsEnabled
+        trigger: root.entranceTrigger
+        pageActive: root.entrancePageActive
+        delayIndex: Math.min(Math.max(root.buttonIndex, 0), 15)
+        staggerRatio: 0.08
     }
 
     property string tooltipText: {
@@ -149,9 +128,9 @@ Item {
         width: root.width
         height: root.height
 
-        scale: (root.isDragging ? 1.05 : 1.0) * (root._entranceDone ? 1.0 : root._entranceScale)
+        scale: (root.isDragging ? 1.05 : 1.0) * (0.85 + 0.15 * entranceProgress.progress)
         opacity: {
-            if (!root._entranceDone) return root._entranceOpacity;
+            if (entranceProgress.progress < 1) return entranceProgress.progress;
             if (root.isUnused)
                 return 0.5;
             if (root.editMode && !root.isDragging)
@@ -164,15 +143,15 @@ Item {
 
         transform: Translate {
             x: root.isDragging ? root.dragOffsetX : 0
-            y: (root.isDragging ? root.dragOffsetY : 0) + (root._entranceDone ? 0 : root._entranceTranslateY)
+            y: (root.isDragging ? root.dragOffsetY : 0) + 20 * (1 - entranceProgress.progress)
         }
 
         Behavior on scale {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.clickBounce.numberAnimation.createObject(visualButton)
         }
         Behavior on opacity {
-            enabled: !entranceAnim.running
+            enabled: !entranceProgress.running
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
 

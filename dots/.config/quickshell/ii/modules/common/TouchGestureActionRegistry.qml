@@ -25,6 +25,7 @@ Singleton {
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
         { id: "usage", name: "App Usage Stats", icon: "query_stats" },
+        { id: "modes", name: "Modes & Routines", icon: "tune" },
         { id: "barToggle", name: "Toggle Bar", icon: "dock_to_bottom" },
         { id: "oledSaver", name: "OLED Saver (Blackout)", icon: "brightness_empty" },
         { id: "lock", name: "Lock Screen", icon: "lock" },
@@ -135,6 +136,10 @@ Singleton {
 
         case "usage":
             GlobalStates.usageOpen = !GlobalStates.usageOpen;
+            break;
+
+        case "modes":
+            GlobalStates.modesOpen = !GlobalStates.modesOpen;
             break;
 
         case "barToggle":

@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.sidebarDashboard
 
 RippleButton {
     id: button
@@ -14,27 +15,38 @@ RippleButton {
     property var taskList
     readonly property int taskMargin: 5
     property bool showPopup: false
-
     property int gridRow: -1
     property int gridCol: -1
     property int entranceKey: 0
+    property bool entranceAnimationsEnabled: false
+    property real _entranceOpacity: 1
+    property real _entranceScale: 1
+    property real _entranceTranslateX: 0
+    property real _entranceTranslateY: 0
+    property real _taskDotScale: 1
+    property bool _entranceDone: true
 
-    property real _entranceOpacity: 0
-    property real _entranceScale: 0.82
-    property real _entranceTranslateX: -15
-    property real _entranceTranslateY: -10
-    property bool _entranceDone: false
-
-    opacity: _entranceDone ? 1.0 : _entranceOpacity
-    scale: _entranceDone ? 1.0 : _entranceScale
+    opacity: _entranceDone ? 1 : _entranceOpacity
+    scale: _entranceDone ? 1 : _entranceScale
     transform: Translate {
         x: button._entranceDone ? 0 : button._entranceTranslateX
         y: button._entranceDone ? 0 : button._entranceTranslateY
     }
 
+    function finishEntrance() {
+        if (entranceController.item)
+            entranceController.item.stop();
+        _entranceDone = true;
+        _entranceOpacity = 1;
+        _entranceScale = 1;
+        _entranceTranslateX = 0;
+        _entranceTranslateY = 0;
+        _taskDotScale = 1;
+    }
+
     function resetAndAnimate() {
-        if (gridRow < 0 || gridCol < 0) {
-            _entranceDone = true;
+        if (!entranceAnimationsEnabled || gridRow < 0 || gridCol < 0) {
+            finishEntrance();
             return;
         }
         _entranceDone = false;
@@ -42,30 +54,48 @@ RippleButton {
         _entranceScale = 0.82;
         _entranceTranslateX = -15;
         _entranceTranslateY = -10;
+        _taskDotScale = 0;
         Qt.callLater(function() {
-            entranceAnim.start();
+            if (button.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
         });
     }
 
     onEntranceKeyChanged: resetAndAnimate()
-    Component.onCompleted: resetAndAnimate()
+    onEntranceAnimationsEnabledChanged: entranceAnimationsEnabled ? resetAndAnimate() : finishEntrance()
+    Component.onCompleted: finishEntrance()
 
-    SequentialAnimation {
-        id: entranceAnim
-        PauseAnimation { duration: Math.max(0, Math.round(((button.gridRow ?? 0) + (button.gridCol ?? 0)) * 28)) }
-        ParallelAnimation {
-            NumberAnimation { target: button; property: "_entranceOpacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
-            NumberAnimation { target: button; property: "_entranceScale"; from: 0.82; to: 1.0; duration: 280; easing.type: Easing.OutBack }
-            NumberAnimation { target: button; property: "_entranceTranslateX"; from: -15; to: 0; duration: 260; easing.type: Easing.OutCubic }
-            NumberAnimation { target: button; property: "_entranceTranslateY"; from: -10; to: 0; duration: 260; easing.type: Easing.OutCubic }
+    Loader {
+        id: entranceController
+        active: button.entranceAnimationsEnabled
+        sourceComponent: Item {
+            function restart() { animation.restart(); }
+            function stop() { animation.stop(); }
+            SequentialAnimation {
+                id: animation
+                PauseAnimation {
+                    duration: Math.round((Math.max(0, button.gridRow) + Math.max(0, button.gridCol))
+                        * Appearance.animation.elementMove.duration * 0.07)
+                }
+                ParallelAnimation {
+                    SidebarGroupAnimation { target: button; property: "_entranceOpacity"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+                    SidebarGroupAnimation { target: button; property: "_entranceScale"; from: 0.82; to: 1; animationSpec: Appearance.animation.elementMove }
+                    SidebarGroupAnimation { target: button; property: "_entranceTranslateX"; from: -15; to: 0; animationSpec: Appearance.animation.elementMove }
+                    SidebarGroupAnimation { target: button; property: "_entranceTranslateY"; from: -10; to: 0; animationSpec: Appearance.animation.elementMove }
+                }
+                ScriptAction { script: button._entranceDone = true }
+                SidebarGroupAnimation { target: button; property: "_taskDotScale"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+            }
         }
-        PropertyAction { target: button; property: "_entranceDone"; value: true }
     }
-    
+
     Layout.fillWidth: false
     Layout.fillHeight: false
-    implicitWidth: 38
-    implicitHeight: 38
+    // The grid is the tallest thing in the sidebar's bottom group, so the cell
+    // shrinks with the space the calendar is given instead of being clipped.
+    property real cellSize: 38
+    implicitWidth: cellSize
+    implicitHeight: cellSize
     toggled: (isToday == 1)
     buttonRadius: Appearance.rounding.small
     
@@ -74,7 +104,7 @@ RippleButton {
         width: 8
         height: 8
         radius: Appearance.rounding.full
-        scale: 0
+        scale: button._taskDotScale
         color: (taskList.length > 0 && isToday !== -1 && !bold) ? 
                toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary : "transparent"
         anchors {
@@ -82,21 +112,6 @@ RippleButton {
             left: parent.left
             margins: 4
         }
-    }
-
-    Connections {
-        target: button
-        function on_EntranceDoneChanged() {
-            if (button._entranceDone && taskList.length > 0 && isToday !== -1 && !bold) {
-                taskDotPop.start();
-            }
-        }
-    }
-
-    SequentialAnimation {
-        id: taskDotPop
-        NumberAnimation { target: taskDot; property: "scale"; from: 0; to: 1.15; duration: 250; easing.type: Easing.OutBack }
-        NumberAnimation { target: taskDot; property: "scale"; from: 1.15; to: 1.0; duration: 150; easing.type: Easing.OutBack }
     }
 
     LazyLoader {

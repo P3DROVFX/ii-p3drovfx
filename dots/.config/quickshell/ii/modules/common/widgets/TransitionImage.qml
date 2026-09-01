@@ -131,40 +131,54 @@ Item {
         }
     }
 
-    ShaderEffectSource {
-        id: fromSource
-        sourceItem: root.imgAIsBack ? imgA : imgB
-        hideSource: shaderProgressAnim.running
-        live: shaderProgressAnim.running
-        visible: false
-    }
-
-    ShaderEffectSource {
-        id: toSource
-        sourceItem: root.imgAIsBack ? imgB : imgA
-        hideSource: shaderProgressAnim.running
-        live: shaderProgressAnim.running
-        visible: false
-    }
-
-    ShaderEffect {
-        id: transitionEffect
+    // The two ShaderEffectSources keep their item-sized textures alive after a transition even
+    // though they are non-live and invisible at rest, so they only exist while a shader
+    // transition is in flight. They were never live before the animation started, so capture
+    // timing is unchanged.
+    Loader {
+        id: transitionLoader
         anchors.fill: parent
         z: 2
-        visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
-        
-        property var source: fromSource
-        property var fromImage: fromSource
-        property var toImage: toSource
-        property real progress: root.transitionProgress
-        property real aspectX: width / height
-        property real aspectY: 1.0
-        property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
-        property vector2d origin: Qt.vector2d(0.5, 0.5)
-        
-        fragmentShader: (root.activeShader !== "" && root.shadersPath !== "")
-            ? root.shadersPath + "/" + root.activeShader + ".frag.qsb"
-            : ""
+        active: shaderProgressAnim.running || root.activeShader !== ""
+
+        sourceComponent: Item {
+            anchors.fill: parent
+
+            ShaderEffectSource {
+                id: fromSource
+                sourceItem: root.imgAIsBack ? imgA : imgB
+                hideSource: shaderProgressAnim.running
+                live: shaderProgressAnim.running
+                visible: false
+            }
+
+            ShaderEffectSource {
+                id: toSource
+                sourceItem: root.imgAIsBack ? imgB : imgA
+                hideSource: shaderProgressAnim.running
+                live: shaderProgressAnim.running
+                visible: false
+            }
+
+            ShaderEffect {
+                id: transitionEffect
+                anchors.fill: parent
+                visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
+
+                property var source: fromSource
+                property var fromImage: fromSource
+                property var toImage: toSource
+                property real progress: root.transitionProgress
+                property real aspectX: width / height
+                property real aspectY: 1.0
+                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+                property vector2d origin: Qt.vector2d(0.5, 0.5)
+
+                fragmentShader: (root.activeShader !== "" && root.shadersPath !== "")
+                    ? root.shadersPath + "/" + root.activeShader + ".frag.qsb"
+                    : ""
+            }
+        }
     }
 
     Image {

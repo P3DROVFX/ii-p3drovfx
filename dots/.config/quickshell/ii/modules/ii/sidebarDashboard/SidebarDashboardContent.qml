@@ -27,6 +27,9 @@ import qs.modules.ii.sidebarDashboard.tailscale
 import qs.modules.ii.sidebarDashboard.dnsOverTls
 import qs.modules.ii.sidebarDashboard.idleInhibitor
 import qs.modules.ii.sidebarDashboard.screenShader
+import qs.modules.ii.sidebarDashboard.modes
+import "SidebarSpaceArbitration.js" as SpaceArbitration
+import "SidebarPerformancePolicy.js" as PerformancePolicy
 
 Item {
     id: root
@@ -44,34 +47,140 @@ Item {
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog
+    property bool showModesDialog: false
+    property bool wifiDialogStatePublished: false
+    property bool bluetoothDialogStatePublished: false
+
+    function publishWifiDialogState(open: bool): void {
+        if (root.wifiDialogStatePublished === open)
+            return;
+        root.wifiDialogStatePublished = open;
+        GlobalStates.adjustDashboardWifiDialogOpenCount(open ? 1 : -1);
+    }
+
+    function publishBluetoothDialogState(open: bool): void {
+        if (root.bluetoothDialogStatePublished === open)
+            return;
+        root.bluetoothDialogStatePublished = open;
+        GlobalStates.adjustDashboardBluetoothDialogOpenCount(open ? 1 : -1);
+    }
+
+    onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
+    onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
-
+    property bool isLoadedOnLeft: false
+    readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
+        ? GlobalStates.leftSidebarAnimating
+        : GlobalStates.rightSidebarAnimating
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
     property int entranceTrigger: -1
+    property bool entrancePending: false
 
-    function triggerContentEntrance() {
-        entranceTrigger++;
+    function queueContentEntrance() {
+        if (!PerformancePolicy.shouldQueueEntranceAnimations(
+                root.entranceAnimationsEnabled, GlobalStates.sidebarRightOpen))
+            return;
+        root.entrancePending = true;
+        root.activateDeferredContent();
+        root.triggerContentEntranceIfReady();
+    }
+
+    function triggerContentEntranceIfReady() {
+        if (!PerformancePolicy.canTriggerEntranceAnimations(
+                root.entrancePending,
+                root.entranceAnimationsEnabled,
+                GlobalStates.sidebarRightOpen,
+                root.dashboardSidebarAnimating
+            ))
+            return;
+        root.activateDeferredContent();
+        root.entrancePending = false;
+        root.entranceTrigger++;
+    }
+
+    onEntranceAnimationsEnabledChanged: {
+        if (entranceAnimationsEnabled)
+            root.queueContentEntrance();
+        else
+            root.entrancePending = false;
+    }
+
+    // Compact-space arbitration is runtime-only. When the height that the
+    // notification center would receive with the bottom group expanded falls
+    // below its useful minimum, exactly one of the two groups stays expanded.
+    // Notifications win when compact mode first activates; a manual expansion
+    // request from the bottom group hands the space to it until it is collapsed.
+    property bool compactBottomRequestedExpanded: false
+    readonly property real expandedNotificationsHeightBudget: SpaceArbitration.expandedCenterBudget(
+        adaptiveGroups.availableHeight,
+        bottomGroup.expandedHeight,
+        sidebarPadding
+    )
+    readonly property real minimumExpandedNotificationsHeight: centerGroup.item?.minimumExpandedHeight ?? 0
+    readonly property bool compactModeRequired: SpaceArbitration.requiresCompactMode(
+        expandedNotificationsHeightBudget,
+        minimumExpandedNotificationsHeight,
+        !editMode && centerGroup.visible && bottomGroup.visible
+    )
+    readonly property var compactSpaceResolution: SpaceArbitration.resolve(
+        compactModeRequired,
+        compactBottomRequestedExpanded,
+        bottomGroup.collapsed,
+        editMode
+    )
+    readonly property bool notificationsCollapsed: compactSpaceResolution.notificationsCollapsed
+    readonly property bool bottomForceCollapsed: compactSpaceResolution.bottomForcedCollapsed
+
+    onCompactModeRequiredChanged: compactBottomRequestedExpanded = false
+
+    // The optimized default incubates heavy delegates after the outer motion.
+    // The explicit animation opt-in instead loads them with the open request,
+    // so their entrance choreography starts while the sidebar itself slides.
+    property bool deferredContentReady: false
+    function activateDeferredContent() {
+        deferredContentReady = PerformancePolicy.nextDeferredContentReady(
+            deferredContentReady,
+            GlobalStates.sidebarRightOpen,
+            root.dashboardSidebarAnimating,
+            root.entranceAnimationsEnabled
+        );
+    }
+
+    onDashboardSidebarAnimatingChanged: {
+        if (!dashboardSidebarAnimating) {
+            root.activateDeferredContent();
+            root.triggerContentEntranceIfReady();
+        }
     }
 
     readonly property bool isDynamicIslandTop: !BarPlacement.vertical && !BarPlacement.bottom && Config.options.bar.cornerStyle === 3
     readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && Config.options.bar.cornerStyle === 3
-
-    property bool isLoadedOnLeft: false
 
     Component.onCompleted: {
         if (GlobalStates.requestVolumeDialog) {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
         }
+        root.activateDeferredContent();
+        if (GlobalStates.sidebarRightOpen)
+            root.queueContentEntrance();
+    }
+
+    Component.onDestruction: {
+        root.publishWifiDialogState(false);
+        root.publishBluetoothDialogState(false);
     }
 
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
-                root.triggerContentEntrance();
-            }
-            if (!GlobalStates.sidebarRightOpen) {
+                // Let target-width bindings start the outer animation first.
+                Qt.callLater(root.activateDeferredContent);
+                root.queueContentEntrance();
+            } else {
+                root.entrancePending = false;
                 root.showWifiDialog = false;
                 root.showBluetoothDialog = false;
                 root.showAudioOutputDialog = false;
@@ -83,6 +192,8 @@ Item {
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
+                root.showModesDialog = false;
+                pomodoroTimePicker.close();
             }
         }
     }
@@ -105,6 +216,30 @@ Item {
     implicitHeight: sidebarRightBackground.implicitHeight
     implicitWidth: sidebarRightBackground.implicitWidth
 
+    // Edit mode grows the quick panel by a tray of every toggle that is not on a
+    // page, which has no natural cap and runs straight past the bottom of the
+    // sidebar. Hand the panel the height the column can actually give it, so it
+    // can cap and scroll that tray itself.
+    readonly property real quickPanelMaxHeight: {
+        let available = mainColumn.height;
+        const fixedHeights = [
+            sidebarBanner.visible ? sidebarBanner.Layout.preferredHeight : -1,
+            headerRow.visible ? headerRow.implicitHeight + headerRow.Layout.topMargin : -1,
+            centerGroup.visible ? centerGroup.implicitHeight : -1,
+            bottomGroup.visible
+                ? (bottomGroup.effectivelyCollapsed
+                    ? bottomGroup.collapsedHeight
+                    : bottomGroup.expandedHeight)
+                : -1
+        ];
+        for (let i = 0; i < fixedHeights.length; i++) {
+            if (fixedHeights[i] < 0)
+                continue;
+            available -= fixedHeights[i] + mainColumn.spacing;
+        }
+        return Math.max(0, available);
+    }
+
     Loader {
         id: sidebarRightShadowLoader
         active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate || root.isDynamicIslandTop || root.isDynamicIslandBottom) && !root.anyDialogVisible
@@ -119,6 +254,7 @@ Item {
         id: sidebarRightBackground
 
         anchors.fill: parent
+        clip: true
         implicitHeight: Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
@@ -139,6 +275,7 @@ Item {
         }
 
         ColumnLayout {
+            id: mainColumn
             anchors.fill: parent
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
@@ -150,6 +287,18 @@ Item {
                 blur: sidebarRightBackground.dialogBlurProgress
             }
 
+            // SIDEBAR BANNER
+            SidebarBanner {
+                id: sidebarBanner
+                Layout.fillWidth: true
+                Layout.preferredHeight: 220
+                visible: Config.options.sidebar.enableBanner
+                enabled: visible
+                editMode: root.editMode
+                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+            }
+
+            // DEFAULT
             SystemButtonRow {
                 id: headerRow
                 Layout.fillHeight: false
@@ -157,6 +306,8 @@ Item {
                 // Layout.margins: 10
                 Layout.topMargin: 5
                 Layout.bottomMargin: 0
+                visible: !Config.options.sidebar.enableBanner
+                enabled: visible
                 entranceTrigger: root.entranceTrigger
                 editMode: root.editMode
                 onEditModeToggled: (newEditMode) => root.editMode = newEditMode
@@ -166,6 +317,7 @@ Item {
                 id: classicQuickPanelLoader
                 styleName: "classic"
                 sourceComponent: ClassicQuickPanel {
+                    editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                 }
@@ -176,6 +328,8 @@ Item {
                 styleName: "android"
                 sourceComponent: AndroidQuickPanel {
                     editMode: root.editMode
+                    maxContentHeight: root.quickPanelMaxHeight
+                    entranceTrigger: root.entranceTrigger
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
@@ -183,31 +337,110 @@ Item {
                 }
             }
 
-            Loader {
-                id: centerGroup
-                // Notifications remain backed by their global service; only the
-                // heavy visual center group is discarded while the sidebar is closed.
-                active: GlobalStates.sidebarRightOpen
-                asynchronous: true
-                sourceComponent: CenterWidgetGroup {}
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                visible: !root.editMode
-            }
-
             Item {
+                id: adaptiveGroups
                 Layout.fillHeight: true
-                visible: root.editMode
-            }
-
-            BottomWidgetGroup {
-                id: bottomGroup
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillHeight: false
                 Layout.fillWidth: true
-                Layout.preferredHeight: implicitHeight
-                forceCollapsed: root.editMode
+                Layout.minimumHeight: containmentHeight
+                // This boundary lies inside the dashboard's rounded silhouette
+                // and contains Bottom overshoot without clipping unrelated
+                // header/quick-toggle shadows or allocating an FBO.
+                clip: true
+                readonly property real availableHeight: Math.max(0, mainColumn.height - y)
+                readonly property real packedTakeoverHeight: SpaceArbitration.packedGroupsMinimumHeight(
+                        bottomGroup.expandedHeight,
+                        centerGroup.collapsedHeight,
+                        targetSpacing
+                    )
+                readonly property real targetContainmentHeight: root.notificationsCollapsed
+                    ? packedTakeoverHeight
+                    : availableHeight
+                property real containmentHeight: targetContainmentHeight
+                readonly property real targetSpacing: SpaceArbitration.dashboardSpacing(
+                    root.notificationsCollapsed,
+                    root.sidebarPadding
+                )
+                readonly property real targetBottomHeight: bottomGroup.effectivelyCollapsed
+                    ? bottomGroup.collapsedHeight
+                    : root.notificationsCollapsed
+                        ? SpaceArbitration.expandedBottomFillHeight(
+                            availableHeight,
+                            bottomGroup.expandedHeight,
+                            centerGroup.collapsedHeight,
+                            targetSpacing
+                        )
+                        : bottomGroup.expandedHeight
+                readonly property real expandedCenterTargetHeight: Math.max(
+                    0,
+                    availableHeight - targetBottomHeight - targetSpacing
+                )
+                property real groupSpacing: targetSpacing
+                property real animatedBottomHeight: targetBottomHeight
+
+                Behavior on containmentHeight {
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
+                    }
+                }
+
+                Behavior on groupSpacing {
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
+                    }
+                }
+
+                Behavior on animatedBottomHeight {
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
+                    }
+                }
+
+                Loader {
+                    id: centerGroup
+                    // Notifications remain backed by their global service; only the
+                    // heavy visual center group is incubated after the sidebar
+                    // slide and then kept warm for this dashboard instance.
+                    active: root.deferredContentReady
+                    asynchronous: true
+                    sourceComponent: CenterWidgetGroup {
+                        collapsed: root.notificationsCollapsed
+                        entranceTrigger: root.entranceTrigger
+                    }
+                    readonly property real collapsedHeight: item?.collapsedHeight ?? 0
+                    property real animatedHeight: SpaceArbitration.notificationMaximumHeight(
+                        root.notificationsCollapsed,
+                        collapsedHeight,
+                        adaptiveGroups.expandedCenterTargetHeight
+                    )
+
+                    Behavior on animatedHeight {
+                        SidebarGroupAnimation {
+                            animationSpec: Appearance.animation.elementMove
+                        }
+                    }
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: bottomGroup.top
+                    anchors.bottomMargin: adaptiveGroups.groupSpacing
+                    height: animatedHeight
+                    visible: !root.editMode
+                }
+
+                BottomWidgetGroup {
+                    id: bottomGroup
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: adaptiveGroups.animatedBottomHeight
+                    forceCollapsed: root.bottomForceCollapsed
+                    outerSidebarAnimating: root.dashboardSidebarAnimating
+                    entranceTrigger: root.entranceTrigger
+                    onCollapseRequested: shouldCollapse => {
+                        if (root.compactModeRequired)
+                            root.compactBottomRequestedExpanded = !shouldCollapse;
+                    }
+                }
             }
         }
     }
@@ -296,6 +529,313 @@ Item {
         dialog: ScreenShaderDialog {}
     }
 
+    ToggleDialog {
+        shownPropertyString: "showModesDialog"
+        dialog: ModesDialog {}
+    }
+
+    TimePickerPopup {
+        id: pomodoroTimePicker
+        anchors.fill: parent
+        z: 999
+        onAccepted: (pickedHour, pickedMinute) => {
+            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        }
+    }
+
+    Connections {
+        target: TimerService
+        function onCustomTimeRequested(currentHour, currentMinute, title) {
+            pomodoroTimePicker.open(currentHour, currentMinute, title);
+        }
+    }
+
+    component SidebarBanner: Item {
+        id: headerRoot
+        property bool editMode: false
+        signal editModeToggled(bool newEditMode)
+        implicitHeight: 220
+
+        Rectangle {
+            id: bannerBackground
+            anchors.fill: parent
+            radius: 15
+            color: Appearance.colors.colLayer1
+
+            // wallpaper section (top 70%)
+            Item {
+                id: wallpaperArea
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                }
+                height: parent.height * 0.7
+
+                readonly property string rawBannerSource: {
+                    if (Config.options.sidebar.useCustomBanner) {
+                        return Config.options.sidebar.bannerImage || `${Directories.assetsPath}/images/default_wallpaper.png`;
+                    }
+                    return Config.options.background.wallpaperPath || "";
+                }
+
+                readonly property string cleanBannerSource: {
+                    let p = wallpaperArea.rawBannerSource;
+                    if (!p) return "";
+                    const qIdx = p.indexOf("?");
+                    if (qIdx !== -1) p = p.substring(0, qIdx);
+                    return p.startsWith("file://") ? p : ("file://" + p);
+                }
+
+                readonly property bool isBannerAnimated: {
+                    const lower = wallpaperArea.cleanBannerSource.toLowerCase();
+                    return lower.includes(".gif") || lower.includes(".webp");
+                }
+
+                readonly property bool shouldPlayBanner: {
+                    return GlobalStates.dashboardPanelOpen && wallpaperArea.isBannerAnimated;
+                }
+                
+                Rectangle {
+                    id: imageMask
+                    anchors.fill: parent
+                    radius: 15
+                    visible: false
+                }
+
+                // Static Image Banner (zero QMovie overhead)
+                Image {
+                    id: bannerImage
+                    anchors.fill: parent
+                    readonly property real windowDpr: (QsWindow.window as QsWindow)?.devicePixelRatio ?? 0
+                    property size decodeBox: Qt.size(0, 0)
+                    onWindowDprChanged: bannerImage.growDecodeBox()
+                    onWidthChanged: bannerImage.growDecodeBox()
+                    onHeightChanged: bannerImage.growDecodeBox()
+                    function growDecodeBox() {
+                        if (bannerImage.windowDpr <= 0 || bannerImage.width <= 0 || bannerImage.height <= 0)
+                            return;
+                        const boxWidth = Math.ceil(bannerImage.width * bannerImage.windowDpr);
+                        const boxHeight = Math.ceil(bannerImage.height * bannerImage.windowDpr);
+                        if (boxWidth <= bannerImage.decodeBox.width && boxHeight <= bannerImage.decodeBox.height)
+                            return;
+                        bannerImage.decodeBox = Qt.size(Math.max(boxWidth, bannerImage.decodeBox.width),
+                            Math.max(boxHeight, bannerImage.decodeBox.height));
+                    }
+
+                    source: (!wallpaperArea.isBannerAnimated && bannerImage.decodeBox.width > 0)
+                        ? wallpaperArea.cleanBannerSource
+                        : ""
+                    sourceSize: bannerImage.decodeBox
+                    fillMode: Image.PreserveAspectCrop
+                    cache: false
+                    asynchronous: true
+                    visible: !wallpaperArea.isBannerAnimated
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: imageMask
+                    }
+                }
+
+                // Animated GIF Banner (only active when isBannerAnimated is true, paused when sidebar is closed)
+                AnimatedImage {
+                    id: bannerAnimatedImage
+                    anchors.fill: parent
+                    source: wallpaperArea.isBannerAnimated ? wallpaperArea.cleanBannerSource : ""
+                    fillMode: Image.PreserveAspectCrop
+                    playing: wallpaperArea.shouldPlayBanner
+                    paused: !wallpaperArea.shouldPlayBanner
+                    cache: false
+                    asynchronous: true
+                    visible: wallpaperArea.isBannerAnimated && status === Image.Ready
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: imageMask
+                    }
+                }
+            }
+
+            // Button section
+            Rectangle {
+                id: buttonArea
+
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    bottom: parent.bottom
+                }
+
+                height: parent.height * 0.3
+                color: Appearance.colors.colLayer1
+                bottomLeftRadius: bannerBackground.bottomLeftRadius
+                bottomRightRadius: bannerBackground.bottomRightRadius
+            }
+
+            // pfp overlaps both sections
+            Item {
+                id: profilePicContainer
+
+                anchors {
+                    left: parent.left
+                    bottom: buttonArea.bottom
+
+                    leftMargin: 16
+                    bottomMargin: 55
+                }
+
+                width: 70
+                height: 70
+                visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none"
+
+                // DISTRO ICON
+                Loader {
+                    anchors.fill: parent
+                    active: Config.options.sidebar.dashboardHeader.profileImageType === "distro"
+                    sourceComponent: CustomIcon {
+                        anchors.centerIn: parent
+                        width: parent.width - 8
+                        height: parent.height - 8
+                        source: SystemInfo.distroIcon
+                        colorize: true
+                        color: Appearance.colors.colOnLayer1
+                    }
+                }
+
+                // USER PROFILE
+                UserProfileAvatar {
+                    anchors.fill: parent
+                    active: GlobalStates.dashboardPanelOpen
+                    visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
+                    avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
+                    fontPixelSize: 32
+                    fontWeight: Font.Black
+                    borderWidth: 4
+                    borderColor: Appearance.colors.colLayer1
+                }
+            }
+
+            // sidebar banner text
+            Column {
+                id: greetingTextColumn
+                anchors {
+                    left: parent.left
+                    leftMargin: 20   // matches systemButtonsRow's rightMargin
+                    verticalCenter: buttonArea.verticalCenter
+                }
+                spacing: 2
+
+                // greeting text
+                Text {
+                    id: greetingText
+                    color: Appearance.colors.colOnLayer0
+                    font.pixelSize: 14
+                    font.weight: Font.Normal
+                    horizontalAlignment: Text.AlignLeft
+                    width: 210
+                    elide: Text.ElideRight
+
+                    text: {
+                        const mode = Config.options.sidebar.dashboardHeader.textMode;
+                        const hour = (DateTime.clock?.date ?? new Date()).getHours();
+                        const timeGreeting = hour < 5 ? Translation.tr("Good Night,")
+                            : hour < 12 ? Translation.tr("Good Morning,")
+                                : hour < 18 ? Translation.tr("Good Afternoon,")
+                                    : hour < 22 ? Translation.tr("Good Evening,")
+                                        : Translation.tr("Good Night,");
+                        return mode === "username"
+                            ? (Config.options.userProfile.customGreeting !== "" ? Config.options.userProfile.customGreeting : timeGreeting) + " " + (Config.options.userProfile.customName !== "" ? Config.options.userProfile.customName : SystemInfo.username.charAt(0).toUpperCase() + SystemInfo.username.slice(1))
+                            : mode === "uptime"
+                                ? Translation.tr("Uptime") + ": " + DateTime.uptime
+                                : mode === "custom"
+                                    ? Config.options.sidebar.dashboardHeader.customText
+                                    : "";
+                    }
+                }
+
+                // subtext under greeting
+                Text {
+                    id: greetingSubtextText
+                    color: "#888888"
+                    font.pixelSize: 12
+                    font.weight: Font.Normal
+                    horizontalAlignment: Text.AlignLeft
+                    width: 220
+                    elide: Text.ElideRight
+
+                    visible: Config.options.sidebar.dashboardSubHeader.greetingSubtextMode !== "none"
+                    text: {
+                        const mode = Config.options.sidebar.dashboardSubHeader.greetingSubtextMode;
+                        return mode === "uptime"
+                            ? Translation.tr("Up • ") + DateTime.uptime
+                            : mode === "custom"
+                                ? Config.options.sidebar.dashboardSubHeader.customText
+                                : "";
+                    }
+                }
+            }
+        }
+
+        // sidebar banner buttons
+        Item {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+                bottomMargin: 10
+            }
+
+            height: systemButtonsRow.implicitHeight
+
+            ButtonGroup {
+                id: systemButtonsRow
+                anchors {
+                    right: parent.right
+                    rightMargin: 10
+                    verticalCenter: buttonArea.verticalCenter
+                }
+                color: Appearance.colors.colLayer1
+                padding: 4
+
+                QuickToggleButton {
+                    id: editButton
+                    toggled: headerRoot.editMode
+
+                    visible:
+                        Config.options.sidebar.quickToggles.style === "android"
+
+                    buttonIcon: "edit"
+                    onClicked: {
+                        headerRoot.editMode = !headerRoot.editMode
+                        headerRoot.editModeToggled(headerRoot.editMode)
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "restart_alt"
+                    onClicked: {
+                        Quickshell.execDetached(["hyprctl", "reload"])
+                        Quickshell.reload(true)
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "settings"
+                    onClicked: {
+                        GlobalStates.sidebarRightOpen = false
+                        GlobalStates.toggleSettings()
+                    }
+                }
+
+                QuickToggleButton {
+                    buttonIcon: "power_settings_new"
+                    onClicked: {
+                        GlobalStates.sessionOpen = true
+                    }
+                }
+            }
+        }
+    }
+
     component ToggleDialog: Loader {
         id: toggleDialogLoader
         required property string shownPropertyString
@@ -335,8 +875,21 @@ Item {
         required property string styleName
         Layout.alignment: item?.Layout.alignment ?? Qt.AlignHCenter
         Layout.fillWidth: item?.Layout.fillWidth ?? false
+        Layout.preferredHeight: animatedPanelHeight
         visible: active
         active: Config.options.sidebar.quickToggles.style === styleName
+        clip: true
+        property real animatedPanelHeight: item?.implicitHeight ?? 0
+
+        // Animate the panel at its single layout boundary. Animating nested
+        // heights makes the outer target move on every frame and stretches the
+        // perceived transition beyond the configured duration.
+        Behavior on animatedPanelHeight {
+            SidebarGroupAnimation {
+                animationSpec: Appearance.animation.elementMove
+            }
+        }
+
         Connections {
             target: quickPanelImplLoader.item
             function onOpenAudioOutputDialog() {
@@ -363,6 +916,9 @@ Item {
             function onOpenIdleInhibitorDialog() {
                 root.showIdleInhibitorDialog = true;
             }
+            function onOpenModesDialog() {
+                root.showModesDialog = true;
+            }
         }
     }
 
@@ -373,61 +929,11 @@ Item {
         property bool editMode: false
         signal editModeToggled(bool newEditMode)
 
-        // Entrance animation properties
-        property real _leftTranslateX: -30
-        property real _rightTranslateX: 30
-        property real _entranceTranslateY: -15
-        property real _entranceOpacity: 0
-        property bool _entranceDone: false
-        readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
-
-        onEntranceTriggerChanged: {
-            if (_animationsDisabled) {
-                _entranceDone = true;
-                _entranceOpacity = 1;
-                _leftTranslateX = 0;
-                _rightTranslateX = 0;
-                _entranceTranslateY = 0;
-                return;
-            }
-            _entranceDone = false;
-            _entranceOpacity = 0;
-            _leftTranslateX = -30;
-            _rightTranslateX = 30;
-            _entranceTranslateY = -15;
-            Qt.callLater(function() {
-                entranceAnim.start();
-            });
-        }
-
-        Component.onCompleted: {
-            if (_animationsDisabled) {
-                _entranceDone = true;
-                _entranceOpacity = 1;
-                _leftTranslateX = 0;
-                _rightTranslateX = 0;
-                _entranceTranslateY = 0;
-                return;
-            }
-            _entranceDone = false;
-            _entranceOpacity = 0;
-            _leftTranslateX = -30;
-            _rightTranslateX = 30;
-            _entranceTranslateY = -15;
-            Qt.callLater(function() {
-                entranceAnim.start();
-            });
-        }
-
-        SequentialAnimation {
-            id: entranceAnim
-            ParallelAnimation {
-                NumberAnimation { target: systemButtonRowRoot; property: "_entranceOpacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_leftTranslateX"; from: -30; to: 0; duration: 320; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_rightTranslateX"; from: 30; to: 0; duration: 340; easing.type: Easing.OutCubic }
-                NumberAnimation { target: systemButtonRowRoot; property: "_entranceTranslateY"; from: -15; to: 0; duration: 300; easing.type: Easing.OutCubic }
-            }
-            PropertyAction { target: systemButtonRowRoot; property: "_entranceDone"; value: true }
+        DashboardEntranceProgress {
+            id: headerEntranceProgress
+            animationSpec: Appearance.animation.elementMove
+            animationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+            trigger: systemButtonRowRoot.entranceTrigger
         }
 
         Rectangle {
@@ -438,16 +944,15 @@ Item {
                 left: parent.left
             }
             color: Appearance.colors.colLayer1
+            opacity: headerEntranceProgress.progress
+            transform: Translate {
+                x: -30 * (1 - headerEntranceProgress.progress)
+                y: -15 * (1 - headerEntranceProgress.progress)
+            }
             readonly property int fullRadius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
             radius: fullRadius
 
             visible: Config.options.sidebar.dashboardHeader.profileImageType !== "none" || Config.options.sidebar.dashboardHeader.textMode !== "none"
-
-            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
-            transform: Translate {
-                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._leftTranslateX
-                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
-            }
 
             property int rowLeftMargin: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile" ? 6 : 14
             readonly property bool _hasText: Config.options.sidebar.dashboardHeader.textMode !== "none"
@@ -487,152 +992,11 @@ Item {
                         }
                     }
 
-                    Item {
+                    UserProfileAvatar {
                         anchors.fill: parent
+                        active: GlobalStates.dashboardPanelOpen
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
-
-                        readonly property string _style: Config.options.userProfile.imageStyle
-
-                        // Custom
-                        Item {
-                            anchors.fill: parent
-                            visible: parent._style === "custom"
-                            Image {
-                                id: profilePicSource
-                                anchors.fill: parent
-                                source: parent.visible ? Config.options.userProfile.imagePath : ""
-                                sourceSize.width: parent.width
-                                sourceSize.height: parent.height
-                                fillMode: Image.PreserveAspectCrop
-                                visible: false
-                            }
-                            Rectangle {
-                                id: profilePicMask
-                                anchors.fill: parent
-                                radius: width / 2
-                                visible: false
-                            }
-                            OpacityMask {
-                                anchors.fill: parent
-                                source: profilePicSource
-                                maskSource: profilePicMask
-                            }
-                        }
-
-                        // Initial
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            visible: parent._style === "initial" || parent._style === "default"
-
-                            Image {
-                                id: initialAvatarSource
-                                anchors.fill: parent
-                                source: parent.visible ? Directories.userAvatarPathAccountsService : ""
-                                sourceSize.width: parent.width
-                                sourceSize.height: parent.height
-                                fillMode: Image.PreserveAspectCrop
-                                visible: false
-                            }
-                            Rectangle {
-                                id: initialAvatarMask
-                                anchors.fill: parent
-                                radius: width / 2
-                                visible: false
-                            }
-                            OpacityMask {
-                                id: initialAvatarImage
-                                anchors.fill: parent
-                                source: initialAvatarSource
-                                maskSource: initialAvatarMask
-                                visible: initialAvatarSource.status === Image.Ready
-                            }
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: width / 2
-                                color: Appearance.colors.colPrimary
-                                visible: initialAvatarSource.status !== Image.Ready
-
-                                StyledText {
-                                    anchors.centerIn: parent
-                                    text: SystemInfo.username.charAt(0).toUpperCase()
-                                    color: Appearance.colors.colOnPrimary
-                                    font.pixelSize: Appearance.font.pixelSize.larger
-                                    font.weight: Font.DemiBold
-                                }
-                            }
-                        }
-
-                        // Expressive
-                        MaterialShape {
-                            anchors.fill: parent
-
-                            function resolveShapeInner(s) {
-                                switch (s) {
-                                case "Cookie9Sided":
-                                    return MaterialShape.Shape.Cookie9Sided;
-                                case "Cookie12Sided":
-                                    return MaterialShape.Shape.Cookie12Sided;
-                                case "Circle":
-                                    return MaterialShape.Shape.Circle;
-                                case "Clover4Leaf":
-                                    return MaterialShape.Shape.Clover4Leaf;
-                                case "Burst":
-                                    return MaterialShape.Shape.Burst;
-                                case "Heart":
-                                    return MaterialShape.Shape.Heart;
-                                case "Bun":
-                                    return MaterialShape.Shape.Bun;
-                                default:
-                                    return MaterialShape.Shape.Cookie9Sided;
-                                }
-                            }
-                            shape: resolveShapeInner(Config.options.userProfile.avatarShape)
-
-                            property color resolvedColor: {
-                                switch (Config.options.userProfile.avatarColor) {
-                                case "primary":
-                                    return Appearance.colors.colPrimary;
-                                case "secondary":
-                                    return Appearance.colors.colSecondary;
-                                case "tertiary":
-                                    return Appearance.colors.colTertiary;
-                                case "error":
-                                    return Appearance.colors.colError;
-                                default:
-                                    return Appearance.colors.colPrimary;
-                                }
-                            }
-                            property color resolvedOnColor: {
-                                switch (Config.options.userProfile.avatarColor) {
-                                case "primary":
-                                    return Appearance.colors.colOnPrimary;
-                                case "secondary":
-                                    return Appearance.colors.colOnSecondary;
-                                case "tertiary":
-                                    return Appearance.colors.colOnTertiary;
-                                case "error":
-                                    return Appearance.colors.colOnError;
-                                default:
-                                    return Appearance.colors.colOnPrimary;
-                                }
-                            }
-
-                            color: resolvedColor
-                            visible: parent._style === "expressive"
-
-                            StyledText {
-                                anchors.centerIn: parent
-                                text: {
-                                    let n = Config.options.userProfile.customName || SystemInfo.username;
-                                    return n.charAt(0).toUpperCase();
-                                }
-                                color: parent.resolvedOnColor
-                                font.pixelSize: Appearance.font.pixelSize.larger
-                                font.family: Appearance.font.family.expressive
-                                font.weight: Font.DemiBold
-                            }
-                        }
+                        avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
                 }
 
@@ -681,42 +1045,29 @@ Item {
             }
             color: Appearance.colors.colLayer1
             padding: 4
-
-            opacity: systemButtonRowRoot._entranceDone ? 1.0 : systemButtonRowRoot._entranceOpacity
+            opacity: headerEntranceProgress.progress
             transform: Translate {
-                x: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._rightTranslateX
-                y: systemButtonRowRoot._entranceDone ? 0 : systemButtonRowRoot._entranceTranslateY
+                x: 30 * (1 - headerEntranceProgress.progress)
+                y: -15 * (1 - headerEntranceProgress.progress)
             }
 
             QuickToggleButton {
                 id: editButton
+                rotation: -180 * (1 - headerEntranceProgress.progress)
                 toggled: systemButtonRowRoot.editMode
-                visible: Config.options.sidebar.quickToggles.style === "android"
                 buttonIcon: "edit"
                 onClicked: {
                     systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
                     systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (systemButtonRowRoot.editMode ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : "")
+                    text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
                 }
 
-                SequentialAnimation {
-                    id: editEntranceAnim
-                    ScriptAction { script: editButton.rotation = -180 }
-                    NumberAnimation { target: editButton; property: "rotation"; from: -180; to: 0; duration: 400; easing.type: Easing.OutCubic }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            editEntranceAnim.start();
-                        }
-                    }
-                }
             }
             QuickToggleButton {
                 id: reloadButton
+                rotation: -360 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "restart_alt"
                 onClicked: {
@@ -727,22 +1078,10 @@ Item {
                     text: Translation.tr("Reload Hyprland & Quickshell")
                 }
 
-                SequentialAnimation {
-                    id: reloadEntranceAnim
-                    ScriptAction { script: reloadButton.rotation = -360 }
-                    NumberAnimation { target: reloadButton; property: "rotation"; from: -360; to: 0; duration: 500; easing.type: Easing.OutCubic }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            reloadEntranceAnim.start();
-                        }
-                    }
-                }
             }
             QuickToggleButton {
                 id: settingsButton
+                rotation: 90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "settings"
                 onClicked: {
@@ -753,23 +1092,11 @@ Item {
                     text: Translation.tr("Settings")
                 }
 
-                SequentialAnimation {
-                    id: settingsEntranceAnim
-                    ScriptAction { script: settingsButton.rotation = 90 }
-                    NumberAnimation { target: settingsButton; property: "rotation"; from: 90; to: 0; duration: 350; easing.type: Easing.OutBack }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            settingsEntranceAnim.start();
-                        }
-                    }
-                }
             }
 
             QuickToggleButton {
                 id: powerButton
+                rotation: -90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "power_settings_new"
                 onClicked: {
@@ -779,19 +1106,6 @@ Item {
                     text: Translation.tr("Session")
                 }
 
-                SequentialAnimation {
-                    id: powerEntranceAnim
-                    ScriptAction { script: powerButton.rotation = -90 }
-                    NumberAnimation { target: powerButton; property: "rotation"; from: -90; to: 0; duration: 350; easing.type: Easing.OutBack }
-                }
-                Connections {
-                    target: systemButtonRowRoot
-                    function onEntranceTriggerChanged() {
-                        if (systemButtonRowRoot.entranceTrigger >= 0) {
-                            powerEntranceAnim.start();
-                        }
-                    }
-                }
             }
         }
     }

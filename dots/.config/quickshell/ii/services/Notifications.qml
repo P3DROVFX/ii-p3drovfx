@@ -23,8 +23,13 @@ Singleton {
         id: wrapper
         required property int notificationId // Could just be `id` but it conflicts with the default prop in QtObject
         property Notification notification
+        // Internal notifications have no freedesktop sender to keep alive.
+        // They still use the same cards/actions/popup path as server traffic.
+        property bool internal: false
         property list<var> customActions: []
         property string _qsFilePath: ""
+        property var internalActionPayload: ({})
+        property int internalExpireTimeout: -1
         property list<var> actions: {
             var base = notification ? notification.actions.map(function(action) {
                 return { "identifier": action.identifier, "text": action.text };
@@ -44,7 +49,7 @@ Singleton {
         property Timer timer
 
         onNotificationChanged: {
-            if (notification === null) {
+            if (notification === null && !internal) {
                 root.discardNotification(notificationId);
             }
         }
@@ -292,7 +297,7 @@ Singleton {
     function playNotificationSound(notification) {
         if (root.effectiveSilent) return;
         const hints = notification.hints ?? {};
-        if (hints["suppress-sound"]) return;
+        if (hints["suppress-sound"] || notification.expireTimeout === 0) return;
         if (root.soundPolicyFor(notification.appName) === "mute") return;
 
         if (hints["sound-file"]) {
@@ -321,6 +326,89 @@ Singleton {
     signal discard(id: int);
     signal discardAll();
     signal timeout(id: var);
+    // The sender of an internal notification is this process, so custom action
+    // identifiers come back here rather than trying to call a dead notify-send.
+    signal internalActionInvoked(string identifier, int notificationId, var payload);
+
+    // A replacement notification keeps the freedesktop notification id. Keep
+    // the same wrapper too, otherwise a long-running task such as an Ollama
+    // pull would fill the center with one entry per percentage update.
+    function findTrackedNotification(notificationId: int): var {
+        const listed = root.list.find(notif => notif && notif.notificationId === notificationId);
+        if (listed)
+            return listed;
+        return root._pendingNotifications.find(notif => notif && notif.notificationId === notificationId) ?? null;
+    }
+
+    function armNotificationTimeout(notifObject, notification) {
+        const expireTimeout = notification?.expireTimeout ?? notifObject?.internalExpireTimeout ?? -1;
+        if (root.popupInhibited || expireTimeout === 0)
+            return;
+        const interval = expireTimeout < 0
+            ? (Config?.options.notifications.timeout ?? 7000)
+            : expireTimeout;
+        notifObject.popup = true;
+        if (notifObject.timer) {
+            notifObject.timer.interval = interval;
+            notifObject.timer.restart();
+        } else {
+            notifObject.timer = notifTimerComponent.createObject(root, {
+                "notificationId": notifObject.notificationId,
+                "interval": interval,
+            });
+        }
+    }
+
+    function nextInternalNotificationId(): int {
+        let candidate = -1;
+        const used = new Set(Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(notif => notif !== null && notif !== undefined)
+            .map(notif => Number(notif.notificationId)));
+        while (used.has(candidate))
+            candidate--;
+        return candidate;
+    }
+
+    /**
+     * Adds a shell-owned notification without spawning notify-send. Actions
+     * are regular `customActions`, so every notification surface dispatches
+     * them through executeShellAction and the caller receives one signal.
+     */
+    function publishInternalNotification(options: var): var {
+        if (root.effectiveSilent)
+            return null;
+        const notificationId = root.nextInternalNotificationId();
+        const appName = String(options?.appName ?? "Quickshell");
+        const notifObject = notifComponent.createObject(root, {
+            "notificationId": notificationId,
+            "internal": true,
+            "appName": appName,
+            "appIcon": String(options?.appIcon ?? ""),
+            "summary": String(options?.summary ?? ""),
+            "body": String(options?.body ?? ""),
+            "urgency": String(options?.urgency ?? "normal"),
+            "time": Date.now(),
+            "internalExpireTimeout": Number(options?.expireTimeout ?? -1)
+        });
+        if (!notifObject)
+            return null;
+        notifObject.customActions = Array.from(options?.actions ?? []).filter(action => {
+            return String(action?.identifier ?? "").startsWith("__qs_")
+                && String(action?.text ?? "").length > 0;
+        });
+        notifObject.internalActionPayload = options?.actionPayload ?? ({});
+        root._pendingNotifications.push(notifObject);
+        batchNotificationTimer.restart();
+        if (!root.popupInhibited) {
+            root.armNotificationTimeout(notifObject, null);
+            root.unread++;
+        }
+        if (options?.sound === true && !root.appSoundsMuted(appName))
+            SoundService.playEvent("notifications", ["message-new-instant"]);
+        root.notify(notifObject);
+        root.scheduleDiskWrite();
+        return notificationId;
+    }
 
 	NotificationServer {
         id: notifServer
@@ -347,13 +435,26 @@ Singleton {
             }
 
             notification.tracked = true
+            const notificationId = notification.id + root.idOffset;
+            const existingNotifObject = root.findTrackedNotification(notificationId);
+            if (existingNotifObject) {
+                existingNotifObject.notification = notification;
+                existingNotifObject.time = Date.now();
+                root._handleShellNotification(existingNotifObject);
+                root.armNotificationTimeout(existingNotifObject, notification);
+                root.notify(existingNotifObject);
+                root.triggerListChange();
+                root.scheduleDiskWrite();
+                return;
+            }
+
             try {
                 root.playNotificationSound(notification);
             } catch (e) {
                 console.log("[Notifications] Sound playback error: " + e);
             }
             const newNotifObject = notifComponent.createObject(root, {
-                "notificationId": notification.id + root.idOffset,
+                "notificationId": notificationId,
                 "notification": notification,
                 "time": Date.now(),
             });
@@ -366,13 +467,7 @@ Singleton {
 
             // Popup
             if (!root.popupInhibited) {
-                newNotifObject.popup = true;
-                if (notification.expireTimeout != 0) {
-                    newNotifObject.timer = notifTimerComponent.createObject(root, {
-                        "notificationId": newNotifObject.notificationId,
-                        "interval": notification.expireTimeout < 0 ? (Config?.options.notifications.timeout ?? 7000) : notification.expireTimeout,
-                    });
-                }
+                root.armNotificationTimeout(newNotifObject, notification);
                 root.unread++;
             }
             root.notify(newNotifObject);
@@ -436,6 +531,10 @@ Singleton {
 
     // Execute a QML-handled notification action (identified by "__qs_" prefix).
     function executeShellAction(notifObj, identifier) {
+        if (String(identifier).startsWith("__qs_calendar_")) {
+            root.internalActionInvoked(identifier, notifObj?.notificationId ?? 0, notifObj?.internalActionPayload ?? ({}));
+            return;
+        }
         // Keep-awake actions carry no file, so they're handled before the file-path guard
         if (identifier === "__qs_keepawake_extend") {
             Idle.extendBy(Idle.extendMinutes);

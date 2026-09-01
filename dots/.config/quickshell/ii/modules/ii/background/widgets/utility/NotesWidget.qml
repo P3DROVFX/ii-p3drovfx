@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs
@@ -29,24 +28,9 @@ AbstractBackgroundWidget {
     readonly property color onAccentColor: WidgetColorScheme.onAccentColor
     readonly property color innerShapeColor: WidgetColorScheme.innerShapeColor
 
-    property var notesData: []
-    property bool ready: false
-    property real initTimestamp: Date.now()
-    property int missingFileGracePeriod: 2000
-    property int missingFileRetryInterval: 1500
+    property var notesData: NotesService.tabsData.tabs
 
     property bool notesWindowOpen: false
-
-    readonly property var defaultNotes: [
-        {
-            title: Translation.tr("Material Next"),
-            content: Translation.tr("Material Next is Google's new design language for apps and system UI.")
-        },
-        {
-            title: Translation.tr("Low-Knead Bread"),
-            content: Translation.tr("- 400g bread flour\n- 300ml water\n- 7g instant yeast")
-        }
-    ]
 
     function openNotes(tabIdx) {
         if (tabIdx !== undefined && tabIdx >= 0) {
@@ -57,8 +41,15 @@ AbstractBackgroundWidget {
 
     onNotesWindowOpenChanged: {
         if (!notesWindowOpen) {
-            noteFile.reload();
+            NotesService.reload();
             GlobalStates.notesOpen = false;
+        }
+    }
+
+    Connections {
+        target: NotesService
+        function onDataChanged() {
+            root.notesData = NotesService.tabsData.tabs;
         }
     }
 
@@ -72,18 +63,7 @@ AbstractBackgroundWidget {
     }
 
     function loadNotesFromDisk() {
-        try {
-            const jsonText = noteFile.text();
-            const parsed = JSON.parse(jsonText);
-            if (parsed && parsed.tabs && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
-                root.notesData = parsed.tabs;
-            } else {
-                root.notesData = root.defaultNotes;
-            }
-        } catch (e) {
-            root.notesData = root.defaultNotes;
-        }
-        root.ready = true;
+        root.notesData = NotesService.tabsData.tabs;
     }
 
     function deleteNote(index) {
@@ -97,39 +77,13 @@ AbstractBackgroundWidget {
                 content: ""
             }];
         }
-        let dataToSave = { tabs: newTabs };
-        noteFile.setText(JSON.stringify(dataToSave, null, 2));
+        NotesService.replaceTabs({ tabs: newTabs });
         root.notesData = newTabs;
-        noteFile.reload();
+        NotesService.reload();
     }
 
     Component.onCompleted: {
-        noteFile.reload();
-    }
-
-    FileView {
-        id: noteFile
-        path: Qt.resolvedUrl(Directories.notesPath)
-        atomicWrites: true
-        watchChanges: true
-        onAdapterUpdated: root.loadNotesFromDisk()
-        onLoaded: root.loadNotesFromDisk()
-        onLoadFailed: error => {
-            if (error !== FileViewError.FileNotFound) return;
-            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
-                root.notesData = root.defaultNotes;
-                root.ready = true;
-            } else {
-                missingFileRetryTimer.restart();
-            }
-        }
-    }
-
-    Timer {
-        id: missingFileRetryTimer
-        interval: root.missingFileRetryInterval
-        repeat: false
-        onTriggered: noteFile.reload()
+        root.loadNotesFromDisk();
     }
 
     StyledRectangularShadow {

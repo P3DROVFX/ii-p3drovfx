@@ -140,9 +140,10 @@ AbstractBackgroundWidget {
                     }
 
                     onClicked: {
-                        // Open sidebar policies and switch to AI chat tab (index 0)
-                        GlobalStates.policiesPanelOpen = true;
-                        Persistent.states.sidebar.policies.tab = 0;
+                        Ai.surfaceRouter.open({
+                            surface: "sidebar",
+                            focusIntent: "composer"
+                        });
                     }
                 }
             }

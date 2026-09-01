@@ -10,7 +10,7 @@ Item {
     id: wrapper
     
     required property var modelData
-    readonly property var compInfo: BarComponentRegistry.getComponent(modelData.id)
+    readonly property var compInfo: root.componentInfo(modelData.id)
 
     property bool alternateColor: visualIndex % 2 == 0
     property color colBackground: alternateColor ? Appearance.colors.colLayer3 : Appearance.colors.colLayer2
@@ -154,15 +154,16 @@ Item {
             Loader {
                 active: wrapper.compInfo?.styleConfigKey !== undefined
                 visible: active
-                
+
                 Layout.preferredWidth: item ? item.implicitWidth : 0
+                Layout.preferredHeight: item ? item.implicitHeight : 0
                 Layout.minimumWidth: 0
 
                 sourceComponent: BarWidgetStyleSelector {
                     readonly property string styleKey: wrapper.compInfo?.styleConfigKey ?? ""
                     styleConfigKey: styleKey
                     styleOptions: wrapper.compInfo?.styleOptions ?? []
-                    currentValue: styleKey !== "" ? (Config.options.bar.styles[styleKey] ?? "default") : "default"
+                    selectedValue: styleKey !== "" ? (Config.options.bar.styles[styleKey] ?? "default") : "default"
                     onSelected: newValue => {
                         if (styleKey !== "")
                             Config.options.bar.styles[styleKey] = newValue

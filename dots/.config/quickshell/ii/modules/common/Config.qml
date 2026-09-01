@@ -33,8 +33,283 @@ Singleton {
     // shell hot-reload while Phone services are initializing.
     property int writeGuardDelay: 5000
 
-    function setNestedValue(nestedKey, value) {
+    /**
+     * What kind of thing a config value is, in the vocabulary the checks below
+     * and the assistant both use.
+     */
+    function valueKind(value): string {
+        if (value === undefined)
+            return "unset";
+        if (value === null)
+            return "null";
+        if (Array.isArray(value))
+            return "list";
+        if (typeof value === "boolean")
+            return "bool";
+        if (typeof value === "number")
+            return Number.isInteger(value) ? "int" : "real";
+        if (typeof value === "string")
+            return "string";
+        if (typeof value === "object") {
+            // A JsonObject is a group of options; an array-like one is a list.
+            if (typeof value.length === "number" && Object.keys(value).every(key => !isNaN(key) || key === "length"))
+                return "list";
+            return "group";
+        }
+        return "unknown";
+    }
+
+    /**
+     * Whether a value may be written to a key, and as what.
+     *
+     * The loose path below converts anything that merely looks numeric, which
+     * is how a string option set to "007" became the number 7 and how an enum
+     * could be handed a value it never accepts. This decides against the type
+     * the key already holds instead of against the shape of the incoming
+     * string, and returns the converted value so the caller writes exactly
+     * what was checked.
+     *
+     * Returns {ok, reason, value, kind}.
+     */
+    function validateNestedValue(nestedKey, value): var {
+        const keys = String(nestedKey ?? "").split(".").filter(part => part.length > 0);
+        if (keys.length === 0)
+            return { ok: false, reason: "No key given.", value: undefined, kind: "unset" };
+
+        let node = root.options;
+        for (let i = 0; i < keys.length - 1; ++i) {
+            if (node === undefined || node === null || typeof node !== "object")
+                return { ok: false, reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`, value: undefined, kind: "unset" };
+            node = node[keys[i]];
+        }
+        if (node === undefined || node === null || typeof node !== "object")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: "unset" };
+
+        const leaf = keys[keys.length - 1];
+        const current = node[leaf];
+        const kind = root.valueKind(current);
+        if (kind === "unset")
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: kind };
+        if (kind === "group")
+            return { ok: false, reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`, value: undefined, kind: kind };
+
+        const raw = typeof value === "string" ? value.trim() : value;
+        let converted = raw;
+
+        if (kind === "bool") {
+            if (typeof raw === "boolean")
+                converted = raw;
+            else if (raw === "true" || raw === "false")
+                converted = raw === "true";
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a switch. It takes true or false.`, value: undefined, kind: kind };
+        } else if (kind === "int" || kind === "real") {
+            if (typeof raw === "number")
+                converted = raw;
+            else if (typeof raw === "string" && /^-?(?:\d+|\d*\.\d+)$/.test(raw))
+                converted = Number(raw);
+            else
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            if (!isFinite(converted))
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+            // Whole against fractional is deliberately not enforced. The kind
+            // comes from the value the option happens to hold, and a `real`
+            // sitting at 1 is indistinguishable from an `int` — rejecting 1.5
+            // there would refuse a change that is perfectly legal. QML rounds
+            // a fraction assigned to an int property, which is the mild half
+            // of the two failures.
+        } else if (kind === "list") {
+            if (Array.isArray(raw))
+                converted = raw;
+            else if (typeof raw === "string") {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (!Array.isArray(parsed))
+                        throw new Error("not a list");
+                    converted = parsed;
+                } catch (e) {
+                    return { ok: false, reason: `\`${nestedKey}\` is a list. Give it a JSON array.`, value: undefined, kind: kind };
+                }
+            } else
+                return { ok: false, reason: `\`${nestedKey}\` is a list.`, value: undefined, kind: kind };
+        } else if (kind === "string") {
+            // Deliberately no conversion: a string option keeps what it was
+            // given, leading zeroes and all.
+            if (typeof raw === "object")
+                return { ok: false, reason: `\`${nestedKey}\` is text.`, value: undefined, kind: kind };
+            converted = String(raw);
+        }
+
+        const allowed = root.enumConstraints[keys.join(".")];
+        if (allowed !== undefined && allowed.indexOf(converted) === -1)
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` only takes ${allowed.map(entry => JSON.stringify(entry)).join(", ")}.`,
+                value: undefined,
+                kind: kind
+            };
+
+        return { ok: true, reason: "", value: converted, kind: kind };
+    }
+
+    /**
+     * Every option path in the config, as dotted keys.
+     *
+     * Built once: the shape comes from the QML declarations, so it changes
+     * with the shell version and not with what the user sets. It exists so a
+     * key can be looked for by name instead of the whole file being read out
+     * to find one — the assistant used to be handed all of config.json, some
+     * forty-six kilobytes of it, to change a single switch.
+     */
+    property var cachedKeyPaths: null
+
+    function keyPaths(): var {
+        if (root.cachedKeyPaths !== null)
+            return root.cachedKeyPaths;
+        const paths = [];
+        const walk = (node, prefix) => {
+            if (paths.length > 4000)
+                return;
+            for (const name in node) {
+                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                    || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                    continue;
+                const value = node[name];
+                if (typeof value === "function")
+                    continue;
+                const path = prefix.length > 0 ? `${prefix}.${name}` : name;
+                if (root.valueKind(value) === "group")
+                    walk(value, path);
+                else
+                    paths.push(path);
+            }
+        };
+        walk(root.options, "");
+        root.cachedKeyPaths = paths;
+        return paths;
+    }
+
+    /** A value short enough to hand to a reader, with a note when it was cut. */
+    function summariseValue(value, maxLength = 120): var {
+        const kind = root.valueKind(value);
+        if (kind === "group")
+            return { kind: kind, value: "…" };
+        if (kind === "list") {
+            const list = Array.from(value ?? []);
+            const text = JSON.stringify(list);
+            return text.length <= maxLength
+                ? { kind: kind, value: list }
+                : { kind: kind, value: `${list.length} entries`, truncated: true };
+        }
+        if (kind === "string") {
+            const text = String(value);
+            return text.length <= maxLength
+                ? { kind: kind, value: text }
+                : { kind: kind, value: `${text.slice(0, maxLength)}…`, truncated: true };
+        }
+        return { kind: kind, value: value };
+    }
+
+    /**
+     * Options whose key path matches every word given.
+     *
+     * Matching is on the key path alone, which is what the shell knows without
+     * the settings window open. Labels, pages and translations belong to the
+     * settings index, which is a separate thing.
+     */
+    function findKeys(query, limit = 25): var {
+        const words = String(query ?? "").toLowerCase().split(/[\s._-]+/).filter(word => word.length > 1);
+        if (words.length === 0)
+            return [];
+        const paths = root.keyPaths();
+        const scored = [];
+        for (let i = 0; i < paths.length; i++) {
+            const path = paths[i];
+            const lower = path.toLowerCase();
+            // A key path is camelCase, so the words in it need separating
+            // before "automatic suspend" can match "battery.automaticSuspend".
+            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+                + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
+            let score = 0;
+            let matchedAll = true;
+            for (let w = 0; w < words.length; w++) {
+                const word = words[w];
+                if (lower.endsWith(word))
+                    score += 300;
+                else if (spaced.indexOf(` ${word} `) >= 0 || spaced.indexOf(` ${word}`) >= 0)
+                    score += 200;
+                else if (lower.indexOf(word) >= 0)
+                    score += 100;
+                else {
+                    matchedAll = false;
+                    break;
+                }
+            }
+            if (!matchedAll)
+                continue;
+            // A short path that matched is more likely the option itself than
+            // a long one that merely contains the word.
+            score -= path.length;
+            scored.push({ path: path, score: score });
+        }
+        scored.sort((a, b) => b.score - a.score);
+        return scored.slice(0, Math.max(1, limit)).map(entry => {
+            const summary = root.summariseValue(root.getNestedValue(root.options, entry.path.split(".")));
+            return { key: entry.path, type: summary.kind, value: summary.value };
+        });
+    }
+
+    /** What sits directly under one group, one level deep. */
+    function listGroup(prefix, limit = 60): var {
+        const keys = String(prefix ?? "").split(".").filter(part => part.length > 0);
+        const node = keys.length === 0 ? root.options : root.getNestedValue(root.options, keys);
+        if (node === undefined || root.valueKind(node) !== "group")
+            return null;
+        const entries = [];
+        for (const name in node) {
+            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                continue;
+            const value = node[name];
+            if (typeof value === "function")
+                continue;
+            const path = keys.length > 0 ? `${keys.join(".")}.${name}` : name;
+            const summary = root.summariseValue(value, 60);
+            const entry = { key: path, type: summary.kind };
+            if (summary.kind !== "group")
+                entry.value = summary.value;
+            entries.push(entry);
+            if (entries.length >= Math.max(1, limit))
+                break;
+        }
+        return entries;
+    }
+
+    /**
+     * Writes one option.
+     *
+     * `strict` is for callers that did not write the key themselves — the
+     * assistant, above all. Loose writing creates whatever path it is handed
+     * and converts by guessing, which is fine for a switch in the settings
+     * window bound to a key that provably exists, and is not fine for a key a
+     * model produced from memory. Strict refuses an unknown key, refuses a
+     * value of the wrong kind, and refuses a value outside a declared enum.
+     */
+    function setNestedValue(nestedKey, value, strict = false) {
         let keys = nestedKey.split(".");
+
+        if (strict) {
+            const verdict = root.validateNestedValue(nestedKey, value);
+            if (!verdict.ok)
+                throw new Error(verdict.reason);
+            let target = root.options;
+            for (let i = 0; i < keys.length - 1; ++i) {
+                target = target[keys[i]];
+            }
+            target[keys[keys.length - 1]] = verdict.value;
+            return verdict.value;
+        }
+
         let obj = root.options;
         let parents = [obj];
 
@@ -61,6 +336,7 @@ Singleton {
         }
 
         obj[keys[keys.length - 1]] = convertedValue;
+        return convertedValue;
     }
 
     // Persist options immediately (e.g. kill dialog "Always" in a short-lived process).
@@ -130,6 +406,31 @@ Singleton {
         onTriggered: {
             configFileView.reload();
         }
+    }
+
+    // Shared gate for every OSD implementation (default, minimal/material, Waffle).
+    // Unknown indicator ids stay enabled so a new one is opt-out, not opt-in.
+    function osdIndicatorEnabled(indicatorId): bool {
+        if (!root.ready || !root.options.osd)
+            return true;
+        if (!root.options.osd.enable)
+            return false;
+        const indicators = root.options.osd.indicators;
+        if (!indicators)
+            return true;
+        switch (indicatorId) {
+        case "volume":
+            return indicators.volume;
+        case "brightness":
+            return indicators.brightness;
+        case "keyboardBrightness":
+            return indicators.keyboardBrightness;
+        case "playerVolume":
+            return indicators.playerVolume;
+        case "gamma":
+            return indicators.gamma;
+        }
+        return true;
     }
 
     function isWidgetActive(widgetId) {
@@ -248,6 +549,21 @@ Singleton {
         }
     }
 
+    function updateWidgetScale(instanceId, newScale) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        let found = false;
+        for (let i = 0; i < cloned.length; i++) {
+            if (cloned[i].id === instanceId) {
+                cloned[i].scale = newScale;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            root.options.background.activeWidgets = cloned;
+        }
+    }
+
     function migrateRoundingConfig() {
         if (root.options.appearance.roundingValue >= 0)
             return;
@@ -272,7 +588,8 @@ Singleton {
     }
 
     function migrateWidgetLockBehavior() {
-        if (Persistent.states.background.lockBehaviorMigrated)
+        // Same trap as the widget migration: an unloaded Persistent reports "not migrated yet".
+        if (!Persistent.ready || Persistent.states.background.lockBehaviorMigrated)
             return;
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         let changed = false;
@@ -304,7 +621,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 6
+    readonly property int currentConfigVersion: 15
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -420,13 +737,286 @@ Singleton {
         // identity and explicit dimensions. The normalizer is shared with the
         // sidebar so migration and runtime cannot disagree about defaults,
         // duplicate handling, or allowed sizes.
-        if (from < 6 && raw.sidebar?.quickToggles?.android !== undefined) {
+        // The v7 branch of this PR used the same version number for the AI
+        // schema, so a missing layoutVersion remains a reliable migration cue.
+        if (raw.sidebar?.quickToggles?.android !== undefined
+                && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
             const android = raw.sidebar.quickToggles.android;
             android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
                 warn: function(message) { console.warn(message); }
             });
             android.layoutVersion = 2;
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
+        }
+
+        // Originally v6 -> v7: the bar gained the Modes & Routines indicator.
+        // It hides itself while no mode is active, so appending it to an
+        // existing layout changes nothing visible until a mode starts.
+        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
+            const layouts = raw.bar.layouts;
+            const sections = ["left", "center", "right"];
+            const present = sections.some(k => Array.isArray(layouts[k])
+                && layouts[k].some(e => e && e.id === "mode_indicator"));
+            if (!present) {
+                if (!Array.isArray(layouts.left))
+                    layouts.left = [];
+                const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
+                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
+                layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
+                console.log("[Config] Migrated bar layout: added mode_indicator");
+            }
+        }
+
+        // v7 -> v8: reconcile settings that were introduced independently by
+        // the AI rebuild and the dev branch. The checks are intentionally
+        // shape-based so users already at either former v7 receive only the
+        // migration their file is still missing.
+        if (from < 8) {
+            const ai = raw.ai;
+            if (ai !== undefined && ai !== null && typeof ai === "object" && !Array.isArray(ai)) {
+                if (typeof ai.tool === "string" || typeof ai.localModelTools === "boolean") {
+                    const tools = (ai.tools !== undefined && ai.tools !== null && typeof ai.tools === "object" && !Array.isArray(ai.tools)) ? ai.tools : {};
+                    if (typeof ai.tool === "string" && tools.mode === undefined)
+                        tools.mode = ai.tool;
+                    if (typeof ai.localModelTools === "boolean" && tools.localModels === undefined)
+                        tools.localModels = ai.localModelTools;
+                    ai.tools = tools;
+                    console.log(`[Config] Migrated ai.tool "${ai.tool}" -> ai.tools.mode`);
+                }
+                delete ai.tool;
+                delete ai.localModelTools;
+
+                if (ai.customModels === undefined && (Array.isArray(ai.models) || Array.isArray(ai.otherModels))) {
+                    const merged = [];
+                    for (const group of (ai.models ?? [])) {
+                        if (group === null || typeof group !== "object")
+                            continue;
+                        for (const providerId in group) {
+                            const entries = group[providerId];
+                            if (!Array.isArray(entries))
+                                continue;
+                            for (const entry of entries) {
+                                if (entry === null || typeof entry !== "object")
+                                    continue;
+                                const moved = Object.assign({}, entry);
+                                moved.provider = providerId;
+                                merged.push(moved);
+                            }
+                        }
+                    }
+                    for (const entry of (ai.otherModels ?? [])) {
+                        if (entry === null || typeof entry !== "object")
+                            continue;
+                        merged.push(entry);
+                    }
+                    ai.customModels = merged;
+                    console.log(`[Config] Merged ${merged.length} custom AI model(s) into ai.customModels`);
+                }
+                delete ai.models;
+                delete ai.otherModels;
+            }
+            if (raw.sidebar?.ai !== undefined && raw.sidebar.ai !== null) {
+                delete raw.sidebar.ai.showProviderAndModelButtons;
+                if (raw.ai === undefined || raw.ai === null || typeof raw.ai !== "object" || Array.isArray(raw.ai))
+                    raw.ai = {};
+                if (raw.ai.indexAtStartup === undefined && typeof raw.sidebar.ai.enable === "boolean")
+                    raw.ai.indexAtStartup = raw.sidebar.ai.enable;
+                delete raw.sidebar.ai.enable;
+            }
+            console.log("[Config] Reconciled AI settings and sidebar startup policy");
+        }
+
+        // v8 -> v9: the bar gained the dictation indicator. Like the recording
+        // one it takes no space until dictation is actually running, so adding
+        // it to an existing layout is invisible to anyone who never turns
+        // dictation on.
+        if (from < 9 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
+            const dictationLayouts = raw.bar.layouts;
+            const dictationSections = ["left", "center", "right"];
+            const dictationPresent = dictationSections.some(k => Array.isArray(dictationLayouts[k])
+                && dictationLayouts[k].some(e => e && e.id === "dictation_indicator"));
+            if (!dictationPresent) {
+                if (!Array.isArray(dictationLayouts.left))
+                    dictationLayouts.left = [];
+                const afterRecord = dictationLayouts.left.findIndex(e => e && e.id === "record_indicator");
+                const entry = { "centered": false, "id": "dictation_indicator", "visible": true };
+                dictationLayouts.left.splice(afterRecord === -1 ? dictationLayouts.left.length : afterRecord + 1, 0, entry);
+                console.log("[Config] Migrated bar layout: added dictation_indicator");
+            }
+        }
+
+        // v9 -> v10: dictation defaults to pasting rather than typing. Typing
+        // synthesises one keystroke per character, which several applications
+        // drop under load — the words arrive a letter short. Only the old
+        // default is moved; anyone who picked "clipboard" keeps it.
+        if (from < 10 && raw.dictation !== undefined && raw.dictation !== null
+                && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
+            raw.dictation.outputMode = "paste";
+            console.log("[Config] Migrated dictation output mode: type -> paste");
+        }
+
+        // v10 -> v11: screen recording quality stops being a raw bitrate. Mbps
+        // means nothing without knowing the resolution it is spent on, so the
+        // recorder now derives it from the picture size, the frame rate and a
+        // three-step quality choice. An existing bitrate is read as the intent
+        // behind it and mapped onto that choice.
+        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null
+                && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
+            const oldBitrate = raw.screenRecord.bitrate;
+            raw.screenRecord.quality = oldBitrate <= 6 ? "low" : (oldBitrate >= 16 ? "high" : "balanced");
+            delete raw.screenRecord.bitrate;
+            console.log(`[Config] Migrated screen recording bitrate ${oldBitrate} Mbps -> quality "${raw.screenRecord.quality}"`);
+        }
+
+        // v9 -> v10: Search v2 keeps its lightweight content lists in a
+        // stable schema. Existing users get the new objects without changing
+        // their enabled modules, aliases, or prefix choices.
+        if (from < 10) {
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object")
+                raw.search = {};
+            if (raw.search.favorites === undefined)
+                raw.search.favorites = { enable: true };
+            if (raw.search.fallbacks === undefined)
+                raw.search.fallbacks = { enable: true, actions: ["ai", "web", "tasks", "calendar"] };
+            if (raw.search.history === undefined)
+                raw.search.history = { enable: true, maxItems: 50 };
+            if (raw.search.keybindings === undefined)
+                raw.search.keybindings = [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
+                ];
+            console.log("[Config] Added Search v2 content defaults");
+        }
+
+        // v10 -> v11: normal Search can index bookmarks and selected history
+        // from the default Mozilla-compatible browser profile. Existing result
+        // orders receive the new section exactly once; after this migration the
+        // stored v11 order is authoritative, so removing Sites stays removed.
+        if (from < 11) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            if (raw.search.browserSites === undefined) {
+                raw.search.browserSites = {
+                    enable: true,
+                    profilePath: "",
+                    maxIndexedSites: 300,
+                    maxResults: 6,
+                    includeHistory: true,
+                    useLocalFavicons: true,
+                    allowRemoteFavicons: false,
+                    refreshMinutes: 10
+                };
+            }
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSites = sectionOrder.some(entry => String(entry?.id ?? entry) === "sites");
+                if (!hasSites) {
+                    const appsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "apps");
+                    const settingsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "settings");
+                    const insertAt = appsIndex >= 0 ? appsIndex + 1
+                        : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
+                    sectionOrder.splice(insertAt, 0, { "id": "sites" });
+                }
+            }
+            console.log("[Config] Added Browser Sites search provider");
+        }
+
+        // v11 -> v12: aliases became an explicit result class. Existing orders
+        // predate the id and are otherwise authoritative, so without a one-time
+        // insertion every upgraded user would keep filtering aliases out. Put
+        // exact alias intent before every broader fuzzy result class.
+        if (from < 12) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasAliases = sectionOrder.some(entry => String(entry?.id ?? entry) === "aliases");
+                if (!hasAliases)
+                    sectionOrder.unshift({ "id": "aliases" });
+            }
+            console.log("[Config] Added Aliases search result group");
+        }
+
+        // v12 -> v13: the former Content result group mixed two independent
+        // user-owned providers. Replace it in place so the surrounding priority
+        // stays unchanged. If Content had been removed, both providers remain
+        // disabled and are merely offered by the Settings add selector.
+        if (from < 13) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const contentIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "content");
+                if (contentIndex >= 0) {
+                    const hasQuicklinks = sectionOrder.some(entry => String(entry?.id ?? entry) === "quicklinks");
+                    const hasTextSnippets = sectionOrder.some(entry => String(entry?.id ?? entry) === "textSnippets");
+                    if (!hasQuicklinks && !hasTextSnippets)
+                        sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" });
+                    else
+                        sectionOrder.splice(contentIndex, 1);
+                }
+            }
+            console.log("[Config] Split Content search results into Quick links and Text snippets");
+        }
+
+        // v13 -> v14: idle Search (empty query) grew a dedicated frecency-ranked
+        // "Suggestions" strip. It is idle-only — a typed query never populates
+        // it — but it shares the same reorder/on-off list as every other
+        // result class, so an upgraded order needs the id too.
+        if (from < 14) {
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+                raw.search = {};
+            const sectionOrder = raw.search.sectionOrder;
+            if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
+                const hasSuggested = sectionOrder.some(entry => String(entry?.id ?? entry) === "suggested");
+                if (!hasSuggested)
+                    sectionOrder.unshift({ "id": "suggested" });
+            }
+            console.log("[Config] Added idle Suggestions search result group");
+        }
+
+        // v14 -> v15: the sidebar avatar shape split off from the general
+        // userProfile one. Existing configs kept a single shape for both, so
+        // seed the new key from it to leave the sidebar looking untouched.
+        if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
+            if (raw.sidebar === undefined || raw.sidebar === null
+                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+                raw.sidebar = {};
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
+                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+                raw.sidebar.dashboardHeader = {};
+            if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
+                raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
+                console.log(`[Config] Seeded sidebar.dashboardHeader.avatarShape from userProfile.avatarShape (${raw.userProfile.avatarShape})`);
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -530,6 +1120,7 @@ Singleton {
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
             "panelFamily": ["ii", "tablet", "waffle"],
+            "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
             "policies.wallpapers": [0, 1],
@@ -566,6 +1157,11 @@ Singleton {
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
+            "search.typingTest.mode": ["time", "words", "zen"],
+            "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
+            "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak"],
+            "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
+            "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -904,6 +1500,7 @@ Singleton {
                     property JsonObject appMode: JsonObject {
                         property bool enabled: true
                         property bool showAppIcons: true // Pull each app's launcher icon off the phone over adb
+                        property string iconShape: "oneui" // Launcher-style mask for those icons, keys in AndroidIconMask.shapes
                         property bool flexDisplay: true
                         property int displayWidth: 1280
                         property int displayHeight: 960
@@ -976,6 +1573,16 @@ Singleton {
                 property real driveBackupUsageMb: 0.0
             }
 
+            property JsonObject todo: JsonObject {
+                // Choices: "local", "ticktick", or "googleTasks".
+                property string provider: "local"
+                property int refreshIntervalMinutes: 5
+                property JsonObject googleTasks: JsonObject {
+                    property string taskListId: ""
+                    property string taskListTitle: ""
+                }
+            }
+
             property JsonObject vpn: JsonObject {
                 property bool enabled: false
                 property bool autoConnect: false
@@ -1025,33 +1632,156 @@ Singleton {
             }
 
             property JsonObject ai: JsonObject {
+                // Controls only proactive model/prompt indexing at startup;
+                // policy availability is Config.options.policies.ai.
+                property bool indexAtStartup: true
+                // Name chats automatically from their first completed turn.
+                // Turn this off when session titles must remain manual.
+                property bool autoTitle: true
+                // Interface/status rows are useful while a chat is open, but
+                // can be omitted from the saved transcript when wanted.
+                property bool ephemeralInterfaceMessages: false
                 property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## \ud83d\udc27 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
-                property string tool: "functions" // search, functions, or none
-                property list<var> models: [
-                        {
-                            "openrouter": [
-                                {
-                                    "modelProvider": "google",
-                                    "title": "Gemini 2.5 Flash",
-                                    "value": "gemini-2.5-flash"
-                                }
-                            ]
-                        },
-                        {
-                            "google": []
-                        }
-                ]
-                property list<var> otherModels: [
-                        {
-                            "api_format": "mistral",
-                            "endpoint": "https://api.mistral.ai/v1/chat/completions",
-                            "icon": "mistral-symbolic",
-                            "key_id": "mistral",
-                            "model": "mistral-medium-2505",
-                            "name": "Mistral Medium",
-                            "requires_key": true
-                        }
-                ]
+                property JsonObject tools: JsonObject {
+                    // What the assistant may reach for: "functions" (settings,
+                    // commands, a hop to search), "search" (the provider's own
+                    // web search) or "none".
+                    property string mode: "functions"
+                    // Locally served models advertise no capabilities, so tools
+                    // stay off for them until the user says their models can
+                    // handle function calling.
+                    property bool localModels: false
+                    // Permission per tool, by tool id. A tool named in neither
+                    // list asks before it runs, which is the default for
+                    // anything that writes.
+                    // Reading is allowed outright; anything that writes or runs
+                    // still asks. Searching and fetching a page only read.
+                    property list<string> alwaysAllow: ["settings_search", "settings_get", "switch_to_search_mode", "web_search", "fetch_url"]
+                    property list<string> alwaysDeny: []
+                    // Show every proposed settings change next to its current
+                    // value before writing any of them.
+                    property bool reviewConfigChanges: true
+                    // When enabled, choices made in the tools panel stay with
+                    // the open conversation instead of becoming a global
+                    // standing permission for every future chat.
+                    property bool scopePerConversation: false
+                    // How many tool calls the log remembers. 0 keeps none.
+                    property int logSize: 50
+                    // A local-only policy is about reducing what the assistant
+                    // can reach, not only about the network, so shell commands
+                    // stay off under it. Set true to disagree.
+                    property bool allowShellInLocalPolicy: false
+                }
+                // Longest answer to ask for, in tokens. 0 uses whatever the
+                // model itself supports, which is what most people want;
+                // a positive value caps it and is clamped to the model's own
+                // limit.
+                property int maxOutputTokens: 0
+                // The compact chat toolbar normally shows accumulated usage.
+                // When enabled it shows the latest completed answer's
+                // generated tokens per second instead.
+                property bool showTokensPerSecond: false
+                // When the session contains OpenRouter responses with a
+                // reported charge, show their exact accumulated cost instead
+                // of either token metric in the compact chat toolbar.
+                property bool showOpenRouterSessionCost: false
+                // Seconds before giving up on reaching the endpoint, and
+                // before abandoning a reply that is still being written.
+                property int connectTimeout: 15
+                property int requestTimeout: 300
+                // Extra attempts after a rate limit or a server error.
+                property int maxRetries: 2
+                // Biggest file that may be sent, in MiB, and how many may go
+                // with one message. Both are about what a request can carry:
+                // providers refuse bodies past roughly 20 MiB, and every file
+                // is sent again with every following turn.
+                property int maxAttachmentMib: 8
+                property int maxAttachments: 6
+                // What happens when a conversation outgrows the model's
+                // context window. Sending it whole is how a long chat starts
+                // failing outright, so the oldest turns are left behind and,
+                // if asked, folded into a summary that goes in their place.
+                property JsonObject context: JsonObject {
+                    property bool manage: true
+                    property bool summarise: true
+                    // Room kept for the answer itself.
+                    property int reserveTokens: 4096
+                }
+                // Documents a model cannot read natively are turned into text
+                // on this machine instead of being dropped on the way out.
+                property bool extractDocuments: true
+                // Where the assistant may look for a file by itself, without
+                // one having been chosen by hand first. Empty by default:
+                // reaching the filesystem is something the user opts into,
+                // never a folder guessed on their behalf.
+                property JsonObject files: JsonObject {
+                    property list<string> roots: []
+                }
+                // Read text out of an image with the OCR engine already on
+                // the machine, when one is. The tool itself only ever runs on
+                // a path the model already has — from a search result or a
+                // file the user attached — never on a screenshot taken for
+                // it, so leaving this on does not mean anything is captured
+                // automatically.
+                property JsonObject vision: JsonObject {
+                    property bool ocrEnabled: true
+                }
+                property JsonObject voice: JsonObject {
+                    // Turning speech into a draft the user still has to send.
+                    // Off by default: nothing installs a transcription
+                    // backend automatically, so a fresh install would
+                    // otherwise show a microphone button that can only ever
+                    // land on "error" until the user follows the Settings
+                    // guide and turns this on themselves.
+                    property bool enabled: false
+                }
+                // Local retrieval over folders the user pointed at
+                // explicitly through Settings. Off by default: nothing is
+                // chunked, embedded, or indexed until a collection exists.
+                property JsonObject rag: JsonObject {
+                    property bool enabled: false
+                    // An Ollama model id, chosen from the ones detected as
+                    // embedding-capable. Empty until the user picks one.
+                    property string embeddingModel: ""
+                    // {id, name, path}. The index files themselves live
+                    // outside config.json, under Directories.state.
+                    property list<var> collections: []
+                }
+                // A desktop notification when an answer lands. Only while the
+                // chat is not on screen: telling someone what they are already
+                // reading is noise.
+                property JsonObject notify: JsonObject {
+                    property bool whenDone: true
+                    property bool onlyWhenAway: true
+                    // An answer that came back before this many seconds is one
+                    // the user almost certainly waited for.
+                    property int minimumSeconds: 4
+                }
+                // Facts the assistant carries between conversations. Each one
+                // is a line the user can read and delete; the model can only
+                // propose one through a tool that asks first.
+                property JsonObject memory: JsonObject {
+                    property bool enabled: true
+                    property int limit: 40
+                }
+                // Chats are first moved to .trash so undo and manual recovery
+                // remain possible. The session store prunes that folder by
+                // this retention window on startup and whenever it changes.
+                property JsonObject sessions: JsonObject {
+                    property int retentionDays: 30
+                }
+                // Projects: a name, a prompt of its own and files that go with
+                // every chat filed under it. {id, name, icon, prompt, files[]}
+                property list<var> projects: []
+                // Personas the user wrote: {id, name, icon, description,
+                // systemPrompt, modelId, thinking, temperature, starters[]}.
+                // The ones that ship with the shell are not in here.
+                property list<var> personas: []
+                // Models the user added, in one flat list. An entry with a
+                // `provider` naming a built-in provider is added to it;
+                // anything else stands on its own under "Others" and brings
+                // its own endpoint, dialect and key id.
+                property list<var> customModels: []
             }
 
             property JsonObject appearance: JsonObject {
@@ -1208,7 +1938,53 @@ Singleton {
                 property int minDurationSec: 0
             }
 
+            // Modes & Routines (services/Modes.qml). Definitions are user data
+            // but live here on purpose so one file carries the whole setup.
+            property JsonObject modes: JsonObject {
+                property bool enable: true
+                property bool overlayEnabled: true
+                // Presets are added once; deleting one afterwards sticks.
+                property bool presetsSeeded: false
+                // "auto" shows the start/end banner in the island or, without
+                // a notch, as a top-centre popup; "off" shows nothing.
+                property string flash: "auto"
+                property bool lockPill: true
+                // What the overlay reopens on.
+                property string lastTab: "modes"
+                property string lastModeId: ""
+                property string lastRoutineId: ""
+                // Seconds an auto-started mode's triggers must stay false
+                // before it ends, so a workspace switch does not flap it.
+                property int graceSec: 20
+                // Mode definitions, in priority order (first wins among
+                // automatic starts). Shape: see services/modes/ModeSchema.js.
+                property list<var> modes: []
+                property list<var> routines: []
+                // Game detection (services/GameDetector.qml). Signals 1–3 are
+                // instant; the GPU heuristic needs `gpuThreshold` % for `holdSec`.
+                property JsonObject game: JsonObject {
+                    property bool useLauncherClasses: true
+                    property bool useDesktopCategory: true
+                    property bool useGpuHeuristic: true
+                    property int gpuThreshold: 45
+                    property int holdSec: 20
+                    property list<string> extraClasses: []
+                }
+            }
+
             property list<var> bluetoothDeviceImages: []
+
+            property JsonObject bluetooth: JsonObject {
+                property JsonObject budsLink: JsonObject {
+                    property bool enabled: true
+                    property bool preferBudsLink: true
+                    property bool showIntegrationNotices: true
+                    property bool showBatteryBreakdown: true
+                    property bool showControlsInBarPopup: true
+                    property bool showControlsInConnectionPopup: true
+                    property bool showEnhancedSettingsCard: true
+                }
+            }
 
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
@@ -1992,7 +2768,7 @@ Singleton {
                     property bool lockWidgetPositions: false
                 }
                 property list<var> activeWidgets: []
-                property bool scaleLargeWallpapers: true
+                property bool scaleLargeWallpapers: false
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
@@ -2091,8 +2867,8 @@ Singleton {
                 }
                 property JsonObject styles: JsonObject {
                     property string activeWindow: "default"
-                    property string clock: "expressive" // default, expressive, material
-                    property string media: "default"
+                    property string clock: "expressive" // default, material, expressive, neural, relief
+                    property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
                     property string utilButtons: "expressive"
                     property string workspaces: "default"
@@ -2106,6 +2882,10 @@ Singleton {
                     property string bluetooth: "expressive"
                     property string keyboard: "expressive"
                     property string sports: "expressive"
+                    property string portWatcher: "expressive"
+                    property string aiPlanUsage: "expressive"
+                    property string search: "default"
+                    property string date: "default"
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -2114,9 +2894,17 @@ Singleton {
                     property bool showOnAllMonitors: false
                 }
 
+                property JsonObject weatherWidget: JsonObject {
+                    property string horizonVariant: "balanced" // balanced | inverted | minimal
+                    property string tesseraVariant: "paired" // paired | contrast | bare
+                    property string colorMode: "tonal" // Material pairs: tonal | vibrant | neutral
+                }
+
                 property JsonObject autoHide: JsonObject {
                     property bool enable: false
+                    property string mode: "instant" // "instant" | "dwell" | "wide" | "cautious"
                     property int hoverRegionWidth: 2
+                    property int hoverDelay: 0
                     property bool pushWindows: false
                     property JsonObject showWhenPressingSuper: JsonObject {
                         property bool enable: true
@@ -2159,6 +2947,7 @@ Singleton {
                     property bool disableNotification: false
                     property bool disableOsd: false
                     property bool disableRecording: false
+                    property bool disableDictation: false
                     property bool disableTimer: false
                     property bool disableClipboard: false
                     property bool disableLocalSend: false
@@ -2183,6 +2972,7 @@ Singleton {
                     property int heightMedia: 52
                     property int heightNotification: 60
                     property int heightRecording: 36
+                    property int heightDictation: 44
                     property int heightTimer: 36
                     property int heightClipboard: 36
                     property int heightLocalSend: 42
@@ -2236,6 +3026,85 @@ Singleton {
                     property int cpuWarningThreshold: 90
                     property bool expressivePopup: true
                     property bool showDocker: true
+                }
+
+                property JsonObject aiPlanUsage: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 300000
+                    // Enabling a remote provider authorizes read-only quota
+                    // requests with credentials discovered from its client.
+                    // Tokens are never copied into config.json or the cache.
+                    property bool claudeNetworkEnabled: true
+                    property list<string> enabledProviders: ["chatgpt", "claude", "antigravity"]
+                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text
+                    property string percentMode: "remaining" // remaining | used
+                    property bool showWindowLabel: false
+                    property bool hideWhenUnavailable: false
+                    property int lowRemainingThreshold: 20
+                }
+
+                property JsonObject portWatcher: JsonObject {
+                    property bool enabled: true
+                    property bool autoRefresh: true
+                    property int refreshInterval: 5000
+                    property bool showTcp: true
+                    property bool showUdp: true
+                    property bool showLoopback: true
+                    // Ports without an owning user process (system daemons, other
+                    // users) are noise for the widget's purpose, so they are off.
+                    property bool showSystem: false
+                    property bool exposedOnly: false
+                    property bool notifyNewExposed: false
+                    property bool hideWhenEmpty: false
+                    property int minPort: 1
+                    // Stop below the kernel's ephemeral range (32768+). Those are
+                    // an app's transient IPC sockets churning, never a port
+                    // anybody chose to serve on.
+                    property int maxPort: 32767
+                    // Comma separated ports or ranges, e.g. "3000, 5173, 8000-8999".
+                    property string watchPorts: ""
+                    property string ignorePorts: ""
+                    property string ignoreProcesses: ""
+                    property string sortMode: "port" // port | process | activity
+                }
+
+                property JsonObject privacyPill: JsonObject {
+                    property bool enabled: true
+                    property bool watchCamera: true
+                    property bool watchMicrophone: true
+                    property bool watchScreen: true
+                    // GeoClue keeps its client latched while anything holds a
+                    // position source — including this shell's own weather GPS —
+                    // so watching it would pin the pill on. Opt-in.
+                    property bool watchLocation: false
+                    property int pollInterval: 1200
+                    // How long the pill stays expanded before collapsing to the dot.
+                    property int expandDuration: 4000
+                    property bool collapseToDot: true
+                    property bool showAppNames: true
+                    property string ignoreApps: ""
+                }
+
+                property JsonObject searchWidget: JsonObject {
+                    property string sizeMode: "compact" // compact | balanced | extended
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showShortcutHint: true
+                }
+
+                property JsonObject dateWidget: JsonObject {
+                    property string expressiveVariant: "stack" // stack | badge | ribbon
+                    property string neuralVariant: "orbit" // orbit | glyph | inlay
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool uppercase: true
+                    property bool showYear: false
+                }
+
+                property JsonObject clockWidget: JsonObject {
+                    property string neuralVariant: "orbit" // orbit | bloom | dial
+                    property string reliefVariant: "split" // split | seam | outline
+                    property string colorMode: "tonal" // tonal | vibrant | neutral
+                    property bool showMeridiem: true
                 }
 
                 property JsonObject sports: JsonObject {
@@ -2319,6 +3188,10 @@ Singleton {
                     property bool dockShowWindowDots: true
                     property bool dockHoverEffect: true
                     property bool dockShowAppIcons: true
+
+                    property bool autoCompact: false // Run the workspace compactor automatically when a gap appears
+                    property string autoCompactCurrentGap: "onswitch" // Gap on the current workspace: "onswitch" | "immediate" | "never"
+                    property int autoCompactDelay: 600 // ms of quiet before an automatic compaction fires
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
@@ -2336,6 +3209,7 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true
                     property bool showNetwork: true
@@ -2343,6 +3217,14 @@ Singleton {
                     property bool showVpn: true
                     property bool showTailscale: true
                     property bool showNotifications: true
+                    property bool showPomodoro: true
+                    property bool showStopwatch: true
+                    property bool showCountdowns: true
+                    property bool showEasyEffects: true
+                    property bool showDns: true
+                    property bool showGameMode: true
+                    property bool showMusicRecognition: true
+                    property bool showAlarms: true
                 }
                 property JsonObject layouts: JsonObject {
                     // Only storing id and layout-specific flags (visible, centered)
@@ -2361,6 +3243,11 @@ Singleton {
                             {
                                 "centered": false,
                                 "id": "record_indicator",
+                                "visible": false
+                            },
+                            {
+                                "centered": false,
+                                "id": "mode_indicator",
                                 "visible": false
                             }
                     ]
@@ -2439,6 +3326,80 @@ Singleton {
 
             property JsonObject calendar: JsonObject {
                 property string locale: "en-GB"
+                property JsonObject holidays: JsonObject {
+                    property bool enable: true
+                    // ISO 3166-1 alpha-2, or "auto" to derive it from the system locale
+                    property string countryCode: "auto"
+                    property bool showInMonthView: true
+                }
+                property JsonObject timetable: JsonObject {
+                    // New events start in khal's configured default calendar
+                    // until the user successfully creates one in another
+                    // writable calendar. The selected khal collection then
+                    // becomes the persistent Timetable default.
+                    property string defaultCalendar: ""
+                    property list<string> subscriptions: []
+                    property JsonObject imports: JsonObject {
+                        // Local ICS files and remote read-only subscriptions
+                        // are inactive until the user enables calendar sources.
+                        property bool enable: false
+                        property JsonObject gmailIcs: JsonObject {
+                            // Scans only calendar attachments from the active
+                            // Gmail account and imports through the same
+                            // deduplicating calendar bridge as local files.
+                            property bool enable: false
+                            property int maxMessages: 25
+                            property int scanIntervalMinutes: 60
+                        }
+                        property JsonObject outlook: JsonObject {
+                            // Direct Microsoft Graph calendar mirror. It is
+                            // registered as a local read-only khal collection.
+                            property bool enable: false
+                            property int syncIntervalMinutes: 60
+                            property JsonObject icsAttachments: JsonObject {
+                                // Mail.Read is used only to locate bounded
+                                // .ics/text-calendar files, never mail bodies.
+                                property bool enable: false
+                                property int maxMessages: 25
+                                property int scanIntervalMinutes: 60
+                            }
+                        }
+                    }
+                    // ESPN games stay outside khal and are displayed only when
+                    // explicitly requested in the Timetable.
+                    property bool sportsEvents: false
+                    // Number of dates summarized by the month view's agenda rail.
+                    property int upcomingHorizonDays: 14
+                    // Opt-in: timeline views may replace calendar colours with
+                    // a gradient centred on the next event.
+                    property bool proximityColorGradient: false
+                    property JsonObject moonPhases: JsonObject {
+                        // Moon phase badges in the month grid; computed locally,
+                        // never fetched from the network.
+                        property bool enable: false
+                    }
+                    property JsonObject birthdays: JsonObject {
+                        // Contact birthdays are a read-only projection; they
+                        // never create or mutate khal events.
+                        property bool enable: false
+                    }
+                    property JsonObject googleColors: JsonObject {
+                        // Per-event colour exists only in the Google Calendar API
+                        // (colorId); the synced .ics files carry no COLOR at all.
+                        // Opt-in because it needs the authorized account.
+                        property bool enable: false
+                        // Hours before the colour map is fetched again.
+                        property int refreshHours: 6
+                    }
+                    property JsonObject notifications: JsonObject {
+                        property bool enable: true
+                        property list<string> offsets: ["-15m"]
+                        property bool dailySummary: false
+                        property string dailySummaryTime: "08:00"
+                        property bool notifyAllDay: true
+                        property bool sound: false
+                    }
+                }
             }
 
             property JsonObject cheatsheet: JsonObject {
@@ -2462,6 +3423,10 @@ Singleton {
                 property bool enableCommands: true
                 property bool commandsTagsSidebar: false
                 property bool enableWorkspaceProfiles: false
+                // The typing test also lives in the Overview search. Off by
+                // default so the cheatsheet does not gain a tab nobody asked
+                // for; the two hosts share one surface either way.
+                property bool enableTypingTest: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
@@ -2476,6 +3441,50 @@ Singleton {
             property JsonObject crosshair: JsonObject {
                 // Valorant crosshair format. Use https://www.vcrdb.net/builder
                 property string code: "0;P;d;1;0l;10;0o;2;1b;0"
+            }
+
+            // Speech typed into the focused window, through voxtype. Off by
+            // default: nothing installs voxtype or downloads a speech model on
+            // its own, so a fresh install would otherwise ship a dictation key
+            // that can only ever answer "not installed".
+            property JsonObject dictation: JsonObject {
+                property bool enabled: false
+                // "fast" (base, 142 MB) or "accurate" (large-v3-turbo, 1.6 GB).
+                // A size/latency choice; the language below picks the variant.
+                property string quality: "fast"
+                // "auto" to let Whisper detect it, a single code ("fr"), or
+                // several comma-separated ("en,fr") to detect within that set.
+                property string language: "en"
+                property bool translateToEnglish: false
+                // "paste" (clipboard + Ctrl+V), "type" (synthesised keystrokes),
+                // or "clipboard" (copy only). Paste is the default because
+                // typing races the receiving app and loses characters in
+                // plenty of them; pasting arrives in one piece.
+                property string outputMode: "paste"
+                property bool pauseMedia: true
+                property bool soundFeedback: false
+                property int maxDurationSecs: 60
+                // CPU threads for transcription. 0 leaves it to the shell,
+                // which keeps one core free; Whisper's own default is four
+                // regardless of how many the machine has.
+                property int threads: 0
+                // Primes Whisper with a punctuated sample so it punctuates in
+                // kind. Empty picks one to match the language.
+                property string punctuationHint: ""
+                // Milliseconds between synthesised keystrokes. Voxtype types
+                // with no gap by default, which silently loses characters in
+                // plenty of apps — the words arrive one letter short.
+                property int typeDelayMs: 5
+                // Voxtype's own notification carrying the finished text. Worth
+                // keeping on: with the text pasted into another window, this is
+                // the only place it can be read back if it landed somewhere
+                // unexpected.
+                property bool notifyOnTranscription: true
+                property bool showIndicator: true
+                // Keeps the microphone in the bar while idle, as a click target
+                // for anyone who would rather not reach for the keybind.
+                property bool alwaysShowIndicator: false
+                property bool showInIsland: true
             }
 
             property JsonObject dock: JsonObject {
@@ -2494,6 +3503,7 @@ Singleton {
                 property string magnificationCurve: "cosine"
                 property string magnificationMotion: "balanced"
                 property bool magnificationDynamicSpacing: true
+                property string dockStyle: "floating"
                 property bool islandsStyle: false
                 property real islandSpacing: 8
                 property bool enableAppGroups: true
@@ -2527,6 +3537,11 @@ Singleton {
                 // Each entry is { id: string, apps: list<string> } and is
                 // rendered as one dock item while app groups are enabled.
                 property list<var> appGroups: []
+                // Order keys the user has dragged into place by hand. Smart
+                // grouping treats these as anchors and auto-arranges only what
+                // is left, so turning the feature on no longer makes the dock
+                // undo every reorder.
+                property list<string> manualOrder: []
                 property list<string> order: ["pin", "app:org.kde.dolphin", "app:kitty", "runningApps", "media", "weather", "sports", "livePreview", "phone", "trash", "overview"]
             }
 
@@ -2544,6 +3559,9 @@ Singleton {
 
             property JsonObject hyprland: JsonObject {
                 property string defaultHyprlandLayout: "default" // Options: dwindle, monocle, master // It's best to not use scrolling
+                // Settings -> Hyprland shows only what a normal desktop needs until this is on.
+                // Everything the compositor can be told, and the prose explaining why, is behind it.
+                property bool advancedSettings: false
             }
 
             property JsonObject idle: JsonObject {
@@ -2651,6 +3669,12 @@ Singleton {
                     // With automatic mode on, a restored toggle still expires at the next start/end time.
                     property string persistManual: "always"
                 }
+                property JsonObject gamma: JsonObject {
+                    // Below the backlight minimum, brightness keys and the combined
+                    // gamma/brightness slider keep dimming by lowering gamma.
+                    // Turn off to drive the backlight only and leave gamma alone.
+                    property bool dimBelowMinimum: true
+                }
                 property JsonObject antiFlashbang: JsonObject {
                     property bool enable: false
                 }
@@ -2690,10 +3714,19 @@ Singleton {
                 property JsonObject security: JsonObject {
                     property bool unlockKeyring: true
                     property bool requirePasswordToPower: false
+                    property JsonObject fingerprint: JsonObject {
+                        // Default on so an existing setup with enrolled prints keeps
+                        // unlocking by finger exactly as it did before the toggle existed.
+                        property bool enable: true
+                        property bool showIndicator: true
+                        // [{ finger: "right-index-finger", label: "Trigger finger" }]
+                        property list<var> labels: []
+                    }
                 }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
                 property bool nowPlaying: true
+                property bool sports: true
                 property bool showAlarm: true
                 property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
@@ -2751,6 +3784,16 @@ Singleton {
                 property int timeout: 3000
                 property bool showValues: true
                 property bool hideWhenFullscreen: true
+
+                // Per-indicator popups. Turning one off keeps that OSD from showing
+                // on its own; the master `enable` switch above still wins over all.
+                property JsonObject indicators: JsonObject {
+                    property bool volume: true
+                    property bool brightness: true
+                    property bool keyboardBrightness: true
+                    property bool playerVolume: true
+                    property bool gamma: true
+                }
 
                 property JsonObject material: JsonObject {
                     property bool rotateShape: false
@@ -2927,6 +3970,13 @@ Singleton {
                 // dots/.config/hypr onto ~/.config/hypr (passes --hypr/--no-hypr
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
                 property bool replaceHyprConfig: true
+                // How often ShellUpdates probes the fork's remote for new
+                // commits: "disabled" | "10min" | "hourly" | "daily" | "weekly".
+                property string autoCheckInterval: "daily"
+                // Epoch ms of the last completed automatic check. Persisted so a
+                // daily/weekly period is not restarted from zero on every shell
+                // restart. Written by ShellUpdates, not by the settings UI.
+                property real lastAutoCheck: 0
             }
 
             property JsonObject musicRecognition: JsonObject {
@@ -2937,6 +3987,7 @@ Singleton {
             property JsonObject search: JsonObject {
                 property bool enableSystemControls: true
                 property bool enableMathPreview: true
+                property bool showSettings: false
                 property bool alwaysListApps: false
                 property int nonAppResultDelay: 30
                 property string engineBaseUrl: "https://www.google.com/search?q=" //www.google.com/search?q="
@@ -2944,9 +3995,117 @@ Singleton {
                 property bool sloppy: false
                 property bool levenshtein: false
                 property bool frecency: true
+                // fuzzysort matches any subsequence, so with no floor "file"
+                // reaches "OpenJDK 25 for x86_64 Monitoring & Management
+                // Console". Measured on this machine, the genuine hits for
+                // "file" score 0.82–0.94 and the noise 0.25–0.30, so 0.35 cuts
+                // the tail without emptying short queries.
+                property real fuzzyThreshold: 0.35
+                // And anything below this fraction of the best hit is noise
+                // *next to that hit*, whatever its absolute score.
+                property real fuzzyRelativeCutoff: 0.35
+                property JsonObject bestMatch: JsonObject {
+                    // Render the top result as one prominent row with its own
+                    // actions on it, and the rest as a single uniform list.
+                    // A launcher's promise is that the first thing on screen is
+                    // the thing you meant; showing it at the same weight as the
+                    // nine rows below makes you verify that promise every time.
+                    property bool enable: false
+                    // Actions shown inline on the row. Four fit without turning
+                    // it into a menu; the action panel still holds every one.
+                    property int secondaryActions: 4
+                    // Group captions are what the prominent row replaces: with
+                    // one answer at the top, the rest reads better as one list.
+                    property bool uniformList: true
+                }
+                property JsonObject typoTolerance: JsonObject {
+                    // Myers bit-parallel edit distance as a last tier: it runs
+                    // only when the exact and layout-corrected passes found
+                    // nothing, so a typo returns the app instead of an empty
+                    // list. Off by default — it changes what a miss looks like.
+                    property bool enable: true
+                    // 0.30 lands every case from the upstream PR's table on its
+                    // target while still rejecting a query that is simply not a
+                    // typo of anything. Lower widens the net.
+                    property real threshold: 0.30
+                    property int maxResults: 8
+                    // Query typed with the wrong keyboard layout active, mapped
+                    // back through the physical layout — and Cyrillic queries
+                    // transliterated to Latin. Unlike the typo tier these run
+                    // on every query, so they also fix a *partly* wrong query.
+                    property bool keyboardLayouts: true
+                }
+                property JsonObject browserSites: JsonObject {
+                    property bool enable: true
+                    property string profilePath: ""
+                    property int maxIndexedSites: 300
+                    property int maxResults: 6
+                    property bool includeHistory: true
+                    property bool useLocalFavicons: true
+                    property bool allowRemoteFavicons: false
+                    property int refreshMinutes: 10
+                }
                 property list<var> aliases: []
+                // Priority of the result groups, top to bottom. Removing an
+                // entry hides that group's results, so this list is both the
+                // order and the on/off switch. Reordered from Settings; the
+                // catalogue of ids lives in SearchResultSectionRegistry.
+                property list<var> sectionOrder: [
+                    { "id": "suggested" },
+                    { "id": "aliases" },
+                    { "id": "best" },
+                    { "id": "apps" },
+                    { "id": "sites" },
+                    { "id": "controls" },
+                    { "id": "tools" },
+                    { "id": "actions" },
+                    { "id": "quicklinks" },
+                    { "id": "textSnippets" },
+                    { "id": "other" },
+                    { "id": "settings" },
+                    { "id": "files" },
+                    { "id": "continue" }
+                ]
                 property string fileSearchDirectory: "/home"
+                // Image and vector hits draw themselves in the row's icon slot.
+                // Turning this on drops the thumbnail and leaves the file kind's
+                // symbol there instead — hiding the picture outright rather than
+                // blurring 32 pixels of it.
                 property bool blurFileSearchResultPreviews: false
+                property JsonObject fileSearch: JsonObject {
+                    // Show files and folders from the indexed directory for a
+                    // plain query, no prefix. Off by default: this is the one
+                    // search source that costs a process launch and a filesystem
+                    // walk, so turning it on is a deliberate trade.
+                    property bool inlineResults: false
+                    // One or two letters match a large share of a home directory.
+                    // The walk is only worth starting once the query narrows.
+                    property int minimumQueryLength: 3
+                    // This caps only Search's inline preview. Every matching
+                    // path is still ranked and can be opened in File Browser.
+                    property int maxResults: 8
+                    // Depth limits the complete traversal; 0 leaves it
+                    // unbounded inside the configured search directory.
+                    property int maxDepth: 0
+                    // fd saturates every core by default. On a 16-core machine
+                    // that measured 1351% CPU and 0.70s of CPU time for one
+                    // rare-query walk, against 388% and 0.28s at four threads —
+                    // a third of the work for 50ms more wall time. A background
+                    // helper should not take the machine hostage.
+                    property int threads: 4
+                    // fd skips dotfiles by default. Including them covers the
+                    // whole directory, at the cost of walking every cache and
+                    // state folder a home directory accumulates.
+                    property bool includeHidden: false
+                    property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
+                }
+                property JsonObject fileBrowser: JsonObject {
+                    // The explorer needs more room than the result-oriented
+                    // panels: its file list, preview and metadata are visible
+                    // at the same time. These values remain user-adjustable.
+                    property int panelWidth: 1120
+                    property int panelBodyHeight: 620
+                }
                 property JsonObject prefix: JsonObject {
                     property bool showDefaultActionsWithoutPrefix: true
                     property string action: "/"
@@ -2963,6 +4122,216 @@ Singleton {
                     property string translator: "@"
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
+                    property string typingTest: "^"
+                    property string ai: "&"
+                }
+                property JsonObject typingTest: JsonObject {
+                    property string language: "english_1k"
+                    property string mode: "time"
+                    // Zen without a target is free typing; guided zen keeps the
+                    // generated words but drops both limits, so the test only
+                    // ends when the user says so.
+                    property bool zenGuided: false
+                    property int time: 30
+                    property int words: 50
+                    property bool punctuation: false
+                    property bool numbers: false
+                    property bool showLiveWpm: false
+                    property bool showLiveAccuracy: false
+                    property bool smoothCaret: true
+                    // Typing surface. fontSize is the target text size in px:
+                    // the test is the hero of the panel, so it does not follow
+                    // the launcher's body scale.
+                    property int fontSize: 26
+                    property int visibleLines: 3
+                    property string caretStyle: "line" // line, block, underline, off
+                    // Highlight everything but the current word at reduced
+                    // emphasis, the way Monkeytype's word highlight does.
+                    property bool highlightCurrentWord: false
+                    property bool blindMode: false
+                    // Tab restarts the test, as on Monkeytype. Off by default
+                    // because Tab also walks the launcher's controls.
+                    property bool quickRestart: false
+                    // Finish a words/quote test on the last word without
+                    // needing a trailing space.
+                    property bool finishOnLastWord: true
+                    property JsonObject keyboard: JsonObject {
+                        property bool enable: true
+                        property string layout: "qwerty" // qwerty, qwertz, azerty, dvorak, colemak
+                        property bool highlightNextKey: true
+                    }
+                    property JsonObject sounds: JsonObject {
+                        property bool enable: true
+                        // Monkeytype pack ids, catalogued in
+                        // assets/typing/sounds-manifest.json.
+                        property string theme: "click1"
+                        property string errorTheme: "error1"
+                        property int volume: 55
+                        property bool errorSound: true
+                    }
+                    property JsonObject history: JsonObject {
+                        property bool enable: true
+                        property int maxEntries: 100
+                    }
+                }
+                property JsonObject ai: JsonObject {
+                    // How the AI chat is triggered from the search:
+                    // "prefix" — only via the configured prefix
+                    // "suggest" — adds an "Ask AI" fallback row to the results
+                    // "auto" — switches to the AI chat when the query matches nothing
+                    property string trigger: "suggest"
+                }
+                // Search surfaces consume this module contract through
+                // SearchPanelRegistry. A panel cannot accidentally remain in
+                // aliases or prefix routing after its feature is disabled.
+                property JsonObject modules: JsonObject {
+                    property bool clipboard: true
+                    property bool bluetooth: true
+                    property bool translator: true
+                    property bool mediaDownloader: true
+                    property bool materialSymbols: true
+                    property JsonObject typingTest: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject emojis: JsonObject {
+                        property bool enable: true
+                        property string skinTone: "none"
+                        property int gridColumns: 8
+                        property bool showRecents: true
+                        property string defaultCategory: "all"
+                    }
+                    property bool windowSearch: true
+                    property bool fileBrowser: true
+                    property bool fileSearch: true
+                    property bool math: true
+                    property bool webSearch: true
+                    property bool shellCommand: true
+                    property bool systemControls: true
+                    property bool shellActions: true
+                    property JsonObject calendar: JsonObject {
+                        property bool enable: false
+                        property string source: "khal"
+                        property int lookaheadDays: 14
+                        property bool showDeclined: false
+                        property bool allowCreate: true
+                        property string defaultCalendarId: ""
+                        property int defaultDurationMin: 30
+                        property list<string> hiddenCalendars: []
+                    }
+                    property JsonObject tasks: JsonObject {
+                        property bool enable: true
+                        property bool showCompleted: false
+                        property bool allowCreate: true
+                        property string defaultList: ""
+                        property int lookaheadDays: 7
+                    }
+                    property JsonObject timers: JsonObject {
+                        property bool enable: true
+                        property bool showPomodoro: true
+                        property bool showStopwatch: true
+                        property bool showAlarms: true
+                        property list<int> quickPresets: [5, 10, 15, 25, 45, 60]
+                    }
+                    property JsonObject quicklinks: JsonObject {
+                        property bool enable: true
+                        property list<var> links: []
+                        property bool copyOnEnter: false
+                        property bool fetchFavicons: true
+                    }
+                    property JsonObject windowManagement: JsonObject {
+                        property bool enable: true
+                        property bool showTilingPresets: true
+                        property bool showWorkspaceMoves: true
+                        property bool showMonitorMoves: true
+                        property int columns: 3
+                    }
+                    property JsonObject screenshots: JsonObject {
+                        property bool enable: true
+                        property int maxItems: 60
+                        property bool blurPreviews: false
+                    }
+                    property JsonObject settingsToggles: JsonObject {
+                        property bool enable: true
+                        property bool showPages: true
+                        property int maxInlineResults: 0
+                    }
+                    property JsonObject quickToggles: JsonObject {
+                        property bool enable: true
+                        property list<string> hidden: []
+                    }
+                    property JsonObject keybinds: JsonObject {
+                        property bool enable: true
+                        property bool includeUserBinds: true
+                        property bool includeDefaultBinds: true
+                    }
+                    property JsonObject cheatsheet: JsonObject {
+                        property bool enable: true
+                        property bool commandsPanel: true
+                        property bool gmailPanel: true
+                    }
+                    property JsonObject sports: JsonObject {
+                        property bool enable: false
+                        property int lookaheadHours: 72
+                        property list<string> leagues: []
+                    }
+                    property JsonObject snippets: JsonObject { property bool enable: true; property list<var> items: [] }
+                    property JsonObject notes: JsonObject { property bool enable: true }
+                    property JsonObject processes: JsonObject { property bool enable: true }
+                    property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
+                    property JsonObject tools: JsonObject { property bool enable: true }
+                    property JsonObject generators: JsonObject { property bool enable: true }
+                }
+                property JsonObject frecencyData: JsonObject {
+                    property bool trackApps: true
+                    property bool trackPanels: true
+                    property bool trackActions: true
+                }
+                property JsonObject favorites: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject fallbacks: JsonObject {
+                    property bool enable: true
+                    property list<string> actions: ["ai", "web", "tasks", "calendar"]
+                }
+                property JsonObject history: JsonObject {
+                    property bool enable: true
+                    property int maxItems: 50
+                }
+                // Search-only bindings. They remain local to the focused Search
+                // field and therefore cannot collide with Hyprland global binds.
+                property list<var> keybindings: [
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
+                ]
+                property JsonObject appearance: JsonObject {
+                    property bool accentPanels: true
+                    property real accentStrength: 0.12
+                    property bool showKeyHints: true
+                    property bool showKeyHintBar: true
+                    property int panelWidth: 860
+                    property int panelBodyHeight: 420
                 }
                 property JsonObject imageSearch: JsonObject {
                     property string imageSearchEngineBaseUrl: "https://lens.google.com/uploadbyurl?url=" //lens.google.com/uploadbyurl?url="
@@ -2975,6 +4344,11 @@ Singleton {
                     property int imageHeight: 200
                     property int previewFontSize: 12
                     property bool enableSloppySearch: false
+                    property JsonObject autoDelete: JsonObject {
+                        property bool enable: false
+                        property int retentionDays: 30
+                        property bool wipeOnShutdown: false
+                    }
                     property JsonObject detectors: JsonObject {
                         property bool hexColor: true
                         property bool url: true
@@ -2987,7 +4361,13 @@ Singleton {
                         property bool multiline: true
                     }
                 }
-                property bool showNowPlayingBubble: false
+                property JsonObject nowPlaying: JsonObject {
+                    property bool enable: true          // hoje é `showNowPlayingBubble`
+                    property bool showInlineControls: true
+                    property bool tintFromArtwork: false
+                    property bool showPlayerName: true  // só quando há mais de um player
+                }
+                property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
                 property int baseWidth: 580
                 property int baseHeight: 500
@@ -2995,11 +4375,17 @@ Singleton {
                 property real centerVerticalRatio: 0.3
                 property JsonObject suggestions: JsonObject {
                     property bool enable: false
+                    // Applies only to the "Suggestions" strip below — every
+                    // other idle category shows in full, the same way its
+                    // real-search counterpart does.
                     property int maxSuggestionsPerSection: 5
                     property bool showFrecency: true
                     property bool showCommands: false
                     property bool showApps: true
                     property bool showAliases: true
+                    property bool showToggles: true
+                    property bool showPanels: true
+                    property bool showQuicklinks: true
                 }
             }
 
@@ -3034,7 +4420,17 @@ Singleton {
                     // picture/uptime row, so this now matches "user_profile".
                     property string profileImageType: "user_profile" // "user_profile", "distro", "none"
                     property string profileImagePath: Directories.userProfileImagePath
+                    // Independent from userProfile.avatarShape: the sidebar avatar is
+                    // shaped on its own so the settings/general avatar can differ.
+                    property string avatarShape: "Cookie9Sided"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
+                    property string customText: ""
+                }
+                property bool enableBanner
+                property bool useCustomBanner
+                property string bannerImage: ""
+                property JsonObject dashboardSubHeader: JsonObject {
+                    property string greetingSubtextMode: "uptime"  // "uptime", "custom", "none"
                     property string customText: ""
                 }
                 property string position: "default"
@@ -3050,6 +4446,8 @@ Singleton {
                     property bool liveBackdrop: false
                 }
                 property bool keepRightSidebarLoaded: true
+                property bool keepLeftSidebarLoaded: true
+                property bool dashboardEntranceAnimations: false
                 property bool volumeDialogMediaWidget: true
                 property JsonObject translator: JsonObject {
                     property bool enable: false
@@ -3057,13 +4455,33 @@ Singleton {
                 }
                 property JsonObject ai: JsonObject {
                     property bool textFadeIn: false
-                    property bool showProviderAndModelButtons: true
-                    // When false, the Ai service never spawns its index
-                    // probe at boot (saves one Python fork + ollama
-                    // listing). The panel itself still loads on demand
-                    // via policies.ai; this only gates the proactive
-                    // model listing.
-                    property bool enable: true
+                    // Transcript presentation. These values deliberately live
+                    // beside the sidebar because Search keeps its compact
+                    // density regardless of this chat-specific preference.
+                    property string density: "comfortable" // comfortable | compact
+                    property bool showTimestamps: false
+                    property bool showResponseTime: false
+                    property bool showAnswerModel: true
+                    // Empty follows the persisted per-model default; valid
+                    // values are off, low, medium and high.
+                    property string thinkingDefault: ""
+                    property string activityDefault: "auto" // auto | expanded | collapsed
+                    property bool autoScroll: true
+                    // One source of truth for chat motion. Search forwards
+                    // this same preference into its navigator.
+                    property bool reducedMotion: false
+                    // Ordered shortcuts for Ctrl+1 … Ctrl+9 in the sidebar.
+                    property list<string> pinnedModels: []
+                    property string sendKey: "enter" // enter | ctrlEnter
+                    property bool renderMarkdown: true
+                    property bool renderLatex: true
+                    property bool codeWrap: false
+                    property bool codeLineNumbers: true
+                    property bool collapseLongAnswers: true
+                    property list<string> barKeys: ["keys", "advanced", "sessions", "newChat"]
+                    property string greeting: ""
+                    property bool emptyStateKeys: true
+                    property bool soundOnAnswer: false
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false
@@ -3088,6 +4506,10 @@ Singleton {
                 property JsonObject quickToggles: JsonObject {
                     property string style: "android" // Options: classic, android
                     property bool useThreeWaySliders: true
+                    property JsonObject classic: JsonObject {
+                        // Order matters: it is the order the toggles appear in.
+                        property list<var> toggles: ["network", "bluetooth", "vpn", "tailscale", "nightLight", "gameMode", "idleInhibitor", "modes", "easyEffects", "cloudflareWarp", "keyboardBacklight"]
+                    }
                     property JsonObject android: JsonObject {
                         property int columns: 4
                         property int layoutVersion: 2
@@ -3161,11 +4583,36 @@ Singleton {
                 property string service: "wf-recorder"
                 property bool useGpu: true
                 property string codec: "auto"
-                property int bitrate: 8
+                // Recorded size, as a target box the picture is fitted into
+                // without distorting it: "native" | "2160p" | "1440p" | "1080p" | "720p" | "480p"
+                property string resolution: "native"
+                // Picks the bits-per-pixel the bitrate is derived from, so the
+                // user never has to think in Mbps: "low" | "balanced" | "high"
+                property string quality: "balanced"
                 property int framerate: 60
+                // "cfr" duplicates frames to hold the target rate, which is what
+                // editors expect; "vfr" records only on screen updates, which is
+                // smaller but harder to cut.
+                property string frameSync: "cfr"
                 property bool showNotifications: true
                 property bool showEditPrompt: true
                 property bool openInLosslessCut: false
+
+                property JsonObject keypress: JsonObject {
+                    // The persistent default applied to every new recording; the
+                    // recording indicator can override it for one clip.
+                    property bool showWhileRecording: false
+                    // "top" | "topLeft" | "topRight" | "bottom" | "bottomLeft" | "bottomRight"
+                    property string position: "bottom"
+                    property int marginH: 32
+                    property int marginV: 96
+                    property int hideDelayMs: 2500
+                    property int maxKeys: 5
+                    property real scale: 1.0
+                    property bool showMouseButtons: false
+                    property bool onlyShortcuts: false
+                    property bool mergeTyping: true
+                }
             }
 
             property JsonObject screenSnip: JsonObject {

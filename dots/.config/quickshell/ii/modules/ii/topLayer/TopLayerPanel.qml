@@ -140,6 +140,8 @@ PanelWindow {
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
     readonly property bool rightSidebarContentWanted: GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded
+    readonly property bool keepLeftSidebarContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool leftSidebarContentWanted: GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
 
@@ -215,6 +217,35 @@ PanelWindow {
     // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
     readonly property real barMargin: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
 
+    // ── Shell edge slide ─────────────────────────────────────────────────────
+    // Fullscreen and media mode used to drop the bar and the frame in a single
+    // frame — `active` went false and the panels were simply gone. They now
+    // leave through their own edge: the bar slides out past it, the frame folds
+    // into the screen edges (WrappedFrameVisuals.hideProgress), and the loaders
+    // are only torn down once the slide has finished. The placement swap rides
+    // the same offset, so a bar that changes edge exits through the old one and
+    // enters through the new one — the direction flips with the config, which
+    // GlobalStates writes while we are off screen.
+    readonly property bool mediaModeHere: GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+    readonly property bool shellHiddenWanted: (topPanel.hasFullscreenWindowOnMonitor
+            && !GlobalStates.overviewOpen && !GlobalStates.sidebarLeftOpen && !GlobalStates.sidebarRightOpen)
+        || topPanel.mediaModeHere
+    property real shellHideProgress: topPanel.shellHiddenWanted ? 1 : 0
+    Behavior on shellHideProgress {
+        animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(topPanel)
+    }
+    readonly property real shellHide: Math.max(shellHideProgress, GlobalStates.barPlacementSwapProgress)
+    readonly property bool shellSeated: topPanel.shellHide < 0.999
+    // Loaders outlive the hide request by exactly one slide, so there is
+    // something on screen to animate out.
+    readonly property bool shellContentWanted: !topPanel.mediaModeHere || topPanel.shellSeated
+    readonly property real shellSlideY: topPanel.barVertical
+        ? 0
+        : (topPanel.barBottom ? 1 : -1) * topPanel.shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
+    readonly property real shellSlideX: topPanel.barVertical
+        ? (topPanel.barOnRight ? 1 : -1) * topPanel.shellHide * (Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding)
+        : 0
+
     WlrLayershell.keyboardFocus: (searchOpenOnMonitor || (topPanel.policiesOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate)) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     // Resolve policy commands at window level so focused/selected TextEdits cannot
@@ -238,16 +269,21 @@ PanelWindow {
     // 1. Wrapped Frame Visuals
     Loader {
         id: frameLoader
-        active: topPanel.usingWrappedFrame && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.usingWrappedFrame && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         sourceComponent: Frame.WrappedFrameVisuals {
+            hideProgress: topPanel.shellHide
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
             screen: topPanel.screen
 
-            property real hBarHiddenAmount: topPanel.hBarHiddenAmount
-            property real vBarHiddenAmount: topPanel.vBarHiddenAmount
+            // Plain bindings, not new properties: WrappedFrameVisuals already
+            // declares both, and redeclaring them here shadowed the originals so
+            // the frame (and now the shell shadow silhouette) never saw the bar
+            // retract under autohide.
+            hBarHiddenAmount: topPanel.hBarHiddenAmount
+            vBarHiddenAmount: topPanel.vBarHiddenAmount
 
             leftSidebarMaskOffset: topPanel.leftSidebarMaskWidth
             rightSidebarMaskOffset: topPanel.rightSidebarMaskWidth
@@ -260,12 +296,12 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: !topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         transform: Translate {
-            y: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetY * topPanel.lockTransitionProgress
+            y: (topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetY * topPanel.lockTransitionProgress) + topPanel.shellSlideY
         }
         sourceComponent: Component {
             Item {
@@ -308,8 +344,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: hBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: hBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (hBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !hBarItem.mustShow) === false || hBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                hBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            hBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -457,12 +520,12 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         transform: Translate {
-            x: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetX * topPanel.lockTransitionProgress
+            x: (topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetX * topPanel.lockTransitionProgress) + topPanel.shellSlideX
         }
         sourceComponent: Component {
             Item {
@@ -505,8 +568,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: vBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: vBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (vBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !vBarItem.mustShow) === false || vBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                vBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            vBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -695,7 +785,7 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
@@ -1342,7 +1432,9 @@ PanelWindow {
                     GlobalStates.sidebarRightOpen = false;
             }
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!topPanel.policiesOnLeft || !GlobalStates.policiesPinned) {
+                // A file dialog or the region snip the sidebar itself opened
+                // holds it there until it is done.
+                if (!topPanel.policiesOnLeft || (!GlobalStates.policiesPinned && GlobalStates.policiesHoldOpen === 0)) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }

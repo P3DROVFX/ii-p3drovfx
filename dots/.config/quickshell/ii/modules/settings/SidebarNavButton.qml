@@ -51,11 +51,17 @@ Item {
     implicitHeight: itemHeight
 
     // ── Radius helpers ─────────────────────────────────────────────────────
-    readonly property real _rFull: itemHeight / 2
-    readonly property real _topLeftRadius: _rFull
-    readonly property real _topRightRadius: _rFull
-    readonly property real _bottomLeftRadius: _rFull
-    readonly property real _bottomRightRadius: _rFull
+    readonly property real _rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(itemHeight / 2, Appearance.rounding.large ?? 24)
+    readonly property real _rLarge: Appearance.rounding.scale === 0 ? 0 : (Appearance.rounding.large ?? 24)
+    readonly property real _rSmall: Appearance.rounding.scale === 0 ? 0 : (Appearance.rounding.verysmall ?? 4)
+
+    readonly property bool _isTopPill: isActive || isPressed || prevIsActive || prevIsPressed
+    readonly property bool _isBottomPill: isActive || isPressed || nextIsActive || nextIsPressed
+
+    readonly property real _topLeftRadius: _isTopPill ? _rFull : (isFirst ? _rLarge : _rSmall)
+    readonly property real _topRightRadius: _isTopPill ? _rFull : (isFirst ? _rLarge : _rSmall)
+    readonly property real _bottomLeftRadius: _isBottomPill ? _rFull : (isLast ? _rLarge : _rSmall)
+    readonly property real _bottomRightRadius: _isBottomPill ? _rFull : (isLast ? _rLarge : _rSmall)
 
     // ── Signal ─────────────────────────────────────────────────────────────
     signal clicked
@@ -94,19 +100,18 @@ Item {
     RowLayout {
         anchors {
             fill: parent
-            leftMargin: 2
+            leftMargin: 8
             rightMargin: 12
         }
-        spacing: 10
+        spacing: 12
 
         // Circle icon container
         Rectangle {
             id: iconCircle
-            implicitWidth: root.itemHeight - 8
-            implicitHeight: root.itemHeight - 8
+            implicitWidth: 36
+            implicitHeight: 36
             radius: width / 2
             Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 4
 
             color: isActive ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(Appearance.colors.colOnLayer2.r, Appearance.colors.colOnLayer2.g, Appearance.colors.colOnLayer2.b, 0.10)
 
@@ -117,7 +122,7 @@ Item {
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: root.iconName
-                iconSize: 18
+                iconSize: 20
                 fill: isActive ? 1 : 0
                 color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
 

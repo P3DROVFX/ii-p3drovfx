@@ -7,6 +7,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 import qs.modules.ii.usage
 
 Item {
@@ -18,6 +19,12 @@ Item {
     property bool showBackButton: false
     signal goBack()
 
+    readonly property string selectedProvider: {
+        const configured = Config.options.todo ? Config.options.todo.provider : "local";
+        if (configured === "ticktick" || configured === "googleTasks" || configured === "local")
+            return configured;
+        return "local";
+    }
 
     // Temp state before saving
     property string tempClientId: ""
@@ -35,22 +42,22 @@ Item {
     property int performanceViewIndex: 0
 
     readonly property var driveOptions: (Persistent.ready ? Persistent.states.googleDrive : null) || Config.options.googleDrive
-    readonly property list<var> activityGranularities: [
+    readonly property var activityGranularities: [
         { key: "day", value: "day", displayName: Translation.tr("Last 7 days"), selectorName: Translation.tr("7 days"), icon: "today" },
         { key: "week", value: "week", displayName: Translation.tr("Last 8 weeks"), selectorName: Translation.tr("8 weeks"), icon: "date_range" },
         { key: "month", value: "month", displayName: Translation.tr("Last 12 months"), selectorName: Translation.tr("12 months"), icon: "calendar_month" }
     ]
-    readonly property list<var> activityMetrics: [
+    readonly property var activityMetrics: [
         { key: "data", value: "data", displayName: Translation.tr("Data transferred"), icon: "data_usage" },
         { key: "transfers", value: "transfers", displayName: Translation.tr("Backups completed"), icon: "cloud_done" }
     ]
     readonly property string activityGranularity: root.activityGranularities[root.activityGranularityIndex].key
-    readonly property list<var> activityBuckets: root.buildActivityBuckets(root.activityGranularity)
-    readonly property list<real> activityDataValues: root.activityBuckets.map(bucket => bucket.dataMb)
-    readonly property list<real> activityTransferValues: root.activityBuckets.map(bucket => bucket.runs)
-    readonly property list<string> activityLabels: root.activityBuckets.map(bucket => bucket.label)
-    readonly property list<string> activityTooltipLabels: root.activityBuckets.map(bucket => bucket.tooltip)
-    readonly property list<int> activityVisibleLabelIndices: {
+    readonly property var activityBuckets: root.buildActivityBuckets(root.activityGranularity)
+    readonly property var activityDataValues: root.activityBuckets.map(bucket => bucket.dataMb)
+    readonly property var activityTransferValues: root.activityBuckets.map(bucket => bucket.runs)
+    readonly property var activityLabels: root.activityBuckets.map(bucket => bucket.label)
+    readonly property var activityTooltipLabels: root.activityBuckets.map(bucket => bucket.tooltip)
+    readonly property var activityVisibleLabelIndices: {
         const indices = [];
         const lastIndex = Math.max(0, root.activityLabels.length - 1);
         for (let index = 0; index < root.activityLabels.length; ++index) {
@@ -81,24 +88,24 @@ Item {
     readonly property real backupFootprintRatio: root.storageQuotaMb > 0
         ? Math.min(1, root.storageBackupMb / root.storageQuotaMb)
         : 0
-    readonly property list<real> storageSegments: [root.storageBackupMb, root.storageOtherMb, root.storageFreeMb]
+    readonly property var storageSegments: [root.storageBackupMb, root.storageOtherMb, root.storageFreeMb]
     readonly property real heatmapCellSpacing: 4
     readonly property int heatmapWeekCount: root.currentMonthWeekCount()
-    readonly property list<var> heatmapCells: root.buildHeatmapCells(root.heatmapWeekCount)
-    readonly property list<string> heatmapWeekLabels: root.buildHeatmapWeekLabels(root.heatmapWeekCount)
-    readonly property list<string> heatmapDayLabels: [
+    readonly property var heatmapCells: root.buildHeatmapCells(root.heatmapWeekCount)
+    readonly property var heatmapWeekLabels: root.buildHeatmapWeekLabels(root.heatmapWeekCount)
+    readonly property var heatmapDayLabels: [
         Translation.tr("Mon"), Translation.tr("Tue"), Translation.tr("Wed"),
         Translation.tr("Thu"), Translation.tr("Fri"), Translation.tr("Sat"), Translation.tr("Sun")
     ]
     readonly property string heatmapMonthLabel: new Date().toLocaleDateString(Qt.locale(), "MMMM yyyy")
-    readonly property int heatmapActiveDays: root.heatmapCells.filter(cell => Number(cell?.value || 0) > 0).length
+    readonly property int heatmapActiveDays: root.heatmapCells.filter(cell => Number((cell && cell.value) || 0) > 0).length
     readonly property string heatmapActiveDaysLabel: String(root.heatmapActiveDays) + " "
         + (root.heatmapActiveDays === 1
             ? Translation.tr("active day")
             : Translation.tr("active days"))
-    readonly property real heatmapTotal: root.heatmapCells.reduce((total, cell) => total + Number(cell?.value || 0), 0)
-    readonly property real heatmapMaxValue: root.heatmapCells.reduce((maximum, cell) => Math.max(maximum, Number(cell?.value || 0)), 0)
-    readonly property list<var> recentSyncRows: root.buildRecentSyncRows()
+    readonly property real heatmapTotal: root.heatmapCells.reduce((total, cell) => total + Number((cell && cell.value) || 0), 0)
+    readonly property real heatmapMaxValue: root.heatmapCells.reduce((maximum, cell) => Math.max(maximum, Number((cell && cell.value) || 0)), 0)
+    readonly property var recentSyncRows: root.buildRecentSyncRows()
     readonly property int successfulSyncCount: (GoogleDriveService.syncHistory || [])
         .filter(entry => entry && entry.status === "success").length
     readonly property int failedSyncCount: (GoogleDriveService.syncHistory || [])
@@ -106,26 +113,26 @@ Item {
     readonly property real syncSuccessRatio: root.successfulSyncCount + root.failedSyncCount > 0
         ? root.successfulSyncCount / (root.successfulSyncCount + root.failedSyncCount)
         : 0
-    readonly property list<var> recentPerformanceRows: root.recentSyncRows.filter(entry => entry && entry.status === "success")
+    readonly property var recentPerformanceRows: root.recentSyncRows.filter(entry => entry && entry.status === "success")
     readonly property bool hasDetailedPerformanceData: root.recentPerformanceRows.some(entry => root.entryDurationSeconds(entry) > 0 || root.entrySpeedBytesPerSecond(entry) > 0)
     readonly property real averageDurationSeconds: root.performanceAverage("durationSeconds")
     readonly property real averageSpeedBytesPerSecond: root.performanceAverage("averageBytesPerSecond")
     readonly property var largestTransfer: root.findLargestTransfer()
     readonly property bool hasPerformanceData: root.largestTransfer !== null || root.hasDetailedPerformanceData
-    readonly property list<real> performanceTransferValues: root.recentPerformanceRows.slice().reverse()
-        .map(entry => Math.max(0, Number(entry?.sizeMb || 0)))
+    readonly property var performanceTransferValues: root.recentPerformanceRows.slice().reverse()
+        .map(entry => Math.max(0, Number((entry && entry.sizeMb) || 0)))
     readonly property real averageTransferMb: root.performanceTransferValues.length > 0
         ? root.performanceTransferValues.reduce((sum, value) => sum + value, 0) / root.performanceTransferValues.length
         : 0
     readonly property real recentTransferTotalMb: root.performanceTransferValues.reduce((sum, value) => sum + value, 0)
     readonly property int timedPerformanceCount: root.recentPerformanceRows
         .filter(entry => root.entryDurationSeconds(entry) > 0).length
-    readonly property list<var> performanceViews: [
+    readonly property var performanceViews: [
         { name: Translation.tr("Transfers"), icon: "data_usage" },
         { name: Translation.tr("Timing"), icon: "schedule" }
     ]
 
-    function rcloneInstallFamilyFor(value: string): string {
+    function rcloneInstallFamilyFor(value) {
         const distro = String(value || "").toLowerCase();
         if (["fedora", "rhel", "centos", "rocky", "almalinux"].indexOf(distro) >= 0)
             return "Fedora / RHEL";
@@ -150,7 +157,7 @@ Item {
             : "Linux";
     }
 
-    function rcloneInstallCommandFor(value: string): string {
+    function rcloneInstallCommandFor(value) {
         const distro = String(value || "").toLowerCase();
         if (["fedora", "rhel", "centos", "rocky", "almalinux"].indexOf(distro) >= 0)
             return "sudo dnf install -y rclone";
@@ -176,28 +183,37 @@ Item {
     readonly property string rcloneInstallFamily: root.rcloneInstallFamilyFor(SystemInfo.distroId)
     readonly property string rcloneInstallCommand: root.rcloneInstallCommandFor(SystemInfo.distroId)
 
-    function updateDriveList(key: string, transform): void {
-        const current = (driveOptions[key] || []).slice();
-        transform(current);
-        driveOptions[key] = current;
+    function updateDriveOption(key, value) {
+        if (Persistent.ready && Persistent.states.googleDrive) {
+            Persistent.states.googleDrive[key] = value;
+        }
+        if (Config.ready && Config.options.googleDrive) {
+            Config.options.googleDrive[key] = value;
+        }
     }
 
-    function addBackupFolder(path: string): void {
+    function updateDriveList(key, transform) {
+        const current = Array.from(root.driveOptions[key] || []);
+        transform(current);
+        root.updateDriveOption(key, current);
+    }
+
+    function addBackupFolder(path) {
         const cleanPath = String(path || "").trim();
-        if (!cleanPath || driveOptions.backupFolders.indexOf(cleanPath) >= 0)
+        if (!cleanPath || (root.driveOptions.backupFolders && root.driveOptions.backupFolders.indexOf(cleanPath) >= 0))
             return;
         root.updateDriveList("backupFolders", values => values.push(cleanPath));
     }
 
-    function removeBackupFolder(index: int): void {
+    function removeBackupFolder(index) {
         root.updateDriveList("backupFolders", values => values.splice(index, 1));
     }
 
-    function removeExcludePattern(index: int): void {
+    function removeExcludePattern(index) {
         root.updateDriveList("excludePatterns", values => values.splice(index, 1));
     }
 
-    function addExcludePattern(pattern: string): void {
+    function addExcludePattern(pattern: string) {
         const cleanPattern = String(pattern || "").trim();
         root.excludePatternError = "";
         if (!cleanPattern) {
@@ -208,7 +224,7 @@ Item {
             root.excludePatternError = Translation.tr("Use one rclone glob pattern (up to 256 characters) without line breaks.");
             return;
         }
-        if (driveOptions.excludePatterns.indexOf(cleanPattern) >= 0) {
+        if (root.driveOptions.excludePatterns && root.driveOptions.excludePatterns.indexOf(cleanPattern) >= 0) {
             root.excludePatternError = Translation.tr("That pattern is already excluded.");
             return;
         }
@@ -216,13 +232,13 @@ Item {
         root.excludePatternDraft = "";
     }
 
-    function dateKey(date): string {
+    function dateKey(date) {
         return String(date.getFullYear()) + "-"
             + String(date.getMonth() + 1).padStart(2, "0") + "-"
             + String(date.getDate()).padStart(2, "0");
     }
 
-    function activityBucketKey(value: string, granularity: string): string {
+    function activityBucketKey(value, granularity) {
         const date = new Date(value || "");
         if (!isFinite(date.getTime()))
             return "";
@@ -237,7 +253,7 @@ Item {
         return root.dateKey(date);
     }
 
-    function activityBucketLabel(key: string, granularity: string): string {
+    function activityBucketLabel(key, granularity) {
         if (granularity === "month") {
             const parts = key.split("-");
             return parts[1] + "/" + parts[0];
@@ -246,7 +262,7 @@ Item {
         return parts[2] + "/" + parts[1];
     }
 
-    function activityBucketTooltip(date, granularity: string): string {
+    function activityBucketTooltip(date, granularity) {
         if (granularity === "month")
             return date.toLocaleDateString(Qt.locale(), "MMMM yyyy");
         if (granularity === "week") {
@@ -257,7 +273,7 @@ Item {
         return date.toLocaleDateString(Qt.locale(), "dd MMM yyyy");
     }
 
-    function buildActivityBuckets(granularity: string): list<var> {
+    function buildActivityBuckets(granularity) {
         if (granularity === "day") {
             const bucketCount = 7;
             const dayMilliseconds = 24 * 60 * 60 * 1000;
@@ -358,14 +374,14 @@ Item {
         return orderedKeys.map(key => grouped[key]);
     }
 
-    function currentMonthGridStart(): var {
+    function currentMonthGridStart() {
         const today = new Date();
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1, 12);
         firstDay.setDate(firstDay.getDate() - ((firstDay.getDay() + 6) % 7));
         return firstDay;
     }
 
-    function currentMonthWeekCount(): int {
+    function currentMonthWeekCount() {
         const today = new Date();
         const gridStart = root.currentMonthGridStart();
         const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
@@ -373,7 +389,7 @@ Item {
         return Math.max(4, Math.floor((lastDay.getTime() - gridStart.getTime()) / 604800000) + 1);
     }
 
-    function buildHeatmapCells(weekCount: int): list<var> {
+    function buildHeatmapCells(weekCount) {
         const grouped = ({ });
         const today = new Date();
         const current = root.currentMonthGridStart();
@@ -418,7 +434,7 @@ Item {
         return cells;
     }
 
-    function buildHeatmapWeekLabels(weekCount: int): list<string> {
+    function buildHeatmapWeekLabels(weekCount) {
         const labels = [];
         const today = new Date();
         const current = root.currentMonthGridStart();
@@ -431,26 +447,26 @@ Item {
         return labels;
     }
 
-    function buildRecentSyncRows(): list<var> {
+    function buildRecentSyncRows() {
         const rows = (GoogleDriveService.syncHistory || []).filter(entry => entry && entry.time).slice();
         rows.sort((left, right) => Date.parse(String(right.time)) - Date.parse(String(left.time)));
         return rows.slice(0, 4);
     }
 
-    function entryDurationSeconds(entry: var): real {
-        return Math.max(0, Number(entry?.durationSeconds || 0));
+    function entryDurationSeconds(entry) {
+        return Math.max(0, Number((entry && entry.durationSeconds) || 0));
     }
 
-    function entrySpeedBytesPerSecond(entry: var): real {
-        const storedSpeed = Math.max(0, Number(entry?.averageBytesPerSecond || 0));
+    function entrySpeedBytesPerSecond(entry) {
+        const storedSpeed = Math.max(0, Number((entry && entry.averageBytesPerSecond) || 0));
         if (storedSpeed > 0)
             return storedSpeed;
         const duration = root.entryDurationSeconds(entry);
-        const bytes = Math.max(0, Number(entry?.sizeMb || 0)) * 1024 * 1024;
+        const bytes = Math.max(0, Number((entry && entry.sizeMb) || 0)) * 1024 * 1024;
         return duration > 0 ? bytes / duration : 0;
     }
 
-    function performanceAverage(field: string): real {
+    function performanceAverage(field) {
         const values = root.recentPerformanceRows
             .map(entry => field === "durationSeconds"
                 ? root.entryDurationSeconds(entry)
@@ -461,7 +477,7 @@ Item {
         return values.reduce((sum, value) => sum + value, 0) / values.length;
     }
 
-    function findLargestTransfer(): var {
+    function findLargestTransfer() {
         let largest = null;
         for (const entry of GoogleDriveService.syncHistory || []) {
             if (!entry || entry.status !== "success" || Number(entry.sizeMb || 0) <= 0)
@@ -472,7 +488,7 @@ Item {
         return largest;
     }
 
-    function scheduleIntervalLabel(value: string): string {
+    function scheduleIntervalLabel(value) {
         const labels = ({
             "1h": Translation.tr("Every hour"),
             "4h": Translation.tr("Every 4 hours"),
@@ -483,7 +499,7 @@ Item {
         return labels[value] || Translation.tr("Scheduled");
     }
 
-    function nextRunDate(): var {
+    function nextRunDate() {
         if (!driveOptions.enabled || !GoogleDriveService.configured || !driveOptions.lastSyncTime)
             return null;
         const last = Date.parse(String(driveOptions.lastSyncTime));
@@ -492,42 +508,42 @@ Item {
         return new Date(last + GoogleDriveService.intervalFor(String(driveOptions.syncInterval || "3d")));
     }
 
-    function nextRunLabel(): string {
+    function nextRunLabel() {
         const next = root.nextRunDate();
         if (!next)
             return driveOptions.enabled ? Translation.tr("Waiting for first sync") : Translation.tr("Backup is disabled");
         return next.toLocaleDateString(Qt.locale(), "dd MMM") + " · " + next.toLocaleTimeString(Qt.locale(), "HH:mm");
     }
 
-    function syncStatusLabel(entry: var): string {
+    function syncStatusLabel(entry) {
         return entry && entry.status === "success" ? Translation.tr("Completed") : Translation.tr("Failed");
     }
 
-    function syncStatusIcon(entry: var): string {
+    function syncStatusIcon(entry) {
         if (!entry)
             return "cloud_queue";
         return entry.status === "success" ? "cloud_done" : "cloud_off";
     }
 
-    function syncStatusColor(entry: var): var {
+    function syncStatusColor(entry) {
         return entry && entry.status === "success"
             ? Appearance.colors.colPrimary
             : Appearance.colors.colError;
     }
 
-    function entryDurationText(entry: var): string {
+    function entryDurationText(entry) {
         const seconds = root.entryDurationSeconds(entry);
         return seconds > 0 ? root.formatDuration(seconds) : "—";
     }
 
-    function entryTimeText(entry: var): string {
-        const date = new Date(String(entry?.time || ""));
+    function entryTimeText(entry) {
+        const date = new Date(String((entry && entry.time) || ""));
         if (!isFinite(date.getTime()))
             return Translation.tr("Unknown time");
         return date.toLocaleDateString(Qt.locale(), "dd MMM") + " · " + date.toLocaleTimeString(Qt.locale(), "HH:mm");
     }
 
-    function formatMegabytes(value: real): string {
+    function formatMegabytes(value) {
         const amount = Number(value || 0);
         if (amount >= 1024 * 1024)
             return (amount / (1024 * 1024)).toFixed(1) + " TB";
@@ -536,7 +552,7 @@ Item {
         return amount.toFixed(1) + " MB";
     }
 
-    function storagePercentageLabel(value: real): string {
+    function storagePercentageLabel(value) {
         if (root.storageQuotaMb <= 0)
             return "—";
         const percentage = Math.max(0, Number(value || 0)) / root.storageQuotaMb * 100;
@@ -547,7 +563,7 @@ Item {
             : percentage.toFixed(0) + "%";
     }
 
-    function heatmapLegendLabel(weight: real): string {
+    function heatmapLegendLabel(weight) {
         const value = root.heatmapMaxValue * Math.max(0, Number(weight || 0));
         if (root.heatmapMaxValue <= 0)
             return "0";
@@ -556,7 +572,7 @@ Item {
             : String(Math.max(1, Math.round(value)));
     }
 
-    function formatTransferSize(value: real): string {
+    function formatTransferSize(value) {
         const bytes = Math.max(0, Number(value || 0));
         if (bytes < 1024)
             return Math.round(bytes) + " B";
@@ -567,7 +583,7 @@ Item {
         return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GiB";
     }
 
-    function syncProgressSummary(): string {
+    function syncProgressSummary() {
         const details = [];
         if (GoogleDriveService.currentFolderTotalFiles > 0)
             details.push(String(GoogleDriveService.currentFolderFiles) + " / " + String(GoogleDriveService.currentFolderTotalFiles) + " files");
@@ -578,7 +594,7 @@ Item {
         return details.join(" · ");
     }
 
-    function lastSyncSummary(): string {
+    function lastSyncSummary() {
         if (GoogleDriveService.syncing)
             return Translation.tr("Sync in progress…");
         if (driveOptions.lastSyncStatus === "running")
@@ -593,14 +609,14 @@ Item {
             .arg(root.formatMegabytes(driveOptions.lastSyncSizeMb));
     }
 
-    function formatDuration(seconds: int): string {
+    function formatDuration(seconds) {
         const elapsed = Math.max(0, Number(seconds || 0));
         const minutes = Math.floor(elapsed / 60);
         const remainingSeconds = elapsed % 60;
         return String(minutes).padStart(2, "0") + ":" + String(remainingSeconds).padStart(2, "0");
     }
 
-    function relativeTime(value: string): string {
+    function relativeTime(value) {
         if (!value)
             return Translation.tr("Never");
         const timestamp = new Date(value).getTime();
@@ -616,7 +632,7 @@ Item {
         return Math.floor(elapsed / 86400000) + "d ago";
     }
 
-    function openFolderPicker(): void {
+    function openFolderPicker() {
         root.driveUiError = "";
         folderPickerProc.running = false;
         folderPickerProc.running = true;
@@ -675,14 +691,101 @@ Item {
 
     WarningBox {
         Layout.fillWidth: true
-        visible: !root.driveSubPageMode && authErrorMsg !== ""
+        visible: !root.driveSubPageMode && root.selectedProvider === "ticktick" && authErrorMsg !== ""
         text: authErrorMsg
     }
 
+    // ── To-Do Provider Selector ─────────────────────────────────
+    ContentSection {
+        icon: "checklist"
+        title: Translation.tr("To-Do Provider")
+        visible: !root.driveSubPageMode
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Repeater {
+                model: [
+                    { id: "local", name: Translation.tr("Local Storage"), icon: "save" },
+                    { id: "ticktick", name: "TickTick", icon: "cloud_sync" },
+                    { id: "googleTasks", name: "Google Tasks", icon: "checklist" }
+                ]
+
+                delegate: RippleButton {
+                    required property var modelData
+                    required property int index
+
+                    Layout.fillWidth: true
+                    implicitHeight: 44
+                    buttonRadius: Appearance.rounding.normal
+                    colBackground: root.selectedProvider === modelData.id
+                        ? Appearance.colors.colPrimaryContainer
+                        : Appearance.colors.colLayer0
+                    colBackgroundHover: root.selectedProvider === modelData.id
+                        ? Appearance.colors.colPrimaryContainerHover
+                        : Appearance.colors.colLayer0Hover
+                    colRipple: root.selectedProvider === modelData.id
+                        ? Appearance.colors.colPrimaryContainerActive
+                        : Appearance.colors.colLayer0Active
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: modelData.icon
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: root.selectedProvider === modelData.id
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colOnLayer0
+                        }
+
+                        StyledText {
+                            text: modelData.name
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.bold: root.selectedProvider === modelData.id
+                            color: root.selectedProvider === modelData.id
+                                ? Appearance.colors.colOnPrimaryContainer
+                                : Appearance.colors.colOnLayer0
+                        }
+                    }
+
+                    onClicked: {
+                        if (Config.options.todo) {
+                            Config.options.todo.provider = modelData.id;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Local Storage Info ──────────────────────────────────────
+    ContentSection {
+        icon: "save"
+        title: Translation.tr("Local Storage")
+        visible: !root.driveSubPageMode && root.selectedProvider === "local"
+
+        HelperLinkBox {
+            Layout.fillWidth: true
+            title: Translation.tr("Offline File Storage")
+            text: Translation.tr("Tasks are stored locally on disk in your profile (~/.config/quickshell/ii/todo.json). No network connection or account is required.")
+            isFirst: true
+        }
+    }
+
+    // ── Google Tasks Configuration ──────────────────────────────
+    CoreGoogleTasksConfig {
+        Layout.fillWidth: true
+        visible: !root.driveSubPageMode && root.selectedProvider === "googleTasks"
+    }
+
+    // ── TickTick Configuration ──────────────────────────────────
     ContentSection {
         icon: "cloud_sync"
         title: Translation.tr("TickTick Credentials")
-        visible: !root.driveSubPageMode
+        visible: !root.driveSubPageMode && root.selectedProvider === "ticktick"
 
         HelperLinkBox {
             Layout.fillWidth: true
@@ -734,7 +837,7 @@ Item {
     ContentSection {
         icon: "sync_saved_locally"
         title: Translation.tr("Actions")
-        visible: !root.driveSubPageMode
+        visible: !root.driveSubPageMode && root.selectedProvider === "ticktick"
 
         RowLayout {
             Layout.fillWidth: true
@@ -876,7 +979,7 @@ Item {
         bottomLeftRadius: Appearance.rounding.large
         bottomRightRadius: Appearance.rounding.large
         visible: !root.driveSubPageMode
-        text: Translation.tr("Gmail credentials are set in ii/.env. Sports (ESPN) options live in the Sports bar widget page.")
+        text: Translation.tr("Google credentials (for Gmail, Google Tasks, and Google Drive) are set in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). Sports (ESPN) options live in the Sports bar widget page.")
     }
 
     ContentSection {
@@ -892,7 +995,7 @@ Item {
             configPage: Qt.resolvedUrl("widgets/GoogleDriveBackupConfig.qml")
             onCheckedChanged: {
                 if (checked !== Config.options.googleDrive.enabled)
-                    Config.options.googleDrive.enabled = checked;
+                    root.updateDriveOption("enabled", checked);
             }
         }
     }
@@ -2431,6 +2534,16 @@ Item {
             color: Appearance.colors.colSubtext
         }
 
+        ConfigSwitch {
+            buttonIcon: "cloud_done"
+            text: Translation.tr("Enable Google Drive backups")
+            checked: Config.options.googleDrive.enabled
+            onCheckedChanged: {
+                if (checked !== Config.options.googleDrive.enabled)
+                    root.updateDriveOption("enabled", checked);
+            }
+        }
+
         ConfigSelectionArray {
             Layout.fillWidth: true
             currentValue: Config.options.googleDrive.syncInterval
@@ -2441,7 +2554,7 @@ Item {
                 { displayName: Translation.tr("2 days"), value: "2d", icon: "date_range" },
                 { displayName: Translation.tr("3 days"), value: "3d", icon: "calendar_month" }
             ]
-            onSelected: value => Config.options.googleDrive.syncInterval = value
+            onSelected: value => root.updateDriveOption("syncInterval", value)
         }
 
         ConfigSwitch {
@@ -2450,7 +2563,7 @@ Item {
             checked: Config.options.googleDrive.syncOnBoot
             onCheckedChanged: {
                 if (checked !== Config.options.googleDrive.syncOnBoot)
-                    Config.options.googleDrive.syncOnBoot = checked;
+                    root.updateDriveOption("syncOnBoot", checked);
             }
         }
     }
@@ -2461,57 +2574,17 @@ Item {
         visible: root.driveSubPageMode
         icon: "tune"
         title: Translation.tr("Advanced Drive Settings")
+        tooltip: Translation.tr("Transfer limits, retention, network triggers and notifications.")
 
-        RippleButton {
-            id: advancedDriveButton
+        ColumnLayout {
             Layout.fillWidth: true
-            implicitHeight: advancedDriveRow.implicitHeight + 32
-            buttonRadius: Appearance.rounding.full
-            colBackground: Appearance.colors.colTertiaryContainer
-            colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-            colRipple: Appearance.colors.colTertiaryContainerActive
-            onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
+            spacing: Appearance.sizes.elevationMargin / 2
 
-            contentItem: RowLayout {
-                id: advancedDriveRow
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
-
-                MaterialShapeWrappedMaterialSymbol {
-                    text: "tune"
-                    shape: MaterialShape.Shape.Circle
-                    iconSize: Appearance.font.pixelSize.large
-                    padding: 8
-                    color: Appearance.colors.colTertiary
-                    colSymbol: Appearance.colors.colOnTertiary
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Advanced Drive Settings")
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnTertiaryContainer
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Transfer limits, retention, network triggers and notifications")
-                        color: Appearance.colors.colOnTertiaryContainer
-                        opacity: 0.82
-                        wrapMode: Text.WordWrap
-                    }
-                }
-
-                MaterialSymbol {
-                    text: "arrow_forward"
-                    iconSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnTertiaryContainer
-                }
+            ConfigSubpageRow {
+                buttonIcon: "tune"
+                title: Translation.tr("Advanced Drive Settings")
+                description: Translation.tr("Transfer limits, retention, network triggers and notifications")
+                onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/AdvancedDriveConfig.qml")
             }
         }
     }

@@ -1,0 +1,10 @@
+module qs.modules.settings.configs.ai
+
+AdvancedAiConfig 1.0 AdvancedAiConfig.qml
+AiFilesVisionVoiceConfig 1.0 AiFilesVisionVoiceConfig.qml
+AiModelsKeysConfig 1.0 AiModelsKeysConfig.qml
+AiPeriodDropdown 1.0 AiPeriodDropdown.qml
+AiRequestLimitsConfig 1.0 AiRequestLimitsConfig.qml
+AiToolsPermissionsConfig 1.0 AiToolsPermissionsConfig.qml
+AiUsageDashboard 1.0 AiUsageDashboard.qml
+CustomModelsConfig 1.0 CustomModelsConfig.qml

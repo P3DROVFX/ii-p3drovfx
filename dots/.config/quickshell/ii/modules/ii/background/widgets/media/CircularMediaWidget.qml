@@ -22,9 +22,14 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
-    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
-    implicitWidth: 240
-    implicitHeight: 240
+    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines.
+    // The size factor is folded into the implicit size rather than left to an
+    // Item.scale on the root: growing the box redraws the widget, scaling the
+    // root stretches a finished bitmap. Everything inside already derives from
+    // root.width, so there is nothing else to convert.
+    readonly property real contentScale: (Config.options.background.widgets.circular_media.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
 
     readonly property bool useAlbumColors: Config.ready ? (Config.options.background.widgets.circular_media.useAlbumColors ?? true) : true
     readonly property MprisPlayer player: MprisController.activePlayer

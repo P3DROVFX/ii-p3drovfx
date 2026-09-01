@@ -40,7 +40,7 @@ def fetch_account_inbox(account, max_results):
     try:
         token = gmail_config.resolve_token(refresh_token)
         
-        q_param = "in:inbox {category:primary category:updates category:promotions category:social}"
+        q_param = "in:inbox"
         query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
         
         listing = api_get(f"https://gmail.googleapis.com/gmail/v1/users/me/messages?{query_params}", token)

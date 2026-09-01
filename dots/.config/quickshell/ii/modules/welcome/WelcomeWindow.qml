@@ -59,7 +59,7 @@ FloatingWindow {
                 transitionDirection: flow.transitionDirection
                 transitionRunning: flow.transitionRunning
                 transitionReady: flow.transitionReady
-                onCloseRequested: GlobalStates.closeWelcome()
+                onCloseRequested: root.closeWhenNavigationUnlocked()
             }
 
             WelcomeProgress {
@@ -131,7 +131,7 @@ FloatingWindow {
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 if (!flow.closeNestedPage())
-                    GlobalStates.closeWelcome();
+                    root.closeWhenNavigationUnlocked();
                 event.accepted = true;
             } else if ((event.modifiers & Qt.AltModifier) && event.key === Qt.Key_Left) {
                 flow.goPrevious();
@@ -155,6 +155,11 @@ FloatingWindow {
     property bool previewSearchOwned: false
     property bool opening: false
     property real bodyEntranceY: 0
+
+    function closeWhenNavigationUnlocked(): void {
+        if (!flow.currentPageLocksNavigation())
+            GlobalStates.closeWelcome();
+    }
 
     Behavior on bodyEntranceY {
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(root)

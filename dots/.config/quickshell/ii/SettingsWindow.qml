@@ -35,6 +35,7 @@ FloatingWindow {
     // the states behind the current page, including an open sub-page, and is
     // capped so a long exploratory session cannot grow without bound.
     property var navigationHistory: []
+    property var navigationForwardHistory: []
     property bool navigationHistoryActive: false
     property bool restoringNavigation: false
     property int observedHistoryPage: -1
@@ -99,7 +100,11 @@ FloatingWindow {
     // so anchor every relative entry to the settings configs folder here.
     function resolveSubPageEntry(value) {
         const raw = String(value ?? "");
-        if (raw === "" || raw.indexOf("://") !== -1 || raw.startsWith("file:"))
+        // Qt.resolvedUrl() inside shell components returns Quickshell's
+        // `qs:/...` scheme. It is already absolute even though it has no
+        // `://`; prefixing the configs directory produces
+        // `modules/settings/configs/qs:/...` and the Loader silently fails.
+        if (raw === "" || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(raw))
             return raw;
         return Qt.resolvedUrl("modules/settings/configs/" + raw).toString();
     }
@@ -122,6 +127,34 @@ FloatingWindow {
         return a && b && a.page === b.page && a.subPage === b.subPage;
     }
 
+    function currentNavigationState() {
+        // `pageLoader.item` can still be the outgoing page while its switch
+        // animation is running. The observed state is updated synchronously,
+        // so it remains the authoritative browser-like location here.
+        if (root.navigationHistoryActive && root.observedHistoryPage >= 0) {
+            return {
+                page: root.observedHistoryPage,
+                subPage: root.observedHistorySubPage
+            };
+        }
+        return {
+            page: root.currentPage,
+            subPage: root.currentSubPageUrl()
+        };
+    }
+
+    function appendNavigationState(stack, state) {
+        if (!state)
+            return stack;
+        const last = stack.length > 0 ? stack[stack.length - 1] : null;
+        if (root.sameNavigationState(last, state))
+            return stack;
+        let next = stack.concat([state]);
+        if (next.length > 10)
+            next = next.slice(next.length - 10);
+        return next;
+    }
+
     function rememberObservedState() {
         if (!root.navigationHistoryActive || root.restoringNavigation || root.observedHistoryPage < 0)
             return;
@@ -136,14 +169,16 @@ FloatingWindow {
         if (root.sameNavigationState(last, state))
             return;
 
-        let next = root.navigationHistory.concat([state]);
-        if (next.length > 10)
-            next = next.slice(next.length - 10);
-        root.navigationHistory = next;
+        root.navigationHistory = root.appendNavigationState(root.navigationHistory, state);
+        // A page/sub-page chosen after going back starts a new branch, just as
+        // in a browser. The forward button must not resurrect the abandoned
+        // branch.
+        root.navigationForwardHistory = [];
     }
 
     function beginNavigationSession() {
         root.navigationHistory = [];
+        root.navigationForwardHistory = [];
         root.restoringNavigation = false;
         root.pendingNavigationRestore = null;
         root.observedHistoryPage = root.currentPage;
@@ -159,6 +194,7 @@ FloatingWindow {
             pageLoader.item.activeSubPage = "";
         root.navigationHistoryActive = false;
         root.navigationHistory = [];
+        root.navigationForwardHistory = [];
         root.restoringNavigation = false;
         root.pendingNavigationRestore = null;
         root.observedHistoryPage = -1;
@@ -197,6 +233,9 @@ FloatingWindow {
         if (nextSubPage === "" && root.observedHistorySubPage !== ""
                 && root.sameNavigationState(last, { page: root.currentPage, subPage: "" })) {
             root.navigationHistory = root.navigationHistory.slice(0, -1);
+            root.navigationForwardHistory = root.appendNavigationState(
+                root.navigationForwardHistory,
+                { page: root.currentPage, subPage: root.observedHistorySubPage });
         } else {
             root.rememberObservedState();
         }
@@ -212,12 +251,7 @@ FloatingWindow {
         Qt.callLater(() => root.restoringNavigation = false);
     }
 
-    function navigateBack() {
-        if (!root.navigationHistoryActive || root.navigationHistory.length === 0)
-            return false;
-
-        const target = root.navigationHistory[root.navigationHistory.length - 1];
-        root.navigationHistory = root.navigationHistory.slice(0, -1);
+    function restoreNavigationState(target) {
         root.restoringNavigation = true;
         root.pendingNavigationRestore = target;
 
@@ -232,6 +266,31 @@ FloatingWindow {
             root.finishNavigationRestore();
         }
         return true;
+    }
+
+    function navigateBack() {
+        if (!root.navigationHistoryActive || root.restoringNavigation
+                || root.navigationHistory.length === 0)
+            return false;
+
+        const current = root.currentNavigationState();
+        const target = root.navigationHistory[root.navigationHistory.length - 1];
+        root.navigationHistory = root.navigationHistory.slice(0, -1);
+        root.navigationForwardHistory = root.appendNavigationState(
+            root.navigationForwardHistory, current);
+        return root.restoreNavigationState(target);
+    }
+
+    function navigateForward() {
+        if (!root.navigationHistoryActive || root.restoringNavigation
+                || root.navigationForwardHistory.length === 0)
+            return false;
+
+        const current = root.currentNavigationState();
+        const target = root.navigationForwardHistory[root.navigationForwardHistory.length - 1];
+        root.navigationForwardHistory = root.navigationForwardHistory.slice(0, -1);
+        root.navigationHistory = root.appendNavigationState(root.navigationHistory, current);
+        return root.restoreNavigationState(target);
     }
 
     // ── Flat page list, derived from SettingsPageRegistry ────────────────
@@ -251,12 +310,50 @@ FloatingWindow {
         return SettingsPageRegistry.pageIndexById(id);
     }
 
+    /**
+     * Shows the section a deep link asked for, once its page is up.
+     *
+     * The highlight used to be started only from the page loader's `onLoaded`,
+     * which is fine for a link followed from inside the window — that always
+     * changes page. A link from outside often does not: the window may already
+     * be showing that page, and then nothing loads and nothing ever fires. So
+     * a page that is already up is handled here, and one that is still loading
+     * is left to `onLoaded`.
+     */
+    function applyPendingSectionHighlight() {
+        if (root.pendingSectionHighlight === "")
+            return;
+        if (pageLoader.status === Loader.Ready)
+            pendingHighlightTimer.restart();
+    }
+
     function consumePendingSettingsPage() {
         const pending = GlobalStates.consumePendingSettingsPage();
         root.pendingSubPage = GlobalStates.settingsPendingSubPage || "";
         GlobalStates.settingsPendingSubPage = "";
+        if ((GlobalStates.settingsPendingSection || "") !== "") {
+            root.pendingSectionHighlight = GlobalStates.settingsPendingSection;
+            GlobalStates.settingsPendingSection = "";
+            // After the page switch below has been processed: if it changed
+            // page, the loader takes it; if it did not, this does.
+            Qt.callLater(() => root.applyPendingSectionHighlight());
+        }
         if (!pending || pending === "")
             return;
+
+        if (pending === "clipboard") {
+            const launcherIndex = root.pageIndexById("launcher");
+            if (launcherIndex >= 0) {
+                root.currentPage = launcherIndex;
+                const targetSubPage = "ClipboardConfig.qml";
+                if (pageLoader.status === Loader.Ready) {
+                    Qt.callLater(() => root.restoreSubPagePath(targetSubPage));
+                } else {
+                    root.pendingSubPage = targetSubPage;
+                }
+                return;
+            }
+        }
 
         const directIndex = root.pageIndexById(pending);
         if (directIndex >= 0) {
@@ -363,6 +460,13 @@ FloatingWindow {
     Component.onCompleted: {
         root.visible = GlobalStates.settingsOpen;
         if (root.visible) {
+            // The deep link that opened this window fired before the window
+            // existed: the loader below shell.qml only starts building it when
+            // `settingsOpen` turns true, so both Connections above missed the
+            // signal that carried the destination. A warm window has them and
+            // navigates; a cold one used to land on whatever page was last
+            // shown and drop the request on the floor.
+            root.consumePendingSettingsPage();
             Qt.callLater(() => {
                 SearchRegistry.setSettingsActive(true);
                 root.beginNavigationSession();
@@ -560,8 +664,12 @@ FloatingWindow {
                         pageLoadArmed = false;
                         _skeletonGateActive = true;
                         _waitingForLoad = true;
-                        pageSkeleton.revealed = true;
-                        skeletonDelayTimer.stop();
+                        // The skeleton is a fallback for pages slow enough that
+                        // an empty pane would look broken. Revealing it on every
+                        // switch made the fast pages - which is most of them -
+                        // flash three grey cards for a couple of frames.
+                        pageSkeleton.revealed = false;
+                        skeletonDelayTimer.restart();
                         source = nextSource;
                         pageActivationTimer.restart();
                     }
@@ -624,7 +732,10 @@ FloatingWindow {
 
                     Timer {
                         id: pageActivationTimer
-                        interval: 48
+                        // Only needs to give the outgoing page its own frame to
+                        // be torn down in; it used to sit for a third of the
+                        // whole page-switch budget doing nothing.
+                        interval: 16
                         repeat: false
                         onTriggered: {
                             if (root.visible && Config.ready)
@@ -646,7 +757,10 @@ FloatingWindow {
 
                     Timer {
                         id: skeletonDelayTimer
-                        interval: 90
+                        // Covers pageActivationTimer plus the build time of a
+                        // typical page, so only the genuinely heavy ones ever
+                        // reach the skeleton.
+                        interval: 200
                         repeat: false
                         onTriggered: {
                             if (pageLoader.status === Loader.Loading || pageLoader._waitingForLoad)
@@ -737,17 +851,22 @@ FloatingWindow {
             } // closes Rectangle (Content container)
         } // closes RowLayout (Window content)
 
-        // XButton1/Qt.BackButton is handled by a pointer handler attached to
-        // the content Item, so it can receive the event from any Settings
-        // control without adding a cursor-owning overlay.
-        TapHandler {
-            acceptedButtons: Qt.BackButton | Qt.ExtraButton1
-            grabPermissions: PointerHandler.CanTakeOverFromAnything
-            onTapped: (eventPoint, button) => {
-                root.navigateBack();
-            }
-        }
     } // closes ColumnLayout
+
+    // PointerHandlers do not own a cursor surface, so every control underneath
+    // keeps its PointingHandCursor. React on press instead of waiting for a tap
+    // gesture that another control can cancel while taking the grab.
+    TapHandler {
+        acceptedButtons: Qt.BackButton | Qt.ExtraButton1
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        onPressedChanged: if (pressed) root.navigateBack()
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.ForwardButton | Qt.ExtraButton2
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        onPressedChanged: if (pressed) root.navigateForward()
+    }
 
     // Keep observation reactive to the actual page host. This also catches
     // nested hosts whose activeSubPage changes without replacing the page

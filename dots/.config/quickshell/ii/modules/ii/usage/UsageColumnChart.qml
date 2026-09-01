@@ -20,6 +20,7 @@ Item {
     property var formatValue: value => String(Math.round(Number(value || 0)))
     property real barWidth: 40
     property real minimumBarWidth: 14
+    property real barSpacing: Appearance.rounding.verysmall
     property real barRadius: Appearance.rounding.full
     property int labelStride: 1
     property list<int> labelIndices: []
@@ -93,7 +94,7 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                spacing: 8
+                spacing: root.barSpacing
 
                 Repeater {
                     model: root.values
@@ -201,7 +202,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             visible: root.showLabels
-            spacing: 8
+            spacing: root.barSpacing
 
             Repeater {
                 model: root.labels

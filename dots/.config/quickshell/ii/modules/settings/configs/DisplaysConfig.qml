@@ -17,6 +17,15 @@ ContentPage {
         id: monitorConfig
     }
 
+    readonly property var selectedMonitor: (monitorConfig.monitors
+        && monitorCanvas.selectedIndex >= 0
+        && monitorCanvas.selectedIndex < monitorConfig.monitors.length)
+        ? monitorConfig.monitors[monitorCanvas.selectedIndex]
+        : null
+    readonly property string selectedMonitorName: selectedMonitor && selectedMonitor.name ? selectedMonitor.name : ""
+    readonly property var selectedCalibration: DisplayCalibration.monitorForName(selectedMonitorName)
+    readonly property var selectedGpuCalibration: DisplayColorFilter.profileForMonitor(selectedMonitorName)
+
     component MonitorRect: Rectangle {
         id: rectRoot
         required property var monitor
@@ -1071,7 +1080,7 @@ ContentPage {
             enabled: advancedSection.isHdrEnabled
             opacity: enabled ? 1.0 : 0.5
             buttonIcon: "palette"
-            text: Translation.tr("SDR Saturation") + ` (${(value || 1.0).toFixed(2)})`
+            text: Translation.tr("SDR-in-HDR Saturation") + ` (${(value || 1.0).toFixed(2)})`
             value: (monitorConfig.monitors && monitorConfig.monitors[monitorCanvas.selectedIndex]) ? (monitorConfig.monitors[monitorCanvas.selectedIndex].sdrSaturation || 1.0) : 1.0
             from: 0.5
             to: 1.5
@@ -1092,7 +1101,294 @@ ContentPage {
         }
     }
 
-    // ── 4. Profiles ──────────────────────────────────────────────────────────
+    // ── 4. Color & Contrast ──────────────────────────────────────────────────
+    ContentSection {
+        id: colorCalibrationSection
+        icon: "contrast"
+        title: Translation.tr("Color & Contrast")
+        visible: page.selectedMonitor !== null
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 8
+            text: Translation.tr("Adjusting %1. GPU fallback works on any output; supported hardware controls appear below.").arg(page.selectedMonitor ? (page.selectedMonitor.description || page.selectedMonitorName) : "")
+            color: Appearance.colors.colSubtext
+            font.pixelSize: Appearance.font.pixelSize.small
+            wrapMode: Text.Wrap
+        }
+
+        ContentSubsectionLabel {
+            text: Translation.tr("GPU color filter")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: DisplayColorFilter.applied
+            materialIcon: "science"
+            text: Translation.tr("Experimental feature: the GPU fallback uses Hyprland's screen shader slot, so other screen shaders are disabled while it is active. Activating another shader temporarily pauses these color adjustments.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.selectedMonitorName.length > 0
+                && !DisplayColorFilter.isMonitorNeutral(page.selectedMonitorName)
+                && ScreenShader.active
+            materialIcon: "pause_circle"
+            text: Translation.tr("GPU calibration is temporarily paused while the %1 screen filter is active.").arg(ScreenShader.statusText)
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: DisplayColorFilter.errorMessage.length > 0
+            materialIcon: "error"
+            text: Translation.tr("The GPU color filter could not be generated. Your saved calibration was preserved.")
+        }
+
+        ConfigSlider {
+            buttonIcon: "palette"
+            text: Translation.tr("GPU saturation") + ` (${Math.round(value)}%)`
+            value: page.selectedGpuCalibration ? page.selectedGpuCalibration.saturation * 100 : 100
+            from: 0
+            to: 200
+            stepSize: 1
+            stopIndicatorValues: [100]
+            onValueChanged: {
+                if (page.selectedGpuCalibration
+                        && Math.abs(value / 100 - page.selectedGpuCalibration.saturation) > 0.001)
+                    DisplayColorFilter.setSaturation(page.selectedMonitorName, value / 100);
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "contrast"
+            text: Translation.tr("GPU contrast") + ` (${Math.round(value)}%)`
+            value: page.selectedGpuCalibration ? page.selectedGpuCalibration.contrast * 100 : 100
+            from: 50
+            to: 150
+            stepSize: 1
+            stopIndicatorValues: [100]
+            onValueChanged: {
+                if (page.selectedGpuCalibration
+                        && Math.abs(value / 100 - page.selectedGpuCalibration.contrast) > 0.001)
+                    DisplayColorFilter.setContrast(page.selectedMonitorName, value / 100);
+            }
+        }
+
+        ContentSubsectionLabel {
+            text: Translation.tr("GPU color balance")
+        }
+
+        ConfigSlider {
+            buttonIcon: "format_color_fill"
+            text: Translation.tr("GPU red channel") + ` (${Math.round(value)}%)`
+            value: page.selectedGpuCalibration ? page.selectedGpuCalibration.red * 100 : 100
+            from: 50
+            to: 150
+            stepSize: 1
+            stopIndicatorValues: [100]
+            onValueChanged: {
+                if (page.selectedGpuCalibration
+                        && Math.abs(value / 100 - page.selectedGpuCalibration.red) > 0.001)
+                    DisplayColorFilter.setRed(page.selectedMonitorName, value / 100);
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "grass"
+            text: Translation.tr("GPU green channel") + ` (${Math.round(value)}%)`
+            value: page.selectedGpuCalibration ? page.selectedGpuCalibration.green * 100 : 100
+            from: 50
+            to: 150
+            stepSize: 1
+            stopIndicatorValues: [100]
+            onValueChanged: {
+                if (page.selectedGpuCalibration
+                        && Math.abs(value / 100 - page.selectedGpuCalibration.green) > 0.001)
+                    DisplayColorFilter.setGreen(page.selectedMonitorName, value / 100);
+            }
+        }
+
+        ConfigSlider {
+            buttonIcon: "water_drop"
+            text: Translation.tr("GPU blue channel") + ` (${Math.round(value)}%)`
+            value: page.selectedGpuCalibration ? page.selectedGpuCalibration.blue * 100 : 100
+            from: 50
+            to: 150
+            stepSize: 1
+            stopIndicatorValues: [100]
+            onValueChanged: {
+                if (page.selectedGpuCalibration
+                        && Math.abs(value / 100 - page.selectedGpuCalibration.blue) > 0.001)
+                    DisplayColorFilter.setBlue(page.selectedMonitorName, value / 100);
+            }
+        }
+
+        RippleButtonWithIcon {
+            visible: page.selectedMonitorName.length > 0
+                && !DisplayColorFilter.isMonitorNeutral(page.selectedMonitorName)
+            Layout.fillWidth: false
+            materialIcon: "restart_alt"
+            mainText: Translation.tr("Reset GPU calibration")
+            onClicked: DisplayColorFilter.resetMonitor(page.selectedMonitorName)
+        }
+
+        ContentSubsectionLabel {
+            text: Translation.tr("Hardware controls (DDC/CI)")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: !DisplayCalibration.ddcutilAvailable
+            materialIcon: "error"
+            text: Translation.tr("ddcutil is required for hardware color and contrast controls.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: DisplayCalibration.ddcutilAvailable
+                && !DisplayCalibration.detectionFailed
+                && (!DisplayCalibration.detectionComplete
+                    || (page.selectedCalibration && page.selectedCalibration.probing))
+            materialIcon: "hourglass_top"
+            text: Translation.tr("Reading the selected monitor's color controls…")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: DisplayCalibration.ddcutilAvailable
+                && DisplayCalibration.detectionFailed
+            materialIcon: "error"
+            text: Translation.tr("The display color service could not enumerate DDC/CI monitors. Check I²C permissions and try again.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: DisplayCalibration.ddcutilAvailable
+                && !DisplayCalibration.detectionFailed
+                && DisplayCalibration.detectionComplete
+                && (!page.selectedCalibration || !page.selectedCalibration.isDdc)
+            materialIcon: "info"
+            text: Translation.tr("This display does not expose DDC/CI controls. Internal panels and some adapters may not support hardware color adjustment.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.isDdc
+                && page.selectedCalibration.error !== "readFailed"
+                && !page.selectedCalibration.hasAnyControl
+            materialIcon: "info"
+            text: Translation.tr("DDC/CI is available, but this monitor does not report contrast or RGB gain controls.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.selectedCalibration
+                && (page.selectedCalibration.error === "readFailed"
+                    || page.selectedCalibration.error === "writeFailed")
+            materialIcon: "error"
+            text: page.selectedCalibration && page.selectedCalibration.error === "writeFailed"
+                ? Translation.tr("The monitor rejected the last color adjustment. Reload its values and try again.")
+                : Translation.tr("The monitor was detected, but its color controls could not be read.")
+        }
+
+        ConfigSlider {
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.contrastSupported
+            buttonIcon: "contrast"
+            text: Translation.tr("Hardware contrast") + ` (${Math.round(value)}%)`
+            value: page.selectedCalibration ? page.selectedCalibration.contrast : 50
+            from: 0
+            to: 100
+            stepSize: 1
+            stopIndicatorValues: [50]
+            onValueChanged: {
+                if (page.selectedCalibration
+                        && page.selectedCalibration.contrastSupported
+                        && Math.round(value) !== page.selectedCalibration.contrast)
+                    page.selectedCalibration.setContrast(value);
+            }
+        }
+
+        ContentSubsectionLabel {
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.hasColorControls
+            text: Translation.tr("Hardware color balance")
+        }
+
+        ConfigSlider {
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.redSupported
+            buttonIcon: "format_color_fill"
+            text: Translation.tr("Red gain") + ` (${Math.round(value)}%)`
+            value: page.selectedCalibration ? page.selectedCalibration.red : 50
+            from: 0
+            to: 100
+            stepSize: 1
+            stopIndicatorValues: [50]
+            onValueChanged: {
+                if (page.selectedCalibration
+                        && page.selectedCalibration.redSupported
+                        && Math.round(value) !== page.selectedCalibration.red)
+                    page.selectedCalibration.setRed(value);
+            }
+        }
+
+        ConfigSlider {
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.greenSupported
+            buttonIcon: "grass"
+            text: Translation.tr("Green gain") + ` (${Math.round(value)}%)`
+            value: page.selectedCalibration ? page.selectedCalibration.green : 50
+            from: 0
+            to: 100
+            stepSize: 1
+            stopIndicatorValues: [50]
+            onValueChanged: {
+                if (page.selectedCalibration
+                        && page.selectedCalibration.greenSupported
+                        && Math.round(value) !== page.selectedCalibration.green)
+                    page.selectedCalibration.setGreen(value);
+            }
+        }
+
+        ConfigSlider {
+            visible: page.selectedCalibration
+                && page.selectedCalibration.ready
+                && page.selectedCalibration.blueSupported
+            buttonIcon: "water_drop"
+            text: Translation.tr("Blue gain") + ` (${Math.round(value)}%)`
+            value: page.selectedCalibration ? page.selectedCalibration.blue : 50
+            from: 0
+            to: 100
+            stepSize: 1
+            stopIndicatorValues: [50]
+            onValueChanged: {
+                if (page.selectedCalibration
+                        && page.selectedCalibration.blueSupported
+                        && Math.round(value) !== page.selectedCalibration.blue)
+                    page.selectedCalibration.setBlue(value);
+            }
+        }
+
+        RippleButtonWithIcon {
+            visible: page.selectedCalibration && page.selectedCalibration.isDdc
+            enabled: page.selectedCalibration
+                && !page.selectedCalibration.probing
+                && !DisplayCalibration.detecting
+            Layout.fillWidth: false
+            materialIcon: "refresh"
+            mainText: Translation.tr("Reload hardware values")
+            onClicked: DisplayCalibration.refreshMonitor(page.selectedMonitorName)
+        }
+    }
+
+    // ── 5. Profiles ──────────────────────────────────────────────────────────
     ContentSection {
         icon: "display_settings"
         title: Translation.tr("Profiles")

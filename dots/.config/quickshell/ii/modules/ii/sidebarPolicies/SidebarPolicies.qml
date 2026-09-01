@@ -18,6 +18,12 @@ Scope { // Scope
     property Component contentComponent: SidebarPoliciesContent {}
     property Item sidebarContent
 
+    // Same deal as the right sidebar: the window controller stays cheap and always
+    // alive, while the expensive content tree obeys the user's keep-alive preference.
+    // Pinned counts as wanted so a pinned-but-closed sidebar never loses its content.
+    readonly property bool keepContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool contentWanted: GlobalStates.sidebarLeftOpen || root.pin || root.keepContentLoaded
+
     BarThemes { id: barThemes }
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
@@ -104,11 +110,40 @@ Scope { // Scope
         window.contentParent.children = [root.sidebarContent];
     }
 
-    Component.onCompleted: {
+    // Builds the content tree once and hands it to whichever window is up. Idempotent,
+    // so every caller can just ask for it without checking first.
+    function ensureContent() {
+        if (root.sidebarContent) return;
         root.sidebarContent = contentComponent.createObject(null, {
             "scopeRoot": root,
         });
         root.attachContent();
+    }
+
+    // Drops the content tree. Detached from its window first so the window is never
+    // left holding a dangling child, and destroy() itself is deferred by QML to the
+    // end of the current event loop pass.
+    function releaseContent() {
+        if (root.contentWanted) return;
+        if (!root.sidebarContent) return;
+        const content = root.sidebarContent;
+        root.sidebarContent = null;
+        content.parent = null;
+        content.destroy();
+    }
+
+    onContentWantedChanged: {
+        if (root.contentWanted) {
+            root.ensureContent();
+            return;
+        }
+        // Closing is often triggered from inside the content itself (a button, a focus
+        // grab dismissal), so let the current event unwind before tearing it down.
+        Qt.callLater(root.releaseContent);
+    }
+
+    Component.onCompleted: {
+        if (root.contentWanted) root.ensureContent();
     }
 
     onDetachChanged: {
@@ -141,7 +176,7 @@ Scope { // Scope
             }
 
             exclusionMode: ExclusionMode.Normal
-            exclusiveZone: root.pin ? sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin : 0
+            exclusiveZone: root.pin ? Math.max(0, sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin - (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset)) : 0
             implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
             // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
@@ -236,7 +271,21 @@ Scope { // Scope
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    if (!root.pin) panelWindow.hide();
+                    if (root.pin) return;
+                    // Something the sidebar opened has the focus. The grab was
+                    // given up all the same, so it is taken back once that
+                    // thing is done with — see below.
+                    if (GlobalStates.policiesHoldOpen > 0) return;
+                    panelWindow.hide();
+                }
+            }
+
+            Connections {
+                target: GlobalStates
+                function onPoliciesHoldOpenChanged() {
+                    if (GlobalStates.policiesHoldOpen > 0) return;
+                    if (!panelWindow.visible || root.pin) return;
+                    GlobalFocusGrab.addDismissable(panelWindow);
                 }
             }
 
@@ -323,6 +372,18 @@ Scope { // Scope
                             root.toggleDetach();
                         } else if (event.key === Qt.Key_P) {
                             root.togglePoliciesPin();
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                        } else if (event.key === Qt.Key_Backtab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
+                        } else if (event.key === Qt.Key_PageDown) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(1);
+                        } else if (event.key === Qt.Key_PageUp) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
                         }
                         event.accepted = true;
                     }
@@ -393,7 +454,7 @@ Scope { // Scope
 
             visible: GlobalStates.sidebarLeftOpen
             screen: Quickshell.screens.find(s => s.name === root.policyMonitorName)
-                ?? Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+                ?? Quickshell.screens.find(s => s.name === (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""))
                 ?? Quickshell.screens[0]
                 ?? null
             width: root.sidebarWidth
@@ -459,6 +520,18 @@ Scope { // Scope
                             root.togglePoliciesExtended();
                         } else if (event.key === Qt.Key_P) {
                             root.togglePoliciesPin();
+                        } else if (event.key === Qt.Key_Tab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab((event.modifiers & Qt.ShiftModifier) ? -1 : 1);
+                        } else if (event.key === Qt.Key_Backtab) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
+                        } else if (event.key === Qt.Key_PageDown) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(1);
+                        } else if (event.key === Qt.Key_PageUp) {
+                            if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+                                root.sidebarContent.cycleTab(-1);
                         }
                         event.accepted = true;
                     }

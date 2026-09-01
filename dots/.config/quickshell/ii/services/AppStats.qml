@@ -51,7 +51,10 @@ Singleton {
         })
 
     readonly property var opts: Config.options?.appStats ?? null
-    readonly property bool enabled: root.opts?.enable ?? true
+    // IdleMonitor creates its native ext-idle-notify object from onPostReload.
+    // Keep the whole service disabled until the async config load has completed,
+    // otherwise it can ask Wayland for a notification while the seat is not ready.
+    readonly property bool enabled: Config.ready && (root.opts?.enable ?? true)
     readonly property bool trackHeadless: root.opts?.trackHeadless ?? true
     readonly property bool showHeadless: root.opts?.showHeadless ?? false
     readonly property int intervalMs: root.opts?.sampleIntervalMs ?? 10000

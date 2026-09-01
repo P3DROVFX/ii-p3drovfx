@@ -189,8 +189,11 @@ Item {
 
     readonly property string selectedMime: {
         if (selectedIsImage) {
-            const match = selectedEntry.match(/\[\[(.+?)\s/);
-            return match ? match[1] : "image/*";
+            // Preview format is "[[ binary data <size> <format> <W>x<H> ]]";
+            // the old regex grabbed the leading "binary" fragment instead of
+            // the actual format token before the dimensions.
+            const match = selectedEntry.match(/\s(\w+)\s\d+x\d+\s\]\]\s*$/);
+            return match ? `image/${match[1]}` : "image/*";
         }
         return "text/plain;charset=utf-8";
     }
@@ -358,6 +361,14 @@ Item {
                 selectedActionIndex = -1;
             }
         }
+    }
+
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the query to retype something silently exits the panel.
+    function navigateBack(): bool {
+        return true;
     }
 
     Keys.onPressed: event => {

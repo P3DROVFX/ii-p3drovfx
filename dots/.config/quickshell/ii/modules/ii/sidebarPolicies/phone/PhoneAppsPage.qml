@@ -114,10 +114,10 @@ Rectangle {
 
             layer.enabled: visible
             layer.effect: OpacityMask {
-                maskSource: Rectangle {
+                maskSource: AndroidIconMask {
                     width: launcherIcon.width
                     height: launcherIcon.height
-                    radius: width / 2
+                    shapeName: Config.options?.phone?.scrcpy?.appMode?.iconShape ?? "oneui"
                 }
             }
         }
@@ -239,6 +239,23 @@ Rectangle {
                     verticalAlignment: TextInput.AlignVCenter
 
                     onTextChanged: PhoneScrcpyService.setSearchQuery(text)
+
+                    StyledTextContextMenu {
+                        id: searchContextMenu
+                        targetField: searchInput
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.RightButton
+                        onPressed: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                searchInput.forceActiveFocus();
+                                searchContextMenu.popup(mouse.x, mouse.y);
+                            }
+                        }
+                    }
                 }
 
                 RippleButton {

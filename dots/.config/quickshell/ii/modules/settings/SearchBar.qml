@@ -101,7 +101,11 @@ RowLayout {
 
         animateChange: true
 
-        readonly property var circleLikeShapes: [
+        // Rounded silhouettes keep enough quiet space for the result counter.
+        // The previous sequence mixed flowers and sunbursts into the 56px
+        // badge, making the count look cramped and retargeting the morph before
+        // its 350ms animation had finished.
+        readonly property var indicatorShapes: [
             MaterialShape.Shape.Circle,
             MaterialShape.Shape.Cookie4Sided,
             MaterialShape.Shape.Cookie6Sided,
@@ -111,11 +115,7 @@ RowLayout {
             MaterialShape.Shape.Clover4Leaf,
             MaterialShape.Shape.Clover8Leaf,
             MaterialShape.Shape.Puffy,
-            MaterialShape.Shape.Sunny,
-            MaterialShape.Shape.VerySunny,
-            MaterialShape.Shape.Bun,
-            MaterialShape.Shape.Flower,
-            MaterialShape.Shape.SoftBurst
+            MaterialShape.Shape.Bun
         ]
 
         property int currentShapeIndex: 0
@@ -123,7 +123,7 @@ RowLayout {
 
         readonly property bool isHoveredAndHasText: searchIconMouseArea.containsMouse && hasText
 
-        shape: isHoveredAndHasText ? MaterialShape.Shape.SoftBurst : circleLikeShapes[currentShapeIndex]
+        shape: isHoveredAndHasText ? MaterialShape.Shape.SoftBurst : indicatorShapes[currentShapeIndex]
 
         function advanceShape() {
             if (searchInput.text.length === 0) {
@@ -139,14 +139,16 @@ RowLayout {
             }
 
             shapePending = false;
-            currentShapeIndex = (currentShapeIndex + 1) % circleLikeShapes.length;
-            searchIconShape.rotation += 45;
+            currentShapeIndex = (currentShapeIndex + 1) % indicatorShapes.length;
+            searchIconShape.rotation += 360 / indicatorShapes.length;
             shapeAnimTimer.start();
         }
 
         Timer {
             id: shapeAnimTimer
-            interval: 220
+            // Never retarget ShapeCanvas while its current morph is running.
+            interval: searchIconShape.animation?.duration
+                ?? Appearance.animation.elementMove.duration
             repeat: false
             onTriggered: {
                 if (searchIconShape.shapePending && searchInput.text.length > 0) {

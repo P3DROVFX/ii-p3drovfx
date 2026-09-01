@@ -1,0 +1,5 @@
+module qs.modules.ii.bar.popups.aiPlanUsage
+
+AiPlanUsagePopup 1.0 AiPlanUsagePopup.qml
+AiProviderQuotaCard 1.0 AiProviderQuotaCard.qml
+AiQuotaRow 1.0 AiQuotaRow.qml

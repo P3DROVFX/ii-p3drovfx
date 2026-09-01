@@ -19,8 +19,8 @@ def main():
             lines = f.readlines()
 
     keys_to_set = {
-        "GMAIL_CLIENT_ID": client_id,
-        "GMAIL_CLIENT_SECRET": client_secret
+        "GOOGLE_CLIENT_ID": client_id,
+        "GOOGLE_CLIENT_SECRET": client_secret
     }
 
     updated_keys = set()
@@ -30,9 +30,10 @@ def main():
         if not stripped.startswith("#") and "=" in stripped:
             parts = stripped.split("=", 1)
             key = parts[0].strip()
-            if key in keys_to_set:
-                new_lines.append(f"{key}={keys_to_set[key]}\n")
-                updated_keys.add(key)
+            if key in keys_to_set or key in ("GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"):
+                target_key = "GOOGLE_CLIENT_ID" if "ID" in key else "GOOGLE_CLIENT_SECRET"
+                new_lines.append(f"{target_key}={keys_to_set[target_key]}\n")
+                updated_keys.add(target_key)
                 continue
         new_lines.append(line)
 
@@ -40,7 +41,7 @@ def main():
     for key, val in keys_to_set.items():
         if key not in updated_keys:
             if not appended_any:
-                new_lines.append("\n# Gmail API Credentials (Backup)\n")
+                new_lines.append("\n# Google OAuth2 Credentials (Backup)\n")
                 appended_any = True
             new_lines.append(f"{key}={val}\n")
 

@@ -21,6 +21,8 @@ Rectangle {
     color: Appearance.colors.colLayer2
 
     property Component rightAction: null
+    /// A small pill after the label, for a word about the row. Takes no room while empty.
+    property string badgeText: ""
 
     readonly property int itemIndex: {
         var p = parent;
@@ -224,6 +226,23 @@ Rectangle {
                 text: root.text
                 color: Appearance.colors.colOnLayer2
                 opacity: root.enabled ? 1 : 0.4
+            }
+
+            Rectangle {
+                visible: root.badgeText.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 22
+                implicitWidth: badgeLabel.implicitWidth + 14
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSecondaryContainer
+
+                StyledText {
+                    id: badgeLabel
+                    anchors.centerIn: parent
+                    text: root.badgeText
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
             }
             
             MaterialSymbol {

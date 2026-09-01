@@ -8,10 +8,27 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * LocalSend service for receiving/sending files via localsend-cli.
- * Monitors incoming file transfers, scans for devices, and sends files.
- * 
- * Note for the process':
+ * LocalSend service — drives the official `localsend-cli` (localsend/localsend
+ * monorepo, protocol v2.2, matching the LocalSend app since 1.18.0) through
+ * services/localsend_bridge.py.
+ *
+ * The official CLI is a fully interactive terminal app (crossterm/ratatui)
+ * with no scriptable/JSON mode. The bridge drives it inside a pseudo-terminal
+ * and re-exposes it as the JSON event stream this service expects (see the
+ * bridge's own docstring for the full protocol). This replaced the pip
+ * package `localsend-cli` (0.1.1), a from-scratch reimplementation that
+ * corrupted received files once the protocol moved past v2.0.
+ *
+ * Because the official CLI is a single combined send/receive/discovery
+ * process bound to one port, sending briefly stops the receive daemon (see
+ * sendToDevice()) so a `--file` one-shot instance can bind the same port;
+ * the daemon restarts automatically once the send finishes.
+ *
+ * Installed via prebuilt GitHub release binaries, no Rust toolchain needed
+ * on supported architectures — see scripts/localsend/install_localsend_cli.sh
+ * (also wired to the "Install" button in Settings → Devices & Phone → LocalSend).
+ *
+ * Note for the processes':
  * I have no idea why, but we have to use bash -lc and also set the PATH environment variable manually
  * Or else it cannot detect localsend-cli and cannot use it's functionalities. 
  * The stupid part is that when we run the shell from the terminal "qs -c ii", everything works perfectly fine without the need of "bash -lc" or setting the PATH. 
@@ -26,6 +43,20 @@ Singleton {
     property string downloadPath: Config.options?.localsend?.downloadPath
     property bool showNotifications: Config.options?.localsend?.showNotifications ?? true
     property bool preferPopupOverNotification: Config.options?.localsend?.preferPopupOverNotification ?? true
+
+    // Official localsend-cli binary + PTY bridge (see services/localsend_bridge.py)
+    readonly property string bridgeScriptPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.config/quickshell/ii/services/localsend_bridge.py"
+    readonly property string installerScriptPath: Directories.home.toString().replace(/^file:\/\//, "") + "/.config/quickshell/ii/scripts/localsend/install_localsend_cli.sh"
+    property bool _sendWasReceiving: false
+    property var _pendingSendCommand: []
+
+    // Transparency state shown in Settings (DevicesPhoneConfig.qml)
+    property string cliVersion: ""
+    property bool pyteAvailable: false
+    property bool pyteChecked: false
+    property bool installing: false
+    property string installLog: ""
+    property string installError: ""
 
     // Receive state
     property var currentTransfer: null
@@ -95,23 +126,42 @@ Singleton {
     function sendToDevice(deviceIp: string): void {
         if (!root.available || root.sending || root.droppedFiles.length === 0) return
         root.sending = true
-        
+
         const filePaths = root.droppedFiles.map(f => f.path)
-        const cliPath = Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin/localsend-cli"
-        
-        const cmd = [cliPath, "send", deviceIp]
+        const cmd = ["python3", root.bridgeScriptPath, "send", "--target", deviceIp]
         for (let i = 0; i < filePaths.length; i++) {
             cmd.push(filePaths[i])
         }
-        cmd.push("--json")
-        
-        sendProc.command = cmd
-        sendProc.running = true
+        root._pendingSendCommand = cmd
+
+        // The official CLI binds one port for send/receive/discovery
+        // combined: free it from the receive daemon before the one-shot
+        // send instance starts, then bring the daemon back in sendProc.onExited.
+        root._sendWasReceiving = root.serverRunning
+        if (root._sendWasReceiving) {
+            root.stopServer()
+        }
+        sendStartDelayTimer.restart()
+    }
+
+    Timer {
+        id: sendStartDelayTimer
+        interval: 400
+        repeat: false
+        onTriggered: {
+            sendProc.command = root._pendingSendCommand
+            sendProc.running = true
+        }
     }
 
     function cancelSend(): void {
+        sendStartDelayTimer.stop()
         sendProc.running = false
         root.sending = false
+        if (root._sendWasReceiving) {
+            root._sendWasReceiving = false
+            root.startServer()
+        }
     }
 
     function startScanning(): void {
@@ -197,21 +247,73 @@ Singleton {
         }
     }
 
-    // Check if localsend-cli is available
+    // Check if the official localsend-cli binary is available (see
+    // scripts/localsend/install_localsend_cli.sh) and, if so, its version.
     Process {
         id: checkAvailabilityProc
         running: true
-        command: ["bash", "-c", "command -v localsend-cli >/dev/null 2>&1 || test -x \"$HOME/.local/bin/localsend-cli\""]
+        command: ["bash", "-c", "BIN=\"$HOME/.local/bin/localsend-cli\"; [ -x \"$BIN\" ] || BIN=\"$(command -v localsend-cli 2>/dev/null)\"; [ -n \"$BIN\" ] && [ -x \"$BIN\" ] && exec \"$BIN\" --version"]
         environment: ({
             "PATH": Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin:/usr/local/bin:/usr/bin:/bin"
         })
+        property string versionOutput: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                checkAvailabilityProc.versionOutput = this.text.trim()
+            }
+        }
         onExited: (exitCode, exitStatus) => {
             root.available = (exitCode === 0)
+            // "localsend-cli 1.18.0" -> "1.18.0"
+            root.cliVersion = root.available ? versionOutput.replace(/^localsend-cli\s+/, "") : ""
             if (root.available && root.autoStart) {
                 Qt.callLater(() => {
                     root.startServer()
                 })
             }
+        }
+    }
+
+    // pyte is only needed to drive the send flow's full-screen device list
+    // (see services/localsend_bridge.py); receiving works without it.
+    Process {
+        id: pyteCheckProc
+        running: true
+        command: ["python3", "-c", "import pyte"]
+        onExited: (exitCode, exitStatus) => {
+            root.pyteAvailable = (exitCode === 0)
+            root.pyteChecked = true
+        }
+    }
+
+    function installOfficialCli(): void {
+        if (root.installing) return
+        root.installing = true
+        root.installLog = ""
+        root.installError = ""
+        installCliProc.running = true
+    }
+
+    Process {
+        id: installCliProc
+        running: false
+        command: ["bash", root.installerScriptPath]
+        stdout: SplitParser {
+            onRead: line => {
+                root.installLog += line + "\n"
+            }
+        }
+        stderr: SplitParser {
+            onRead: line => {
+                root.installLog += line + "\n"
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            root.installing = false
+            if (exitCode !== 0) {
+                root.installError = Translation.tr("Installation failed (exit code %1). See the log above.").arg(String(exitCode))
+            }
+            checkAvailabilityProc.running = true
         }
     }
 
@@ -325,6 +427,10 @@ Singleton {
             if (exitCode !== 0) {
                 root.sendFailed("Send process exited with code: " + exitCode)
             }
+            if (root._sendWasReceiving) {
+                root._sendWasReceiving = false
+                root.startServer()
+            }
         }
     }
 
@@ -370,13 +476,8 @@ Singleton {
                 GlobalStates.localSendPopupTransfer = transfer
                 if (root.preferPopupOverNotification) {
                     GlobalStates.localSendPopupOpen = true
-                }
-                break
-
-            case "prompt":
-                console.log("[LocalSend] Prompt received, showing notification")
-                if (root.currentTransfer && root.showNotifications && !root.preferPopupOverNotification) {
-                    root.showIncomingNotification(root.currentTransfer)
+                } else if (root.showNotifications) {
+                    root.showIncomingNotification(transfer)
                 }
                 break
 
@@ -400,20 +501,28 @@ Singleton {
                 break
 
             case "saved":
-                console.log("[LocalSend] File saved:", event.path || "unknown path")
+                console.log("[LocalSend] Transfer saved:", event.summary || event.sender || "unknown")
+                const destinationPath = root.getEffectiveDownloadPath()
                 const fileTransfer = {
                     sender: event.sender || "Unknown",
-                    fileName: event.name || "",
-                    filePath: event.path || root.downloadPath + "/" + (event.name || ""),
-                    fileSize: event.size || 0,
+                    fileCount: event.fileCount || 0,
+                    failedCount: event.failedCount || 0,
+                    sizeDisplay: event.sizeDisplay || "",
+                    duration: event.duration || "",
+                    filePath: destinationPath,
                     timestamp: Date.now()
                 }
                 root.transferCompleted(fileTransfer)
                 if (root.showNotifications) {
+                    const countText = event.fileCount === 1 ? Translation.tr("1 file") : Translation.tr("%1 files").arg(String(event.fileCount || 0))
+                    let body = Translation.tr("From: %1\n%2 (%3) saved to %4").arg(event.sender || "Unknown").arg(countText).arg(event.sizeDisplay || "").arg(destinationPath)
+                    if (event.failedCount) {
+                        body += "\n" + Translation.tr("%1 file(s) failed").arg(String(event.failedCount))
+                    }
                     Quickshell.execDetached([
                         "notify-send",
                         Translation.tr("LocalSend: File Received"),
-                        Translation.tr("From: %1\nOutput path: %2").arg(event.sender || "Unknown").arg(event.path || "unknown path"),
+                        body,
                         "-a", "LocalSend",
                     ])
                 }
@@ -433,9 +542,8 @@ Singleton {
         id: serverStartDelayTimer
         interval: 500
         onTriggered: {
-            const cliPath = Directories.home.toString().replace(/^file:\/\//, "") + "/.local/bin/localsend-cli"
             const effectiveDownloadPath = root.getEffectiveDownloadPath()
-            receiveProc.command = [cliPath, "receive", "--interactive-json", "--output", effectiveDownloadPath]
+            receiveProc.command = ["python3", root.bridgeScriptPath, "receive", "--output", effectiveDownloadPath]
             console.log("[LocalSend] Starting receive server with output dir:", effectiveDownloadPath)
             receiveProc.running = true
         }
@@ -443,7 +551,7 @@ Singleton {
 
     function startServer(): void {
         if (!root.available) {
-            Quickshell.execDetached(["notify-send", Translation.tr("LocalSend Error"), Translation.tr("localsend-cli is not available. You can install it with <tt>pip install localsend-cli</tt>. Check the docs for further details."), "-a", "LocalSend"])
+            Quickshell.execDetached(["notify-send", Translation.tr("LocalSend Error"), Translation.tr("The official localsend-cli binary was not found. Install it from Settings \u2192 Devices & Phone \u2192 LocalSend, or run scripts/localsend/install_localsend_cli.sh."), "-a", "LocalSend"])
             console.warn("[LocalSend] localsend-cli is not available")
             return
         }
@@ -454,6 +562,7 @@ Singleton {
 
         // kill any existing servers
         // or else it gives an error saying "address already in use" and doesn't start
+        Quickshell.execDetached(["pkill", "-f", "localsend_bridge.py"])
         Quickshell.execDetached(["pkill", "-f", "localsend-cli"])
         serverStartDelayTimer.restart()
     }
@@ -529,6 +638,8 @@ Singleton {
             return JSON.stringify({
                 available: root.available,
                 running: root.serverRunning,
+                cliVersion: root.cliVersion,
+                pyteAvailable: root.pyteAvailable,
                 downloadPath: root.getEffectiveDownloadPath()
             })
         }

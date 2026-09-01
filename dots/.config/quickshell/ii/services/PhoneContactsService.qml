@@ -36,10 +36,12 @@ Singleton {
     onHideUnnamedChanged: root._updateFilteredContacts()
 
     function refresh(): void {
-        if (monitorProcess.running) {
-            monitorProcess.running = false
-            monitorProcess.running = true
-        }
+        // Mirrors the old daemon-restart semantics: a restart reset its dedup hash, so an explicit
+        // refresh always re-published the list, and a refresh while no contact source existed did
+        // nothing at all.
+        if (!root._watching) return
+        root._forceEmit = true
+        root._readOnce()
     }
 
     function setSearchQuery(query: string): void {
@@ -176,14 +178,94 @@ Singleton {
         }
     }
 
+    // The contacts monitor used to run as a permanently resident Python interpreter whose only job
+    // was to sit in a GLib main loop and re-read a directory of .vcf files. `gio monitor` is that
+    // exact same GFileMonitor (glib2, already a hard Qt dependency) at a fraction of the memory,
+    // and the script's own --once mode produces byte-identical `ready` + `snapshot` output. The
+    // 250 ms debounce and the "only publish when the payload changed" rule are the daemon's.
+    readonly property bool _enabled: Config.options?.phone?.contacts?.enabled ?? true
+    property bool _watching: false
+    property bool _forceEmit: false
+    property string _lastSnapshot: ""
+    property bool _usePolling: false
+
+    function _readOnce(): void {
+        readProcess.running = false
+        readProcess.running = true
+    }
+
+    on_EnabledChanged: {
+        if (root._enabled) {
+            root._readOnce()
+        } else {
+            root._watching = false
+            root._usePolling = false
+        }
+    }
+
+    Component.onCompleted: {
+        if (root._enabled)
+            root._readOnce()
+    }
+
+    Timer {
+        // Debounce bursts of writes the same way the daemon's GLib timeout did.
+        id: changeDebounce
+        interval: 250
+        repeat: false
+        onTriggered: root._readOnce()
+    }
+
+    Timer {
+        // The script falls back to a 3 s poll when it cannot watch; so does this.
+        id: pollTimer
+        interval: 3000
+        repeat: true
+        running: root._enabled && root._usePolling
+        onTriggered: root._readOnce()
+    }
+
+    Timer {
+        // gio ships with glib2 and should always be there, but if it is not, poll instead of
+        // silently never noticing a contact change again.
+        id: watchStartCheck
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            if (root._watching && !watchProcess.running)
+                root._usePolling = true
+        }
+    }
+
     Process {
-        id: monitorProcess
-        command: ProcUtils.pdeath([
+        id: watchProcess
+        command: ProcUtils.pdeath(["gio", "monitor", "-d", root.sourcePath])
+        running: root._enabled && root._watching && !root._usePolling && root.sourcePath !== ""
+
+        onRunningChanged: {
+            if (running)
+                root._usePolling = false
+        }
+
+        stdout: SplitParser {
+            onRead: data => {
+                if (data.trim().length > 0)
+                    changeDebounce.restart()
+            }
+        }
+    }
+
+    Process {
+        id: readProcess
+        command: [
             "python3",
             Quickshell.shellPath("scripts/kdeconnect/contacts_monitor.py"),
-            "--device", KdeConnectService.activeDeviceId || ""
-        ])
-        running: Config.options?.phone?.contacts?.enabled ?? true
+            "--device", KdeConnectService.activeDeviceId || "",
+            "--once"
+        ]
+        running: false
+
+        onExited: root._forceEmit = false
 
         stdout: SplitParser {
             onRead: data => {
@@ -194,8 +276,16 @@ Singleton {
                         root.ready = true
                         root.sourcePath = msg.sourcePath || ""
                         root.lastError = ""
+                        if (!root._watching) {
+                            root._watching = true
+                            watchStartCheck.restart()
+                        }
                     } else if (msg.event === "snapshot") {
-                        root.contacts = msg.contacts || []
+                        const payload = JSON.stringify(msg.contacts || [])
+                        if (root._forceEmit || payload !== root._lastSnapshot) {
+                            root._lastSnapshot = payload
+                            root.contacts = msg.contacts || []
+                        }
                     } else if (msg.event === "error") {
                         root.lastError = msg.message || "Unknown contacts error"
                         if (msg.code === "no_contact_source") {

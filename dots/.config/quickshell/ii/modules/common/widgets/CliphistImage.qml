@@ -16,9 +16,12 @@ Rectangle {
     property string blurText: "Image hidden"
 
     property string imageDecodePath: Directories.cliphistDecode
-    property string imageDecodeFileName: `${entryNumber}`
+    property string imageDecodeFileName: root.entry.length > 0 ? Qt.md5(root.entry) + ".cliphist" : ""
     property string imageDecodeFilePath: `${imageDecodePath}/${imageDecodeFileName}`
     property string source
+    readonly property bool loading: decodeImageProcess.running || (root.source.length > 0 && image.status === Image.Loading)
+    readonly property bool ready: root.source.length > 0 && image.status === Image.Ready
+    property bool failed: false
 
     property int entryNumber: {
         if (!root.entry)
@@ -38,7 +41,7 @@ Rectangle {
         const match = root.entry.match(/(\d+)x(\d+)/);
         return match ? parseInt(match[2]) : 0;
     }
-    property real scale: {
+    readonly property real fitScale: {
         if (imageWidth <= 0 || imageHeight <= 0)
             return 1;
         const w = root.maxWidth > 0 ? root.maxWidth : 300;
@@ -48,34 +51,33 @@ Rectangle {
 
     color: Appearance.colors.colLayer1
     radius: Appearance.rounding.small
-    implicitHeight: imageHeight * scale
-    implicitWidth: imageWidth * scale
+    implicitHeight: imageHeight * fitScale
+    implicitWidth: imageWidth * fitScale
 
-    Component.onCompleted: {
-        decodeImageProcess.running = true;
-    }
-
-    onEntryChanged: {
-        root.source = "";
+    function requestDecode() {
         decodeImageProcess.running = false;
+        root.source = "";
+        root.failed = false;
+        if (root.entryNumber <= 0 || root.imageDecodeFileName.length === 0)
+            return;
         decodeImageProcess.running = true;
     }
+
+    Component.onCompleted: root.requestDecode()
+    onEntryChanged: root.requestDecode()
 
     Process {
         id: decodeImageProcess
-        command: ["bash", "-c", `mkdir -p '${imageDecodePath}' && { [ -f '${imageDecodeFilePath}' ] || echo '${StringUtils.shellSingleQuoteEscape(root.entry)}' | ${Cliphist.cliphistBinary} decode > '${imageDecodeFilePath}'; }`]
+        command: ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(imageDecodePath)}' && { [ -s '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}' ] || ${Cliphist.cliphistBinary} decode ${root.entryNumber} > '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}'; }`]
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 root.source = "file://" + imageDecodeFilePath;
             } else {
                 console.error("[CliphistImage] Failed to decode image for entry:", root.entry);
                 root.source = "";
+                root.failed = true;
             }
         }
-    }
-
-    Component.onDestruction: {
-        Quickshell.execDetached(["bash", "-c", `[ -f '${imageDecodeFilePath}' ] && rm -f '${imageDecodeFilePath}'`]);
     }
 
     layer.enabled: true
@@ -96,8 +98,13 @@ Rectangle {
         antialiasing: true
         asynchronous: true
 
-        width: root.imageWidth * root.scale
-        height: root.imageHeight * root.scale
+        onStatusChanged: {
+            if (status === Image.Error)
+                root.failed = true;
+        }
+
+        width: root.imageWidth * root.fitScale
+        height: root.imageHeight * root.fitScale
     }
 
     Loader {

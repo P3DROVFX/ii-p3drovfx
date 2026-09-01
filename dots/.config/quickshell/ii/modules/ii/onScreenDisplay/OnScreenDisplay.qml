@@ -146,12 +146,12 @@ Scope {
     }
 
     function triggerOsd() {
-        if (Config.ready && Config.options.osd && !Config.options.osd.enable)
+        if (!root.currentIndicator)
+            root.currentIndicator = "volume";
+        if (!Config.osdIndicatorEnabled(root.currentIndicator))
             return;
         if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
             return;
-        if (!root.currentIndicator)
-            root.currentIndicator = "volume";
         root.isClosing = false;
         if (osdLoader.item) {
             osdLoader.item.openedProgress = 1.0;

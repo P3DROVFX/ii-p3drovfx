@@ -30,9 +30,9 @@ Singleton {
     property int maxEmails: 20
     property string historyId: ""
     property bool enableAllInboxes: false
-    property bool enableUpdates: false
-    property bool enablePromotions: false
-    property bool enableSocials: false
+    property bool enableUpdates: true
+    property bool enablePromotions: true
+    property bool enableSocials: true
     property int refreshIntervalMinutes: 1
     property bool compactMode: false
     property bool stackingEnabled: true
@@ -294,6 +294,13 @@ Singleton {
             return _accessToken;
         }
         return _refreshToken;
+    }
+
+    // Narrow public bridge for the opt-in calendar attachment scanner. The
+    // scanner receives an access token when fresh and otherwise exchanges the
+    // account refresh token using the existing Gmail helper.
+    function calendarImportToken() {
+        return root.authenticated ? root._getBestToken() : "";
     }
 
     function decrementUnreadForModel(targetModel) {
