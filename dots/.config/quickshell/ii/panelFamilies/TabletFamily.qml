@@ -7,6 +7,7 @@ import qs.modules.common
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
+import qs.modules.tablet.dock
 import qs.modules.tablet.sidebarDashboard
 
 // ── Borrowed from ii, pending a tablet replacement ──────────────────────────
@@ -107,6 +108,10 @@ Scope {
         id: searchPanelHostComponent
         SearchPanelHost {}
     }
+
+    // Pinned apps, what is open, and a door to the drawer — the Pixel Tablet's taskbar.
+    // Not the ii dock: see the note in TabletDockWindow on why none of it is reused.
+    PanelLoader { component: TabletDock {} }
 
     // GNOME-like window scale-out during overview. Follows GlobalStates, owns no UI.
     OverviewWindowTransition {}
