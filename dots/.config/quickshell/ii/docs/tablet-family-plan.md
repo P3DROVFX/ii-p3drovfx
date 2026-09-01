@@ -642,6 +642,34 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       aqui pressupõe teclado físico e alcançá-lo só por keybind é circular.
       **Confirmado pelo mantenedor com ponteiro real:** funciona. O que falhava nos testes
       era o clique direito *sintético* do `ydotool` não contando, não a cadeia do shell.
+- [x] **Gaveta reordena ao vivo em vez de ser reconstruída.** Atribuir um array JS novo
+      reseta a view, e um reset não dispara transição de `move`: cada tile é destruído e
+      recriado onde caiu, que é o oposto do que se quer. As linhas agora têm chave e são
+      reconciliadas no lugar (mesmo diff da lista de resultados da ii), então
+      `move`/`displaced` têm o que animar. A entrada anima `scale`, nunca `opacity` — uma
+      transição de opacidade interrompida deixa o tile invisível, e um tile que não pinta é
+      pior que um que não anima.
+- [x] **Ordenação e categorias**: A–Z, Z–A, categoria e mais usados, mas só com a busca
+      vazia — com query, a relevância *é* a ordem, e é ela que se move enquanto o usuário
+      digita. As categorias vêm dos `.desktop`, colapsadas das treze categorias principais
+      do freedesktop em grupos navegáveis, e também são chips de filtro.
+- [x] **Long-press abre menu** em vez de mandar o app para a home silenciosamente. O menu
+      oferece os atalhos do próprio `.desktop`, abrir, adicionar à home e fixar na dock, e
+      é desenhado dentro da gaveta — uma segunda superfície disputaria o foco de teclado
+      exclusivo da gaveta por algo que o Android desenha no próprio launcher.
+- [x] **Barra de busca na dock**: pílula ou círculo compacto, com os dois botões das pontas
+      escolhidos pelo usuário — inclusive os painéis de busca da shell, então "clipboard na
+      dock" é ajuste e não pedido de recurso. A pílula sabe desenhar uma ação e nada sobre o
+      que ela faz; a dock resolve isso.
+- [x] **A dock sobe junto com a gaveta.** Ela não estava sendo descarregada, estava sendo
+      **cortada**: uma superfície de layer não tem overflow, e a superfície tinha exatamente
+      a altura da dock. Agora há uma folga transparente acima, mascarada e fora da zona
+      exclusiva.
+- [x] **Blur progressivo na gaveta.** O blur do compositor não é um valor que o cliente
+      dirija: a força é o alpha da própria superfície, e a regra `ignore_alpha` da shell
+      transforma isso num limiar — daí ele aparecer de uma vez no fim. A gaveta borra um
+      screencopy congelado, como a shade já fazia. Com `appearance.transparency` desligado
+      não há captura nem blur: fundo sólido.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.
