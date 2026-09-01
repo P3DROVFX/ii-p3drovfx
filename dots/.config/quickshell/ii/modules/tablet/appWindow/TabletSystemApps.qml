@@ -51,6 +51,21 @@ Singleton {
             keywords: ["modes", "routines", "automation", "modos", "rotinas", "automacao", "focus"]
         },
         {
+            id: "policies",
+            name: "Policies",
+            icon: "policy",
+            kind: "hosted",
+            // It lives on the left edge in the desktop shell, so it still arrives from
+            // there — but at app width with a title bar, not as a 460px sidebar.
+            enterFrom: "left",
+            // Its content only builds its tabs while the shell considers policies open
+            // (SidebarPoliciesContent.tabsWanted). Opening it as an app has to say so, and
+            // saying so is true: policies IS open, just presented differently.
+            onOpen: () => GlobalStates.sidebarLeftOpen = true,
+            onClose: () => GlobalStates.sidebarLeftOpen = false,
+            keywords: ["policies", "ai", "phone", "anime", "politicas", "telefone"]
+        },
+        {
             id: "timetable",
             name: "Timetable",
             icon: "calendar_month",
@@ -115,6 +130,28 @@ Singleton {
                 return true;
             return (app.keywords ?? []).some(keyword => keyword.startsWith(q));
         });
+    }
+
+    // ── Open/close hooks ────────────────────────────────────────────────────
+    // Some hosted surfaces need shell state set while they are up. Driven from the id
+    // rather than from the window, because there is one window per screen and they would
+    // all fire; the id changes exactly once per open.
+    property string _activeHostedId: ""
+
+    function _syncActive() {
+        const next = GlobalStates.tabletAppId;
+        if (next === root._activeHostedId)
+            return;
+        root.byId(root._activeHostedId)?.onClose?.();
+        root._activeHostedId = next;
+        root.byId(next)?.onOpen?.();
+    }
+
+    readonly property Connections _appIdWatcher: Connections {
+        target: GlobalStates
+        function onTabletAppIdChanged() {
+            root._syncActive();
+        }
     }
 
     function launch(appId) {

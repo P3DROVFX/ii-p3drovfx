@@ -58,6 +58,9 @@ import qs.modules.ii.wallpaperSelector
  * What the tablet deliberately does NOT load, and why:
  *
  *   ii Dock               — replaced by modules/tablet/dock, an Android-style taskbar.
+ *   SidebarPolicies       — the window, not the content: policies is a TabletAppWindow
+ *                           here, entering from the left at app width with a title bar and
+ *                           a back button, instead of a 460px sidebar you dismiss.
  *   ii Overview           — replaced by modules/tablet/recents. The overview is a grid of
  *                           workspaces answering "where is everything"; recents is a flat
  *                           most-recent-first list answering "what was I just doing".
@@ -166,10 +169,25 @@ Scope {
         ModesContent {}
     }
 
+    Component {
+        id: policiesAppContent
+        SidebarPoliciesContent {
+            // Only read for the Ctrl+O/D/P shortcuts, which already fall back to
+            // GlobalStates when the controller has no such function — and this family has
+            // no detach/pin controller to offer.
+            scopeRoot: null
+        }
+    }
+
     Component.onCompleted: TabletSystemApps.hostedContent = {
         "usage": usageAppContent,
-        "modes": modesAppContent
+        "modes": modesAppContent,
+        "policies": policiesAppContent
     }
+
+    // The left edge opens policies as an app rather than as a sidebar, so it has to claim
+    // the drag — otherwise the same swipe would also fire the user's leftEdge binding.
+    TabletPoliciesDragHandler {}
 
     // The surface-kind entries need their windows loaded, or launching them does nothing.
     PanelLoader { component: Cheatsheet {} }
@@ -185,7 +203,7 @@ Scope {
 
     PanelLoader { component: TabletSidebarDashboard {} }
 
-    PanelLoader { component: SidebarPolicies {} }
+
 
     // ── System surfaces ─────────────────────────────────────────────────────
     PanelLoader { component: Lock {} }

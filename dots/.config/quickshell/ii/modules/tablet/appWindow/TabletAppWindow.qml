@@ -33,6 +33,12 @@ PanelWindow {
     readonly property bool wantOpen: root.contentComponent !== null
     property real openProgress: root.wantOpen ? 1 : 0
 
+    /// Which edge the window comes in from. Most apps rise from the bottom, the way an
+    /// Android app does when you tap its icon; a surface that lives on an edge of the
+    /// screen — policies on the left — keeps coming from there, so opening it still reads
+    /// as the same panel rather than as an unrelated app.
+    readonly property string enterFrom: root.app?.enterFrom ?? "bottom"
+
     anchors {
         top: true
         bottom: true
@@ -76,8 +82,8 @@ PanelWindow {
         spacing: 0
         opacity: root.openProgress
         transform: Translate {
-            // Rises into place, the way an Android app does when it opens.
-            y: (1 - root.openProgress) * 48
+            x: root.enterFrom === "left" ? -(1 - root.openProgress) * 64 : 0
+            y: root.enterFrom === "left" ? 0 : (1 - root.openProgress) * 48
         }
 
         // ── Title bar ───────────────────────────────────────────────────────

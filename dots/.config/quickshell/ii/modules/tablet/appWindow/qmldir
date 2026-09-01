@@ -1,3 +1,4 @@
 singleton TabletSystemApps 1.0 TabletSystemApps.qml
 TabletAppWindow 1.0 TabletAppWindow.qml
 TabletAppWindows 1.0 TabletAppWindows.qml
+TabletPoliciesDragHandler 1.0 TabletPoliciesDragHandler.qml
