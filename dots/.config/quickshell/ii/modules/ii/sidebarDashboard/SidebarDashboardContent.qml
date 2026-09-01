@@ -154,8 +154,8 @@ Item {
         }
     }
 
-    readonly property bool isDynamicIslandTop: !BarPlacement.vertical && !BarPlacement.bottom && Config.options.bar.cornerStyle === 3
-    readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIslandTop: !BarPlacement.vertical && !BarPlacement.bottom && BarInteraction.cornerStyle === 3
+    readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && BarInteraction.cornerStyle === 3
 
     Component.onCompleted: {
         if (GlobalStates.requestVolumeDialog) {

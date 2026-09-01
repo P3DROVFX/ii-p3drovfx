@@ -21,7 +21,7 @@ Item {
     property real btnSize:       iconSize + 5
     property real btnSpacing:    Config.options.dockToPanel.buttonSpacing
     property bool vertical:    BarPlacement.vertical
-    property bool isMaterial:  Config.options.bar.cornerStyle === 3
+    property bool isMaterial:  BarInteraction.cornerStyle === 3
     property var pinnedApps: Config.options?.dock.pinnedApps ?? []
 
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)

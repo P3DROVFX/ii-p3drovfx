@@ -93,7 +93,7 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(visualsRoot)
     }
 
-    readonly property bool isFloatingOrIsland: Config.options.bar.cornerStyle === 1 || Config.options.bar.cornerStyle === 3
+    readonly property bool isFloatingOrIsland: BarInteraction.cornerStyle === 1 || BarInteraction.cornerStyle === 3
 
     property bool hasTopFrame: isFloatingOrIsland || !(!barVertical && !barBottom)
     property bool hasBottomFrame: isFloatingOrIsland || !(!barVertical && barBottom)

@@ -52,7 +52,7 @@ Scope {
                     }
                     exclusionMode: ExclusionMode.Normal
 
-                    property real targetZone: Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                    property real targetZone: Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                     property real minZone: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
                     exclusiveZone: (Config.options.bar.autoHide.enable && !Config.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - (barRoot ? barRoot.hiddenAmount : 0))
@@ -274,7 +274,7 @@ Scope {
                                 right: undefined
                             }
                             width: Appearance.rounding.screenRounding
-                            active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3 // Hug
+                            active: barRoot.showBarBackground && BarInteraction.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3 // Hug
 
                             states: State {
                                 name: "right"

@@ -62,15 +62,15 @@ Item { // Bar content region
     property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
 
     readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
-    readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
-    readonly property bool isHugIslandMode: root.isIslandMode && Config.options.bar.cornerStyle === 0
+    readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3
+    readonly property bool isHugIslandMode: root.isIslandMode && BarInteraction.cornerStyle === 0
 
     // Hug/Rect vertical bars are welded to the wrapped frame ring, so the shell
     // shadow is generated once in WrappedFrameVisuals, underneath every panel.
     // Float and Dynamic Island bars keep their own shadow: they really do float
     // above the frame surface.
     readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
-        && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2)
+        && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2)
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
@@ -83,7 +83,7 @@ Item { // Bar content region
         anchors {
             fill: root.isDynamicIsland ? undefined : parent
             centerIn: root.isDynamicIsland ? parent : undefined
-            margins: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+            margins: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
         }
 
         property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
@@ -119,7 +119,7 @@ Item { // Bar content region
         color: root.isIslandMode ? "transparent" : barBackground.actualColor
         readonly property real availablePillExtension: Math.max(0, width - root.frameThickness)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
-        property real baseRadius: root.isDynamicIsland ? islandRadius : (Config.options.bar.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
+        property real baseRadius: root.isDynamicIsland ? islandRadius : (BarInteraction.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
 
         // In vertical mode (Left/Right), the edges touching the screen are left/right.
         // For Left bar (bottom: false): left edges are 0.
@@ -451,7 +451,7 @@ Item { // Bar content region
         visible: !root.isDynamicIsland
         anchors {
             top: barBackground.top
-            topMargin: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
+            topMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
             horizontalCenter: barBackground.horizontalCenter
         }
         spacing: 4
@@ -551,7 +551,7 @@ Item { // Bar content region
         anchors {
             horizontalCenter: barBackground.horizontalCenter
             bottom: barBackground.bottom
-            bottomMargin: (Config.options.bar.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
+            bottomMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : Math.ceil(Appearance.rounding.screenRounding / 2.5)
         }
         spacing: 4
 

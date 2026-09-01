@@ -779,8 +779,20 @@ Singleton {
     }
 
     sizes: QtObject {
-        property real baseBarHeight: Config.options.bar.sizes.height
-        property real barHeight: Config.options.bar.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // A finger needs a bigger target than a cursor. A touch-first family raises the
+        // bar's FLOOR rather than replacing the value: a bar the user configured taller
+        // than this stays taller, and the stored preference is never rewritten.
+        //
+        // This is deliberately here and not a per-window scale. Scaling the bar window was
+        // tried and reverted — every widget inside sizes itself off barHeight, so the window
+        // grew while the content did not, and backgrounds, hit targets and popup anchors all
+        // measured against a bar that was not the one on screen.
+        // Material's minimum touch target, and the Pixel Tablet's status bar height.
+        property real minimumTouchTarget: 48
+        property real baseBarHeight: PanelFamily.touchFirst
+            ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
+            : Config.options.bar.sizes.height
+        property real barHeight: BarInteraction.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
         property real barCenterSideModuleWidth: Config.options?.bar.verbose ? 360 : 140
         property real barCenterSideModuleWidthShortened: 280
         property real barCenterSideModuleWidthHellaShortened: 190
@@ -800,7 +812,7 @@ Singleton {
         property real sidebarWidthExtended: 750
         property real baseVerticalBarWidth: Config.options.bar.sizes.width
         property real verticalBarWidth: baseVerticalBarWidth
-        property real verticalBarWindowWidth: Config.options.bar.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
+        property real verticalBarWindowWidth: BarInteraction.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
         property real wallpaperSelectorWidth: 1200
         property real wallpaperSelectorHeight: 690
         property real wallpaperSelectorSidebarWidth: 180

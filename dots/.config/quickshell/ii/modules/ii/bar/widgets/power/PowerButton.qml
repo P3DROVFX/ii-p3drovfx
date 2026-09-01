@@ -9,8 +9,8 @@ RippleButton {
     property bool vertical: false
 
     property real buttonPadding: 5
-    implicitWidth: Config.options.bar.cornerStyle === 2 ? 27 : 27 + buttonPadding
-    implicitHeight: Config.options.bar.cornerStyle === 2 ? 27 : 27 + buttonPadding
+    implicitWidth: BarInteraction.cornerStyle === 2 ? 27 : 27 + buttonPadding
+    implicitHeight: BarInteraction.cornerStyle === 2 ? 27 : 27 + buttonPadding
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active

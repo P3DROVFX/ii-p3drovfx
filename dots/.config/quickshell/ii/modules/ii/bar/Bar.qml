@@ -16,9 +16,8 @@ import qs.modules.ii.bar.core
 Scope {
     id: bar
 
-    // Panel-family override. Desktop ii keeps 1.0; TabletFamily can request
-    // larger geometry without changing persistent Config values.
-    property real sizeScale: 1.0
+    // Panel-family override: the tablet family pins the bar to the top edge without
+    // touching the user's stored bar position. See BarPlacement.
     property bool forceTop: false
 
     Variants {
@@ -41,7 +40,6 @@ Scope {
             component: BarWindow {
                 screen: barLoader.modelData
                 monitorIndex: barLoader.monitorIndex
-                sizeScale: bar.sizeScale
                 forceTop: bar.forceTop
             }
         }

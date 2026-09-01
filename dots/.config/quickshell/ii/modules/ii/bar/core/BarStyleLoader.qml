@@ -19,7 +19,7 @@ Item {
     required property var centerList
     required property var rightList
 
-    readonly property int cornerStyle: Config.options.bar.cornerStyle
+    readonly property int cornerStyle: BarInteraction.cornerStyle
 
     readonly property real verticalTopOffset: styleLoader.item ? (styleLoader.item.verticalTopOffset ?? 0) : 0
     readonly property real verticalBottomOffset: styleLoader.item ? (styleLoader.item.verticalBottomOffset ?? 0) : 0
