@@ -130,6 +130,7 @@ class TabletFamilyContractTests(unittest.TestCase):
     def test_long_press_offers_a_menu_instead_of_silently_adding_to_the_home_screen(self):
         content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
         menu = read("modules/tablet/appDrawer/TabletInlineMenu.qml")
+        tile = read("modules/tablet/appDrawer/TabletAppTile.qml")
 
         self.assertIn("root.openAppMenu(appTile, appCell.modelData.entry)", content)
         for label in ("Open", "Add to home screen", "Pin to dock"):
@@ -140,6 +141,39 @@ class TabletFamilyContractTests(unittest.TestCase):
         # keyboard focus for something Android draws in the launcher itself.
         self.assertNotIn("PopupWindow {", menu)
         self.assertNotIn("HyprlandFocusGrab {", menu)
+        # Touch-sized action surfaces with the shared dynamic-corner behavior, not bare
+        # text rows. Pointer users reach the exact same path via right click.
+        self.assertIn("useDynamicRadius: true", menu)
+        self.assertIn("colBackground: (actionButton.modelData.destructive", menu)
+        self.assertIn("acceptedButtons: Qt.LeftButton | Qt.RightButton", tile)
+        self.assertIn("if (event.button === Qt.RightButton)", tile)
+        self.assertIn("root.contextRequested()", tile)
+        self.assertIn("onContextRequested:", content)
+
+    def test_tablet_quick_toggle_column_owns_vertical_scrolling_end_to_end(self):
+        content = read("modules/tablet/sidebarDashboard/TabletDashboardContent.qml")
+        panel = read("modules/common/quickToggles/AndroidQuickPanel.qml")
+
+        self.assertIn("externalVerticalScroll: true", content)
+        self.assertIn("contentHeight: Math.max(height,", content)
+        self.assertIn("property bool externalVerticalScroll: false", panel)
+        self.assertIn("interactive: !root.externalVerticalScroll && contentHeight > height", panel)
+        self.assertIn("wheelEvent.accepted = false", panel)
+
+    def test_five_dashboard_widgets_are_tablet_quick_toggles(self):
+        catalog = read("modules/common/quickToggles/androidStyle/QuickToggleCatalog.js")
+        chooser = read("modules/common/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml")
+        widget = read("modules/common/quickToggles/androidStyle/AndroidDashboardWidgetToggle.qml")
+
+        for toggle_type in ("calendarWidget", "tasksWidget", "timerWidget",
+                            "countdownWidget", "pomodoroWidget"):
+            self.assertIn(f'{toggle_type}: {{ kind: "dashboardWidget"', catalog)
+            self.assertIn(f'roleValue: "{toggle_type}"', chooser)
+        self.assertIn('allowedSizes: [[1, 2]], families: ["tablet"]', catalog)
+        self.assertIn("TimerService.toggleStopwatch()", widget)
+        self.assertIn("TimerService.toggleCountdown", widget)
+        self.assertIn("TimerService.togglePomodoro()", widget)
+        self.assertIn('GlobalStates.openAppDrawerTool("", panelId)', widget)
 
     def test_dock_search_pill_is_configurable_and_delegates_what_its_buttons_do(self):
         bar = read("modules/tablet/dock/TabletDockSearchBar.qml")

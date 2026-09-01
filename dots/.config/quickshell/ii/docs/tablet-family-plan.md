@@ -472,8 +472,8 @@ Também nesta fase:
       moveu o disparo do entrance para `SidebarDashboardContent`.
 - [x] `BottomWidgetGroup` parado atrás de `showBottomWidgetGroup: false` removido do
       conteúdo da shade. A tablet pagava uma dependência entre famílias por código que nunca
-      rodava; os widgets de calendário/tarefas/timer voltam como *tiles* no grid (Fase 3),
-      que é outra construção, não este Loader ressuscitado.
+      rodava; calendário, tarefas, cronômetro, countdown e pomodoro voltaram como *tiles*
+      funcionais no grid da shade, que é outra construção, não este Loader ressuscitado.
 - [x] **Bug real corrigido**, não só o warning: `StableQuickToggleModel` guardava o payload
       num papel chamado `modelData`. Um `ListModel` fixa o tipo do papel no primeiro uso e
       infere objeto aninhado como lista, então todo `setProperty()` posterior era recusado e
@@ -657,6 +657,17 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       oferece os atalhos do próprio `.desktop`, abrir, adicionar à home e fixar na dock, e
       é desenhado dentro da gaveta — uma segunda superfície disputaria o foco de teclado
       exclusivo da gaveta por algo que o Android desenha no próprio launcher.
+- [x] **Menu contextual touch-first da gaveta.** Clique direito e toque longo abrem a mesma
+      superfície; cada ação tem alvo de toque amplo, respiro próprio, superfície Material
+      e raio dinâmico em grupo. A lista interna rola quando um `.desktop` oferece muitas
+      ações, sem aumentar o menu além da viewport.
+- [x] **A coluna inteira de quick toggles rola como uma superfície só.** A rolagem vertical
+      cobre páginas configuradas, editor e gaveta de toggles; a gaveta não captura um segundo
+      gesto vertical nem fica comprimida numa subviewport curta.
+- [x] **Cinco widgets funcionais como quick toggles fixos:** calendário, tarefas,
+      cronômetro, countdown e pomodoro aparecem na gaveta apenas na família tablet. Todos
+      usam footprint quadrado fixo `1x2`; toque executa a ação imediata e toque longo/clique
+      direito abre a ferramenta completa correspondente.
 - [x] **Barra de busca na dock**: pílula ou círculo compacto, com os dois botões das pontas
       escolhidos pelo usuário — inclusive os painéis de busca da shell, então "clipboard na
       dock" é ajuste e não pedido de recurso. A pílula sabe desenhar uma ação e nada sobre o

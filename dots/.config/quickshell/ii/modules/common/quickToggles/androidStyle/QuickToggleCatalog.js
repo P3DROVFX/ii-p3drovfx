@@ -45,7 +45,16 @@ var TOGGLE_TYPES = {
         kind: "media",
         defaultSize: [2, 2],
         allowedSizes: [[2, 1], [2, 2], [4, 2]]
-    }
+    },
+
+    // The dashboard widgets use one column by two rows: across both the ii sidebar and
+    // tablet shade this is the grid's near-square footprint. A single allowed size makes
+    // the footprint immutable while keeping the same packer and persistence format.
+    calendarWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    tasksWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    timerWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    countdownWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    pomodoroWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] }
 };
 
 function allTypes() {
@@ -58,6 +67,23 @@ function hasType(type) {
 function kind(type) {
     var metadata = TOGGLE_TYPES[type];
     return metadata ? metadata.kind : "unknown";
+}
+
+function availableForFamily(type, family) {
+    var metadata = TOGGLE_TYPES[type];
+    if (!metadata || !metadata.families)
+        return true;
+    return metadata.families.indexOf(String(family || "")) !== -1;
+}
+
+function isResizable(type, columns) {
+    var metadata = TOGGLE_TYPES[type];
+    if (!metadata || !metadata.allowedSizes)
+        return true;
+    var fitting = metadata.allowedSizes.filter(function(candidate) {
+        return candidate[0] <= positiveColumns(columns);
+    });
+    return fitting.length > 1;
 }
 
 function defaultSize(type) {

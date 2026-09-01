@@ -35,8 +35,15 @@ Item {
     property real originX: 0
     property real originY: 0
 
-    readonly property real rowHeight: Math.max(Appearance.sizes.minimumTouchTarget, 48)
-    readonly property real menuWidth: 260
+    readonly property real edgeMargin: Math.max(12, Appearance.sizes.elevationMargin)
+    readonly property real cardPadding: Math.max(12, Appearance.sizes.elevationMargin)
+    readonly property real rowSpacing: Math.max(4, Math.round(Appearance.sizes.elevationMargin * 0.45))
+    readonly property real rowHeight: Math.max(Appearance.sizes.minimumTouchTarget,
+        Math.min(72, Math.round(root.height * 0.072)))
+    readonly property real menuWidth: Math.max(320, Math.min(420, Math.round(root.width * 0.27)))
+    readonly property real headerHeight: root.headerText.length > 0 ? root.rowHeight : 0
+    readonly property real maximumMenuHeight: Math.max(root.rowHeight * 2,
+        root.height - root.edgeMargin * 2)
 
     visible: root.opened || card.opacity > 0.01
     enabled: root.opened
@@ -67,12 +74,17 @@ Item {
         id: card
 
         // Clamped so a tile near an edge still gets a whole menu rather than a clipped one.
-        x: Math.max(8, Math.min(root.width - card.width - 8, root.originX - card.width / 2))
-        y: Math.max(8, Math.min(root.height - card.height - 8, root.originY))
+        x: Math.max(root.edgeMargin, Math.min(root.width - card.width - root.edgeMargin,
+            root.originX - card.width / 2))
+        y: Math.max(root.edgeMargin, Math.min(root.height - card.height - root.edgeMargin,
+            root.originY))
         width: root.menuWidth
-        implicitHeight: menuColumn.implicitHeight + Appearance.sizes.elevationMargin
+        height: Math.min(root.maximumMenuHeight,
+            root.cardPadding * 2 + root.headerHeight
+                + (root.headerHeight > 0 ? root.rowSpacing : 0)
+                + actionsColumn.implicitHeight)
 
-        radius: Appearance.rounding.normal
+        radius: Appearance.rounding.large
         color: Config.options.appearance.transparency.popups
             ? Appearance.colors.colLayer1
             : Appearance.m3colors.m3surfaceContainer
@@ -91,100 +103,123 @@ Item {
 
         ColumnLayout {
             id: menuColumn
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Appearance.sizes.elevationMargin / 2
-            spacing: 0
+            anchors.fill: parent
+            anchors.margins: root.cardPadding
+            spacing: root.rowSpacing
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.margins: Appearance.sizes.elevationMargin / 2
+                Layout.preferredHeight: root.headerHeight
                 visible: root.headerText.length > 0
-                spacing: 10
+                spacing: 14
 
                 IconImage {
                     visible: root.headerIconPath.length > 0
-                    implicitSize: Appearance.font.pixelSize.larger
+                    implicitSize: Math.round(root.rowHeight * 0.52)
                     source: root.headerIconPath
                 }
 
                 MaterialSymbol {
                     visible: root.headerSymbol.length > 0
                     text: root.headerSymbol
-                    iconSize: Appearance.font.pixelSize.larger
+                    iconSize: Math.round(root.rowHeight * 0.46)
                     color: Appearance.colors.colOnLayer1
                 }
 
                 StyledText {
                     Layout.fillWidth: true
                     text: root.headerText
-                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.DemiBold
                     color: Appearance.colors.colOnLayer1
                     elide: Text.ElideRight
                 }
             }
 
-            Rectangle {
+            StyledFlickable {
+                id: actionsFlickable
+
                 Layout.fillWidth: true
-                Layout.bottomMargin: Appearance.sizes.elevationMargin / 4
-                visible: root.headerText.length > 0
-                implicitHeight: 1
-                color: Appearance.colors.colLayer0Border
-            }
+                Layout.fillHeight: true
+                contentWidth: width
+                contentHeight: actionsColumn.implicitHeight
+                flickableDirection: Flickable.VerticalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
+                interactive: contentHeight > height
 
-            Repeater {
-                model: root.actions
+                ColumnLayout {
+                    id: actionsColumn
+                    width: actionsFlickable.width
+                    spacing: root.rowSpacing
 
-                delegate: RippleButton {
-                    id: actionButton
-                    required property var modelData
+                    Repeater {
+                        model: root.actions
 
-                    Layout.fillWidth: true
-                    implicitHeight: root.rowHeight
-                    buttonRadius: Appearance.rounding.small
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colLayer1Hover
-                    colBackgroundActive: Appearance.colors.colLayer1Active
-                    colRipple: Appearance.colors.colLayer1Active
+                        delegate: RippleButton {
+                            id: actionButton
+                            required property var modelData
 
-                    readonly property color contentColor: (actionButton.modelData.destructive ?? false)
-                        ? Appearance.colors.colError
-                        : Appearance.colors.colOnLayer1
-
-                    releaseAction: () => {
-                        // Closed first: an action that opens another surface must not have
-                        // this one still sitting on top of it.
-                        root.close();
-                        actionButton.modelData.trigger?.();
-                    }
-
-                    contentItem: RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 12
-
-                        MaterialSymbol {
-                            text: actionButton.modelData.symbol ?? "chevron_right"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: actionButton.contentColor
-                        }
-
-                        StyledText {
                             Layout.fillWidth: true
-                            text: actionButton.modelData.label ?? ""
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: actionButton.contentColor
-                            elide: Text.ElideRight
-                        }
+                            implicitHeight: root.rowHeight
+                            useDynamicRadius: true
+                            toggled: actionButton.modelData.checked ?? false
+                            colBackground: (actionButton.modelData.destructive ?? false)
+                                ? Appearance.colors.colErrorContainer
+                                : Appearance.colors.colLayer2
+                            colBackgroundHover: (actionButton.modelData.destructive ?? false)
+                                ? Appearance.colors.colErrorContainerHover
+                                : Appearance.colors.colLayer2Hover
+                            colBackgroundActive: (actionButton.modelData.destructive ?? false)
+                                ? Appearance.colors.colErrorContainerActive
+                                : Appearance.colors.colLayer2Active
+                            colBackgroundToggled: Appearance.colors.colPrimaryContainer
+                            colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
+                            colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
+                            colRipple: (actionButton.modelData.destructive ?? false)
+                                ? Appearance.colors.colErrorContainerActive
+                                : Appearance.colors.colLayer2Active
 
-                        MaterialSymbol {
-                            visible: actionButton.modelData.checked ?? false
-                            text: "check"
-                            iconSize: Appearance.font.pixelSize.large
-                            color: Appearance.colors.colPrimary
+                            readonly property color contentColor: (actionButton.modelData.destructive ?? false)
+                                ? Appearance.colors.colOnErrorContainer
+                                : (actionButton.toggled
+                                    ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnLayer2)
+
+                            releaseAction: () => {
+                                // Closed first: an action that opens another surface must not have
+                                // this one still sitting on top of it.
+                                root.close();
+                                actionButton.modelData.trigger?.();
+                            }
+
+                            contentItem: RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 18
+                                anchors.rightMargin: 18
+                                spacing: 16
+
+                                MaterialSymbol {
+                                    text: actionButton.modelData.symbol ?? "chevron_right"
+                                    iconSize: Math.round(root.rowHeight * 0.38)
+                                    color: actionButton.contentColor
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: actionButton.modelData.label ?? ""
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                    color: actionButton.contentColor
+                                    elide: Text.ElideRight
+                                }
+
+                                MaterialSymbol {
+                                    visible: actionButton.toggled
+                                    text: "check"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: actionButton.contentColor
+                                }
+                            }
                         }
                     }
                 }

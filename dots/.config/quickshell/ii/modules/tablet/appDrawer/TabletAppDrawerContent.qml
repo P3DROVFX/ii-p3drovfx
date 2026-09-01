@@ -837,6 +837,13 @@ Item {
                             root.appHeld(appCell.modelData.entry.id);
                             root.dismissRequested();
                         }
+                        onContextRequested: {
+                            // A right click has unambiguous pointer semantics and therefore
+                            // always opens the menu, even when touch hold is configured for
+                            // the legacy direct add-to-home shortcut.
+                            if (!appCell.isSystemApp)
+                                root.openAppMenu(appTile, appCell.modelData.entry);
+                        }
                     }
                 }
             }

@@ -14,6 +14,10 @@ import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 AbstractQuickPanel {
     id: root
     property bool editMode: false
+    // Full-screen hosts can own the vertical axis for the complete panel. In that mode the
+    // unused-toggle tray publishes its natural height and never steals a drag from the
+    // surrounding Flickable; horizontal paging remains local to this component.
+    property bool externalVerticalScroll: false
     // Gesture-driven hosts feed their 0→1 pull progress here so the sliders and the tile grid
     // come in one after the other instead of appearing at once. 1.0 = fully revealed (ii).
     property real revealProgress: 1.0
@@ -62,7 +66,7 @@ AbstractQuickPanel {
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
     function isToggleVisible(toggleType) {
-        return true
+        return QuickToggleCatalog.availableForFamily(toggleType, PanelFamily.current)
     }
     readonly property int columns: Config.options.sidebar.quickToggles.android.columns
 
@@ -364,6 +368,13 @@ AbstractQuickPanel {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
                     onWheel: function (wheelEvent) {
+                        if (root.externalVerticalScroll
+                                && Math.abs(wheelEvent.angleDelta.y) >= Math.abs(wheelEvent.angleDelta.x)) {
+                            // Let the host's vertical WheelHandler move the complete column,
+                            // from configured toggles all the way through the unused tray.
+                            wheelEvent.accepted = false;
+                            return;
+                        }
                         if (Math.abs(wheelEvent.angleDelta.x) > Math.abs(wheelEvent.angleDelta.y)) {
                             // Horizontal scroll
                             if (wheelEvent.angleDelta.x < 0 && root.currentPage < root.displayPages.length - 1) {
@@ -666,6 +677,7 @@ AbstractQuickPanel {
                     contentWidth: width
                     contentHeight: fullHeight
                     clip: true
+                    interactive: !root.externalVerticalScroll && contentHeight > height
 
                     Item {
                         id: unusedCanvas

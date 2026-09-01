@@ -183,9 +183,11 @@ Item {
                         Layout.fillHeight: true
                         clip: true
                         contentWidth: width
-                        contentHeight: quickTogglesColumn.implicitHeight
+                        contentHeight: Math.max(height,
+                            quickTogglesColumn.implicitHeight + root.gridSpacing)
                         flickableDirection: Flickable.VerticalFlick
                         boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentHeight > height
 
                         readonly property real reveal: root.sectionReveal(0.08)
                         opacity: reveal
@@ -214,6 +216,7 @@ Item {
                                 styleName: "android"
                                 sourceComponent: AndroidQuickPanel {
                                     revealProgress: root.sectionReveal(0.08)
+                                    externalVerticalScroll: true
                                     color: "transparent"
                                     padding: 0
                                     spacing: root.gridSpacing

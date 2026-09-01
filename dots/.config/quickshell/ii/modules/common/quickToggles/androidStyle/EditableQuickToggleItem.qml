@@ -3,6 +3,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import "QuickToggleLayout.js" as QuickToggleLayout
+import "QuickToggleCatalog.js" as QuickToggleCatalog
 
 // Shared editing surface for every Android quick-toggle delegate. The visual
 // widget stays owned by its base component; this item only handles gestures,
@@ -19,6 +20,7 @@ Item {
     readonly property bool isMedia: target && target.buttonData ? target.buttonData.type === "mediaWidget" : false
     readonly property bool isSlider: target && target.buttonData ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(target.buttonData.type) : false
     readonly property bool canResize: target && target.pageIndex >= 0 && !root.isUnused
+        && QuickToggleCatalog.isResizable(target.buttonData?.type ?? "", target.gridColumns)
     readonly property bool canResizeHeight: root.canResize
 
     property real pressX: 0

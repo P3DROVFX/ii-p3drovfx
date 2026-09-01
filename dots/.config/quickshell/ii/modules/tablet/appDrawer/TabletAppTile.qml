@@ -27,9 +27,10 @@ Item {
     property real iconSize: 56
 
     signal activated
-    /// Long-press. Android's "add to home" gesture, and the only one available without a
-    /// right button.
+    /// The configurable touch hold. It may still use the legacy direct add-to-home action.
     signal held
+    /// A pointer context click always requests the menu, independent of the touch preference.
+    signal contextRequested
 
     /// Room for two lines whether or not the name needs them.
     ///
@@ -138,14 +139,23 @@ Item {
     MouseArea {
         id: tapArea
         anchors.fill: parent
-        onClicked: {
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        cursorShape: Qt.PointingHandCursor
+        onClicked: event => {
+            if (event.button === Qt.RightButton) {
+                holdTimer.stop();
+                holdTimer.fired = true;
+                root.contextRequested();
+                return;
+            }
             if (holdTimer.fired)
                 return;
             root.activated();
         }
-        onPressed: {
+        onPressed: event => {
             holdTimer.fired = false;
-            holdTimer.restart();
+            if (event.button === Qt.LeftButton)
+                holdTimer.restart();
         }
         onReleased: holdTimer.stop()
         onCanceled: holdTimer.stop()
