@@ -21,6 +21,9 @@ Item {
     property real iconSize: 56
 
     signal activated
+    /// Long-press. Android's "add to home" gesture, and the only one available without a
+    /// right button.
+    signal held
 
     implicitWidth: 96
     implicitHeight: 116
@@ -79,6 +82,26 @@ Item {
     MouseArea {
         id: tapArea
         anchors.fill: parent
-        onClicked: root.activated()
+        onClicked: {
+            if (holdTimer.fired)
+                return;
+            root.activated();
+        }
+        onPressed: {
+            holdTimer.fired = false;
+            holdTimer.restart();
+        }
+        onReleased: holdTimer.stop()
+        onCanceled: holdTimer.stop()
+
+        Timer {
+            id: holdTimer
+            property bool fired: false
+            interval: 550
+            onTriggered: {
+                holdTimer.fired = true;
+                root.held();
+            }
+        }
     }
 }

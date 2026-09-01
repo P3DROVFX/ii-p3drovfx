@@ -17,6 +17,10 @@ Scope {
     /// panels live in the ii family and modules/tablet may not import them.
     property Component toolHostComponent: null
 
+    /// Long-pressed an app in the grid. The drawer does not know what a home screen is, so
+    /// the composition root connects this to whatever should receive it.
+    signal appHeld(string appId)
+
     Variants {
         model: Quickshell.screens
 
@@ -29,6 +33,7 @@ Scope {
                 sourceComponent: TabletAppDrawerWindow {
                     screen: screenScope.modelData
                     contentComponent: drawerContent
+                    onAppHeld: appId => root.appHeld(appId)
                 }
             }
 

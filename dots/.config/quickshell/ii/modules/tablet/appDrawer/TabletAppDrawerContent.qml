@@ -32,6 +32,9 @@ Item {
     property real revealProgress: 1
 
     signal dismissRequested
+    /// Long-pressed an app: the host decides what "add to home" means, because the home
+    /// screen is a different module and the drawer must not reach into it.
+    signal appHeld(string appId)
 
     readonly property string query: searchField.text
     property string activeToolId: ""
@@ -299,6 +302,10 @@ Item {
                         iconSize: root.appIconSize
                         onActivated: {
                             appCell.modelData.execute();
+                            root.dismissRequested();
+                        }
+                        onHeld: {
+                            root.appHeld(appCell.modelData.id);
                             root.dismissRequested();
                         }
                     }

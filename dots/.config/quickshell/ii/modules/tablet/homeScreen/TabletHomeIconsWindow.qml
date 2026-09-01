@@ -1,0 +1,269 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Widgets
+
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+
+/**
+ * App icons laid out on the wallpaper, one screen's worth.
+ *
+ * On the Bottom layer, above the wallpaper and below every window, so the icons are part
+ * of the desktop rather than an overlay on it. Only the icons take input — the rest of the
+ * surface is masked out, which is what leaves the workspace swipe and everything behind it
+ * reachable.
+ */
+PanelWindow {
+    id: root
+
+    readonly property string screenName: root.screen?.name ?? ""
+    readonly property int workspaceId: TabletHomeIcons.currentWorkspace
+
+    /// Re-read whenever the store changes or the home screen does.
+    readonly property var icons: {
+        TabletHomeIcons.revision;
+        return TabletHomeIcons.iconsFor(root.workspaceId);
+    }
+
+    readonly property real iconSize: Math.max(52, Math.min(76, Math.round(height * 0.062)))
+    readonly property real cellSize: Math.round(root.iconSize * 1.75)
+    readonly property real gridStep: Appearance.sizes.widgetGridStep
+
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+    }
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+
+    WlrLayershell.namespace: "quickshell:tabletHomeIcons"
+    // Bottom, so icons are part of the desktop rather than floating over windows.
+    //
+    // KNOWN LIMITATION: ii's BackgroundWidgetsWindow is also on Bottom, is created after
+    // this one, and sets no input mask — so its input region covers the whole screen and
+    // the compositor never routes a tap down to these icons. They render correctly and are
+    // fully interactive once that surface is out of the way (verified by temporarily
+    // raising this window to Top, where dragging and the remove badge both work). Fixing it
+    // properly is a design decision recorded in the plan: either the tablet stops loading
+    // ii's widget surface, or that canvas is promoted so one surface holds both.
+    WlrLayershell.layer: WlrLayer.Bottom
+
+    /// Set by whichever icon is currently being dragged. See the mask below.
+    property bool dragging: false
+
+    /// The delegate Items, so the input mask can be built from them. Rebuilt rather than
+    /// appended to, because the Repeater destroys and recreates delegates whenever the
+    /// icon list changes.
+    property var iconItems: []
+
+    function refreshIconItems() {
+        const items = [];
+        for (let i = 0; i < iconRepeater.count; i++) {
+            const item = iconRepeater.itemAt(i);
+            if (item)
+                items.push(item);
+        }
+        root.iconItems = items;
+    }
+
+    Component {
+        id: regionComponent
+        Region {}
+    }
+
+    // Nothing over the desktop should take a tap except the icons themselves — otherwise
+    // this full-screen surface would swallow every click meant for the wallpaper and the
+    // background widgets behind it.
+    //
+    // While an icon IS being dragged the whole surface has to take input instead: the
+    // pointer leaves the icon's own region on the first pixel of movement, and with the
+    // narrow mask the drag was lost right there.
+    mask: Region {
+        item: root.dragging ? dragCatcher : null
+        regions: root.iconItems.map(item => regionComponent.createObject(root, { item: item }))
+    }
+
+    Item {
+        id: dragCatcher
+        anchors.fill: parent
+    }
+
+    visible: Config.ready && !GlobalStates.screenLocked
+
+    Repeater {
+        id: iconRepeater
+        model: root.icons
+        onCountChanged: Qt.callLater(root.refreshIconItems)
+        onItemAdded: Qt.callLater(root.refreshIconItems)
+        onItemRemoved: Qt.callLater(root.refreshIconItems)
+
+        delegate: Item {
+            id: iconItem
+            required property var modelData
+
+            readonly property string appId: iconItem.modelData.id
+            readonly property var entry: TaskbarApps.getCachedDesktopEntry(iconItem.appId)
+
+            x: iconItem.modelData.x
+            y: iconItem.modelData.y
+            width: root.cellSize
+            height: root.cellSize
+
+            // Where the icon is being dragged to, before it is committed to the store.
+            property real dragX: iconItem.modelData.x
+            property real dragY: iconItem.modelData.y
+            property bool dragging: false
+            onDraggingChanged: root.dragging = iconItem.dragging
+
+            Item {
+                id: visual
+                width: parent.width
+                height: parent.height
+                x: iconItem.dragging ? iconItem.dragX - iconItem.x : 0
+                y: iconItem.dragging ? iconItem.dragY - iconItem.y : 0
+                scale: iconItem.dragging ? 1.1 : (tapArea.pressed ? 0.92 : 1)
+                z: iconItem.dragging ? 10 : 0
+
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visual)
+                }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    spacing: 4
+
+                    IconImage {
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitSize: root.iconSize
+                        source: Quickshell.iconPath(TaskbarApps.getCachedIcon(iconItem.appId), "image-missing")
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: iconItem.entry?.name ?? iconItem.appId
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: "white"
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                        // The wallpaper underneath is arbitrary, so the label carries its
+                        // own contrast rather than trusting the theme's surface colours.
+                        style: Text.Outline
+                        styleColor: Qt.rgba(0, 0, 0, 0.55)
+                    }
+                }
+            }
+
+            MouseArea {
+                id: tapArea
+                anchors.fill: parent
+
+                property real grabX: 0
+                property real grabY: 0
+
+                onPressed: mouse => {
+                    tapArea.grabX = mouse.x;
+                    tapArea.grabY = mouse.y;
+                    longPressTimer.restart();
+                }
+
+                onPositionChanged: mouse => {
+                    if (!tapArea.pressed)
+                        return;
+                    const dx = mouse.x - tapArea.grabX;
+                    const dy = mouse.y - tapArea.grabY;
+                    if (!iconItem.dragging && Math.abs(dx) + Math.abs(dy) < 12)
+                        return;
+                    longPressTimer.stop();
+                    iconItem.dragging = true;
+                    // Snap while dragging rather than on drop, so the icon visibly lands on
+                    // the grid and the user can see where it will end up.
+                    const step = Math.max(1, root.gridStep);
+                    iconItem.dragX = Math.round((iconItem.x + dx) / step) * step;
+                    iconItem.dragY = Math.round((iconItem.y + dy) / step) * step;
+                }
+
+                onReleased: {
+                    longPressTimer.stop();
+                    if (!iconItem.dragging)
+                        return;
+                    iconItem.dragging = false;
+                    TabletHomeIcons.move(root.workspaceId, iconItem.appId,
+                                         Math.max(0, Math.min(root.width - root.cellSize, iconItem.dragX)),
+                                         Math.max(0, Math.min(root.height - root.cellSize, iconItem.dragY)));
+                }
+
+                onClicked: {
+                    if (iconItem.dragging)
+                        return;
+                    if (iconItem.editing) {
+                        iconItem.editing = false;
+                        return;
+                    }
+                    iconItem.entry?.execute();
+                }
+
+                Timer {
+                    id: longPressTimer
+                    interval: 550
+                    onTriggered: iconItem.editing = true
+                }
+            }
+
+            // Long-press arms a remove badge rather than deleting outright. A finger has no
+            // right-click, and a press held a moment too long must not silently lose an
+            // icon — so removal always takes a second, deliberate tap. The badge disarms
+            // itself so the home screen does not sit in a half-edit state forever.
+            property bool editing: false
+
+            Timer {
+                running: iconItem.editing
+                interval: 4000
+                onTriggered: iconItem.editing = false
+            }
+
+            Rectangle {
+                anchors.right: visual.right
+                anchors.top: visual.top
+                anchors.rightMargin: 2
+                anchors.topMargin: 2
+                width: 26
+                height: 26
+                radius: height / 2
+                color: Appearance.m3colors.m3error
+                z: 20
+
+                visible: iconItem.editing
+                scale: iconItem.editing ? 1 : 0.4
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "close"
+                    iconSize: 16
+                    color: Appearance.m3colors.m3onError
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    onClicked: {
+                        iconItem.editing = false;
+                        TabletHomeIcons.remove(root.workspaceId, iconItem.appId);
+                    }
+                }
+            }
+        }
+    }
+}

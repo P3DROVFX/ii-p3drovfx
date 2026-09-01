@@ -97,6 +97,10 @@ Scope {
         component: Background {}
     }
 
+    // App icons on the wallpaper, one set per workspace, plus the swipe that moves between
+    // them. The workspaces are this family's home screens.
+    PanelLoader { component: TabletHomeScreen {} }
+
     // What was I just doing: every open window as a card, most recent first. Distinct from
     // the workspaces, which are this family's home screens.
     PanelLoader { component: TabletRecents {} }
@@ -111,6 +115,14 @@ Scope {
     PanelLoader {
         component: TabletAppDrawer {
             toolHostComponent: searchPanelHostComponent
+            // Long-pressing an app in the drawer puts it on the current home screen. The
+            // drawer raises the event and the home screen owns the store; neither knows
+            // about the other, so the wiring lives here.
+            onAppHeld: appId => {
+                const workspace = TabletHomeIcons.currentWorkspace;
+                const slot = TabletHomeIcons.nextFreeSlot(workspace, 8);
+                TabletHomeIcons.add(workspace, appId, slot.x, slot.y);
+            }
         }
     }
 
@@ -172,8 +184,7 @@ Scope {
     // handler unregisters itself when the family unloads.
     TabletShadeDragHandler {}
 
-    // Swiping across the wallpaper moves between workspaces, as between home screen pages.
-    TabletWorkspaceDragHandler {}
+
 
     // ── Tools ───────────────────────────────────────────────────────────────
     PanelLoader { component: MediaControls {} }

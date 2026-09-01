@@ -364,6 +364,19 @@ Singleton {
                 property list<var> historySeen: []
             }
 
+            property JsonObject tablet: JsonObject {
+                // Home-screen icons, keyed by workspace id:
+                //   { "1": [ { "id": "firefox", "x": 120, "y": 200 }, ... ], ... }
+                //
+                // A JSON string rather than a typed structure on purpose. This is a nested,
+                // variable-shaped map that grows an entry per workspace the user drops
+                // something on, and Config/Persistent's typed lists are documented as
+                // fragile for exactly that shape (see AGENTS.md on array typing). It is
+                // also state rather than preference — where the user last put an icon —
+                // which is why it lives here and not in Config.
+                property string homeIconsJson: "{}"
+            }
+
             property JsonObject sidebar: JsonObject {
                 property JsonObject policies: JsonObject {
                     property int tab: 0

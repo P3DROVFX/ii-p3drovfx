@@ -20,6 +20,9 @@ PanelWindow {
 
     required property Component contentComponent
 
+    /// Forwarded from the drawer's content; see TabletAppDrawer.
+    signal appHeld(string appId)
+
     readonly property string screenName: root.screen?.name ?? ""
     readonly property bool wantOpen: GlobalStates.appDrawerOpen
         && (GlobalStates.activeAppDrawerMonitor === "" || GlobalStates.activeAppDrawerMonitor === root.screenName)
@@ -94,6 +97,7 @@ PanelWindow {
                 return;
             contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
             contentLoader.item.dismissRequested.connect(root.dismiss);
+            contentLoader.item.appHeld.connect(root.appHeld);
             if (root.wantOpen)
                 contentLoader.item.reset();
         }
