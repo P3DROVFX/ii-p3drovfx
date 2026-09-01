@@ -1504,6 +1504,9 @@ Singleton {
                     // is sorted: with a query, relevance is the order, and re-sorting it
                     // would discard the ranking the user is typing towards.
                     property string sortMode: "name"
+                    /// How tall the bottom-edge strip that starts a pull-up drag is. Same
+                    /// idea as the shade's pull-down edge, and the same default.
+                    property int edgeDragHeight: 8
                     property bool showSortButton: true
                     property bool showCategoryFilter: true
                     /// Long-press opens an Android-style menu on the tile. Off restores the

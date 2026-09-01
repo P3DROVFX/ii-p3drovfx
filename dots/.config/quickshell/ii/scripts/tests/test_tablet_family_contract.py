@@ -49,8 +49,11 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Input while open or while being dragged open, never while closing. The drag case
         # was added when the sheet started following the finger; the closing case is the
         # original bug and must stay excluded.
-        self.assertIn("root.wantOpen || TabletAppDrawerGestureController.tracking", drawer)
-        self.assertIn("Intersection.Combine : Intersection.Subtract", drawer)
+        self.assertIn("readonly property bool holdsInput: root.wantOpen"
+                      " || TabletAppDrawerGestureController.tracking", drawer)
+        # Anything else leaves only the edge strip, so a closing overlay hands the rest of
+        # the screen back in the same frame instead of eating the next tap on Apps.
+        self.assertIn("item: root.holdsInput ? inputRegion : bottomEdgeCaptureStrip", drawer)
 
     def test_app_drawer_uses_one_progress_for_the_backdrop_sheet_and_dock_exit(self):
         drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
@@ -168,6 +171,41 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("verticalAlignment: Text.AlignTop", tile)
         self.assertIn("elide: Text.ElideRight", tile)
         self.assertIn("maximumLineCount: 2", tile)
+
+    def test_bottom_edge_has_a_pointer_target_so_a_pen_can_open_the_drawer(self):
+        drawer = read("modules/tablet/appDrawer/TabletAppDrawerWindow.qml")
+
+        # TouchGestureService reads evdev and only accepts devices it classifies as
+        # touchscreens, so a pen arrives as a pointer and never reaches the drag registry.
+        # The shade has had this strip on the top edge from the start.
+        self.assertIn("id: bottomEdgeCaptureStrip", drawer)
+        self.assertIn("id: bottomMouseDragArea", drawer)
+        self.assertIn("preventStealing: true", drawer)
+        # Upwards opens, so the sign is flipped against the shade's pull-down.
+        self.assertIn("const travel = bottomMouseDragArea.startY - mouse.y;", drawer)
+        self.assertIn("TabletAppDrawerGestureController.startTracking(root.screenName)", drawer)
+        # Outside the sliding viewport: an area that moved with the sheet would read its own
+        # coordinate shift as pointer movement and feed the gesture back into itself.
+        self.assertLess(drawer.index("id: bottomEdgeCaptureStrip"), drawer.index("id: drawerViewport"))
+
+    def test_navigation_buttons_use_androids_own_shapes(self):
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+
+        # Chevron, circle, square — home was drawing the square and recents the circle.
+        self.assertIn('if (action === "home")\n            return "radio_button_unchecked";', dock)
+        self.assertIn('return "check_box_outline_blank";', dock)
+
+    def test_app_grid_fades_at_the_bottom_instead_of_being_cut_off(self):
+        content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
+
+        self.assertIn("anchors.bottomMargin: 0", content)
+        # An alpha mask, not a colour band. ScrollEdgeFade paints a colour, which ends
+        # content only when the surface behind it is that colour; the drawer sits on a
+        # blurred screencopy, so the band washed the last row without ever ending it.
+        self.assertIn("layer.effect: OpacityMask {", content)
+        self.assertIn("readonly property real fadeSize:", content)
+        # Room to scroll the last row clear of the gradient.
+        self.assertIn("bottomMargin: body.fadeSize", content)
 
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")

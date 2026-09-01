@@ -65,21 +65,20 @@ PanelWindow {
     // while it is still animating steals keys from whatever the user was doing.
     WlrLayershell.keyboardFocus: root.openProgress > 0.99 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    // Keep the close animation mapped, but give input back to the dock immediately. Without
-    // this, the transparent, closing overlay was still the topmost touch target while the
-    // dock button had already reappeared, so a second tap on Apps was swallowed.
+    // Open, or being dragged open — but deliberately NOT while closing. A sheet being
+    // pulled up must accept the finger pulling it; a sheet on its way out must hand input
+    // straight back, or it stays the topmost target after the dock button has reappeared
+    // and swallows the next tap on Apps.
+    readonly property bool holdsInput: root.wantOpen || TabletAppDrawerGestureController.tracking
+
     Item {
         id: inputRegion
         anchors.fill: parent
     }
     mask: Region {
-        item: inputRegion
-        // Open, or being dragged open — but deliberately NOT while closing. A sheet being
-        // pulled up must accept the finger pulling it; a sheet on its way out must hand
-        // input straight back, or it stays the topmost target after the dock button has
-        // reappeared and swallows the next tap on Apps.
-        intersection: (root.wantOpen || TabletAppDrawerGestureController.tracking)
-            ? Intersection.Combine : Intersection.Subtract
+        // Anything but "open or being opened" leaves just the edge strip interactive, so
+        // the closing overlay hands the rest of the screen back in the same frame.
+        item: root.holdsInput ? inputRegion : bottomEdgeCaptureStrip
     }
 
     // Keep the layer mapped while idle. A layer surface that is first mapped in the same
@@ -180,6 +179,94 @@ PanelWindow {
             // Tapping the backdrop closes, the way tapping outside any Android sheet does.
             enabled: root.wantOpen
             onClicked: root.dismiss()
+        }
+    }
+
+    /**
+     * The bottom edge, as a pointer target.
+     *
+     * TouchGestureService reads evdev directly and only accepts devices it classifies as
+     * touchscreens, so a pen on a graphics tablet — which arrives as a pointer, not as a
+     * touch contact — never reached the drag registry and the swipe simply did nothing.
+     * The shade has had a pointer strip on the top edge from the start, which is exactly
+     * why dragging it down works with the same pen. This is that strip, upside down.
+     *
+     * Touch still goes through the registry: the two paths drive the same controller, and
+     * only one of them can be in a drag at a time because the controller latches on
+     * `tracking`.
+     *
+     * Outside the sliding viewport on purpose — an area that moves with the sheet would
+     * read its own coordinate shift as pointer movement and feed the gesture back into
+     * itself.
+     */
+    Item {
+        id: bottomEdgeCaptureStrip
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+        }
+        height: Math.max(2, Config.options?.tablet?.appDrawer?.edgeDragHeight ?? 8)
+        z: 9999
+
+        MouseArea {
+            id: bottomMouseDragArea
+            anchors.fill: parent
+            preventStealing: true
+            // Only owns the edge while the drawer is mostly closed, latched on isTracking so
+            // a drag that crosses the halfway point does not lose its own grab.
+            enabled: TabletAppDrawerGestureController.progress < 0.5 || bottomMouseDragArea.isTracking
+
+            property real startY: 0
+            property real lastY: 0
+            property real lastTime: 0
+            property real calculatedVelocity: 0
+            property bool isTracking: false
+
+            onPressed: mouse => {
+                if (TabletAppDrawerGestureController.isSettledOpen)
+                    return;
+                // Before the surface paints anything, or the capture contains the drawer.
+                if (root.useBlur)
+                    backdropCapture.captureFrame();
+                bottomMouseDragArea.startY = mouse.y;
+                bottomMouseDragArea.lastY = mouse.y;
+                bottomMouseDragArea.lastTime = Date.now();
+                bottomMouseDragArea.calculatedVelocity = 0;
+                bottomMouseDragArea.isTracking = true;
+                TabletAppDrawerGestureController.startTracking(root.screenName);
+            }
+
+            onPositionChanged: mouse => {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                const now = Date.now();
+                const dt = Math.max(1, now - bottomMouseDragArea.lastTime);
+                // Upwards is opening, so the sign is flipped against the shade's: the
+                // controller reads a positive velocity as "towards open" either way.
+                bottomMouseDragArea.calculatedVelocity = ((bottomMouseDragArea.lastY - mouse.y) / dt) * 1000.0;
+                bottomMouseDragArea.lastY = mouse.y;
+                bottomMouseDragArea.lastTime = now;
+
+                const travel = bottomMouseDragArea.startY - mouse.y;
+                const p = Math.max(0.0, Math.min(1.0,
+                    travel / TabletAppDrawerGestureController.dragDistance(root.height)));
+                TabletAppDrawerGestureController.updateProgress(p, bottomMouseDragArea.calculatedVelocity);
+            }
+
+            onReleased: {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                bottomMouseDragArea.isTracking = false;
+                TabletAppDrawerGestureController.endTracking(bottomMouseDragArea.calculatedVelocity, 0);
+            }
+
+            onCanceled: {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                bottomMouseDragArea.isTracking = false;
+                TabletAppDrawerGestureController.cancelTracking();
+            }
         }
     }
 

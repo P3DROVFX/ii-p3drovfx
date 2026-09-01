@@ -670,6 +670,20 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       transforma isso num limiar — daí ele aparecer de uma vez no fim. A gaveta borra um
       screencopy congelado, como a shade já fazia. Com `appearance.transparency` desligado
       não há captura nem blur: fundo sólido.
+- [x] **A grade termina em fade, não em corte.** Margem inferior 0 e uma máscara de alfa:
+      `ScrollEdgeFade` pinta uma faixa de cor, o que só encerra conteúdo quando a superfície
+      atrás é daquela cor — aqui é um screencopy borrado, então qualquer cor que a faixa
+      pintasse era ela mesma translúcida e a última fileira continuava visivelmente fatiada
+      por baixo do lavado. Mascarar o alfa funciona contra qualquer fundo, porque o que
+      aparece através *é* o fundo.
+- [x] **Borda inferior como alvo de ponteiro.** `TouchGestureService` lê evdev e só aceita
+      dispositivos que classifica como touchscreen, então uma caneta de mesa digitalizadora
+      — que chega como ponteiro — nunca alcançava o registro de arrasto e o swipe não fazia
+      nada. A shade sempre teve uma faixa de ponteiro na borda de cima, que é exatamente por
+      que arrastá-la para baixo funciona com a mesma caneta. Esta é a mesma faixa, invertida;
+      o toque continua pelo serviço, e os dois caminhos dirigem o mesmo controller.
+- [x] **Botões de navegação com as formas do Android**: chevron, círculo, quadrado. Home
+      desenhava o quadrado e recentes o círculo — o par trocado.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.

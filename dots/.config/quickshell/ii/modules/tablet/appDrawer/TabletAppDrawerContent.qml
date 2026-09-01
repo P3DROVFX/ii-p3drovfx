@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -431,6 +432,9 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.outerMargin
+        // No bottom inset: the grid runs to the edge of the screen and fades out there
+        // instead of stopping at a margin, where the last row was being sliced in half.
+        anchors.bottomMargin: 0
         spacing: root.outerMargin * 0.6
 
         // Search bar. Android puts it at the top of the drawer and it keeps focus while
@@ -695,8 +699,43 @@ Item {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(body)
             }
 
+            /**
+             * The bottom of each scroller, faded to transparent.
+             *
+             * ScrollEdgeFade paints a colour band, which works when the view sits on a flat
+             * surface of that colour. This one sits on a blurred screencopy, so any colour
+             * the band could paint is itself see-through: it washed the last row out
+             * without ever ending it, and the row stayed visibly sliced underneath. Fading
+             * the view's own alpha works against any backdrop, because what shows through
+             * IS the backdrop.
+             */
+            /// Deep enough to take most of a row, or a row that straddles the edge still
+            /// shows a solid top half above the fade and reads as cut.
+            readonly property real fadeSize: Math.round(root.tileHeight * 0.9)
+
             GridView {
                 id: appGrid
+                // Fades the grid's own alpha, not a colour band over it. ScrollEdgeFade
+                // paints a colour, which ends content only when the surface behind is that
+                // colour — this one sits on a blurred screencopy, so any colour it could
+                // paint is itself see-through and the last row stayed visibly sliced under
+                // the wash. What shows through here is the backdrop, which is the point.
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: Math.max(1, appGrid.width)
+                        height: Math.max(1, appGrid.height)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "white" }
+                            GradientStop {
+                                position: appGrid.height > 0
+                                    ? Math.max(0, 1 - body.fadeSize / appGrid.height) : 1
+                                color: "white"
+                            }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+                }
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
@@ -710,6 +749,12 @@ Item {
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 cacheBuffer: 600
+
+                // Room to scroll the last row clear of the fade. Without it the bottom row
+                // can only ever be reached half-covered by the gradient.
+                // Enough room to scroll the last row clear of the fade, so the bottom of
+                // the list can still be read in full.
+                bottomMargin: body.fadeSize
 
                 model: ListModel {
                     id: gridModel
@@ -806,7 +851,24 @@ Item {
                 visible: width > 1 && root.activeToolId.length === 0
                 clip: true
                 contentHeight: sideContent.implicitHeight
+                bottomMargin: body.fadeSize
                 boundsBehavior: Flickable.StopAtBounds
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: Math.max(1, sideColumn.width)
+                        height: Math.max(1, sideColumn.height)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "white" }
+                            GradientStop {
+                                position: sideColumn.height > 0
+                                    ? Math.max(0, 1 - body.fadeSize / sideColumn.height) : 1
+                                color: "white"
+                            }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+                }
 
                 ColumnLayout {
                     id: sideContent
@@ -867,6 +929,9 @@ Item {
                 }
             }
 
+            // The ends of both scrollers, faded into the surface behind them rather than
+            // cut off by it. The colour is the drawer's own scrim, so the fade lands on
+            // exactly what is painted underneath.
             // Outside the GridView: a child of a Flickable joins its scrolling content, so
             // an empty-state placeholder put in there would drift with the view.
             PagePlaceholder {

@@ -141,9 +141,11 @@ PanelWindow {
     function navigationSymbol(action) {
         if (action === "back")
             return "arrow_back_ios_new";
+        // Android's three buttons are chevron, circle, square, in that order. Home was
+        // drawing the square and recents the circle, which is the pair swapped.
         if (action === "home")
-            return "check_box_outline_blank";
-        return "radio_button_unchecked";
+            return "radio_button_unchecked";
+        return "check_box_outline_blank";
     }
 
     function activateNavigation(action) {

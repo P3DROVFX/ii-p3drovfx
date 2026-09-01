@@ -117,6 +117,22 @@ Item {
             }
 
             ConfigSpinBox {
+                icon: "swipe_up"
+                text: Translation.tr("Bottom swipe edge height (px)")
+                value: Config.options.tablet.appDrawer.edgeDragHeight
+                from: 2
+                to: 48
+                stepSize: 2
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.appDrawer.edgeDragHeight)
+                        Config.options.tablet.appDrawer.edgeDragHeight = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("How far up from the bottom of the screen a drag can start. This strip is what makes the gesture work with a pen or a mouse; touch reaches the drawer through the gesture service either way.")
+                }
+            }
+
+            ConfigSpinBox {
                 icon: "width"
                 text: Translation.tr("Tile width (px, 0 fits the screen)")
                 value: Config.options.tablet.appDrawer.tileWidth
