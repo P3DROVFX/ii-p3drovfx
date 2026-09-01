@@ -87,6 +87,13 @@ PERSONAL_PATHS = (
     "soundcore.macAddress",
     "phone.contacts.favoriteIds",
     "phone.microphone.wifiIp",
+    "phone.scrcpy.wirelessIp",
+    "phone.webcam.wifiIp",
+    "sidebar.booru.zerochan.username",
+    # The libinput id of a touchpad that exists on one laptop. Machine-local
+    # in the same way a monitor name is, and applying it silently stops touch
+    # gestures working on everyone else's.
+    "interactions.touchGestures.deviceId",
     "todo.googleTasks.taskListId",
     "todo.googleTasks.taskListTitle",
     "tailscale.exitNode",
@@ -94,8 +101,8 @@ PERSONAL_PATHS = (
     "vpn.defaultProfile",
     "vpn.defaultLocation",
     "vpn.recentProvider",
-    "weather.city",
-    "weather.enableGPS",
+    "bar.weather.city",
+    "bar.weather.enableGPS",
     "update.lastAutoCheck",
     "update.scriptPath",
 )
@@ -116,7 +123,7 @@ LOCAL_PREFERENCE_PATHS = (
     "appearance.iconTheme",
     "appearance.icons.enableThemed",
     "language",
-    "weather.useUSCS",
+    "bar.weather.useUSCS",
     "policies",
     "workSafety",
 )

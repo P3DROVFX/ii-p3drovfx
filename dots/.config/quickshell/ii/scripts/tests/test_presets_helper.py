@@ -452,19 +452,226 @@ class TestPersonalDataStripping(unittest.TestCase):
         """A preset would otherwise say where its author lives. The city and
         the GPS switch are dropped as a pair: dropping only the city would
         leave the importer pinned to nowhere."""
-        data = {"weather": {"enable": True, "enableGPS": False, "city": "Grenoble",
-                            "fetchInterval": 10}}
+        data = {"bar": {"weather": {"enable": True, "enableGPS": False,
+                                    "city": "Grenoble", "fetchInterval": 10}}}
         sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
-        self.assertNotIn("city", sanitized["weather"])
-        self.assertNotIn("enableGPS", sanitized["weather"])
+        weather = sanitized["bar"]["weather"]
+        self.assertNotIn("city", weather)
+        self.assertNotIn("enableGPS", weather)
         # Whether the widget is shown at all is a look, and it stays.
-        self.assertTrue(sanitized["weather"]["enable"])
-        self.assertEqual(sanitized["weather"]["fetchInterval"], 10)
+        self.assertTrue(weather["enable"])
+        self.assertEqual(weather["fetchInterval"], 10)
 
     def test_weather_units_are_never_applied(self):
         """Like the interface language, units are the reader's choice: a
         preset from a US author must not flip anyone to Fahrenheit."""
-        self.assertIn("weather.useUSCS", presets_helper.LOCAL_ONLY_PATHS)
+        self.assertIn("bar.weather.useUSCS", presets_helper.LOCAL_ONLY_PATHS)
+
+    def test_phone_addresses_and_accounts_do_not_travel(self):
+        """The phone tabs hold the address of a device on the author's own
+        network, and the booru tab holds an account name."""
+        data = {
+            "phone": {
+                "scrcpy": {"wirelessIp": "192.168.1.42:5555", "bitRate": "8M"},
+                "webcam": {"wifiIp": "192.168.1.42", "resolution": "1280x720"},
+                "microphone": {"wifiIp": "192.168.1.42", "connection": "wifi"},
+            },
+            "sidebar": {"booru": {"zerochan": {"username": "someone"}}},
+            "interactions": {"touchGestures": {"deviceId": "elan1200:00-touchpad",
+                                               "enable": True}},
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+        self.assertNotIn("wirelessIp", sanitized["phone"]["scrcpy"])
+        self.assertNotIn("wifiIp", sanitized["phone"]["webcam"])
+        self.assertNotIn("wifiIp", sanitized["phone"]["microphone"])
+        self.assertNotIn("username", sanitized["sidebar"]["booru"]["zerochan"])
+        self.assertNotIn("deviceId", sanitized["interactions"]["touchGestures"])
+        # The settings beside them describe a setup, not a machine.
+        self.assertEqual(sanitized["phone"]["scrcpy"]["bitRate"], "8M")
+        self.assertEqual(sanitized["phone"]["webcam"]["resolution"], "1280x720")
+        self.assertTrue(sanitized["interactions"]["touchGestures"]["enable"])
+
+
+# Types that can carry an address, an account or a hardware id. A bool named
+# `autoWirelessIp` is a mode, not a machine, so only these are audited.
+IDENTITY_TYPES = ("string", "var", "list<string>", "list<var>")
+
+# The tail of a property name that means "this belongs to one person or one
+# machine". Matched against the last segment only, case- and underscore-
+# insensitively, so `wifiIp`, `wireless_ip` and `WifiIP` all read the same.
+IDENTITY_SUFFIXES = re.compile(
+    r"(ip|mac|serial|username|deviceid|contactid|hostname|host|address"
+    r"|phonenumber|imei|uuid)$")
+
+# Keys the audit finds that are published on purpose. Each one is a decision,
+# so each one is written down here rather than quietly excluded.
+IDENTITY_ALLOWED = {
+    # A public resolver everybody may use, shown to the importer before an
+    # apply by the risk scan rather than hidden from them by the sanitiser.
+    "dnsOverTls.serverAddress",
+    "dnsOverTls.fallbackAddress",
+}
+
+
+def blank_qml_noise(text):
+    """Replace comments and string bodies with spaces, keeping the layout.
+
+    Brace depth is what tells one option group from the next, and a brace
+    inside a comment or a shell command in a string counts just as much to a
+    naive scan -- one of them is enough to file every option after it under
+    the wrong group, quietly.
+    """
+    out = []
+    state = None  # None | '"' | "'" | '`' | '//' | '/*'
+    index = 0
+    while index < len(text):
+        char = text[index]
+        pair = text[index:index + 2]
+        if state is None:
+            if pair == "//":
+                state = "//"
+                out.append("  ")
+                index += 2
+                continue
+            if pair == "/*":
+                state = "/*"
+                out.append("  ")
+                index += 2
+                continue
+            if char in "\"'`":
+                state = char
+                out.append(char)
+                index += 1
+                continue
+            out.append(char)
+            index += 1
+            continue
+        if state == "//":
+            if char == "\n":
+                state = None
+                out.append(char)
+            else:
+                out.append(" ")
+            index += 1
+            continue
+        if state == "/*":
+            if pair == "*/":
+                state = None
+                out.append("  ")
+                index += 2
+                continue
+            out.append(char if char == "\n" else " ")
+            index += 1
+            continue
+        # Inside a string.
+        if char == "\\":
+            out.append("  ")
+            index += 2
+            continue
+        if char == state:
+            state = None
+            out.append(char)
+            index += 1
+            continue
+        out.append(char if char == "\n" else " ")
+        index += 1
+    return "".join(out)
+
+
+def config_qml_leaves():
+    """Every settable option in Config.qml, as (dotted path, declared type).
+
+    Nesting is tracked by brace depth, which is enough because the file only
+    ever nests options inside `property JsonObject <name>: JsonObject {`.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(presets_helper.__file__)))
+    qml = os.path.join(root, "modules", "common", "Config.qml")
+    if not os.path.exists(qml):
+        return None
+    with open(qml, encoding="utf-8") as handle:
+        lines = blank_qml_noise(handle.read()).split("\n")
+
+    path, opened_at, depth, leaves = [], [], 0, []
+    for line in lines:
+        stripped = line.strip()
+        nested = re.match(r"property\s+(?:JsonObject|Item)\s+(\w+)\s*:\s*\w+\s*\{", stripped)
+        if nested:
+            path.append(nested.group(1))
+            opened_at.append(depth + stripped.count("{") - stripped.count("}"))
+        else:
+            leaf = re.match(r"property\s+([\w<>]+)\s+(\w+)\s*:", stripped)
+            if leaf:
+                leaves.append((".".join(path + [leaf.group(2)]), leaf.group(1)))
+        depth += stripped.count("{") - stripped.count("}")
+        while opened_at and depth < opened_at[-1]:
+            opened_at.pop()
+            path.pop()
+    return leaves
+
+
+class TestPersonalPathAudit(unittest.TestCase):
+    """Read Config.qml and find what the exclusion lists have not caught yet.
+
+    Every personal path found so far was found by someone noticing it in a
+    published preset -- a city, a phone's address on its owner's network, an
+    account name. This walks the option tree instead, so the next one is a
+    failing test rather than a stranger's config.
+    """
+
+    def setUp(self):
+        self.leaves = config_qml_leaves()
+        if self.leaves is None:
+            self.skipTest("Config.qml is not next to this checkout")
+
+    def test_the_parser_still_understands_config_qml(self):
+        """A guard that stops reading the file stops guarding, silently."""
+        self.assertGreater(len(self.leaves), 500)
+        paths = dict(self.leaves)
+        self.assertEqual(paths.get("bar.weather.city"), "string")
+        self.assertEqual(paths.get("bar.cornerStyle"), "int")
+
+    def test_no_exclusion_path_is_dead(self):
+        """Every pattern must name an option that exists.
+
+        A pattern with the wrong nesting matches nothing and strips nothing,
+        and the tests around it still pass because they build their fixture
+        from the same wrong path. This is the only place that notices.
+        """
+        real = {path for path, _ in self.leaves}
+        groups = set()
+        for path in real:
+            parts = path.split(".")
+            for cut in range(1, len(parts)):
+                groups.add(".".join(parts[:cut]))
+        dead = []
+        for pattern in presets_helper.LOCAL_ONLY_PATHS:
+            expression = re.compile(
+                "^" + re.escape(pattern).replace("\\*", "[^.]+") + "$")
+            if any(expression.match(candidate) for candidate in real | groups):
+                continue
+            dead.append(pattern)
+        self.assertEqual(dead, [], "\n".join([
+            "These patterns match no option in Config.qml, so they protect",
+            "nothing. Check the nesting -- most settings live under a group:", *dead]))
+
+    def test_no_unclaimed_identity_key_ships(self):
+        unclaimed = []
+        for path, kind in self.leaves:
+            if kind not in IDENTITY_TYPES:
+                continue
+            name = path.split(".")[-1].lower().replace("_", "")
+            if not IDENTITY_SUFFIXES.search(name):
+                continue
+            if path in IDENTITY_ALLOWED or path in presets_helper.LOCAL_ONLY_PATHS:
+                continue
+            if presets_helper.is_sensitive_key(path.split(".")[-1]):
+                continue
+            unclaimed.append(path)
+        self.assertEqual(unclaimed, [], "\n".join([
+            "These options read like an address, an account or a piece of",
+            "hardware, and a preset would publish them as they are. Add each",
+            "one to PERSONAL_PATHS, or to IDENTITY_ALLOWED if it really is",
+            "meant to travel:", *unclaimed]))
 
 
 class TestPresetMerge(unittest.TestCase):
