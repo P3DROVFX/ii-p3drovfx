@@ -1228,6 +1228,21 @@ Singleton {
         }
     }
 
+    // Bindable from Hyprland as quickshell:appDrawerToggle / quickshell:recentsToggle.
+    // The tablet family is touch-first, not touch-only: every surface reachable by a
+    // gesture also has to be reachable without one.
+    GlobalShortcut {
+        name: "appDrawerToggle"
+        description: "Toggles the tablet app drawer"
+        onPressed: root.toggleAppDrawer("")
+    }
+
+    GlobalShortcut {
+        name: "recentsToggle"
+        description: "Toggles the tablet recents carousel"
+        onPressed: root.toggleRecents("")
+    }
+
     // App drawer IPC (tablet family)
     IpcHandler {
         target: "appDrawer"

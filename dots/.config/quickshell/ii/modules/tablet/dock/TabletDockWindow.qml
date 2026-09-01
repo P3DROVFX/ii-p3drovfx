@@ -206,8 +206,9 @@ PanelWindow {
                 opacity: 0.18
             }
 
-            // The drawer is also a swipe up from the bottom edge; this is the same door for
-            // anyone using a pointer, and a visible affordance that the drawer exists.
+            // The drawer and recents are both gestures on a touchscreen. These are the same
+            // doors for anyone driving the shell with a pointer — which this family
+            // deliberately still supports — and a visible sign that the surfaces exist.
             TabletDockButton {
                 id: allAppsButton
                 iconSize: 40
@@ -217,6 +218,19 @@ PanelWindow {
                     anchors.centerIn: parent
                     text: "apps"
                     iconSize: 26
+                    color: Appearance.colors.colOnLayer1
+                }
+            }
+
+            TabletDockButton {
+                id: recentsButton
+                iconSize: 40
+                onActivated: GlobalStates.toggleRecents(root.screenName)
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "filter_none"
+                    iconSize: 22
                     color: Appearance.colors.colOnLayer1
                 }
             }
