@@ -80,6 +80,16 @@ Singleton {
             "aliases": []
         },
         {
+            "id": "tablet",
+            "name": "Tablet",
+            "icon": "tablet_android",
+            "component": "modules/settings/configs/TabletConfig.qml",
+            // Only for the family it configures. Everything on it is inert elsewhere.
+            "families": ["tablet"],
+            "subPages": [],
+            "aliases": ["Shade", "Home screen", "Dock", "App drawer", "Gestures", "Android"]
+        },
+        {
             "id": "sidebars",
             "name": "Sidebars",
             "icon": "side_navigation",
@@ -438,7 +448,7 @@ Singleton {
         {
             "id": "modules",
             "name": "Modules",
-            "pageIds": ["sidebars", "dock", "dynamicIsland"]
+            "pageIds": ["tablet", "sidebars", "dock", "dynamicIsland"]
         },
         {
             "id": "desktopWindows",

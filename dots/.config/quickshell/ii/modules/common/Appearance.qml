@@ -797,7 +797,16 @@ Singleton {
         // anything that precisely, and a home screen is supposed to look laid out on a
         // grid rather than merely tidy — so a touch-first family snaps to a step coarse
         // enough to read as cells, the way Android's home screen does.
-        property real widgetGridStep: PanelFamily.touchFirst ? 40 : 10
+        // What this family wants when nothing is configured. Kept separate from the
+        // resolved value below so a settings control can offer it as the fallback without
+        // reading a property that depends on the very key it writes — that was a binding
+        // loop, and the page it was on rendered empty.
+        readonly property real familyWidgetGridStep: PanelFamily.touchFirst ? 40 : 10
+
+        property real widgetGridStep: {
+            const configured = Config.options?.background?.widgets?.gridStep ?? 0;
+            return configured > 0 ? configured : root.sizes.familyWidgetGridStep;
+        }
         property real baseBarHeight: PanelFamily.touchFirst
             ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
             : Config.options.bar.sizes.height

@@ -620,11 +620,8 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       alternaria no caminho.
 - [x] **On-screen keyboard** como app da gaveta — cidadão de primeira classe, já que nada
       aqui pressupõe teclado físico e alcançá-lo só por keybind é circular.
-- [ ] **Aberto:** o diálogo de um quick toggle não aparece nem pelo long-press nem pelo
-      botão direito documentado — **nem na tablet nem na ii**. A falha é anterior a esta
-      mudança, mas de fora não deu para distinguir bug pré-existente de clique direito
-      sintético não contando (`console.log` não chega ao log aqui). Vale olhar com ponteiro
-      real.
+      **Confirmado pelo mantenedor com ponteiro real:** funciona. O que falhava nos testes
+      era o clique direito *sintético* do `ydotool` não contando, não a cadeia do shell.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.
