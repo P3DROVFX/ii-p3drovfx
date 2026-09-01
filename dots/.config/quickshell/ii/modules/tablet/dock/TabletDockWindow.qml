@@ -9,6 +9,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.tablet.appDrawer
 import qs.modules.common.widgets
 import qs.modules.tablet.navigation
 
@@ -44,7 +45,9 @@ PanelWindow {
     readonly property bool dockRevealed: root.appsRevealed || root.navigationRevealed
     // Keep the dock mapped long enough to leave the screen instead of unmapping it on the
     // first state change. The same structural clock drives opacity and translation below.
-    property real drawerProgress: GlobalStates.appDrawerOpen ? 1 : 0
+    // The same number the drawer uses, so the dock travels with the sheet instead of
+    // animating its own copy of appDrawerOpen and finishing first.
+    readonly property real drawerProgress: TabletAppDrawerGestureController.progress
     readonly property bool surfaceVisible: Config.ready && !GlobalStates.screenLocked
         && root.dockRevealed
     readonly property bool reservesSpace: (root.tabletDock?.reserveSpace ?? true) && root.surfaceVisible
@@ -157,10 +160,6 @@ PanelWindow {
 
     visible: root.surfaceVisible
 
-    Behavior on drawerProgress {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
-    }
-
     anchors {
         bottom: true
         left: true
@@ -206,9 +205,15 @@ PanelWindow {
         anchors.fill: parent
         anchors.margins: Appearance.sizes.elevationMargin
         spacing: Appearance.sizes.elevationMargin / 2
-        opacity: 1 - root.drawerProgress
+        // Rises with the sheet rather than dropping away from it: the drawer is pulled up
+        // out of the dock, so the dock is part of what is being pulled.
+        //
+        // The fade is held back to the last stretch. Fading linearly made the dock vanish
+        // while it was still on screen and still moving, which read as it being deleted
+        // mid-gesture rather than travelling with the sheet.
+        opacity: 1 - Math.max(0, (root.drawerProgress - 0.55) / 0.45)
         transform: Translate {
-            y: root.drawerProgress * root.dockContentHeight
+            y: -root.drawerProgress * root.dockContentHeight
         }
 
         Loader {

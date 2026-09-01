@@ -26,12 +26,21 @@ PanelWindow {
     readonly property bool wantOpen: GlobalStates.appDrawerOpen
         && (GlobalStates.activeAppDrawerMonitor === "" || GlobalStates.activeAppDrawerMonitor === root.screenName)
 
-    // 0 closed, 1 open. Everything visual reads this so the whole surface animates as one.
+    /// This screen is the one the drawer belongs to. The controller tracks a single drag,
+    /// so only the screen it started on may show progress.
+    readonly property bool isTargetScreen: TabletAppDrawerGestureController.activeScreenName === ""
+        || TabletAppDrawerGestureController.activeScreenName === root.screenName
+
+    // 0 closed, 1 open. Everything visual reads this so the whole surface animates as one —
+    // and the dock reads the same controller, so the two move as one sheet instead of each
+    // animating its own copy of the same boolean and drifting apart. That drift is why the
+    // dock used to be gone before the drawer was anywhere near the top.
     //
-    // A binding, not an assignment from onWantOpenChanged: a window constructed while the
-    // drawer is already open — which is what a hot reload does — gets no change signal, so
-    // the imperative version left the surface mapped and drawing nothing.
-    property real openProgress: root.wantOpen ? 1 : 0
+    // No Behavior here: while a finger is on the screen the value IS the finger's position,
+    // and easing it would add lag to a direct manipulation. The controller runs its own
+    // settle animation on release.
+    readonly property real openProgress: root.isTargetScreen
+        ? TabletAppDrawerGestureController.progress : 0
 
     anchors {
         top: true
@@ -57,7 +66,9 @@ PanelWindow {
     }
     mask: Region {
         item: inputRegion
-        intersection: root.wantOpen ? Intersection.Combine : Intersection.Subtract
+        // Follows the drag, not the settled flag: a sheet being pulled up has to accept the
+        // finger that is pulling it.
+        intersection: root.openProgress > 0.001 ? Intersection.Combine : Intersection.Subtract
     }
 
     // Keep the layer mapped while idle. A layer surface that is first mapped in the same
@@ -65,10 +76,6 @@ PanelWindow {
     // sheet appears to pop in. Its closed mask is empty, therefore this transparent layer
     // never takes pointer input from the application below.
     visible: !GlobalStates.screenLocked
-
-    Behavior on openProgress {
-        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
-    }
 
     onWantOpenChanged: {
         if (root.wantOpen) {

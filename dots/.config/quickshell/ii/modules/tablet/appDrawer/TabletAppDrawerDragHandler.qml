@@ -7,23 +7,20 @@ import qs.modules.common
 /**
  * Claims the bottom edge for the app drawer.
  *
- * Unlike the shade, the drawer does not follow the finger: it is either open or closed, so
- * this watches the drag for a committed upward swipe and then opens, rather than mapping
- * travel onto a progress. It still has to claim the edge — a drag the registry does not own
- * would instead fire whatever discrete action the user bound to `bottomEdge`, and the
- * gesture would do two things at once.
+ * The drawer follows the finger, like the shade: travel maps onto the controller's progress
+ * frame by frame rather than the sheet snapping open on release. A sheet that ignores the
+ * finger until you let go does not feel attached to it.
+ *
+ * It has to *claim* the edge — a drag the registry does not own would instead fire whatever
+ * discrete action the user bound to `bottomEdge`, and the gesture would do two things.
  */
 QtObject {
     id: handler
 
-    // Far enough that a short flick while scrolling something at the bottom of the screen
-    // does not open the drawer, short enough to feel like Android's.
-    readonly property real commitFraction: 0.18
-    // Below this the release is treated as a tap or an aborted drag, whatever the distance.
-    readonly property real flingVelocity: 320
-
-    property real _travel: 0
     property string _screenName: ""
+    /// Where the drag started, so the controller can apply the cheaper close threshold to a
+    /// drag that began with the drawer already open.
+    property real _startProgress: 0
 
     function claims(origin) {
         return origin === "bottomEdge";
@@ -34,25 +31,26 @@ QtObject {
     }
 
     function begin(origin, screenName) {
-        handler._travel = 0;
         handler._screenName = screenName ?? "";
+        handler._startProgress = TabletAppDrawerGestureController.progress;
+        TabletAppDrawerGestureController.startTracking(handler._screenName);
     }
 
     function update(origin, screenName, travel, velocity) {
-        handler._travel = travel;
         handler._screenName = screenName ?? handler._screenName;
+        const screen = Quickshell.screens.find(s => s.name === handler._screenName)
+            ?? Quickshell.primaryScreen;
+        const distance = TabletAppDrawerGestureController.dragDistance(screen ? screen.height : 1000);
+        TabletAppDrawerGestureController.updateProgress(
+            handler._startProgress + travel / distance, velocity);
     }
 
     function release(origin, velocity) {
-        const screen = Quickshell.screens.find(s => s.name === handler._screenName) ?? Quickshell.primaryScreen;
-        const needed = Math.max(1, (screen ? screen.height : 1000) * handler.commitFraction);
-        if (handler._travel >= needed || velocity >= handler.flingVelocity)
-            GlobalStates.openAppDrawer(handler._screenName);
-        handler._travel = 0;
+        TabletAppDrawerGestureController.endTracking(velocity, handler._startProgress);
     }
 
     function cancel(origin) {
-        handler._travel = 0;
+        TabletAppDrawerGestureController.cancelTracking();
     }
 
     Component.onCompleted: TouchGestureDragRegistry.register(handler)
