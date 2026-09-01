@@ -539,10 +539,22 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] Claim da borda inferior via `TouchGestureDragRegistry` (↑ abre a gaveta).
 - [ ] Lista de sugestões de ferramentas **antes** de digitar (segunda iteração).
 
-#### 3c. Dock nova ✅
+#### 3c. Dock — igual à do Android ✅
 - [x] `modules/tablet/dock/` — implementação nova, **não** derivada de `modules/ii/dock/`.
-- [x] Pill flutuante na base: fixos → divisória → até 3 abertos → botão da gaveta.
-      Ponto embaixo do ícone marca app rodando, como no Android.
+- [x] **Sem fundo**: linha horizontal na largura da tela, ícones direto no wallpaper, como
+      na home screen do Android. Glifos com contorno e divisórias brancas, porque o
+      wallpaper embaixo é arbitrário.
+- [x] **Botões de navegação** do Android no canto esquerdo: voltar, home, recentes.
+      Voltar sai da superfície do shell que estiver por cima, em ordem, e é inerte numa home
+      screen vazia — exatamente como o do Android, já que não existe "tela anterior"
+      genérica para um aplicativo qualquer. Home fecha o que estiver aberto e cai num
+      workspace vazio.
+- [x] **Auto-hide igual ao da ii**: fixada sempre aparece, senão só enquanto o workspace não
+      tem nada aberto. Os botões de navegação **ficam de fora dessa regra** — são controles
+      de sistema, e um shell cujo único caminho de volta some ao abrir algo é um shell onde
+      dá para ficar preso.
+- [x] Fixos → divisória → até 3 abertos → botão da gaveta. Ponto embaixo do ícone marca app
+      rodando, como no Android.
 - [x] Compartilha a lista de fixos via `TaskbarApps` — são os favoritos do usuário, não
       propriedade da dock de um shell, então os pinos atravessam as famílias.
 - [x] `exclusionMode: Ignore` (flutua, não reserva faixa) e máscara de input só no pill.
@@ -590,7 +602,16 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       instalados com internals do shell, e renderizam como símbolo em placa tingida em vez
       de fingir ser ícone de app.
 - [x] Componentes de conteúdo são da ii → **injetados** pelo composition root.
-- [ ] **Policies entrando da esquerda** como app window.
+- [x] **Policies entrando da esquerda** como app window — largura de app, barra de título e
+      voltar, e a borda esquerda reivindica o arrasto pelo `TouchGestureDragRegistry`.
+      O conteúdo só monta as abas enquanto o shell considera policies aberto, então a
+      entrada do registro liga `sidebarLeftOpen` enquanto está no ar e desliga ao fechar —
+      o que é verdade, não truque: policies **está** aberto, só apresentado diferente.
+- [x] Entradas do cheatsheet como apps separados (Timetable, Keybinds, Periodic Table,
+      Amino Acids), cada uma abrindo direto na sua aba. Do lado do usuário são apps
+      distintos, que é o que são aqui.
+- [x] Apps de sistema **sempre listados** na gaveta, liderando a grade. Escondê-los atrás
+      da busca significava que só achava quem já sabia que existiam.
 - [ ] Diálogos da shade: hoje redimensionados por fora (`dialogWidth`) mas com layout
       interno de sidebar de 460px.
 - [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
