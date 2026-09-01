@@ -197,27 +197,26 @@ ContentPage {
         title: Translation.tr("Default layout")
         icon: "view_quilt"
 
-        ContentSubsection {
-            title: Translation.tr("Window tiling")
-            icon: "grid_view"
+        // This was a Default/Scrolling picker writing a setting nothing ever read, so choosing
+        // either did nothing at all. The tiling engine is Hyprland's own general:layout, and the
+        // Hyprland page sets it for real - along with the options that belong to each engine.
+        StyledText {
             Layout.fillWidth: true
+            text: Translation.tr("Which engine arranges your windows - dwindle, master, scrolling or monocle - is a Hyprland setting. Its options, and a diagram of where the next window would land, are on the Hyprland page.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.WordWrap
+        }
 
-            ConfigSelectionArray {
-                currentValue: Config.options.hyprland.defaultHyprlandLayout
-                onSelected: (newValue) => {
-                    Config.options.hyprland.defaultHyprlandLayout = newValue;
-                }
-                options: [{
-                    "displayName": Translation.tr("Default"),
-                    "icon": "splitscreen",
-                    "value": "default"
-                }, {
-                    "displayName": Translation.tr("Scrolling"),
-                    "icon": "view_carousel",
-                    "value": "scrolling"
-                }]
+        Flow {
+            Layout.fillWidth: true
+            spacing: 8
+
+            RelatedChip {
+                pageId: "hyprland"
+                label: Translation.tr("Tiling engine")
+                sectionHighlight: Translation.tr("Tiling engine")
             }
-
         }
 
     }

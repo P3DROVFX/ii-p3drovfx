@@ -233,6 +233,15 @@ Singleton {
             "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
         },
         {
+            "id": "hyprland",
+            "name": "Hyprland",
+            "icon": "instant_mix",
+            "component": "modules/settings/configs/HyprlandConfig.qml",
+            "subPages": [],
+            "searchSources": ["hyprland/InputTab.qml", "hyprland/LayoutTab.qml", "hyprland/ShortcutsTab.qml", "hyprland/DefaultAppsTab.qml", "hyprland/RulesTab.qml", "hyprland/EnvironmentTab.qml", "hyprland/AllOptionsTab.qml"],
+            "aliases": ["Compositor", "Keyboard layout", "Key repeat", "Mouse", "Touchpad", "Cursor", "Dwindle", "Master layout", "Keybinds", "Default apps", "Default applications", "XDG", "MIME types", "File associations", "Window rules", "Layer rules", "Environment variables", "hyprland.conf", "custom lua"]
+        },
+        {
             "id": "touchGestures",
             "name": "Touch & Gestures",
             "icon": "touch_app",
@@ -425,7 +434,7 @@ Singleton {
         {
             "id": "system",
             "name": "System",
-            "pageIds": ["displays", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
+            "pageIds": ["displays", "hyprland", "network", "soundAlerts", "touchGestures", "power", "devicesPhone", "usageStats", "privacy", "about"]
         }
     ]
 

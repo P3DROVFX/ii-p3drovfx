@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -11,6 +12,10 @@ import "../../../../services/modes/ModeSchema.js" as ModeSchema
 /**
  * Parameters of the `shortcut` event. `row` is the TriggerRow this form
  * unfolds from; every change goes back through it.
+ *
+ * This is the one trigger with a second half somewhere else: the routine
+ * only listens, and nothing runs it until a key is bound to its global.
+ * So the form both binds it and says whether it already is.
  */
 ColumnLayout {
     id: form
@@ -20,6 +25,17 @@ ColumnLayout {
 
     readonly property string name: ModeSchema.shortcutName(row.trigger, row.ownerId)
     readonly property string globalName: `quickshell:modes-${form.name}`
+
+    /// Reading this builds the shortcut service, which parses the config files - so it happens
+    /// when the form is unfolded and not before.
+    readonly property var boundRow: HyprlandBinds.boundToGlobal(form.globalName)
+
+    // The shortcut service stops following config reloads while the hub is closed, so ask it to
+    // catch up before reading which key this routine is on.
+    Component.onCompleted: HyprlandBinds.ensureFresh()
+
+    readonly property string boundLabel: form.boundRow
+        ? HyprlandBinds.comboLabel(form.boundRow.mods, form.boundRow.key) : ""
 
     RowLayout {
         Layout.fillWidth: true
@@ -42,8 +58,37 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 10
+
+        SmallButton {
+            buttonText: form.boundRow ? Translation.tr("Change the key") : Translation.tr("Bind a key")
+            onClicked: {
+                GlobalStates.modesOpen = false;
+                if (form.boundRow) {
+                    HyprlandBinds.requestEditBind(form.boundRow);
+                    return;
+                }
+                HyprlandBinds.requestNewBind("global", form.globalName,
+                    Translation.tr("Run the %1 routine").arg(form.name));
+            }
+        }
+
+        FormHint {
+            Layout.fillWidth: true
+            text: {
+                if (!HyprlandBinds.ready)
+                    return Translation.tr("Looking for a key…");
+                if (form.boundRow)
+                    return Translation.tr("%1 runs this now").arg(form.boundLabel);
+                return Translation.tr("Nothing runs this yet");
+            }
+        }
+    }
+
     FormHint {
-        text: Translation.tr("Bind a key to this global shortcut in your Hyprland config, e.g.")
+        text: Translation.tr("Or bind it by hand, in your Hyprland config:")
     }
 
     Rectangle {

@@ -3559,6 +3559,9 @@ Singleton {
 
             property JsonObject hyprland: JsonObject {
                 property string defaultHyprlandLayout: "default" // Options: dwindle, monocle, master // It's best to not use scrolling
+                // Settings -> Hyprland shows only what a normal desktop needs until this is on.
+                // Everything the compositor can be told, and the prose explaining why, is behind it.
+                property bool advancedSettings: false
             }
 
             property JsonObject idle: JsonObject {

@@ -707,6 +707,12 @@ def _generate_locked():
 
     # Get icon theme from config or default
     icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
+    # A caller that just changed the config passes the base explicitly: the config write is
+    # debounced, so reading it back from disk here would race with it.
+    if "--base" in sys.argv:
+        at = sys.argv.index("--base")
+        if at + 1 < len(sys.argv):
+            icon_theme_name = sys.argv[at + 1]
     print(f"Configured icon theme: {icon_theme_name}")
 
     # Locate base theme
@@ -861,6 +867,15 @@ def _generate_locked():
     # ── Atomic swap: replace old DynamicTheme with new one ───────────────
     # Restores TARGET_THEME_PATH global to original value before swapping
     TARGET_THEME_PATH = OLD_TARGET
+    # The caches are built on the staging copy, before the swap: rewriting them inside the
+    # live directory hands a half-written cache to anything resolving icons at that moment,
+    # which crashes it (bad_alloc in KIconTheme) rather than just missing.
+    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
+    if shutil.which("gtk4-update-icon-cache"):
+        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+    if shutil.which("gtk-update-icon-cache"):
+        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", NEW_THEME_PATH], capture_output=True)
+
     OLD_PATH = TARGET_THEME_PATH + ".old"
     if os.path.exists(TARGET_THEME_PATH):
         if os.path.exists(OLD_PATH):
@@ -870,11 +885,18 @@ def _generate_locked():
     if os.path.exists(OLD_PATH):
         shutil.rmtree(OLD_PATH)
 
-    print("[Phase 3] Updating GTK3 and GTK4 icon caches...")
-    if shutil.which("gtk4-update-icon-cache"):
-        subprocess.run(["gtk4-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
-    if shutil.which("gtk-update-icon-cache"):
-        subprocess.run(["gtk-update-icon-cache", "-f", "-q", "-t", TARGET_THEME_PATH], capture_output=True)
+    # Point every copy of the icon theme setting at DynamicTheme and tell running apps to
+    # re-read it. This used to set gsettings alone, which left kdeglobals naming whatever pack
+    # was picked before themed icons were turned on - and since that is the copy Qt reads, the
+    # first refresh after a wallpaper change dropped the whole desktop back onto that old pack,
+    # uncoloured. The same script does this for the pack picker, so the two cannot drift.
+    #
+    # It also has to run before the hash file below: the shell watches that file and redraws
+    # every icon on screen when it changes, and a redraw that happens before the loader has
+    # been pointed at the new theme draws the old one.
+    subprocess.run(["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "apply_icon_theme.sh"), "DynamicTheme"],
+                   capture_output=True)
 
     # Save hash + base theme fingerprint so next run can skip if nothing changed
     try:
@@ -887,14 +909,6 @@ def _generate_locked():
             f.write(base_fingerprint)
     except Exception:
         pass
-
-    # Notify system
-    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", "DynamicTheme"], capture_output=True)
-    # KIconLoader (KDE platform theme, used by Quickshell) caches the parsed
-    # theme per-process; this signal makes running apps drop it and re-read.
-    for group in range(7):
-        subprocess.run(["dbus-send", "--session", "--type=signal", "/KIconLoader",
-                        "org.kde.KIconLoader.iconChanged", f"int32:{group}"], capture_output=True)
 
     total = base_count + svg_count + raster_count
     print(f"Generation complete. {total} total icons in DynamicTheme.")
