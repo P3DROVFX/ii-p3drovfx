@@ -23,11 +23,14 @@ WindowDialog {
     function prepareForOpen() {
         Network.enableWifi();
         Network.rescanWifi();
+        NetworkSpeed.start();
     }
 
     onShowChanged: {
         if (show)
             root.prepareForOpen();
+        else
+            NetworkSpeed.stop();
     }
 
     // ── Header ────────────────────────────────────────────

@@ -518,5 +518,7 @@ StyledFlickable {
                 && Network.friendlyWifiNetworks.length === 0
                 && !Network.wifiScanning
         }
+
+        NetworkConnectionInfoGrid {}
     }
 }

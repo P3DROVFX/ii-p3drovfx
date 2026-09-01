@@ -11,6 +11,14 @@ function preferredConnectionName(wiredConnected, wiredName, wifiConnected, wifiN
     return "";
 }
 
+function preferredInterface(wiredConnected, wiredInterface, wifiConnected, wifiInterface) {
+    if (wiredConnected)
+        return wiredInterface || "";
+    if (wifiConnected)
+        return wifiInterface || "";
+    return "";
+}
+
 function activeConnectionName(rows, type) {
     const suffix = ":" + type;
     for (const row of rows) {
