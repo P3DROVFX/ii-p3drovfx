@@ -1,16 +1,14 @@
-import QtQuick
-import Quickshell
-
 import qs.modules.common
 import qs.modules.common.widgets
 
 /**
  * One Android navigation button: back, home or recents.
  *
- * Plain symbol on transparent ground, like Android's three-button navigation. The press
- * plate is the only feedback, since there is no cursor to hover with.
+ * Each target is a deliberately visible circular touch plate. The parent pill groups the
+ * three controls as one system-navigation surface while the generous spacing keeps adjacent
+ * targets distinct for a finger.
  */
-Item {
+RippleButton {
     id: root
 
     property string symbol: ""
@@ -22,32 +20,20 @@ Item {
 
     implicitWidth: root.buttonSize
     implicitHeight: root.buttonSize
+    buttonRadius: Appearance.rounding.full
+    buttonRadiusPressed: Appearance.rounding.large
+    colBackground: Appearance.colors.colLayer2
+    colBackgroundHover: Appearance.colors.colLayer2Hover
+    colBackgroundActive: Appearance.colors.colLayer2Active
+    colRipple: Appearance.colors.colLayer2Active
+    releaseAction: () => root.activated()
 
-    Rectangle {
-        anchors.centerIn: parent
-        width: parent.width
-        height: parent.height
-        radius: height / 2
-        color: Appearance.colors.colOnLayer0
-        opacity: tapArea.pressed ? 0.16 : 0
-
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-    }
-
-    MaterialSymbol {
+    contentItem: MaterialSymbol {
         anchors.centerIn: parent
         text: root.symbol
         iconSize: root.symbolSize
         rotation: root.symbolRotation
         fill: 0
-        color: Appearance.colors.colOnLayer0
-    }
-
-    MouseArea {
-        id: tapArea
-        anchors.fill: parent
-        onClicked: root.activated()
+        color: Appearance.colors.colOnLayer2
     }
 }

@@ -48,6 +48,9 @@ PanelWindow {
 
     readonly property real appIconSize: root.tabletDock?.iconSize ?? Appearance.sizes.minimumTouchTarget
     readonly property real appButtonSize: root.appIconSize + Appearance.sizes.elevationMargin * 2
+    // The pill itself matches an app item's full circular surface. Its three targets use the
+    // remaining inner space, leaving only a compact shared inset around the cluster.
+    readonly property real navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin
     readonly property real pageIndicatorSize: Appearance.sizes.elevationMargin * 0.75
 
     // Favourite apps and adaptive icon treatment are deliberately shared with the ii dock:
@@ -169,7 +172,7 @@ PanelWindow {
 
     Region {
         id: navigationRegion
-        item: navigationRow
+        item: navigationPill
         intersection: root.navigationRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
@@ -221,28 +224,37 @@ PanelWindow {
             Layout.fillWidth: true
             Layout.preferredHeight: root.appButtonSize
 
-            RowLayout {
-                id: navigationRow
+            Rectangle {
+                id: navigationPill
                 anchors.right: parent.right
                 anchors.rightMargin: Appearance.sizes.elevationMargin
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Appearance.sizes.elevationMargin / 2
                 visible: root.navigationRevealed
                 opacity: visible ? 1 : 0
+                implicitWidth: navigationRow.implicitWidth + Appearance.sizes.elevationMargin
+                implicitHeight: root.appButtonSize
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colLayer1
 
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
 
-                Repeater {
-                    model: root.navigationOrder
+                RowLayout {
+                    id: navigationRow
+                    anchors.centerIn: parent
+                    spacing: Appearance.sizes.elevationMargin * 1.25
 
-                    delegate: TabletNavButton {
-                        required property string modelData
-                        symbol: root.navigationSymbol(modelData)
-                        buttonSize: root.appButtonSize
-                        symbolSize: root.appIconSize * 0.625
-                        onActivated: root.activateNavigation(modelData)
+                    Repeater {
+                        model: root.navigationOrder
+
+                        delegate: TabletNavButton {
+                            required property string modelData
+                            symbol: root.navigationSymbol(modelData)
+                            buttonSize: root.navigationButtonSize
+                            symbolSize: Math.round(root.navigationButtonSize * 0.625)
+                            onActivated: root.activateNavigation(modelData)
+                        }
                     }
                 }
             }

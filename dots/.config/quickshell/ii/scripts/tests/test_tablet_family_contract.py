@@ -78,6 +78,18 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("TaskbarApps.togglePin", menu)
         self.assertIn("toplevel.close()", menu)
 
+    def test_tablet_navigation_is_a_spacious_pill_of_circular_touch_targets(self):
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+        button = read("modules/tablet/dock/TabletNavButton.qml")
+
+        self.assertIn("id: navigationPill", dock)
+        self.assertIn("radius: Appearance.rounding.full", dock)
+        self.assertIn("spacing: Appearance.sizes.elevationMargin * 1.25", dock)
+        self.assertIn("navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin", dock)
+        self.assertIn("implicitHeight: root.appButtonSize", dock)
+        self.assertIn("buttonRadius: Appearance.rounding.full", button)
+        self.assertIn("symbolSize: Math.round(root.navigationButtonSize * 0.625)", dock)
+
 
 if __name__ == "__main__":
     unittest.main()
