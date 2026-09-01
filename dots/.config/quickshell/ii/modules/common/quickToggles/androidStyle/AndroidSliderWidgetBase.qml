@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import qs.services
 import qs.modules.common
+import qs.modules.common.quickToggles
 import qs.modules.common.animations
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
@@ -19,9 +20,8 @@ Item {
 
     // Mirrors AndroidQuickToggleButton: chrome scales with the cell height so touch-sized
     // grids get proportionally larger icons. Identity at the ii default cell height.
-    readonly property real touchScale: Math.max(1.0, Math.pow(root.baseCellHeight / 56, 0.65))
     function scaled(value) {
-        return Math.round(value * root.touchScale);
+        return QuickToggleMetrics.scaled(root.baseCellHeight, value);
     }
     required property real cellSpacing
     required property int cellSize
@@ -173,9 +173,10 @@ Item {
             StyledSlider {
                 id: quickSliderHorizontal
                 anchors.fill: parent
-                // Touch-sized cells get a track proportional to the cell; the ii grid
-                // (touchScale === 1) keeps the fixed M track.
-                configuration: root.touchScale > 1 ? Math.round(root.baseCellHeight * 0.62) : StyledSlider.Configuration.M
+                // Touch-sized cells get a track proportional to the cell; at the reference
+                // cell height sliderTrack() returns -1 and the fixed M preset stands.
+                readonly property real trackThickness: QuickToggleMetrics.sliderTrack(root.baseCellHeight)
+                configuration: trackThickness > 0 ? trackThickness : StyledSlider.Configuration.M
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
                 valueAnimationDuration: root._activeValueAnimDuration

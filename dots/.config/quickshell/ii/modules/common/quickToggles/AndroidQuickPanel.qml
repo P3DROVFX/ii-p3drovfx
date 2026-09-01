@@ -14,10 +14,6 @@ import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 AbstractQuickPanel {
     id: root
     property bool editMode: false
-    // Kept for touch hosts that drive their own reveal. The dashboard content now owns the
-    // entrance trigger (SidebarDashboardContent.triggerContentEntranceIfReady), so this no
-    // longer gates anything here.
-    property bool entranceOnOpen: true
     // Gesture-driven hosts feed their 0→1 pull progress here so the sliders and the tile grid
     // come in one after the other instead of appearing at once. 1.0 = fully revealed (ii).
     property real revealProgress: 1.0

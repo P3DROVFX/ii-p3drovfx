@@ -210,7 +210,6 @@ Item {
                                 id: androidQuickPanelLoader
                                 styleName: "android"
                                 sourceComponent: AndroidQuickPanel {
-                                    entranceOnOpen: false
                                     revealProgress: root.sectionReveal(0.08)
                                     color: "transparent"
                                     padding: 0

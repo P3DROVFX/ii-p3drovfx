@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
+import qs.modules.common.quickToggles
 import qs.modules.common.animations
 import qs.modules.common.models.quickToggles
 import qs.modules.common.functions
@@ -30,9 +31,8 @@ Item {
     // Every metric inside a tile is proportional to the cell height, so a touch-sized grid
     // grows its icon circles and labels along with it. Damped so a twice-as-tall cell doesn't
     // double the type; at the ii default (56) this is exactly 1.0 and nothing changes there.
-    readonly property real touchScale: Math.max(1.0, Math.pow(root.baseCellHeight / 56, 0.65))
     function scaled(value) {
-        return Math.round(value * root.touchScale);
+        return QuickToggleMetrics.scaled(root.baseCellHeight, value);
     }
 
     readonly property bool isWide: effectiveSizeW > 1
