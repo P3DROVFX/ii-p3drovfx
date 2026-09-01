@@ -42,7 +42,10 @@ Item {
     signal dockToggleRequested(string appId)
     signal lockLayoutResetRequested()
 
-    property string section: "widgets"
+    // Held shell-wide (GlobalStates), not here: a right-click on the desktop or
+    // the bar asks for a catalogue before the drawer that shows it exists, and
+    // every screen's drawer shows the same one.
+    readonly property string section: GlobalStates.editDrawerSection
     property var dragMetadata: null
 
     // ── The query ────────────────────────────────────────────────────────────
@@ -381,7 +384,7 @@ Item {
     readonly property bool lockTab: GlobalStates.editLockPreview
     onLockTabChanged: {
         if (root.lockTab ? (root.section === "bar" || root.section === "dock") : root.section === "lock")
-            root.section = "widgets";
+            GlobalStates.editDrawerSection = "widgets";
     }
     readonly property bool anyLockFork: root.activeWidgets.some(entry =>
         WidgetPlacement.fork(entry, root.screenName, true) !== null)
@@ -457,27 +460,27 @@ Item {
                     leftmost: true
                     buttonText: Translation.tr("Widgets")
                     toggled: root.section === "widgets"
-                    onClicked: root.section = "widgets"
+                    onClicked: GlobalStates.editDrawerSection = "widgets"
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
                     buttonText: Translation.tr("Bar")
                     toggled: root.section === "bar"
-                    onClicked: root.section = "bar"
+                    onClicked: GlobalStates.editDrawerSection = "bar"
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
                     rightmost: true
                     buttonText: Translation.tr("Dock")
                     toggled: root.section === "dock"
-                    onClicked: root.section = "dock"
+                    onClicked: GlobalStates.editDrawerSection = "dock"
                 }
                 SelectionGroupButton {
                     visible: root.lockTab
                     rightmost: true
                     buttonText: Translation.tr("Lock screen")
                     toggled: root.section === "lock"
-                    onClicked: root.section = "lock"
+                    onClicked: GlobalStates.editDrawerSection = "lock"
                 }
             }
 

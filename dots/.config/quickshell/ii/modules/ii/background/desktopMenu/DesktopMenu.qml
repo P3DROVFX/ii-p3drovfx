@@ -91,7 +91,7 @@ Scope {
 
                 DesktopMenuCard {
                     id: menuCard
-                    showWallpaper: GlobalStates.desktopMenuWallpaper
+                    onBar: GlobalStates.desktopMenuOnBar
                     x: Math.min(Math.max(GlobalStates.desktopMenuX, 8), menuWindow.width - width - 8)
                     y: Math.min(Math.max(GlobalStates.desktopMenuY, 8), menuWindow.height - height - 8)
                     onDismissRequested: GlobalStates.closeDesktopMenu()

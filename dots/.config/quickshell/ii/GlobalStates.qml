@@ -378,6 +378,10 @@ Singleton {
     // `&& editMode` so the exit closes the drawer even if nothing wrote the
     // flag back, and both scalars run down together on the same tier.
     property bool editDrawerOpen: false
+    // Which of the drawer's catalogues it shows. Here rather than in the drawer
+    // itself because a right-click asks for one before the drawer that will
+    // show it exists: the chrome is built on the way into the mode.
+    property string editDrawerSection: "widgets"
     // Whether the catalogue's search field holds the keyboard. The chrome's
     // surface raises it while the field is focused; the desktop's canvas - the
     // mode's real key surface - reads it to know when to take the keyboard back
@@ -412,14 +416,15 @@ Singleton {
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
-    // Whether the wallpaper row is offered: the bar asks for the menu too, and
-    // a bar is not a place to pick a wallpaper from.
-    property bool desktopMenuWallpaper: true
+    // Where the click landed. The bar asks for the menu too, and that decides
+    // both what the menu offers - a bar is not a place to pick a wallpaper
+    // from - and which catalogue its widgets row opens.
+    property bool desktopMenuOnBar: false
 
-    function openDesktopMenu(screenName, x, y, wallpaper = true) {
+    function openDesktopMenu(screenName, x, y, onBar = false) {
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
-        root.desktopMenuWallpaper = wallpaper;
+        root.desktopMenuOnBar = onBar;
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;
@@ -595,7 +600,12 @@ Singleton {
         root.dockInsets = next;
     }
 
-    function openEditMode() {
+    // The screen a right-click asked the mode for, read once by the entry
+    // below and cleared there: the menu knows which desktop or bar was
+    // clicked, and it is not always the focused one.
+    property string _editRequestedMonitor: ""
+
+    function openEditMode(monitor = "") {
         if (root.editMode)
             return;
         // Nothing to edit without a desktop, and nothing to see while the
@@ -606,7 +616,23 @@ Singleton {
         // having the mode layered under them.
         root.overviewOpen = false;
         root.sessionOpen = false;
+        root._editRequestedMonitor = monitor;
         root.editMode = true;
+    }
+
+    // A right-click's way in: the mode, with the drawer already showing the
+    // catalogue for what was clicked. Also the way to change catalogues when
+    // the mode is already on, which is what a second right-click does.
+    function openEditCatalogue(section, screenName = "") {
+        root.editDrawerSection = section;
+        root.openEditMode(screenName);
+        if (!root.editMode)
+            return;
+        // The bar and the dock are no part of the lock's face: asking for one
+        // of them from the lock preview means the desktop.
+        if (root.editLockPreview && section !== "widgets" && section !== "lock")
+            root.editTab = EditModeLogic.desktopTab;
+        root.editDrawerOpen = true;
     }
 
     function closeEditMode() {
@@ -622,7 +648,9 @@ Singleton {
 
     function _enterEditMode() {
         root.editTab = EditModeLogic.desktopTab;
-        root.editModeMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
+        root.editModeMonitor = root._editRequestedMonitor !== "" ? root._editRequestedMonitor
+            : (Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "");
+        root._editRequestedMonitor = "";
         // Panels covering the desktop being edited close, and stay closed: the
         // sidebar open handlers refuse them for the length of the mode.
         root.policiesPanelOpen = false;
@@ -640,6 +668,7 @@ Singleton {
         // The drawer and its drop hint are the mode's: one left open would
         // greet the next entry mid-slide.
         root.editDrawerOpen = false;
+        root.editDrawerSection = "widgets";
         root.editDrawerDropScreen = "";
         // The lock now owns every monitor's workspace - it parks them itself
         // and restores its own record on unlock - so a restore fired here

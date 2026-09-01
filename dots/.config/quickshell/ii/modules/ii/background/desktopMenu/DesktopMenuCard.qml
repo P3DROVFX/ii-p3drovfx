@@ -9,14 +9,17 @@ import qs.modules.ii.editMode
 /**
  * The desktop's right-click menu: what the desktop offers when a click lands
  * on no widget. Four rows, deliberately (decision D6): the wallpaper picker,
- * the widgets settings page, the layout editor, and Settings.
+ * the catalogue for whatever was clicked, the layout editor, and Settings.
  */
 Item {
     id: root
 
     signal dismissRequested()
 
-    property bool showWallpaper: true
+    // Whether the click was on the bar rather than the desktop. It decides two
+    // rows: a bar is not a place to pick a wallpaper from, and the catalogue
+    // row opens the bar's widgets instead of the desktop's.
+    property bool onBar: false
 
     readonly property real padding: 6
     implicitWidth: 236
@@ -51,7 +54,7 @@ Item {
             spacing: 2
 
             EditMenuRow {
-                visible: root.showWallpaper
+                visible: !root.onBar
                 cardPadding: root.padding
                 symbol: "wallpaper"
                 label: Translation.tr("Wallpaper & style")
@@ -63,10 +66,11 @@ Item {
             EditMenuRow {
                 cardPadding: root.padding
                 symbol: "widgets"
-                label: Translation.tr("Widgets")
+                label: root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
                 onClicked: {
                     root.dismissRequested();
-                    GlobalStates.openSettingsPage("widgets");
+                    const section = root.onBar ? "bar" : "widgets";
+                    GlobalStates.openEditCatalogue(section, GlobalStates.desktopMenuScreenName);
                 }
             }
             EditMenuRow {
