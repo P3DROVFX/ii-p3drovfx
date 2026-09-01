@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import Qt5Compat.GraphicalEffects
 import qs.modules.common
 import qs.modules.common.widgets
@@ -133,8 +134,22 @@ Rectangle {
                     }
                 }
 
-                // Continuous rotation animation
+                // Continuous rotation animation.
+                //
+                // Guarded, because this card is popup content: StyledPopup holds it
+                // in a `default property Item contentItem`, so it is built once at
+                // startup and outlives every popup window, and is only parented into
+                // that window while the popup is open. Unguarded, the animation spun
+                // 90 ticks and the blur source that reads them for the life of the
+                // shell.
+                //
+                // The test has to be window membership. StyledPopup detaches only the
+                // top-level contentItem, so this card's own `parent` (its ColumnLayout)
+                // is never null, and `visible` stays true on a detached subtree because
+                // there is no hidden ancestor to propagate from. `Window.window` is null
+                // in exactly the case that matters: not currently inside any window.
                 RotationAnimation on rotation {
+                    running: root.visible && root.Window.window !== null
                     from: 0
                     to: 360
                     duration: 60000 // 60 seconds per full turn
