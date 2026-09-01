@@ -18,8 +18,8 @@
 | **0** | Merge com `dev`, isolamento arquitetural, limpeza | ✅ **concluída** |
 | **1** | Acabamento da bar de tablet | ✅ **concluída** |
 | **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
-| **4** | Gestos: múltiplos handlers + ações por família | 🟡 **parcial** — arrasto fora das bordas movido para a Fase 3 |
-| **3** | Tela inicial: workspaces, grid, dock, gaveta de apps | ⬜ **próxima** |
+| **4** | Gestos: múltiplos handlers + ações por família | ✅ **concluída** (arrasto fora das bordas entregue na Fase 3) |
+| **3** | Tela inicial: gaveta, dock, workspaces, grid | 🟡 **parcial** — falta ícones no desktop (3b) e recentes (3e) |
 | **5** | Application windows + layout de módulos | ⬜ a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
@@ -461,12 +461,17 @@ Também nesta fase:
 
 | Gesto | Ação | Estado |
 |---|---|---|
-| ↓ da borda superior | Central de controle (shade) | ✅ funciona |
-| ↑ da base | Gaveta de apps | Fase 3 — registrar `bottomEdge` no registry |
-| ↑ e segurar | Recentes | Fase 3 — distinguir por tempo/velocidade |
-| ← / → da borda lateral | Voltar (back) | Fase 3 |
-| ← / → no corpo do desktop | Trocar de workspace | Fase 3 — precisa de arrasto fora de borda |
+| ↓ da borda superior | Central de controle (shade) | ✅ |
+| ↑ da base | Gaveta de apps | ✅ |
+| ← / → no corpo do desktop | Trocar de workspace | ✅ |
+| ↑ e segurar | Recentes | Fase 3e — distinguir por tempo/velocidade |
+| ← / → da borda lateral | Voltar (back) | a fazer |
 | → da borda esquerda (longo) | Policies como app window | Fase 5 |
+
+> ⚠️ **Nenhum gesto foi verificado ponta a ponta.** Esta máquina de desenvolvimento tem
+> touchpad e nenhum touchscreen (`hyprctl devices` não lista Touch), então o reconhecedor
+> não pode ser acionado. Vale para o pull-down da shade que já existia também. Testar no
+> hardware alvo.
 
 - [x] `TouchGestureDragRegistry` suporta **múltiplos handlers**, resolvidos por origem.
       Dois handlers reivindicando a mesma borda é bug da família, não camada suportada:
@@ -485,34 +490,40 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 
 ### Fase 3 — Tela inicial
 
-#### 3a. Workspaces como home screens
-- [ ] Arrasto horizontal no desktop troca workspace, wallpaper acompanhando (parallax).
-- [ ] Indicador de página acima da dock.
-- [ ] Camada nova sobre o `Background` existente, **não** um fork.
+#### 3d. Gaveta de apps (D1) ✅
+- [x] `modules/tablet/appDrawer/` — grade alfabética de todos os apps + barra de busca no topo.
+- [x] Digitar mostra **chips de ferramentas** vindos do `SearchPanelRegistry`; escolher uma
+      **substitui a grade** pelo painel dela, no mesmo contêiner. Seta de voltar retorna à
+      grade; Escape volta um nível por vez (ferramenta → busca → fechado).
+- [x] O host das ferramentas é **injetado** pelo `TabletFamily`, porque os painéis moram na
+      ii. Sem injeção a gaveta continua completa, só sem ferramentas.
+- [x] Claim da borda inferior via `TouchGestureDragRegistry` (↑ abre a gaveta).
+- [ ] Lista de sugestões de ferramentas **antes** de digitar (segunda iteração).
 
-#### 3b. Ícones no grid (D4)
-- [ ] `alignmentGridStep` maior na tablet — sem sistema de grid novo.
+#### 3c. Dock nova ✅
+- [x] `modules/tablet/dock/` — implementação nova, **não** derivada de `modules/ii/dock/`.
+- [x] Pill flutuante na base: fixos → divisória → até 3 abertos → botão da gaveta.
+      Ponto embaixo do ícone marca app rodando, como no Android.
+- [x] Compartilha a lista de fixos via `TaskbarApps` — são os favoritos do usuário, não
+      propriedade da dock de um shell, então os pinos atravessam as famílias.
+- [x] `exclusionMode: Ignore` (flutua, não reserva faixa) e máscara de input só no pill.
+- [x] Some enquanto a gaveta está aberta.
+
+#### 3a. Workspaces como home screens 🟡
+- [x] Arrasto horizontal no corpo do desktop troca workspace. Só age quando o toque cai
+      onde nenhuma janela cobre — senão o arrasto é do aplicativo. Origem `surface` nova no
+      `TouchGestureService`, com `dx`/`dy` no contrato do registry.
+- [ ] Wallpaper acompanhando o dedo (parallax).
+- [ ] Indicador de página acima da dock.
+
+#### 3b. Ícones no grid (D4) 🟡
+- [x] `Appearance.sizes.widgetGridStep` — 40 na tablet, 10 no resto. Sem grid novo.
 - [ ] Arrastar app da gaveta para o desktop; entre workspaces; para remover; pasta ao
       soltar ícone sobre ícone.
 - [ ] Persistência em `Persistent.qml` (é estado, não preferência), por workspace e monitor.
 - [ ] Long-press → menu de contexto.
 
-#### 3c. Dock nova
-- [ ] `modules/tablet/dock/` — implementação nova, **não** derivada de `modules/ii/dock/`
-      (6919 linhas de features de desktop).
-- [ ] Comportamento Pixel Tablet: barra flutuante na base, ~6 fixos + divisória + até 3
-      recentes, cantos arredondados, fundo translúcido.
-- [ ] Visível na home; some (ou vira handle) com app em foreground.
-- [ ] ↑ a partir da dock abre a gaveta.
-
-#### 3d. Gaveta de apps (D1)
-- [ ] `modules/tablet/appDrawer/` — grade alfabética + **barra de busca no topo**.
-- [ ] Abrir uma ferramenta pela busca **substitui o conteúdo da gaveta** pelo painel.
-- [ ] Reaproveitar `DesktopEntries` e `Fuzzy`; a lógica de `AppGridWidget.qml` serve, o
-      layout é que precisa ser touch.
-- [ ] Lista de sugestões de ferramentas antes de digitar (segunda iteração).
-
-#### 3e. Recentes (D2)
+#### 3e. Recentes (D2) ⬜
 - [ ] `modules/tablet/recents/` — carrossel de apps abertos, design Android tablet.
 - [ ] Botão/gesto para abrir workspace nova.
 - [ ] Aposentar o `Overview` da ii no `TabletFamily.qml`.
