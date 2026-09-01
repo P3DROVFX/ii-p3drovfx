@@ -16,9 +16,9 @@
 | Fase | Escopo | Estado |
 |---|---|---|
 | **0** | Merge com `dev`, isolamento arquitetural, limpeza | ✅ **concluída** |
-| **1** | Acabamento da bar de tablet | ⬜ a fazer |
-| **2** | Promoção dos componentes compartilhados | ⬜ a fazer |
-| **4** | Gestos fora das bordas | ⬜ a fazer |
+| **1** | Acabamento da bar de tablet | ✅ **concluída** |
+| **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
+| **4** | Gestos fora das bordas | ⬜ **próxima** |
 | **3** | Tela inicial: workspaces, grid, dock, gaveta de apps | ⬜ a fazer |
 | **5** | Application windows + layout de módulos | ⬜ a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
@@ -78,6 +78,7 @@ A regra que este plano estabelece:
 | 1 | `services/` e `modules/common/` **não importam nenhuma família** | São compartilhados por todas. Um serviço que conhece uma família não pode ser raciocinado sem ela, e essa família nunca mais pode ser deletada. |
 | 2 | `modules/tablet/` **não importa `qs.modules.ii.*`** | Emprestar componente da ii é permitido, mas só a partir de `panelFamilies/TabletFamily.qml`, para a dívida ficar contável em um arquivo só. |
 | 3 | `modules/ii/` **não importa `qs.modules.tablet.*`** nem waffle | Mesma razão da regra 1, na direção contrária. |
+| 4 | **Nenhum import relativo sobe para fora do próprio módulo** | `import "../../../mediaControls"` é a mesma dependência que `import qs.modules.ii`, escrita de um jeito que as regras 1–3 não enxergam — e passa a resolver para outro diretório no instante em que o arquivo é movido. Descer para `common/` ou `services/` continua legal. |
 
 ### Como as regras são cobradas
 
@@ -88,6 +89,15 @@ A regra que este plano estabelece:
 Falha em qualquer violação **nova**. As conhecidas ficam em
 `scripts/dev/panel-family-layering-baseline.txt` — são dívida registrada, não permissão.
 O script também avisa quando uma entrada do baseline deixa de ocorrer, para ser removida.
+
+> **O baseline está vazio desde a Fase 2, e deve continuar assim.** Adicionar uma linha é
+> uma decisão revisada que precisa de um comentário dizendo qual fase a remove — não é um
+> jeito de passar pelo check.
+
+A regra 4 nasceu de um caso real: durante a promoção da Fase 2 as regras 1–3 deram OK
+enquanto um `import "../../../mediaControls"` continuava apontando para a ii, e depois do
+`git mv` passou a apontar para um diretório inexistente. O check resolve cada caminho
+relativo e só acusa os que aterrissam em **outra** família.
 
 ---
 
@@ -141,26 +151,36 @@ lugar ou a parametrização.
 
 ### 3.4 Como parametrizar sem espalhar multiplicadores
 
-O padrão errado (o que está lá hoje e será removido):
+O padrão errado — que estava no grid de toggles e foi removido na Fase 2:
 
 ```qml
-// ❌ multiplicador solto, cada consumidor reinventa a escala
+// ❌ a mesma curva escrita à mão em dois arquivos diferentes
 readonly property real touchScale: Math.max(1.0, Math.pow(baseCellHeight / 56, 0.65))
 iconSize: root.scaled(16)
 ```
 
-O padrão certo — um objeto de métricas com presets nomeados:
+Duas cópias de uma curva que ninguém reconheceria como deliberada é exatamente como as
+duas divergem na primeira vez que alguém ajusta uma delas.
+
+O padrão certo — a derivação mora num lugar só:
 
 ```qml
-// ✅ o host escolhe um preset; o componente só lê valores
-QuickToggleMetrics {
-    id: metrics
-    preset: PanelFamily.touchFirst ? QuickToggleMetrics.Touch : QuickToggleMetrics.Desktop
-}
-iconSize: metrics.iconSize
+// ✅ modules/common/quickToggles/QuickToggleMetrics.qml
+iconSize: QuickToggleMetrics.scaled(root.baseCellHeight, 16)
 ```
 
-Fica explícito quem quer o quê, e o valor de toque é ajustável num lugar só.
+`QuickToggleMetrics` é um **singleton de funções puras** da altura da célula, e não um
+objeto que o host instancia e passa para baixo. Foi uma decisão consciente: todo delegate
+já recebe `baseCellHeight`, então uma instância seria cerimônia em volta de aritmética.
+Quando o valor depender de algo que o delegate *não* recebe, aí sim vale um objeto com
+presets nomeados.
+
+Duas coisas que o singleton documenta e que não devem ser "consertadas" sem pensar:
+
+- A escala é **sub-linear** (expoente 0.65) de propósito. Uma célula duas vezes maior não
+  quer um ícone duas vezes maior; quer um ícone um pouco maior com muito mais respiro.
+- `sliderTrack()` devolve **-1** para dizer "use o preset M". O preset é um valor de enum,
+  não uma espessura, então não dá para devolver os dois pelo mesmo caminho.
 
 ### 3.5 Regras de runtime (do AGENTS.md, repetidas porque doem)
 
@@ -339,60 +359,101 @@ Não é uma fase própria.
 
 ---
 
-## 6. Dívida atual (burn-down)
+## 6. Dívida atual
 
-`scripts/dev/panel-family-layering-baseline.txt` — 16 entradas.
+### Camadas
 
-| Arquivo | Importa | Resolução planejada |
+`scripts/dev/panel-family-layering-baseline.txt` — **vazio**. As 16 entradas originais
+foram quitadas na Fase 2. Ver §2 sobre o que significa adicionar uma linha de volta.
+
+### Parametrização
+
+O que sobrou de parâmetro atravessando fronteira, e por quê:
+
+| Local | Parâmetro | Situação |
 |---|---|---|
-| `TabletDashboardContent.qml` | 14× `qs.modules.ii.sidebarDashboard.*` | **Fase 2** |
-| `TabletTrayDialog.qml` | `qs.modules.ii.bar.widgets.tray` | **Fase 2** |
-| `modules/common/widgets/CalendarView.qml` | `qs.modules.waffle.looks` | Pré-existente, corrigir junto na Fase 2 |
+| `common/quickToggles/AndroidQuickPanel.qml` | `baseCellHeight` | **Fica.** É a unidade de layout do grid, com nome honesto, agora em camada compartilhada. Não é multiplicador solto. |
+| `common/quickToggles/AndroidQuickPanel.qml` | `revealProgress`, `stageReveal()` | **Fica.** É a API de reveal dirigida pelo host — o gesto de arrasto da shade precisa dela. Legítima em `common/`. |
+| `common/notifications/NotificationList.qml` | `zoom`, `placeholderScale` | **Fica**, mesma razão: camada compartilhada, parametrizar é o correto. |
+| `common/widgets/{PagePlaceholder,DialogHostLoader,Android16Battery}` | `sizeScale` etc. | **Ficam.** |
+| `modules/ii/bar/Bar.qml` | `forceTop` | **Fica.** É a tablet fixando a bar no topo sem tocar na config guardada. |
 
-### Parâmetros com default-identidade ainda dentro da ii
+Nada disso está mais dentro de `modules/ii/` a não ser o `forceTop`, que é o mecanismo
+correto e não uma gambiarra.
 
-| Local | Parâmetro | Destino |
-|---|---|---|
-| `modules/ii/bar/Bar.qml`, `bar/core/BarWindow.qml` | `sizeScale` / `effectiveBarHeight` | **Fase 1** — código morto, ninguém usa |
-| `modules/ii/bar/Bar.qml` | `forceTop` | fica, é legítimo |
-| `AndroidQuickPanel.qml` | `baseCellHeight`, `revealProgress`, `stageReveal()`, `entranceOnOpen` | **Fase 2** |
-| `AndroidQuickToggleButton.qml`, `AndroidSliderWidgetBase.qml` | `touchScale`, `scaled()` | **Fase 2** |
-| `NotificationList.qml` | `zoom`, `placeholderScale` | **Fase 2** |
-| `modules/common/widgets/PagePlaceholder.qml`, `DialogHostLoader.qml`, `Android16Battery.qml` | `sizeScale` etc. | **ficam** — camada compartilhada, parametrizar é o correto |
+### Conhecido, ainda aberto
 
-### Bug pré-existente (não é regressão)
-
-`Can't assign to existing role 'modelData' of different type [List -> VariantMap]` —
-~118 no boot, ~22 por abertura de sidebar. **Reproduz também na ii** (verificado abrindo a
-sidebar direita). Origem: `StableQuickToggleModel` / `AndroidQuickPanel`. Corrigir na Fase 2.
+- **`SidebarPerformancePolicy.js`** continua em `modules/ii/sidebarDashboard/`. É usado só
+  pela ii (`BottomWidgetGroup`, `SidebarDashboardContent`), então está no lugar certo — mas
+  se a tablet ganhar uma política de performance própria, vale comparar as duas em vez de
+  duplicar.
+- **`ClassicQuickPanel` / `classicStyle/`** foram promovidos junto do grid Android porque
+  moravam na mesma árvore. A tablet não usa o estilo clássico. Se ele nunca for usado fora
+  da ii, pode voltar para lá numa limpeza posterior — não é urgente e mover de novo custa
+  mais do que deixar.
 
 ---
 
 ## 7. Fases futuras
 
-### Fase 1 — Acabamento da bar de tablet
+### Fase 1 — Acabamento da bar de tablet ✅
 
-- [ ] Remover `sizeScale`/`effectiveBarHeight` de `Bar.qml` e `BarWindow.qml` (código morto).
-- [ ] Altura da bar em modo tablet ~48dp (Pixel Tablet). Escalar em `Appearance`,
-      **não** por janela.
-- [ ] Alvos de toque mínimos de 48×48dp nos widgets da bar.
-- [ ] Excluir `Dynamic Island` (cornerStyle 3) do seletor quando `PanelFamily.isTablet`
-      (D3 mantém o resto da personalização).
+- [x] Removido `sizeScale`/`effectiveBarHeight` de `Bar.qml` e `BarWindow.qml` — era resto
+      de uma abordagem abandonada e ninguém mais setava.
+- [x] `Appearance.sizes.baseBarHeight` eleva o **piso** para 48 em família touch-first, em
+      vez de substituir o valor: uma bar configurada mais alta continua mais alta, e a
+      preferência guardada nunca é reescrita. Verificado: tablet renderiza 48, ii continua
+      nos 40 configurados.
+- [x] `BarComponent` estende widgets estreitos até o mesmo mínimo na **largura**. Widget sem
+      conteúdo continua em zero, então nada deixa um buraco de 48px ao se esconder.
+- [x] `BarInteraction.cornerStyle` resolve Dynamic Island (3) para Hug na tablet — a família
+      não desenha ilha nenhuma, então o estilo guardado dava à bar a silhueta de um notch sem
+      nada atrás. Varridos os 16 consumidores de renderização; Settings, Welcome, `Config` e
+      `ShellModePolicy` continuam lendo o valor guardado, porque exibem ou validam a
+      preferência em si. O estilo também sai das opções do seletor, em vez de ficar apenas
+      desabilitado.
 
-### Fase 2 — Promoção dos componentes compartilhados
+**Deliberadamente não feito:** um mínimo horizontal aplicado a todo widget indistintamente.
+O layout da bar é ajustado com cuidado e widgets como workspaces são largos de propósito —
+alvos horizontais por widget são revisados na Fase 5, junto da adaptação de cada módulo.
 
-- [ ] `modules/common/quickToggles/` ← `AndroidQuickPanel`, `androidStyle/*`,
-      `StableQuickToggleModel`, `QuickToggleCatalog.js`, `QuickToggleLayout.js` e os
-      diálogos (`wifiNetworks`, `bluetoothDevices`, `volumeMixer`, `nightLight`,
-      `darkMode`, `localSend`, `vpn`, `tailscale`, `dnsOverTls`, `idleInhibitor`,
-      `screenShader`).
-- [ ] `modules/common/notifications/` ← `NotificationList` e afins.
-- [ ] `modules/common/tray/` ← modelo de system tray.
-- [ ] Substituir os multiplicadores por `QuickToggleMetrics` com presets `Desktop`/`Touch`
-      (ver §3.4).
-- [ ] Corrigir o warning `modelData` durante a promoção.
-- [ ] Corrigir `CalendarView` → `qs.modules.waffle.looks`.
-- [ ] Baseline zerado.
+### Fase 2 — Promoção dos componentes compartilhados ✅
+
+Baseline de **16 → 0**. O que se moveu:
+
+| De | Para |
+|---|---|
+| `ii/sidebarDashboard/{SidebarGroupAnimation,DashboardEntranceProgress}` | `common/animations/` |
+| `ii/sidebarDashboard/quickToggles/` (44 arquivos) | `common/quickToggles/` |
+| `ii/sidebarDashboard/{11 diálogos}` | `common/quickToggleDialogs/` |
+| `ii/sidebarDashboard/notifications/` | `common/notifications/` |
+| `ii/sidebarDashboard/SidebarSpaceArbitration.js` | `common/functions/SpaceArbitration.js` |
+| `ii/mediaControls/AndroidMediaPopup.qml` | `common/media/` |
+| `ii/bar/shared/cards/{MetricCard,LoadingPlaceholder}` | `common/widgets/cards/` |
+| `ii/bar/widgets/tray/{SysTrayMenu,SysTrayMenuEntry}` | `common/tray/` |
+| `common/widgets/CalendarView.qml` | `waffle/notificationCenter/` |
+
+Esse último é o inverso dos outros: `CalendarView` estava em `common/` mas importava
+`qs.modules.waffle.looks`, e a waffle era sua única consumidora. Nunca foi um widget
+compartilhado, só um widget no diretório errado.
+
+Também nesta fase:
+
+- [x] `QuickToggleMetrics` (ver §3.4) unifica a curva de escala que estava duplicada.
+- [x] `entranceOnOpen` removido dos dois lados — ficou sem efeito quando o merge do dev
+      moveu o disparo do entrance para `SidebarDashboardContent`.
+- [x] `BottomWidgetGroup` parado atrás de `showBottomWidgetGroup: false` removido do
+      conteúdo da shade. A tablet pagava uma dependência entre famílias por código que nunca
+      rodava; os widgets de calendário/tarefas/timer voltam como *tiles* no grid (Fase 3),
+      que é outra construção, não este Loader ressuscitado.
+- [x] **Bug real corrigido**, não só o warning: `StableQuickToggleModel` guardava o payload
+      num papel chamado `modelData`. Um `ListModel` fixa o tipo do papel no primeiro uso e
+      infere objeto aninhado como lista, então todo `setProperty()` posterior era recusado e
+      **descartado em silêncio** — ou seja, um tile movido para novo `layoutX`/`layoutY`
+      continuava desenhando na geometria antiga até a linha ser reconstruída por outro
+      motivo. `dynamicRoles: true` resolve. 118 warnings no boot e ~22 por abertura de
+      sidebar, nas duas famílias, foram a zero.
+- [x] Regra 4 adicionada ao guarda (ver §2).
 
 ### Fase 4 — Gestos fora das bordas
 
@@ -492,6 +553,10 @@ O subsistema central desta fase.
 | `modules/common/widgets/widgetCanvas/WidgetCanvas.qml` | Grid do desktop (`alignmentGridStep`) |
 | `modules/tablet/sidebarDashboard/TabletShadeDragHandler.qml` | Lado tablet do contrato de drag |
 | `modules/tablet/sidebarDashboard/TabletShadeWindow.qml` | Janela da shade (blur, backdrop, arrasto) |
-| `modules/tablet/sidebarDashboard/TabletDashboardContent.qml` | Conteúdo da shade — maior fonte de dívida |
+| `modules/tablet/sidebarDashboard/TabletDashboardContent.qml` | Conteúdo da shade |
+| `modules/common/quickToggles/` | Grid de quick toggles, compartilhado ii + tablet |
+| `modules/common/quickToggles/QuickToggleMetrics.qml` | Escala do chrome do grid — **exemplo de referência de parametrização** |
+| `modules/common/quickToggleDialogs/` | Os 11 diálogos dos toggles |
+| `modules/common/notifications/` | Lista de notificações compartilhada |
 | `scripts/dev/check-panel-family-layering.sh` | Cobrança das regras |
 | `scripts/dev/panel-family-layering-baseline.txt` | Dívida registrada |
