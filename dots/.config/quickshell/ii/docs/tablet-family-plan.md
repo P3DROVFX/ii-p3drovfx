@@ -20,7 +20,7 @@
 | **2** | Promoção dos componentes compartilhados | ✅ **concluída** — baseline em **0** |
 | **4** | Gestos: múltiplos handlers + ações por família | ✅ **concluída** (arrasto fora das bordas entregue na Fase 3) |
 | **3** | Tela inicial: gaveta, dock, workspaces, ícones, recentes | ✅ **concluída** (2 polimentos adiados, ver 3a/3b) |
-| **5** | Application windows + layout de módulos | ⬜ a fazer |
+| **5** | Application windows + layout de módulos | 🟡 **parcial** — app windows prontos; layout dos módulos a fazer |
 | **6** | Settings adaptado para toque | ⬜ a fazer |
 | **7** | Restrição de customização + simplificação multi-monitor | ⬜ a fazer |
 
@@ -494,6 +494,19 @@ Também nesta fase:
 | ← / → da borda lateral | Voltar (back) | a fazer |
 | → da borda esquerda (longo) | Policies como app window | Fase 5 |
 
+### Como abrir cada superfície sem touchscreen
+
+| Superfície | Mouse | IPC | Atalho bindável |
+|---|---|---|---|
+| Gaveta de apps | botão `apps` na dock | `qs -c ii ipc call appDrawer toggle` | `quickshell:appDrawerToggle` |
+| Recentes | botão `filter_none` na dock | `qs -c ii ipc call recents toggle` | `quickshell:recentsToggle` |
+| Central de controle (shade) | botão dashboard na bar | `qs -c ii ipc call sidebarRight toggle` | `quickshell:sidebarRightToggle` |
+| Apps do sistema (usage, modes…) | buscar na gaveta | — | — |
+| Ícones do home screen | clique no wallpaper | — | — |
+
+Para bindar no Hyprland, o padrão do projeto é
+`hl.bind("SUPER + X", hl.dsp.global("quickshell:appDrawerToggle"))`.
+
 > ⚠️ **Nenhum gesto foi verificado ponta a ponta.** Esta máquina de desenvolvimento tem
 > touchpad e nenhum touchscreen (`hyprctl devices` não lista Touch), então o reconhecedor
 > não pode ser acionado. Vale para o pull-down da shade que já existia também. Testar no
@@ -560,16 +573,28 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] Pill "New workspace" leva a um workspace vazio.
 - [x] `Overview` da ii aposentado no `TabletFamily.qml`, junto do `OverviewWindowTransition`.
 
-### Fase 5 — Application windows (D6)
+### Fase 5 — Application windows (D6) 🟡
 
-O subsistema central desta fase.
-
-- [ ] `modules/tablet/appWindow/TabletAppWindow.qml` — hospedeiro que apresenta uma
-      superfície do shell como janela de app: barra de título, botão voltar, animação de
-      entrada por um lado, dispensa por gesto.
-- [ ] Registro de "apps do sistema" que a gaveta lista junto dos apps reais.
-- [ ] Migrar para app window: **policies** (entra da esquerda), **modes**, **cheatsheet**,
-      **usage stats**, **video editor**, **scratchpad**.
+- [x] `modules/tablet/appWindow/TabletAppWindow.qml` — barra de título com ícone, nome e
+      **botão voltar**, entrada subindo, Escape também fecha. O botão é o ponto: as versões
+      de desktop são overlays que se dispensam com Escape, clique fora ou o keybind de novo,
+      e nenhum desses é algo que um dedo faça.
+- [x] `TabletSystemApps` — registro com **dois tipos**, porque as superfícies diferem de
+      verdade:
+      - `hosted` — o módulo já separa conteúdo de janela (`UsageContent`, `ModesContent`),
+        então o conteúdo é re-emoldurado dentro do `TabletAppWindow`.
+      - `surface` — o módulo é uma `PanelWindow` indivisível. Separar exigiria refatorar a
+        ii, o que esta família não pode exigir; a entrada abre a superfície que o shell de
+        desktop já tem. Continua sendo lançada pela gaveta, só usa a própria moldura.
+- [x] Aparecem na gaveta **só durante a busca**, para não diluir a grade A-Z de aplicativos
+      instalados com internals do shell, e renderizam como símbolo em placa tingida em vez
+      de fingir ser ícone de app.
+- [x] Componentes de conteúdo são da ii → **injetados** pelo composition root.
+- [ ] **Policies entrando da esquerda** como app window.
+- [ ] Diálogos da shade: hoje redimensionados por fora (`dialogWidth`) mas com layout
+      interno de sidebar de 460px.
+- [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
+- [ ] On-screen keyboard como cidadão de primeira classe.
 - [ ] Diálogos da shade: hoje redimensionados por fora (`dialogWidth`) mas com layout
       interno de sidebar de 460px.
 - [ ] Media controls, session screen, polkit, wallpaper selector: revisar alvos de toque.
