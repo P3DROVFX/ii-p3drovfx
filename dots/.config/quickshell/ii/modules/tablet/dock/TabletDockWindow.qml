@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 import qs
 import qs.services
@@ -79,7 +80,7 @@ PanelWindow {
         right: true
     }
     color: "transparent"
-    implicitHeight: dockPill.implicitHeight + 24
+    implicitHeight: dockColumn.implicitHeight + 24
 
     // Ignore, not Auto: the dock floats over the desktop the way Android's taskbar does,
     // rather than reserving a strip that every window then has to lay out around.
@@ -87,17 +88,69 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell:tabletDock"
     WlrLayershell.layer: WlrLayer.Top
 
-    // Only the pill takes input. Without this the whole invisible full-width strip would
-    // swallow taps meant for whatever is behind it.
+    // Only the dock itself takes input. Without this the whole invisible full-width strip
+    // would swallow taps meant for whatever is behind it.
     mask: Region {
-        item: dockPill
+        item: dockColumn
     }
 
-    Rectangle {
-        id: dockPill
+    // ── Page indicator ──────────────────────────────────────────────────────
+    // Which home screen you are on, as dots above the dock. Only the workspaces on this
+    // monitor count: with a second display, showing every workspace in the session would
+    // make the indicator disagree with the swipe, which moves within the monitor.
+    readonly property var monitorWorkspaces: {
+        const list = [];
+        for (const workspace of (Hyprland.workspaces?.values ?? [])) {
+            // Special workspaces (scratchpad) have negative ids and are not pages.
+            if (workspace && workspace.id > 0 && workspace.monitor?.name === root.screenName)
+                list.push(workspace.id);
+        }
+        return list.sort((a, b) => a - b);
+    }
+    readonly property int activeWorkspaceId: {
+        const monitor = Hyprland.monitors.values.find(m => m.name === root.screenName);
+        return monitor?.activeWorkspace?.id ?? -1;
+    }
+
+    ColumnLayout {
+        id: dockColumn
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 12
+        spacing: 8
+
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 7
+            // One page is not a set of pages worth indicating.
+            visible: root.monitorWorkspaces.length > 1
+
+            Repeater {
+                model: root.monitorWorkspaces
+
+                delegate: Rectangle {
+                    required property int modelData
+                    readonly property bool current: modelData === root.activeWorkspaceId
+
+                    implicitWidth: current ? 18 : 6
+                    implicitHeight: 6
+                    radius: height / 2
+                    color: Appearance.colors.colOnLayer1
+                    opacity: current ? 0.95 : 0.4
+
+                    Behavior on implicitWidth {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
+                }
+            }
+        }
+
+    Rectangle {
+        id: dockPill
+        Layout.alignment: Qt.AlignHCenter
 
         implicitWidth: dockRow.implicitWidth + 24
         implicitHeight: dockRow.implicitHeight + 12
@@ -168,5 +221,6 @@ PanelWindow {
                 }
             }
         }
+    }
     }
 }
