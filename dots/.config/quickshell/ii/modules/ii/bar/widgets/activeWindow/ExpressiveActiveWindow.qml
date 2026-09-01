@@ -47,7 +47,7 @@ Item {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        hoverEnabled: !BarInteraction.clickToShow
     }
 
     ActiveWindowPopup {

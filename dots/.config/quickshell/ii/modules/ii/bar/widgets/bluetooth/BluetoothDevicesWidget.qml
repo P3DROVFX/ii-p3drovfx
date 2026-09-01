@@ -38,7 +38,7 @@ MouseArea {
 
     
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     // Cycle through devices on click
     onClicked: {

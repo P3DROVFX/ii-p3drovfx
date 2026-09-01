@@ -29,7 +29,7 @@ MouseArea {
     visible: root.shown
     implicitWidth: root.shown ? content.implicitWidth + 10 : 0
     implicitHeight: root.vertical ? (root.shown ? content.implicitHeight + 10 : 0) : Appearance.sizes.baseBarHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)

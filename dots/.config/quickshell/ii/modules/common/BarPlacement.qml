@@ -16,7 +16,7 @@ import Quickshell
 Singleton {
     id: root
 
-    readonly property bool familyPinsBarToTop: (Config.options?.panelFamily ?? "ii") === "tablet"
+    readonly property bool familyPinsBarToTop: PanelFamily.pinsBarToTop
 
     readonly property bool vertical: !root.familyPinsBarToTop && (Config.options?.bar?.vertical ?? false)
     readonly property bool bottom: !root.familyPinsBarToTop && (Config.options?.bar?.bottom ?? false)

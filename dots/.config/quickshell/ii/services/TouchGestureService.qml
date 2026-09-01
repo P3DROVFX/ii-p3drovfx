@@ -8,7 +8,6 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
-import qs.modules.tablet.sidebarDashboard
 
 Singleton {
     id: root
@@ -566,15 +565,19 @@ Singleton {
     }
 
     function actionForOrigin(origin) {
+        // An edge a family drags never commits to a discrete action, so its binding does
+        // not apply. Let the family name the drag instead, for the feedback overlay.
+        const dragged = TouchGestureDragRegistry.actionId(origin);
+        if (dragged)
+            return dragged;
+
         var bindings = root.opts ? root.opts.bindings : null;
         if (!bindings) return "none";
 
         switch (origin) {
         case "leftEdge": return bindings.leftEdge ? bindings.leftEdge : "none";
         case "rightEdge": return bindings.rightEdge ? bindings.rightEdge : "none";
-        case "topEdge":
-            if (Config.options.panelFamily === "tablet") return "sidebarRight";
-            return bindings.topEdge ? bindings.topEdge : "none";
+        case "topEdge": return bindings.topEdge ? bindings.topEdge : "none";
         case "bottomEdge": return bindings.bottomEdge ? bindings.bottomEdge : "none";
         case "topLeftCorner": return bindings.topLeftCorner ? bindings.topLeftCorner : "none";
         case "topRightCorner": return bindings.topRightCorner ? bindings.topRightCorner : "none";
@@ -703,9 +706,7 @@ Singleton {
         console.log("[TouchGestures] Gesture START on", screenName, ":", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
         gestureStarted(screenName, origin, actionId, px, py);
 
-        if (Config.options.panelFamily === "tablet" && origin === "topEdge") {
-            TabletDashboardGestureController.startTracking(screenName);
-        }
+        TouchGestureDragRegistry.begin(origin, screenName);
     }
 
     function onTouchMove(event) {
@@ -755,12 +756,7 @@ Singleton {
 
         gestureProgressChanged(activeScreenName, activeOrigin, activeActionId, progress, primaryTravel);
 
-        if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
-            var screen = Quickshell.screens.find(s => s.name === activeScreenName) || Quickshell.primaryScreen;
-            var targetDist = screen ? screen.height * 0.60 : 600;
-            var p = Math.max(0.0, Math.min(1.0, primaryTravel / Math.max(1, targetDist)));
-            TabletDashboardGestureController.updateProgress(p, currentVelocity());
-        }
+        TouchGestureDragRegistry.update(activeOrigin, activeScreenName, primaryTravel, currentVelocity());
     }
 
     function onTouchUp(event) {
@@ -784,8 +780,9 @@ Singleton {
 
         var vel = currentVelocity();
 
-        if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
-            TabletDashboardGestureController.endTracking(vel);
+        // A family dragging this edge owns the release: it settles its own surface from
+        // the velocity, and no discrete action fires.
+        if (TouchGestureDragRegistry.release(activeOrigin, vel)) {
             enterCooldown();
             return;
         }
@@ -833,9 +830,7 @@ Singleton {
         if (gestureState === root.stateTracking || gestureState === root.stateQualified) {
             console.log("[TouchGestures] Gesture CANCELLED:", reason);
             gestureCancelled(activeScreenName, activeOrigin, activeActionId);
-            if (Config.options.panelFamily === "tablet" && activeOrigin === "topEdge") {
-                TabletDashboardGestureController.cancelTracking();
-            }
+            TouchGestureDragRegistry.cancel(activeOrigin);
         }
         resetGestureState();
     }

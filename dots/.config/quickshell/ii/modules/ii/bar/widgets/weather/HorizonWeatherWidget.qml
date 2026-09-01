@@ -37,7 +37,7 @@ MouseArea {
 
     implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : root.animatedLength
     implicitHeight: root.vertical ? root.animatedLength : Appearance.sizes.baseBarHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     clip: true
 

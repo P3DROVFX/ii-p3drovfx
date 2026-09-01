@@ -18,7 +18,7 @@ MouseArea {
     width: implicitWidth
     height: implicitHeight
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     MouseArea {
         anchors.fill: parent

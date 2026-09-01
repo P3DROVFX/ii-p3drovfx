@@ -15,7 +15,7 @@ MouseArea {
     implicitWidth: rowLayout.implicitWidth + 10 * 2.5
     implicitHeight: rowLayout.implicitHeight + 10 * 2
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     MouseArea {
         anchors.fill: parent

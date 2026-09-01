@@ -16,7 +16,7 @@ MouseArea {
     width: implicitWidth
     height: implicitHeight
     visible: Battery.available
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)

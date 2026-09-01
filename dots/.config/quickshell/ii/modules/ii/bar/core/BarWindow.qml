@@ -55,7 +55,7 @@ Scope {
             if (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) {
                 return 0;
             }
-            return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
+            return (BarInteraction.autoHide && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
         }
 
         implicitHeight: root.effectiveBarHeight + Appearance.rounding.screenRounding
@@ -170,7 +170,7 @@ Scope {
 
         property bool superShow: false
         property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? root.effectiveBarHeight : 0
+        property real hiddenAmount: (BarInteraction.autoHide && !mustShow) ? root.effectiveBarHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
         }
@@ -254,8 +254,8 @@ Scope {
             Item {
                 id: hoverMaskRegion
                 readonly property real shadowExtend: 0
-                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
-                readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
+                readonly property real bottomMaskExtend: BarInteraction.autoHide ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
+                readonly property real topMaskExtend: BarInteraction.autoHide ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                 anchors {
                     fill: barContent
                     topMargin: -topMaskExtend - (barContent.verticalTopOffset ?? 0)

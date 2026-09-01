@@ -130,7 +130,7 @@ ShellRoot {
 
     PanelFamilyLoader {
         identifier: "tablet"
-        component: TabletFamily {}
+        familyUrl: Qt.resolvedUrl("panelFamilies/TabletFamily.qml")
     }
 
     PanelFamilyLoader {

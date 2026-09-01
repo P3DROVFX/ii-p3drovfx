@@ -140,7 +140,7 @@ Item {
     MouseArea {
         id: mediaMouseArea
         anchors.fill: parent
-        hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        hoverEnabled: !BarInteraction.clickToShow
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
 

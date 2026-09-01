@@ -156,7 +156,7 @@ Item {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
-        hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        hoverEnabled: !BarInteraction.clickToShow
 
         ClockWidgetPopup {
             compact: Config.options.bar.tooltips.compactPopups

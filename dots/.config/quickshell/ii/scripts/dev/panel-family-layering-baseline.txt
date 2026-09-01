@@ -1,0 +1,25 @@
+# Known panel-family layering violations. Debt, not permission.
+# Format: <path>:<imported module>. See check-panel-family-layering.sh.
+# The burn-down plan lives in docs/tablet-family-plan.md.
+
+# Pre-existing: a shared calendar widget reaching into the waffle family's styling.
+modules/common/widgets/CalendarView.qml:qs.modules.waffle.looks
+
+# The tablet shade still renders ii's quick-toggle grid, its dialogs and its
+# notification list. Phase 2 promotes these to modules/common/ so both families
+# consume one shared implementation instead of the tablet reaching into ii.
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.bluetoothDevices
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.darkMode
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.dnsOverTls
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.idleInhibitor
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.localSend
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.nightLight
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.notifications
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.quickToggles
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.screenShader
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.tailscale
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.volumeMixer
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.vpn
+modules/tablet/sidebarDashboard/TabletDashboardContent.qml:qs.modules.ii.sidebarDashboard.wifiNetworks
+modules/tablet/sidebarDashboard/TabletTrayDialog.qml:qs.modules.ii.bar.widgets.tray

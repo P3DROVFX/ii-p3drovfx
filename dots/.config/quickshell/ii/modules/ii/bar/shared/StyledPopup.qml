@@ -75,7 +75,7 @@ LazyLoader {
     property bool _isClosing: false
     property bool _reopenPending: false
 
-    readonly property bool _computedActive: Config.options.bar.tooltips.enablePopups && ((Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
+    readonly property bool _computedActive: BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
 
     property bool _openDebounced: false
 
@@ -163,7 +163,7 @@ LazyLoader {
             _reopenPending = false;
         }
 
-        if (Config.options.bar.tooltips.clickToShow || forceClick) {
+        if (BarInteraction.clickToShow || forceClick) {
             if (_targetHovered && !root._clickActive && !root._isClosing) {
                 root._clickActive = true;
             }
@@ -262,7 +262,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
+            active: root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
             onCleared: () => {
                 root._clickActive = false;
             }
@@ -275,7 +275,7 @@ LazyLoader {
         // open — the same mechanism BarWindow.qml already uses for the bar itself.
         // Click-to-show popups are excluded: they run their own dismissGrab above.
         readonly property bool joinsSharedGrab: !(root.selfDismiss
-            && (Config.options.bar.tooltips.clickToShow || root.forceClick))
+            && (BarInteraction.clickToShow || root.forceClick))
 
         function updateSharedGrabMembership() {
             if (popupWindow.joinsSharedGrab && root.active)
@@ -373,8 +373,8 @@ LazyLoader {
                     return;
 
                 root._reopenPending = false;
-                if (root._targetHovered || Config.options.bar.tooltips.clickToShow || root.forceClick) {
-                    if (Config.options.bar.tooltips.clickToShow || root.forceClick)
+                if (root._targetHovered || BarInteraction.clickToShow || root.forceClick) {
+                    if (BarInteraction.clickToShow || root.forceClick)
                         root._clickActive = true;
                     else if (root.stickyHover)
                         root._stickyActive = true;
@@ -419,7 +419,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (root.selfDismiss && Config.options.bar.tooltips.clickToShow) {
+            if (root.selfDismiss && BarInteraction.clickToShow) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;

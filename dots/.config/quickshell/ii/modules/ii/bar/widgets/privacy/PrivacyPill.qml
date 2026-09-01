@@ -19,7 +19,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     readonly property var kinds: Privacy.activeKinds
     readonly property string kindSignature: root.kinds.join(",")

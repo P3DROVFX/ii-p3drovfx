@@ -23,7 +23,7 @@ MouseArea {
     readonly property bool active: Modes.active
     readonly property var mode: Modes.activeMode
     readonly property string colorKey: indicator.mode?.color ?? ""
-    readonly property bool clickToShowPopup: Config.options.bar.tooltips.clickToShow
+    readonly property bool clickToShowPopup: BarInteraction.clickToShow
     readonly property bool showHoverState: containsMouse && !clickToShowPopup
 
     Layout.fillHeight: vertical
