@@ -7,7 +7,7 @@ import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.ii.bar.widgets.tray
+import qs.modules.common.tray
 
 /**
  * Touch-sized system tray. The bar's tray is a row of 20px icons, which is unusable with a

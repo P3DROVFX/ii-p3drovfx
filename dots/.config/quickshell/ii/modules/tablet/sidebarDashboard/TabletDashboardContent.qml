@@ -7,7 +7,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-import qs.modules.ii.sidebarDashboard
 import qs.modules.common.quickToggles
 import qs.modules.common.notifications
 import qs.modules.common.quickToggleDialogs.bluetoothDevices
@@ -45,9 +44,10 @@ Item {
     // The ii dialogs are sized for a 460px sidebar; here they float over the whole screen.
     readonly property real dialogWidth: Math.max(560, Math.min(980, Math.round(root.width * 0.38)))
 
-    // Parked, not deleted: the calendar/to-do/timer group moves into the quick toggles grid
-    // later, so the code stays wired up behind this switch and notifications take the space.
-    readonly property bool showBottomWidgetGroup: false
+    // The calendar / to-do / timer group is deliberately absent. It used to be wired up
+    // behind a `false` switch, which cost the tablet an import of ii's sidebar module for
+    // code that never ran. Those widgets return as tiles in the quick-toggles grid (Fase 3),
+    // which is a different construction, not this Loader revived. Notifications take the space.
 
     // ── Dialog state ────────────────────────────────────────────────────────
     property bool showAudioOutputDialog: false
@@ -275,15 +275,6 @@ Item {
                         }
                     }
 
-                    Loader {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: active ? implicitHeight : 0
-                        active: root.showBottomWidgetGroup
-                        visible: active
-                        sourceComponent: BottomWidgetGroup {
-                            forceCollapsed: root.editMode
-                        }
-                    }
                 }
             }
         }
