@@ -9,6 +9,7 @@ import Quickshell.Io
 import Quickshell.Networking as QNet
 import qs.modules.common.functions
 import qs.services.network
+import "network/NetworkConnectionSelection.js" as ConnectionSelection
 
 /**
  * Wi-Fi and wired status.
@@ -84,11 +85,12 @@ Singleton {
     readonly property string networkName: {
         if (!root.ready)
             return root.seedNetworkName;
-        if (NetworkState.wifiConnected)
-            return NetworkState.activeWifiNetwork?.name ?? "";
-        if (NetworkState.wiredConnected)
-            return NetworkState.wiredNetwork?.name ?? "";
-        return "";
+        return ConnectionSelection.preferredConnectionName(
+            NetworkState.wiredConnected,
+            NetworkState.wiredNetwork?.name ?? "",
+            NetworkState.wifiConnected,
+            NetworkState.activeWifiNetwork?.name ?? ""
+        );
     }
     readonly property string activeConnectionName: root.networkName
     readonly property int networkStrength: root.active?.strength ?? 0
@@ -400,8 +402,8 @@ Singleton {
                 root.seedWifiEnabled = (blocks[1] ?? "").trim() === "enabled";
                 root.seedEthernet = wired;
                 root.seedStatus = root.seedWifiEnabled ? status : "disabled";
-                const active = (blocks[2] ?? "").trim().split("\n").find(l => l.includes(":802-11-wireless"));
-                root.seedNetworkName = active ? active.split(":")[0] : "";
+                const activeRows = (blocks[2] ?? "").trim().split("\n").filter(row => row.length > 0);
+                root.seedNetworkName = ConnectionSelection.seededConnectionName(activeRows);
             }
         }
     }
