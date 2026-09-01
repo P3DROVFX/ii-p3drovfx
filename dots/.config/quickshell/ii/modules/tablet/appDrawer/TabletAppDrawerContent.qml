@@ -540,7 +540,10 @@ Item {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
+            // Hidden while a panel owns the body: the chips filter a grid that is not on
+            // screen, so leaving them up offers a control that does nothing visible.
             readonly property bool shown: (root.drawerConfig?.showCategoryFilter ?? true)
+                && root.activeToolId.length === 0
                 && root.query.trim().length === 0
                 && root.availableCategories.length > 1
 

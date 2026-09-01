@@ -242,10 +242,29 @@ Item {
             }
 
             ConfigSubpageRow {
+                buttonIcon: "search"
+                title: Translation.tr("Dock search")
+                description: Translation.tr("Pill or compact circle, and what each of its two buttons opens")
+                configPage: Qt.resolvedUrl("widgets/TabletDockSearchConfig.qml")
+            }
+
+            ConfigSubpageRow {
                 buttonIcon: "apps"
                 title: Translation.tr("Pinned apps")
                 description: Translation.tr("Which apps sit on the left of the dock. Shared with the desktop shell's dock, since these are your favourite apps rather than one shell's setting.")
                 configPage: Qt.resolvedUrl("widgets/DockContentConfig.qml")
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("App drawer")
+            icon: "grid_view"
+
+            ConfigSubpageRow {
+                buttonIcon: "grid_view"
+                title: Translation.tr("Grid and search")
+                description: Translation.tr("Sorting, category chips, tile size, long-press behaviour, and what the search reaches beyond applications")
+                configPage: Qt.resolvedUrl("widgets/TabletAppDrawerConfig.qml")
             }
         }
 

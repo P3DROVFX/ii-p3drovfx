@@ -138,6 +138,24 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertNotIn("PopupWindow {", menu)
         self.assertNotIn("HyprlandFocusGrab {", menu)
 
+    def test_dock_search_pill_is_configurable_and_delegates_what_its_buttons_do(self):
+        bar = read("modules/tablet/dock/TabletDockSearchBar.qml")
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+        states = read("GlobalStates.qml")
+
+        self.assertIn('property string barStyle: "extended"', bar)
+        self.assertIn("readonly property bool compact:", bar)
+        # The bar knows how to draw an action and nothing about what one does, so a new
+        # action is a line in the dock rather than a new dependency in the pill.
+        self.assertIn("signal actionTriggered(string actionId)", bar)
+        self.assertIn("function runSearchAction(actionId)", dock)
+        self.assertIn("GlobalStates.openAppDrawerTool(root.screenName, id.substring(5))", dock)
+        # A negative z is how an earlier version lost taps to the wrong handler; the
+        # fallback area is ordered below the end buttons by declaration instead.
+        self.assertNotIn("z: -1", bar)
+        # Opening the drawer plainly must not reopen whatever panel was asked for last.
+        self.assertIn('root.appDrawerTool = "";\n        root._showAppDrawer(monitorName);', states)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")

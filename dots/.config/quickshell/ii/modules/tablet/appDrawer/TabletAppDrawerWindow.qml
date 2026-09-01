@@ -91,9 +91,27 @@ PanelWindow {
     onWantOpenChanged: {
         if (root.wantOpen) {
             contentLoader.item?.reset();
+            root.applyRequestedTool();
             GlobalFocusGrab.addDismissable(root);
         } else {
             GlobalFocusGrab.removeDismissable(root);
+        }
+    }
+
+    /// reset() clears any panel, so the requested one is applied after it, not before.
+    function applyRequestedTool() {
+        if (GlobalStates.appDrawerTool.length > 0)
+            contentLoader.item?.openToolById(GlobalStates.appDrawerTool);
+    }
+
+    // Asking for a panel while the drawer is already up changes no boolean, so
+    // onWantOpenChanged never runs. Both entry points are covered, and neither can fire
+    // twice for one request because reset() is what clears the panel.
+    Connections {
+        target: GlobalStates
+        function onAppDrawerToolChanged() {
+            if (root.wantOpen)
+                root.applyRequestedTool();
         }
     }
 

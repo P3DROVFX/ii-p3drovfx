@@ -68,6 +68,21 @@ PanelWindow {
     readonly property bool showAppDrawerButton: root.tabletDock?.showAppDrawerButton ?? true
     readonly property bool searchBarEnabled: root.tabletDock?.showSearchBar ?? true
     readonly property real searchBarWidth: root.tabletDock?.searchBarWidth ?? 320
+    readonly property string searchBarStyle: root.tabletDock?.searchBarStyle ?? "extended"
+
+    /// The dock decides what a search-bar button does; the bar only knows how to draw one.
+    function runSearchAction(actionId) {
+        const id = String(actionId ?? "");
+        if (id === "none")
+            return;
+        if (id.startsWith("tool:")) {
+            GlobalStates.openAppDrawerTool(root.screenName, id.substring(5));
+            return;
+        }
+        // "apps" and "search" both land on the drawer; the difference is only which of its
+        // two halves the user is reaching for, and the drawer focuses the field either way.
+        GlobalStates.openAppDrawer(root.screenName);
+    }
     // The search pill follows the app row: both belong to the home screen and both get out
     // of the way once something is running.
     readonly property bool searchRevealed: root.searchBarEnabled && root.appsRevealed
@@ -271,8 +286,14 @@ PanelWindow {
                 anchors.left: parent.left
                 anchors.leftMargin: Appearance.sizes.elevationMargin
                 anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(root.searchBarWidth, parent.width * 0.3)
+                width: searchBar.compact
+                    ? root.appButtonSize
+                    : Math.min(root.searchBarWidth, parent.width * 0.3)
                 barHeight: root.appButtonSize
+                barStyle: root.searchBarStyle
+                leadingAction: root.tabletDock?.searchLeadingAction ?? "search"
+                trailingAction: root.tabletDock?.searchTrailingAction ?? "apps"
+                placeholderText: root.tabletDock?.searchPlaceholder ?? ""
                 visible: root.searchRevealed
                 opacity: visible ? 1 : 0
                 transform: Translate {
@@ -282,8 +303,12 @@ PanelWindow {
                 Behavior on opacity {
                     animation: Appearance.animation.elementMove.numberAnimation.createObject(searchBar)
                 }
+                Behavior on width {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(searchBar)
+                }
 
                 onActivated: GlobalStates.openAppDrawer(root.screenName)
+                onActionTriggered: actionId => root.runSearchAction(actionId)
             }
 
             Rectangle {

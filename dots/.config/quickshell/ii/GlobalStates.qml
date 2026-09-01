@@ -1054,7 +1054,22 @@ Singleton {
     property bool appDrawerOpen: false
     property string activeAppDrawerMonitor: ""
 
+    /// A search panel the drawer should open straight into, empty for the plain grid. Set
+    /// by whatever asked for the drawer, so a dock button can be "clipboard" rather than
+    /// "the drawer, then find clipboard".
+    property string appDrawerTool: ""
+
     function openAppDrawer(monitorName) {
+        root.appDrawerTool = "";
+        root._showAppDrawer(monitorName);
+    }
+
+    function openAppDrawerTool(monitorName, toolId) {
+        root.appDrawerTool = toolId ?? "";
+        root._showAppDrawer(monitorName);
+    }
+
+    function _showAppDrawer(monitorName) {
         root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.appDrawerOpen = true;
     }
