@@ -8,6 +8,7 @@ import qs.modules.common
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
 import qs.modules.tablet.dock
+import qs.modules.tablet.homeScreen
 import qs.modules.tablet.sidebarDashboard
 
 // ── Borrowed from ii, pending a tablet replacement ──────────────────────────
@@ -164,6 +165,9 @@ Scope {
     // inside the service keeps qs.services free of any panel-family dependency; the
     // handler unregisters itself when the family unloads.
     TabletShadeDragHandler {}
+
+    // Swiping across the wallpaper moves between workspaces, as between home screen pages.
+    TabletWorkspaceDragHandler {}
 
     // ── Tools ───────────────────────────────────────────────────────────────
     PanelLoader { component: MediaControls {} }

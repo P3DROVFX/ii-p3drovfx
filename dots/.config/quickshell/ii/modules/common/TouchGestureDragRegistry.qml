@@ -25,12 +25,17 @@ import Quickshell
  *     function claims(origin): bool          // "topEdge", "leftEdge", "rightEdge", "bottomEdge"
  *     function actionId(origin): string      // optional; names the drag for the feedback overlay
  *     function begin(origin, screenName)
- *     function update(origin, screenName, travel, velocity)
+ *     function update(origin, screenName, travel, velocity, dx, dy)
  *     function release(origin, velocity)     // the drag is over; settle it
  *     function cancel(origin)
  *
  * `travel` is the raw primary-axis distance in pixels. Mapping it to a 0..1 progress is
  * the handler's business — only it knows what a full open means for its own surface.
+ *
+ * The origins are the four edges, the four corners, and "surface" for the body of the
+ * screen. A surface drag has no axis, so `travel` is the distance along whichever axis is
+ * longer and `dx`/`dy` carry the direction; edge handlers can ignore both. Nothing arms a
+ * surface drag unless a handler claims it, so a family that does not is unaffected.
  *
  * Several handlers may be registered at once, each claiming different edges: a home
  * screen wants the bottom edge for its app drawer while the shade holds the top. Two
@@ -101,10 +106,10 @@ Singleton {
             handler.begin(origin, screenName);
     }
 
-    function update(origin, screenName, travel, velocity) {
+    function update(origin, screenName, travel, velocity, dx, dy) {
         const handler = root.handlerFor(origin);
         if (handler)
-            handler.update(origin, screenName, travel, velocity);
+            handler.update(origin, screenName, travel, velocity, dx, dy);
     }
 
     function release(origin, velocity) {

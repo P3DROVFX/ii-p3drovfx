@@ -561,7 +561,11 @@ Singleton {
         if (py >= height - edge)
             return "bottomEdge";
 
-        return "";
+        // Anything else is the body of the screen. Unlike an edge this has no binding and
+        // no fixed axis: it exists only so a family can claim a free 2D drag there — the
+        // home screen swiping between workspaces. onTouchDown drops it unless a handler
+        // has claimed it, so nothing changes for a family that has not.
+        return "surface";
     }
 
     function actionForOrigin(origin) {
@@ -605,6 +609,12 @@ Singleton {
         var invSqrt2 = 0.7071067811865475;
 
         switch (activeOrigin) {
+        case "surface":
+            // No axis to lock to, so report the distance travelled along whichever axis is
+            // longer and leave offAxis at zero. That keeps the direction-tolerance and
+            // reverse-direction guards below inert for surface drags, where "backwards" is
+            // a direction the handler may well want, rather than a cancelled gesture.
+            return { primary: Math.max(Math.abs(dx), Math.abs(dy)), offAxis: 0 };
         case "leftEdge":
             return { primary: dx, offAxis: Math.abs(dy) };
         case "rightEdge":
@@ -684,6 +694,12 @@ Singleton {
         if (origin === "") {
             return;
         }
+
+        // The body of the screen is not a gesture zone by default. Without this every touch
+        // anywhere would arm the recogniser, and the shell would be tracking drags inside
+        // application windows for nothing.
+        if (origin === "surface" && !TouchGestureDragRegistry.claims(origin))
+            return;
 
         var actionId = actionForOrigin(origin);
         if (!actionId || actionId === "none")
@@ -768,7 +784,10 @@ Singleton {
 
         gestureProgressChanged(activeScreenName, activeOrigin, activeActionId, progress, primaryTravel);
 
-        TouchGestureDragRegistry.update(activeOrigin, activeScreenName, primaryTravel, currentVelocity());
+        // dx/dy as well as the scalar travel: an edge handler only needs how far along its
+        // one axis the finger has gone, but a surface handler has to know which way.
+        TouchGestureDragRegistry.update(activeOrigin, activeScreenName, primaryTravel,
+                                        currentVelocity(), px - startX, py - startY);
     }
 
     function onTouchUp(event) {
