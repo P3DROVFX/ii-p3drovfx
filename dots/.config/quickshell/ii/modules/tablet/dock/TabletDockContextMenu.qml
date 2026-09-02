@@ -43,6 +43,35 @@ Loader {
 
     Component.onDestruction: TransientLayerRegistry.remove("tabletDockContextMenu")
 
+    // ── Split ───────────────────────────────────────────────────────────────
+    readonly property int activeWorkspace: Number(HyprlandData.activeWorkspace?.id ?? -1)
+    readonly property bool activeWorkspaceOccupied: root.activeWorkspace > 0
+        && HyprlandData.hyprlandClientsForWorkspace(root.activeWorkspace).length > 0
+
+    /// The window to move, if this app already has one. Empty means "launch it instead".
+    readonly property string splitTarget: {
+        if (root.appToplevels.length === 0)
+            return root.desktopEntry ? "launch" : "";
+        const raw = String(root.appToplevels[0]?.HyprlandToplevel?.address ?? "").trim();
+        if (raw.length === 0)
+            return root.desktopEntry ? "launch" : "";
+        return raw.startsWith("0x") ? raw : `0x${raw}`;
+    }
+
+    function openBesideCurrent() {
+        const workspace = root.activeWorkspace;
+        if (workspace <= 0)
+            return;
+        if (root.splitTarget === "launch") {
+            // A new window lands on the focused workspace on its own, so launching is the
+            // whole operation — there is nothing to move yet.
+            root.desktopEntry?.execute();
+            return;
+        }
+        Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${workspace}, follow = false, window = "address:${root.splitTarget}" })`);
+        Hyprland.dispatch(`hl.dsp.focus({ window = "address:${root.splitTarget}" })`);
+    }
+
     active: false
     visible: active
 
@@ -119,6 +148,25 @@ Loader {
                     label: Translation.tr("Launch"),
                     trigger: () => root.desktopEntry?.execute()
                 });
+                /**
+                 * Picking the second app of a split, with a finger, from the dock.
+                 *
+                 * The audit wanted this as a drag onto a half of the screen. That needs drop
+                 * zones, a drag proxy and live geometry feedback — a lot of machinery for a
+                 * choice this menu is already open to take. Hyprland tiles two windows that
+                 * share a workspace, so the whole feature is "put this app where the other
+                 * one is": raise it there if it is already running, launch it there if not.
+                 *
+                 * Only offered when there is something to split with. On an empty workspace
+                 * this is a plain launch, which the row above already is.
+                 */
+                if (root.splitTarget.length > 0 && root.activeWorkspaceOccupied) {
+                    entries.push({
+                        symbol: "splitscreen",
+                        label: Translation.tr("Open beside current app"),
+                        trigger: () => root.openBesideCurrent()
+                    });
+                }
                 if (root.appId.length > 0) {
                     entries.push({
                         symbol: "live_tv",
