@@ -162,6 +162,47 @@ Item {
 
     onGridEntriesChanged: root.applyGridDiff(root.gridEntries)
 
+    // ── A–Z index ───────────────────────────────────────────────────────────
+    /**
+     * Where each letter starts in the grid, for the scrubber down the right-hand side.
+     *
+     * A few hundred apps in an alphabetical grid is a long way to drag a finger to reach
+     * anything past the middle of the alphabet, and this family has no scrollbar to throw a
+     * thumb at. Android's launcher solves it with a letter rail; so does this.
+     *
+     * Only the applications are indexed. The shell's own surfaces lead the grid in their own
+     * order, so letting them claim letters would send "A" to the top of the list rather than
+     * to the applications that begin with it.
+     */
+    readonly property bool alphabetIndexAvailable: root.query.trim().length === 0
+        && (root.sortMode === "name" || root.sortMode === "nameDesc")
+        && root.gridEntries.length > 40
+
+    readonly property var alphabetIndex: {
+        if (!root.alphabetIndexAvailable)
+            return [];
+        const firstIndexFor = {};
+        const inOrder = [];
+        for (let i = 0; i < root.gridEntries.length; i++) {
+            const row = root.gridEntries[i];
+            if ((row.systemAppId ?? "").length > 0)
+                continue;
+            const name = String(row.name ?? "").trim();
+            if (name.length === 0)
+                continue;
+            // Fold the accent off so "Ãpp" files under A rather than under a letter with no
+            // rail entry, and bucket everything non-alphabetic under one heading.
+            const folded = name.charAt(0).toLocaleUpperCase()
+                .normalize("NFD").replace(/[̀-ͯ]/g, "");
+            const letter = /^[A-Z]$/.test(folded) ? folded : "#";
+            if (firstIndexFor[letter] === undefined) {
+                firstIndexFor[letter] = i;
+                inOrder.push({ letter: letter, index: i });
+            }
+        }
+        return inOrder;
+    }
+
     /**
      * Reconcile the grid's model with `rows` in place, so the view can animate.
      *
@@ -749,7 +790,9 @@ Item {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                anchors.rightMargin: body.sideColumnWidth > 0 ? body.sideColumnWidth + 24 : 0
+                anchors.rightMargin: body.sideColumnWidth > 0
+                    ? body.sideColumnWidth + 24
+                    : (letterRail.width > 0 ? letterRail.width + 8 : 0)
                 visible: root.activeToolId.length === 0
                 enabled: visible
 
@@ -854,6 +897,78 @@ Item {
                                 root.openAppMenu(appTile, appCell.modelData.entry);
                         }
                     }
+                }
+            }
+
+            // ── A–Z scrubber ────────────────────────────────────────────────
+            // A rail rather than a scrollbar: the target is a letter, not a position, and a
+            // letter is something you can aim a thumb at. Dragging scrubs, so finding "S" is
+            // one gesture instead of a tap and a look.
+            Item {
+                id: letterRail
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: body.fadeSize
+                width: root.alphabetIndexAvailable && body.sideColumnWidth < 1 ? letterRailWidth : 0
+                visible: width > 0 && root.activeToolId.length === 0
+
+                readonly property real letterRailWidth: Math.max(28, Math.round(root.tileWidth * 0.22))
+                readonly property real rowHeight: root.alphabetIndex.length > 0
+                    ? Math.min(30, letterRail.height / root.alphabetIndex.length) : 0
+
+                /// Turns a y inside the rail into a jump. Clamped, because a drag that runs
+                /// off either end should stick to the first or last letter rather than stop
+                /// responding.
+                function jumpTo(y) {
+                    if (root.alphabetIndex.length === 0 || letterRail.rowHeight <= 0)
+                        return;
+                    const slot = Math.floor((y - letters.y) / letterRail.rowHeight);
+                    const clamped = Math.max(0, Math.min(root.alphabetIndex.length - 1, slot));
+                    appGrid.positionViewAtIndex(root.alphabetIndex[clamped].index, GridView.Beginning);
+                    letterRail.activeSlot = clamped;
+                }
+
+                property int activeSlot: -1
+
+                Column {
+                    id: letters
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width
+
+                    Repeater {
+                        model: root.alphabetIndex
+
+                        delegate: Item {
+                            id: letterSlot
+                            required property var modelData
+                            required property int index
+
+                            width: letters.width
+                            height: letterRail.rowHeight
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: letterSlot.modelData.letter
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: letterRail.activeSlot === letterSlot.index ? Font.Bold : Font.Normal
+                                color: letterRail.activeSlot === letterSlot.index
+                                    ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onPressed: mouse => letterRail.jumpTo(mouse.y)
+                    onPositionChanged: mouse => {
+                        if (pressed)
+                            letterRail.jumpTo(mouse.y);
+                    }
+                    onReleased: letterRail.activeSlot = -1
+                    onCanceled: letterRail.activeSlot = -1
                 }
             }
 
