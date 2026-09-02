@@ -866,9 +866,29 @@ Item {
 
             GridView {
                 id: appGrid
-                /// Reserves the strip above. contentY rests at originY, which is where the
-                /// header block measures its own offset from.
+                /// Reserves the strip above. The resting position is `originY - topMargin`,
+                /// which is what headerBlock measures its own offset against.
                 topMargin: headerBlock.height
+
+                /**
+                 * Put the list back at the top when the strip above it changes size.
+                 *
+                 * A Flickable does not move its content when a margin changes, so a header
+                 * that measures itself after the view already exists leaves the list scrolled
+                 * down by exactly the height that appeared — which is why the drawer opened
+                 * on the middle of the app list with the categories already gone.
+                 *
+                 * Only while the user has not scrolled. After they have, where they are is
+                 * theirs, and a header resizing underneath them must not yank them back.
+                 */
+                property bool userScrolled: false
+                onMovementStarted: appGrid.userScrolled = true
+                onTopMarginChanged: appGrid.returnToTopIfUntouched()
+
+                function returnToTopIfUntouched() {
+                    if (!appGrid.userScrolled)
+                        appGrid.contentY = appGrid.originY - appGrid.topMargin;
+                }
                 /// How much of the top fade is in. Zero until something has actually scrolled
                 /// off the top, or the categories would sit washed out in their resting place.
                 property real topFade: Math.max(0, Math.min(1,
@@ -907,6 +927,7 @@ Item {
                 Component.onCompleted: {
                     root._gridReady = true;
                     root.applyGridDiff(root.gridEntries);
+                    appGrid.returnToTopIfUntouched();
                 }
 
                 // What makes a narrowing query read as the grid rearranging itself rather
@@ -1184,6 +1205,10 @@ Item {
                         return;
                     const slot = Math.floor((y - letters.y) / letterRail.rowHeight);
                     const clamped = Math.max(0, Math.min(root.alphabetIndex.length - 1, slot));
+                    // Counts as the user placing the list: positionViewAtIndex emits no
+                    // movement signal, so without this the next header resize would snap
+                    // them back to A.
+                    appGrid.userScrolled = true;
                     appGrid.positionViewAtIndex(root.alphabetIndex[clamped].index, GridView.Beginning);
                     letterRail.activeSlot = clamped;
                 }
