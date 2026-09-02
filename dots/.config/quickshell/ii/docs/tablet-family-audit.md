@@ -610,17 +610,17 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 | 5 | ✅ | Home workspace determinístico | 🔴 P0 | M | `tablet/navigation/TabletNavigation.qml`, `tablet/homeScreen/TabletHomeIcons.qml` |
 | 6 | ✅ | Seletor de panel family (superfície + entradas) | 🔴 P0 | M | novo em `modules/common/`, `settings/`, `welcome/`, `TabletSystemActionRow.qml` |
 | 7 | ✅ | `back` nas bordas laterais como default da tablet | 🟠 P1 | P | `common/Config.qml`, `TabletPoliciesDragHandler.qml` |
-| 8 | 🟨 | Menu do card de recentes — flutuar/tela cheia/fechar prontos; **dividir depende de Q3** | 🟠 P1 | M | `tablet/recents/`, `tablet/menu/TabletMenuCard.qml` |
+| 8 | ✅ | Menu do card de recentes (flutuar, tela cheia, dividir, fechar) | 🟠 P1 | M | `tablet/recents/`, `tablet/menu/TabletMenuCard.qml` |
 | 9 | ✅ | "Clear all" em recentes, com undo | 🟠 P1 | P | `tablet/recents/TabletRecentsContent.qml` |
 | 10 | ⬜ | Dock desenhada dentro de recentes | 🟠 P1 | M | `tablet/recents/`, `tablet/dock/TabletDockButton.qml` |
 | 11 | ✅ | Densidade da gaveta (~6–7 colunas, ícones maiores) | 🟠 P1 | P | `tablet/appDrawer/TabletAppDrawerContent.qml` |
 | 12 | ⬜ | Índice A–Z / rolagem rápida na gaveta | 🟠 P1 | M | `tablet/appDrawer/` |
-| 13 | ⬜ | Ferramentas hospedadas sem afordância de teclado | 🟠 P1 | M | contêiner de ferramentas + capability |
+| 13 | ✅ | Ferramentas hospedadas sem afordância de teclado | 🟠 P1 | M | contêiner de ferramentas + capability |
 | 14 | ✅ | OSK reserva espaço quando aberta por auto-show | 🟠 P1 | P | `common/onScreenKeyboard/`, `services/OskAutoShow.qml` |
-| 15 | ⬜ | Split-screen a partir de recentes / dock | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
+| 15 | 🟨 | Split-screen a partir de recentes (dock → arrastar: não feito) | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
 | 16 | ⬜ | Seta de feedback no gesto de voltar | 🟡 P2 | M | `ii/touchGestures/` |
 | 17 | ✅ | `back` fecha diálogos e menus antes de superfícies | 🟡 P2 | P | `tablet/navigation/TabletNavigation.qml` |
-| 18 | ⬜ | "↑ e segurar" → recentes (depende de Q1) | 🟡 P2 | M | `TabletAppDrawerDragHandler.qml`, `TouchGestureService.qml` |
+| 18 | ✅ | "↑ e segurar" → recentes, e ↑ = Home (Q1 respondida) | 🟡 P2 | M | `tablet/navigation/TabletBottomEdgeHandler.qml` |
 | 19 | ⬜ | Teclado dividido (split keyboard) | 🟡 P2 | G | `common/onScreenKeyboard/DeckContent.qml` |
 | 20 | ⬜ | Sugestões de app na gaveta e na home | 🟡 P2 | M | `tablet/appDrawer/`, `services/AppStats` |
 | 21 | ⬜ | Toque longo na home → wallpaper & estilo | 🟡 P2 | P | `tablet/homeScreen/TabletHomeIconsLayer.qml` |
@@ -639,10 +639,11 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 
 ### Estado em 2026-09-02
 
-Bloqueadores **1–6 fechados**, mais o lote pequeno **7, 9, 11, 14, 17** e o menu do card (8).
-Restam, na ordem: **10** (dock dentro de recentes), **12** (índice A–Z), **13** (ferramentas
-sem afordância de teclado, depende de Q4), **15** (split, depende de Q3), **18** (depende de
-Q1), e o resto do P2/P3.
+Bloqueadores **1–6 fechados**, o lote pequeno **7, 9, 11, 14, 17**, e — com as três decisões
+do §9 respondidas — **8, 13, 18** e a metade do **15** que cabia no escopo aprovado.
+
+Restam, na ordem: **10** (dock dentro de recentes), **12** (índice A–Z na gaveta), a metade
+de **15** que é arrastar da dock, **16** (seta de feedback do back) e o resto do P2/P3.
 
 Duas correções que a implementação impôs ao próprio documento:
 
@@ -676,18 +677,15 @@ o plano cita celulares como hardware alvo. Não estou pedindo para reabrir; esto
 que **é a maior divergência estrutural** em relação às duas referências de produto, e que ela
 cresce de custo a cada superfície nova que assume paisagem.
 
-**Q3 — Split-screen é escopo do shell?**
-O Hyprland já ladrilha. O que falta é a UI para escolher o par com o dedo (item 15). Isso
-significa o shell despachando layout, que é território do compositor. *Recomendação: fazer,
-limitado a "dividir com a janela ativa" a partir de recentes — sem gerenciador de layout
-próprio.*
+**Q3 — Split-screen é escopo do shell?** — ✅ **respondida: sim, limitado.**
+O menu do card de recentes tem "Dividir com o app atual", que despacha um *move* e deixa o
+Hyprland ladrilhar. Sem gerenciador de layout próprio. Arrastar da dock para dividir continua
+fora (parte do item 15 marcada 🟨).
 
-**Q4 — Ferramentas hospedadas: adaptar cada uma ou dar capability ao contêiner?**
-São ~14 painéis. Adaptar um a um é previsível e caro; uma capability `touchFirst` lida por
-cada painel é barata e espalha leitura de política por `modules/ii/`, o que o §3.1 do plano
-proíbe fora de `modules/common/`. *Recomendação: capability no contêiner + as ferramentas
-lendo do contêiner, não de `PanelFamily` — assim a política atravessa por parâmetro, como
-`baseCellHeight` já faz.*
+**Q4 — Ferramentas hospedadas: como adaptar?** — ✅ **respondida: só as dicas de teclado, por ora.**
+`SearchPanelScaffold.showKeyHintFooter` resolve a preferência guardada contra
+`PanelFamily.touchFirst`, e os ~14 painéis param de desenhar o rodapé de atalhos. Densidade
+das listas e o layout mestre-detalhe continuam em aberto.
 
 ---
 
