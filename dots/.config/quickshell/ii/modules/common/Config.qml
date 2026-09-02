@@ -1475,6 +1475,10 @@ Singleton {
                     property bool showNavigation: true
                     property list<string> navigationOrder: ["back", "home", "recents"]
                     property bool showRunningApps: true
+                    /// How many running apps the dock shows beside the pinned ones. 0 fits
+                    /// as many as the free space between the search pill and the navigation
+                    /// pill allows, which is what a dock on a wide screen should do.
+                    property int maximumRecents: 0
                     property bool showAppDrawerButton: true
                     // A search pill on the left of the dock, styled like the desktop's
                     // Android search widget. It opens the app drawer with the field already

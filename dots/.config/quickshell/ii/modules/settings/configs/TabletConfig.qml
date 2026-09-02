@@ -185,6 +185,22 @@ Item {
                 }
             }
 
+            ConfigSpinBox {
+                icon: "apps"
+                text: Translation.tr("Running apps shown (0 fits the dock)")
+                value: Config.options.tablet.dock.maximumRecents
+                from: 0
+                to: 24
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.dock.maximumRecents)
+                        Config.options.tablet.dock.maximumRecents = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("0 fills the free space between the search pill and the navigation pill. Anything that still does not fit is grouped into the last slot rather than dropped.")
+                }
+            }
+
             ConfigSwitch {
                 buttonIcon: "swap_horiz"
                 text: Translation.tr("Show workspace arrows")

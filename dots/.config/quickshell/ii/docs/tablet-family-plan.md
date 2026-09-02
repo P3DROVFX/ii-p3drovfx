@@ -716,6 +716,13 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] **Back virou ação vinculável.** O que "voltar" significa é específico da família e
       `modules/common` não pode importar uma para descobrir, então a tablet instala um
       handler, como já fazia com o keybind de policies.
+- [x] **A dock cabe quantos apps couberem.** O limite fixo de três deixava a maior parte de
+      uma dock de 1920px vazia enquanto escondia apps que tinham espaço. A fileira é
+      centralizada, então o que a limita é o flanco mais largo, dobrado. O que ainda não
+      couber vai para um grupo no último slot — desenhado como pasta do Android, 2x2 — em
+      vez de sumir: um app aberto sem sinal nenhum na dock é uma dock em que não se confia.
+      Tocar no grupo abre uma página com as linhas restantes, que **levantam a janela** em
+      vez de reexecutar o launcher.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.

@@ -63,7 +63,6 @@ PanelWindow {
     // Favourite apps and adaptive icon treatment are deliberately shared with the ii dock:
     // they are personal launcher choices, not a desktop-family preference.
     readonly property var pinnedApps: Config.options?.dock?.pinnedApps ?? []
-    readonly property int maximumRecents: 3
     readonly property bool showRunningApps: root.tabletDock?.showRunningApps ?? true
     readonly property bool showAppDrawerButton: root.tabletDock?.showAppDrawerButton ?? true
     readonly property bool searchBarEnabled: root.tabletDock?.showSearchBar ?? true
@@ -100,7 +99,8 @@ PanelWindow {
             : "hl.dsp.focus({ workspace = 'r-1' })");
     }
 
-    readonly property var recentApps: {
+    /// Everything running that is not already pinned, oldest first.
+    readonly property var runningApps: {
         if (!root.showRunningApps)
             return [];
         const pinnedNormalized = root.pinnedApps.map(id => TaskbarApps.normalizeAppId(id));
@@ -114,8 +114,49 @@ PanelWindow {
                 continue;
             seen.push(normalized);
         }
-        return seen.slice(-root.maximumRecents);
+        return seen;
     }
+
+    // ── How many running apps fit ───────────────────────────────────────────
+    // The row is centred, so what bounds it is the wider of the two flanks, doubled. A
+    // fixed count of three left most of a 1920px dock empty and hid apps that had room.
+    readonly property real appSlotWidth: root.appButtonSize + Appearance.sizes.elevationMargin
+    readonly property real dividerSlotWidth: root.showAppDividers
+        ? Appearance.sizes.elevationMargin * 1.25 : 0
+
+    readonly property real appRowSideReserve: {
+        const margin = Appearance.sizes.elevationMargin;
+        const arrow = root.workspaceArrowsRevealed ? root.appButtonSize + margin : 0;
+        const left = arrow + (root.searchRevealed ? searchBar.width + margin : 0) + margin;
+        const right = arrow + (root.navigationRevealed ? navigationPill.implicitWidth + margin : 0) + margin;
+        return Math.max(left, right);
+    }
+
+    readonly property int automaticRecentsLimit: {
+        let used = root.pinnedApps.length * root.appSlotWidth;
+        if (root.pinnedApps.length > 0)
+            used += root.dividerSlotWidth;
+        if (root.showAppDrawerButton)
+            used += root.appSlotWidth + root.dividerSlotWidth;
+        const free = root.width - root.appRowSideReserve * 2 - used;
+        return Math.max(0, Math.floor(free / root.appSlotWidth));
+    }
+
+    readonly property int configuredMaximumRecents: root.tabletDock?.maximumRecents ?? 0
+    readonly property int recentSlots: root.configuredMaximumRecents > 0
+        ? Math.min(root.configuredMaximumRecents, root.automaticRecentsLimit)
+        : root.automaticRecentsLimit
+
+    // The group takes the last slot rather than being appended past it, so it holds the app
+    // that would have been shown there plus everything opened since. Dropping them instead
+    // is what this replaces: the app was open and the dock gave no sign of it.
+    readonly property bool recentsOverflowing: root.runningApps.length > root.recentSlots
+    readonly property var recentApps: root.recentsOverflowing
+        ? root.runningApps.slice(0, Math.max(0, root.recentSlots - 1))
+        : root.runningApps
+    readonly property var overflowApps: root.recentsOverflowing
+        ? root.runningApps.slice(Math.max(0, root.recentSlots - 1))
+        : []
 
     readonly property var runningNormalized: {
         const running = [];
@@ -460,9 +501,25 @@ PanelWindow {
                     }
                 }
 
+                TabletDockOverflowButton {
+                    id: overflowButton
+                    visible: root.recentsOverflowing && root.overflowApps.length > 0
+                    appIds: root.overflowApps
+                    iconSize: root.appIconSize
+                    buttonSize: root.appButtonSize
+                    onActivated: overflowMenu.open()
+
+                    TabletDockOverflowMenu {
+                        id: overflowMenu
+                        anchorItem: overflowButton
+                        appIds: root.overflowApps
+                    }
+                }
+
                 Rectangle {
                     visible: root.showAppDividers && root.showAppDrawerButton
-                        && (root.pinnedApps.length > 0 || root.recentApps.length > 0)
+                        && (root.pinnedApps.length > 0 || root.recentApps.length > 0
+                            || root.recentsOverflowing)
                     Layout.preferredWidth: Appearance.sizes.elevationMargin / 8
                     Layout.preferredHeight: root.appButtonSize * 0.45
                     Layout.leftMargin: Appearance.sizes.elevationMargin / 2

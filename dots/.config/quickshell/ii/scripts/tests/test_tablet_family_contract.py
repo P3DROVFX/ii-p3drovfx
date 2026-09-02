@@ -339,6 +339,28 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Shared code must not import a family to find out what back means there.
         self.assertNotIn("qs.modules.tablet", registry)
 
+    def test_dock_fits_running_apps_to_the_space_and_groups_the_rest(self):
+        dock = read("modules/tablet/dock/TabletDockWindow.qml")
+        overflow = read("modules/tablet/dock/TabletDockOverflowButton.qml")
+        menu = read("modules/tablet/dock/TabletDockOverflowMenu.qml")
+
+        # A fixed three left most of a wide dock empty while hiding apps that had room.
+        self.assertNotIn("readonly property int maximumRecents: 3", dock)
+        self.assertIn("readonly property int automaticRecentsLimit:", dock)
+        # The row is centred, so what bounds it is the wider flank, doubled.
+        self.assertIn("return Math.max(left, right);", dock)
+        self.assertIn("root.appRowSideReserve * 2", dock)
+
+        # The group takes the last slot rather than being appended past it, so it holds the
+        # app that would have been shown there plus everything opened since.
+        self.assertIn("root.runningApps.slice(0, Math.max(0, root.recentSlots - 1))", dock)
+        self.assertIn("root.runningApps.slice(Math.max(0, root.recentSlots - 1))", dock)
+        self.assertIn("TabletDockOverflowButton {", dock)
+        self.assertIn("readonly property var previewIds: root.appIds.slice(0, 4)", overflow)
+        # Every app in the group is running by definition; re-running the launcher would
+        # open a second copy of what the user was trying to get back to.
+        self.assertIn("toplevel.activate()", menu)
+
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")
         states = read("GlobalStates.qml")
