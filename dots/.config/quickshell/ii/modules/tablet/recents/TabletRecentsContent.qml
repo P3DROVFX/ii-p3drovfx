@@ -82,6 +82,14 @@ Item {
         toplevel?.close();
     }
 
+    /// Snapshot the list first: closing walks it, and `windows` is a binding that
+    /// re-evaluates as each toplevel goes away.
+    function closeAll() {
+        const doomed = root.windows.slice();
+        for (const toplevel of doomed)
+            toplevel?.close();
+    }
+
     function newWorkspace() {
         // The Lua dispatcher API, as everything else in the shell uses; the classic
         // "workspace empty" string is a Lua syntax error here rather than a no-op. The host
@@ -170,42 +178,118 @@ Item {
             }
         }
 
-        // A workspace with nothing on it is Android's "new window" — the way out of recents
-        // that is not going back to something you already had.
-        Rectangle {
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: newWorkspaceRow.implicitWidth + 44
-            Layout.preferredHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
-            radius: height / 2
-            color: newWorkspaceArea.pressed ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1
+            spacing: 12
 
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            // A workspace with nothing on it is Android's "new window" — the way out of
+            // recents that is not going back to something you already had.
+            RecentsPill {
+                symbol: "add"
+                label: Translation.tr("New workspace")
+                onTriggered: root.newWorkspace()
             }
 
-            RowLayout {
-                id: newWorkspaceRow
-                anchors.centerIn: parent
-                spacing: 10
+            /**
+             * Android's "Clear all", with the one difference that matters here.
+             *
+             * On Android this needs no confirmation because the apps behind it save their
+             * own state; here it closes real editors with unsaved buffers in them. And an
+             * undo is not available: a closed window cannot be reopened, so offering one
+             * would be a lie. So the pill arms instead — the same second-deliberate-tap the
+             * home screen's remove badge uses — and disarms itself if the tap does not come.
+             */
+            RecentsPill {
+                id: clearAllPill
+                visible: root.windows.length > 0
+                symbol: clearAllPill.armed ? "warning" : "delete_sweep"
+                accent: clearAllPill.armed
+                label: clearAllPill.armed
+                    ? Translation.tr("Close %1 apps?").arg(root.windows.length)
+                    : Translation.tr("Clear all")
 
-                MaterialSymbol {
-                    text: "add"
-                    iconSize: 22
-                    color: Appearance.colors.colOnLayer1
+                property bool armed: false
+
+                Timer {
+                    id: disarmTimer
+                    interval: 3500
+                    onTriggered: clearAllPill.armed = false
                 }
 
-                StyledText {
-                    text: Translation.tr("New workspace")
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnLayer1
+                onTriggered: {
+                    if (!clearAllPill.armed) {
+                        clearAllPill.armed = true;
+                        disarmTimer.restart();
+                        return;
+                    }
+                    disarmTimer.stop();
+                    clearAllPill.armed = false;
+                    root.closeAll();
+                }
+
+                // Nothing left to clear, and nothing left to confirm.
+                Connections {
+                    target: root
+                    function onWindowsChanged() {
+                        if (root.windows.length === 0)
+                            clearAllPill.armed = false;
+                    }
                 }
             }
+        }
+    }
 
-            MouseArea {
-                id: newWorkspaceArea
-                anchors.fill: parent
-                onClicked: root.newWorkspace()
+    component RecentsPill: Rectangle {
+        id: pill
+
+        property string symbol: ""
+        property string label: ""
+        property bool accent: false
+
+        signal triggered
+
+        implicitWidth: pillRow.implicitWidth + 44
+        implicitHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
+        radius: height / 2
+        color: {
+            if (pill.accent)
+                return pillArea.pressed ? Appearance.colors.colErrorContainerActive : Appearance.colors.colErrorContainer;
+            return pillArea.pressed ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1;
+        }
+
+        readonly property color contentColor: pill.accent
+            ? Appearance.colors.colOnErrorContainer
+            : Appearance.colors.colOnLayer1
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+        Behavior on implicitWidth {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        RowLayout {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 10
+
+            MaterialSymbol {
+                text: pill.symbol
+                iconSize: 22
+                color: pill.contentColor
             }
+
+            StyledText {
+                text: pill.label
+                font.pixelSize: Appearance.font.pixelSize.normal
+                color: pill.contentColor
+            }
+        }
+
+        MouseArea {
+            id: pillArea
+            anchors.fill: parent
+            onClicked: pill.triggered()
         }
     }
 

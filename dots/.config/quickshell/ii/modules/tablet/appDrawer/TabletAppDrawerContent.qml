@@ -49,9 +49,17 @@ Item {
     readonly property real outerMargin: Math.max(20, Math.min(56, Math.round(root.width * 0.04)))
     readonly property real searchHeight: Math.max(52, Math.min(68, Math.round(root.height * 0.062)))
     readonly property var drawerConfig: Config.options?.tablet?.appDrawer
+    /// Tile size, and with it the column count, which is what actually decides whether this
+    /// reads as an app drawer or as a desktop menu.
+    ///
+    /// It used to work out at twelve or thirteen columns on a 1920px screen. A Pixel Tablet
+    /// shows six; twelve is the density of a program list you scan with a pointer, not of a
+    /// grid you hit with a thumb. Seven-ish columns with a bigger tile is the compromise for
+    /// a landscape-only family on a wide display — this is not a portrait phone, and six
+    /// columns across 1920px would leave tiles the size of playing cards.
     readonly property real tileWidth: (root.drawerConfig?.tileWidth ?? 0) > 0
         ? root.drawerConfig.tileWidth
-        : Math.max(96, Math.min(148, Math.round(root.width / 8)))
+        : Math.max(120, Math.min(200, Math.round(root.width / 7)))
     readonly property real tileHeight: Math.round(root.tileWidth * 1.18)
     readonly property real appIconSize: (root.drawerConfig?.iconSize ?? 0) > 0
         ? root.drawerConfig.iconSize

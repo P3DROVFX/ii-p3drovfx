@@ -46,7 +46,13 @@ PanelWindow {
     implicitHeight: root.dockHeight + root.shadowMargin
 
     // Edge to edge already, so there is no gap to leave for: the dock reserves exactly its height.
-    exclusiveZone: root.pinned ? root.dockHeight : 0
+    //
+    // Also reserved when the keyboard raised itself. A keyboard summoned by tapping a text
+    // field would otherwise cover the bottom of the screen — including, often, the field that
+    // summoned it — and Android has always pushed the content up instead. Auto-show only ever
+    // fires for a touch or a pen, so this needs no family condition: a mouse-driven session
+    // never reaches it.
+    exclusiveZone: (root.pinned || OskAutoShow.autoShown) ? root.dockHeight : 0
 
     WlrLayershell.namespace: "quickshell:osk"
     WlrLayershell.layer: WlrLayer.Overlay
