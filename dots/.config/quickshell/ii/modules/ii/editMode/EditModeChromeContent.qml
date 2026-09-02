@@ -79,7 +79,7 @@ Item {
     // ── The toolbar's cascade ────────────────────────────────────────────────
     // The pill rises out of the band as one piece (its `y` is a function of
     // `card`), and its contents used to arrive with it in a single flat frame:
-    // nine controls appearing at once, which reads as a screenshot rather than
+    // eight controls appearing at once, which reads as a screenshot rather than
     // as a toolbar being handed to you.
     //
     // Derived from `editProgress` rather than animated here, and that is the
@@ -91,7 +91,7 @@ Item {
     // scalar runs back down to zero. An animation of its own could do none of
     // that, and a declarative one whose target moves every frame restarts
     // every frame and never ticks at all (b710ef731).
-    readonly property real staggerStep: 0.05
+    readonly property real staggerStep: 0.06
     readonly property real revealSpan: 0.5
 
     function slotReveal(slot) {
@@ -164,76 +164,90 @@ Item {
             color: Appearance.colors.colOutlineVariant
         }
 
-        // The panel's toggle, on the catalogue it opens on.
-        IconAndTextToolbarButton {
-            id: drawerButton
+        // The panel's catalogues, as one group of chips: Widgets, Bar, Dock -
+        // and on the Lockscreen tab, Widgets and the lock's own switches. The
+        // chips mirror the panel's own tabs one for one, so the toolbar and
+        // the panel can never disagree about what there is to edit; a chip
+        // reads toggled while the panel is open on its catalogue, and a click
+        // on that chip closes the panel again. Bar and Dock open on their
+        // appearance pages - what the panel is for when you already know
+        // which surface you came to change - and the rest on their roots.
+        //
+        // One group rather than three loose buttons because the three used to
+        // read as unrelated actions ("Add widgets", "Bar", "Dock"), and a
+        // fourth would have made the toolbar wider than the card on a small
+        // screen. Grouped, they are one control with one job: which catalogue.
+        Rectangle {
+            id: sectionGroup
             opacity: root.slotReveal(2)
-            scale: (drawerButton.down ? 0.92 : 1) * root.slotScale(2)
+            scale: root.slotScale(2)
             Layout.alignment: Qt.AlignVCenter
-            iconText: "widgets"
-            text: Translation.tr("Add widgets")
-            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets"
-            onClicked: {
-                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets") {
-                    root.drawerToggleRequested();
-                    return;
+            implicitWidth: sectionRow.implicitWidth + 6
+            implicitHeight: Appearance.sizes.toolbarHeight - 12
+            radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            component SectionChip: IconAndTextToolbarButton {
+                id: chip
+                required property string section
+                property string page: ""
+                property string tooltip: ""
+                readonly property bool open: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === chip.section
+
+                Layout.fillHeight: false
+                implicitHeight: sectionGroup.implicitHeight - 6
+                scale: chip.down ? 0.92 : 1
+                toggled: chip.open
+                onClicked: {
+                    if (chip.open) {
+                        root.drawerToggleRequested();
+                        return;
+                    }
+                    root.drawerPageRequested(chip.section, chip.page);
                 }
-                root.drawerPageRequested("widgets", "");
-            }
-        }
 
-        // The bar's own quick settings. The catalogue is where every layout
-        // edit already lives, so this is an address in it rather than a second
-        // panel: position, height, corner and background, the handful of keys
-        // that change what the bar LOOKS like, without a trip to Settings.
-        // Hidden on the Lockscreen tab, where there is no bar to edit.
-        IconAndTextToolbarButton {
-            id: barButton
-            opacity: root.slotReveal(3)
-            scale: (barButton.down ? 0.92 : 1) * root.slotScale(3)
-            Layout.alignment: Qt.AlignVCenter
-            visible: !GlobalStates.editLockPreview
-            iconText: "dock_to_bottom"
-            text: Translation.tr("Bar")
-            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar"
-            onClicked: {
-                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar") {
-                    root.drawerToggleRequested();
-                    return;
+                StyledToolTip {
+                    requireOverlay: false
+                    text: chip.tooltip
                 }
-                root.drawerPageRequested("bar", "appearance");
             }
 
-            StyledToolTip {
-                requireOverlay: false
-                text: Translation.tr("Bar appearance and widgets")
-            }
-        }
+            Row {
+                id: sectionRow
+                anchors.centerIn: parent
+                spacing: 2
 
-        // The dock's, on the same terms: its page is where it is placed, how
-        // tall it is and how its icons are drawn, with the apps a step down.
-        // The dock used to be reachable only through the panel's own tabs -
-        // the one surface the mode edits that the toolbar did not name.
-        IconAndTextToolbarButton {
-            id: dockButton
-            opacity: root.slotReveal(4)
-            scale: (dockButton.down ? 0.92 : 1) * root.slotScale(4)
-            Layout.alignment: Qt.AlignVCenter
-            visible: !GlobalStates.editLockPreview
-            iconText: "dock"
-            text: Translation.tr("Dock")
-            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "dock"
-            onClicked: {
-                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "dock") {
-                    root.drawerToggleRequested();
-                    return;
+                SectionChip {
+                    section: "widgets"
+                    iconText: "widgets"
+                    text: Translation.tr("Widgets")
+                    tooltip: GlobalStates.editLockPreview
+                        ? Translation.tr("Widgets on the lock screen")
+                        : Translation.tr("Desktop widgets")
                 }
-                root.drawerPageRequested("dock", "appearance");
-            }
-
-            StyledToolTip {
-                requireOverlay: false
-                text: Translation.tr("Dock appearance and apps")
+                SectionChip {
+                    visible: !GlobalStates.editLockPreview
+                    section: "bar"
+                    page: "appearance"
+                    iconText: "dock_to_bottom"
+                    text: Translation.tr("Bar")
+                    tooltip: Translation.tr("Bar appearance and widgets")
+                }
+                SectionChip {
+                    visible: !GlobalStates.editLockPreview
+                    section: "dock"
+                    page: "appearance"
+                    iconText: "dock"
+                    text: Translation.tr("Dock")
+                    tooltip: Translation.tr("Dock appearance and apps")
+                }
+                SectionChip {
+                    visible: GlobalStates.editLockPreview
+                    section: "lock"
+                    iconText: "lock"
+                    text: Translation.tr("Lock screen")
+                    tooltip: Translation.tr("What the lock screen shows")
+                }
             }
         }
 
@@ -243,8 +257,8 @@ Item {
         // spend the words.
         IconToolbarButton {
             id: snapButton
-            opacity: root.slotReveal(5)
-            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(5)
+            opacity: root.slotReveal(3)
+            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(3)
             Layout.alignment: Qt.AlignVCenter
             // The guides ARE the feature - the dot lattice and the alignment
             // lines a dragged widget latches onto. The alignment glyph this
@@ -263,8 +277,8 @@ Item {
         }
 
         Rectangle {
-            opacity: root.slotReveal(6)
-            scale: root.slotScale(6)
+            opacity: root.slotReveal(4)
+            scale: root.slotScale(4)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             Layout.rightMargin: 4
@@ -283,8 +297,8 @@ Item {
             // RippleButton dims a disabled button through this same property,
             // and an outer binding replaces its rule rather than joining it -
             // so the dimming is multiplied back in by hand.
-            opacity: root.slotReveal(7) * (undoButton.enabled ? 1 : 0.4)
-            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(7)
+            opacity: root.slotReveal(5) * (undoButton.enabled ? 1 : 0.4)
+            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(5)
             Layout.alignment: Qt.AlignVCenter
             text: "undo"
             enabled: GlobalStates.editCanUndo
@@ -298,8 +312,8 @@ Item {
 
         IconToolbarButton {
             id: redoButton
-            opacity: root.slotReveal(8) * (redoButton.enabled ? 1 : 0.4)
-            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(8)
+            opacity: root.slotReveal(6) * (redoButton.enabled ? 1 : 0.4)
+            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(6)
             Layout.alignment: Qt.AlignVCenter
             text: "redo"
             enabled: GlobalStates.editCanRedo
@@ -317,8 +331,8 @@ Item {
         // rendered flat beside the title it read as a second label.
         IconAndTextToolbarButton {
             id: doneButton
-            opacity: root.slotReveal(9)
-            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(9)
+            opacity: root.slotReveal(7)
+            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(7)
             Layout.alignment: Qt.AlignVCenter
             iconText: "done"
             text: Translation.tr("Done")
