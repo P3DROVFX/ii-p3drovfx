@@ -55,6 +55,20 @@ class BarMediaWidgetContractTest(unittest.TestCase):
             self.assertNotIn("MouseArea {", body, name)
             self.assertNotIn("mediaPopupRect", body, name)
 
+    def test_cover_art_is_refreshed_for_an_already_active_track(self):
+        base = self.widget(BASE)
+        self.assertIn("function refreshArt()", base)
+        self.assertIn("onArtUrlChanged: root.refreshArt()", base)
+        completed = base.split("Component.onCompleted:", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("root.refreshArt()", completed)
+
+    def test_lyric_rows_do_not_depend_on_an_id_in_the_caller(self):
+        scroller = self.read("modules/common/widgets/LyricScroller.qml")
+        line = self.read("modules/common/widgets/LyricLine.qml")
+        delegate = scroller.split("LyricLine {", 1)[1].split("\n            }", 1)[0]
+        self.assertIn("rowHeight: root.rowHeight", delegate)
+        self.assertNotIn("lyricScroller.rowHeight", line)
+
     def test_preview_instances_cannot_hijack_the_popup_anchor(self):
         base = self.widget(BASE)
         self.assertIn("property bool previewMode: false", base)

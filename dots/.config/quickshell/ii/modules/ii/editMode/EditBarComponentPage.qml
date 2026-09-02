@@ -107,6 +107,22 @@ StyledFlickable {
             }
         }
 
+        // The variants above are the ones the registry publishes. Several
+        // widgets carry more inside their own Settings page - the weather
+        // widget's families, the clock's formats - and this page is not the
+        // place to mirror a whole config tree, so it points at it instead.
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            first: true
+            last: true
+            visible: root.componentId !== ""
+            symbol: "settings"
+            title: Translation.tr("All of this widget's settings")
+            trailingKind: "chevron"
+            onActivated: GlobalStates.openSettingsPage(root.info?.pageId ?? "bar")
+        }
+
         Item {
             Layout.fillWidth: true
             implicitHeight: 8
