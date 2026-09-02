@@ -31,6 +31,9 @@ FloatingWindow {
         : null
 
     title: root.app ? "ii Tablet: " + Translation.tr(root.app.name) : "ii Tablet"
+    // Only a fallback. The window rule deliberately does not float these, so a tiled app
+    // takes the whole work area and this size is never used; a compositor without the rule
+    // gets something large rather than a default-sized box.
     implicitWidth: Math.round((root.screen?.width ?? 1280) * 0.86)
     implicitHeight: Math.round((root.screen?.height ?? 800) * 0.82)
     minimumSize: Qt.size(Appearance.sizes.minimumTouchTarget * 10,

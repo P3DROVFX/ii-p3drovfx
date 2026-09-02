@@ -144,7 +144,12 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Touch-sized action surfaces with the shared dynamic-corner behavior, not bare
         # text rows. Pointer users reach the exact same path via right click.
         self.assertIn("useDynamicRadius: true", menu)
-        self.assertIn("colBackground: (actionButton.modelData.destructive", menu)
+        # The rows themselves moved into the card every tablet menu is built from, so the
+        # behaviour is asserted where it now lives; the drawer still opts into it above.
+        card = read("modules/tablet/menu/TabletMenuCard.qml")
+        self.assertIn("property bool useDynamicRadius: true", card)
+        self.assertIn("buttonRadiusPressed: root.useDynamicRadius", card)
+        self.assertIn("Appearance.colors.colError", card)
         self.assertIn("acceptedButtons: Qt.LeftButton | Qt.RightButton", tile)
         self.assertIn("if (event.button === Qt.RightButton)", tile)
         self.assertIn("root.contextRequested()", tile)
@@ -360,6 +365,44 @@ class TabletFamilyContractTests(unittest.TestCase):
         # Every app in the group is running by definition; re-running the launcher would
         # open a second copy of what the user was trying to get back to.
         self.assertIn("toplevel.activate()", menu)
+
+    def test_every_tablet_menu_is_built_from_one_card(self):
+        card = read("modules/tablet/menu/TabletMenuCard.qml")
+        inline = read("modules/tablet/appDrawer/TabletInlineMenu.qml")
+        context = read("modules/tablet/dock/TabletDockContextMenu.qml")
+        overflow = read("modules/tablet/dock/TabletDockOverflowMenu.qml")
+
+        # Three menus with three radii, row heights and fonts meant the same gesture on two
+        # icons a centimetre apart produced two visibly different menus, two of them at
+        # desktop sizes on a surface meant for a fingertip.
+        for menu in (inline, context, overflow):
+            self.assertIn("TabletMenuCard {", menu)
+        # Rows are the whole target, and a fingertip-exact row is one you mis-tap.
+        self.assertIn("Math.max(Appearance.sizes.minimumTouchTarget + 8, 56)", card)
+        self.assertIn("font.pixelSize: Appearance.font.pixelSize.normal", card)
+        # A menu taller than the screen is a menu with unreachable entries.
+        self.assertIn("property real maximumHeight: 0", card)
+        self.assertIn("Flickable {", card)
+
+    def test_bar_widgets_scale_their_insides_with_the_bar(self):
+        appearance = read("modules/common/Appearance.qml")
+        workspaces = read("modules/ii/bar/widgets/workspaces/Workspaces.qml")
+        power = read("modules/ii/bar/widgets/power/ExpressivePowerButton.qml")
+        policies = read("modules/ii/bar/widgets/policies/ExpressivePoliciesPanelButton.qml")
+        classicPolicies = read("modules/ii/bar/widgets/policies/PoliciesPanelButton.qml")
+
+        # One ratio for all of them, and 1.0 at the 40px default, so the desktop is unchanged.
+        self.assertIn("readonly property real barContentScale:", appearance)
+        self.assertIn("readonly property real barReferenceHeight: 40", appearance)
+
+        # These sized the plate off the bar and left the glyph at its drawn size.
+        self.assertIn("Math.round(22 * root.contentScale)", workspaces)
+        self.assertIn("Math.round(26 * root.contentScale)", workspaces)
+        self.assertIn("* root.contentScale)", power)
+        self.assertIn("Math.round((root.vertical ? 28 : 22) * root.contentScale)", policies)
+        # This one did not follow the bar even on the outside.
+        self.assertNotIn("implicitWidth: 42", classicPolicies)
+        self.assertIn("Math.round(42 * root.contentScale)", classicPolicies)
 
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")

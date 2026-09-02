@@ -600,8 +600,10 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 ### Fase 5 — Application windows (D6) 🟡
 
 - [x] `modules/tablet/appWindow/TabletAppWindow.qml` é uma `FloatingWindow` (xdg toplevel),
-      não uma `PanelWindow` Overlay: Hyprland abre o módulo numa workspace vazia e aplica as
-      regras de janela `ii Tablet: …` para flutuar e centralizar. A barra própria oferece
+      não uma `PanelWindow` Overlay: Hyprland abre o módulo numa workspace vazia e ele
+      **encaixa** (tiling) como qualquer aplicação — flutuar e centralizar deixava uma
+      ferramenta da shell numa caixinha centrada numa workspace vazia enquanto todo app real
+      na mesma workspace a preenche. A barra própria oferece
       **voltar** à esquerda e **fechar** à direita, pois ambos são necessários num fluxo de
       tablet mesmo quando o compositor não expõe decorações; dismiss por clique fora e Escape
       continuam removidos.
@@ -723,6 +725,15 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
       vez de sumir: um app aberto sem sinal nenhum na dock é uma dock em que não se confia.
       Tocar no grupo abre uma página com as linhas restantes, que **levantam a janela** em
       vez de reexecutar o launcher.
+- [x] **Um card só para todo menu da família.** Eram três — long-press da dock, long-press
+      da gaveta e a página de overflow — com três raios, alturas de linha e fontes, e dois
+      deles em tamanho de desktop numa superfície feita para o dedo. `TabletMenuCard` é a
+      única superfície de menu agora; onde ela é posicionada continua sendo problema de quem
+      a abre, porque a gaveta pode desenhar dentro de si e a camada da dock é curta demais.
+- [x] **Widgets da bar acompanham a altura dela por dentro.** A maioria dimensiona a placa
+      externa pela bar e deixa o glifo interno no número com que foi desenhado, então uma
+      bar touch-first virava placa grande com ícone pequeno. `Appearance.sizes.barContentScale`
+      é a mesma razão para todos, e é 1.0 no padrão de 40px.
 - [ ] Diálogos da shade: largura já é parametrizada (`WindowDialog.preferredDialogWidth`
       via `DialogHostLoader.dialogWidth`, 560–980 na tablet). Falta revisar o layout
       *interno* — listas e linhas ainda desenhadas para a sidebar estreita.

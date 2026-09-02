@@ -95,8 +95,16 @@ Item {
     property var monitorWindows
     readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
 
-    property int individualIconBoxHeight: 22
-    property int iconBoxWrapperSize: 26
+    // Every measurement in this widget derives from these two, so scaling them scales the
+    // pills, the active indicator and the window dots together. They were drawn for the
+    // 40px bar and stayed that size on a taller one, which is what left the workspace row
+    // looking like a strip of desktop pills floating in a touch-sized bar.
+    readonly property real contentScale: root.vertical
+        ? Appearance.sizes.verticalBarContentScale
+        : Appearance.sizes.barContentScale
+
+    property int individualIconBoxHeight: Math.round(22 * root.contentScale)
+    property int iconBoxWrapperSize: Math.round(26 * root.contentScale)
     property int workspaceDotSize: 4
     property real iconRatio: 0.8
     property bool showIcons: Config.options.bar.workspaces.showAppIcons

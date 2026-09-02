@@ -5,8 +5,8 @@ import Quickshell.Hyprland
 
 import qs
 import qs.modules.common
-import qs.modules.common.dock
 import qs.modules.common.widgets
+import qs.modules.tablet.menu
 import qs.services
 
 /**
@@ -104,16 +104,20 @@ Loader {
             visible: menuContent.visible
         }
 
-        Rectangle {
+        TabletMenuCard {
             id: menuContent
 
             anchors.centerIn: parent
-            color: Config.options.appearance.transparency.popups
-                ? Appearance.colors.colLayer0
-                : Appearance.m3colors.m3surfaceContainer
-            radius: Appearance.rounding.normal
-            implicitWidth: menuColumn.implicitWidth + Appearance.sizes.elevationMargin * 2
-            implicitHeight: menuColumn.implicitHeight + Appearance.sizes.elevationMargin * 2
+            headerText: Translation.tr("More open apps")
+            headerSymbol: "apps"
+            menuWidth: 340
+            actions: root.appIds.map(appId => ({
+                iconPath: Quickshell.iconPath(TaskbarApps.getCachedDesktopEntry(appId)?.icon
+                    ?? AppSearch.guessIcon(appId), "image-missing"),
+                label: TaskbarApps.getCachedDesktopEntry(appId)?.name ?? appId,
+                trigger: () => root.raiseApp(appId)
+            }))
+
             opacity: 0
             scale: 0.8
 
@@ -129,66 +133,6 @@ Loader {
                 if (opacity === 0 && root.closing) {
                     root.active = false;
                     root.closing = false;
-                }
-            }
-
-            ColumnLayout {
-                id: menuColumn
-                anchors.fill: parent
-                anchors.margins: Appearance.sizes.elevationMargin
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Appearance.sizes.elevationMargin / 2
-                    text: Translation.tr("More open apps")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnLayer0
-                }
-
-                Repeater {
-                    model: root.appIds
-
-                    delegate: RippleButton {
-                        id: appRowButton
-                        required property string modelData
-
-                        Layout.fillWidth: true
-                        // A finger, not a pointer: the row is the target, all of it.
-                        implicitHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
-                        implicitWidth: Math.max(260, rowContent.implicitWidth + 32)
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: "transparent"
-                        colBackgroundHover: Appearance.colors.colLayer1Hover
-                        colBackgroundActive: Appearance.colors.colLayer1Active
-                        colRipple: Appearance.colors.colLayer1Active
-                        releaseAction: () => root.raiseApp(appRowButton.modelData)
-
-                        contentItem: RowLayout {
-                            id: rowContent
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 14
-                            spacing: 12
-
-                            DockIcon {
-                                Layout.preferredWidth: Appearance.font.pixelSize.huge
-                                Layout.preferredHeight: Appearance.font.pixelSize.huge
-                                appId: appRowButton.modelData
-                                isRunning: true
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: TaskbarApps.getCachedDesktopEntry(appRowButton.modelData)?.name
-                                    ?? appRowButton.modelData
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colOnLayer0
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
                 }
             }
         }

@@ -811,6 +811,16 @@ Singleton {
             ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
             : Config.options.bar.sizes.height
         property real barHeight: BarInteraction.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // Bar widgets were drawn against a 40px horizontal bar and a 44px vertical one, and
+        // most of them size their outer plate off the bar while leaving the glyph inside at
+        // the number it was drawn with. On a touch-first family the bar is taller than that
+        // by definition, so those widgets became big plates around small icons. Scaling the
+        // insides by the same ratio is a no-op at the default and correct everywhere else.
+        readonly property real barReferenceHeight: 40
+        readonly property real barReferenceWidth: 44
+        readonly property real barContentScale: root.sizes.baseBarHeight / root.sizes.barReferenceHeight
+        readonly property real verticalBarContentScale: root.sizes.verticalBarWidth / root.sizes.barReferenceWidth
+
         property real barCenterSideModuleWidth: Config.options?.bar.verbose ? 360 : 140
         property real barCenterSideModuleWidthShortened: 280
         property real barCenterSideModuleWidthHellaShortened: 190

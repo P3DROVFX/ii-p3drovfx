@@ -2,12 +2,11 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import Quickshell.Widgets
-
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.tablet.menu
 
 /**
  * A menu drawn inside the surface that opened it, growing out of the item it belongs to.
@@ -20,6 +19,8 @@ import qs.modules.common.widgets
  *
  * Serves both the sort control and the long-press app menu, which is why the actions are a
  * plain list of `{ symbol, label, checked, destructive, trigger }` rather than fixed rows.
+ * The card itself is TabletMenuCard, shared with the dock's two menus so the same gesture on
+ * two icons a centimetre apart cannot produce two different-looking menus.
  */
 Item {
     id: root
@@ -70,24 +71,28 @@ Item {
         onClicked: root.close()
     }
 
-    Rectangle {
+    TabletMenuCard {
         id: card
 
         // Clamped so a tile near an edge still gets a whole menu rather than a clipped one.
-        x: Math.max(root.edgeMargin, Math.min(root.width - card.width - root.edgeMargin,
-            root.originX - card.width / 2))
-        y: Math.max(root.edgeMargin, Math.min(root.height - card.height - root.edgeMargin,
-            root.originY))
-        width: root.menuWidth
-        height: Math.min(root.maximumMenuHeight,
-            root.cardPadding * 2 + root.headerHeight
-                + (root.headerHeight > 0 ? root.rowSpacing : 0)
-                + actionsColumn.implicitHeight)
+        x: Math.max(root.edgeMargin,
+            Math.min(root.width - card.width - root.edgeMargin, root.originX - card.width / 2))
+        y: Math.max(root.edgeMargin,
+            Math.min(root.height - card.height - root.edgeMargin, root.originY))
 
-        radius: Appearance.rounding.large
-        color: Config.options.appearance.transparency.popups
-            ? Appearance.colors.colLayer1
-            : Appearance.m3colors.m3surfaceContainer
+        actions: root.actions
+        headerText: root.headerText
+        headerIconPath: root.headerIconPath
+        headerSymbol: root.headerSymbol
+
+        // The drawer has a whole screen to size from; the dock's menus do not. The shape,
+        // the spacing and the type come from the card either way.
+        useDynamicRadius: true
+        rowHeight: root.rowHeight
+        menuWidth: root.menuWidth
+        menuPadding: root.cardPadding
+        rowSpacing: root.rowSpacing
+        maximumHeight: root.maximumMenuHeight
 
         opacity: root.opened ? 1 : 0
         scale: root.opened ? 1 : 0.85
@@ -101,129 +106,6 @@ Item {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(card)
         }
 
-        ColumnLayout {
-            id: menuColumn
-            anchors.fill: parent
-            anchors.margins: root.cardPadding
-            spacing: root.rowSpacing
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: root.headerHeight
-                visible: root.headerText.length > 0
-                spacing: 14
-
-                IconImage {
-                    visible: root.headerIconPath.length > 0
-                    implicitSize: Math.round(root.rowHeight * 0.52)
-                    source: root.headerIconPath
-                }
-
-                MaterialSymbol {
-                    visible: root.headerSymbol.length > 0
-                    text: root.headerSymbol
-                    iconSize: Math.round(root.rowHeight * 0.46)
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.headerText
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnLayer1
-                    elide: Text.ElideRight
-                }
-            }
-
-            StyledFlickable {
-                id: actionsFlickable
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                contentWidth: width
-                contentHeight: actionsColumn.implicitHeight
-                flickableDirection: Flickable.VerticalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                clip: true
-                interactive: contentHeight > height
-
-                ColumnLayout {
-                    id: actionsColumn
-                    width: actionsFlickable.width
-                    spacing: root.rowSpacing
-
-                    Repeater {
-                        model: root.actions
-
-                        delegate: RippleButton {
-                            id: actionButton
-                            required property var modelData
-
-                            Layout.fillWidth: true
-                            implicitHeight: root.rowHeight
-                            useDynamicRadius: true
-                            toggled: actionButton.modelData.checked ?? false
-                            colBackground: (actionButton.modelData.destructive ?? false)
-                                ? Appearance.colors.colErrorContainer
-                                : Appearance.colors.colLayer2
-                            colBackgroundHover: (actionButton.modelData.destructive ?? false)
-                                ? Appearance.colors.colErrorContainerHover
-                                : Appearance.colors.colLayer2Hover
-                            colBackgroundActive: (actionButton.modelData.destructive ?? false)
-                                ? Appearance.colors.colErrorContainerActive
-                                : Appearance.colors.colLayer2Active
-                            colBackgroundToggled: Appearance.colors.colPrimaryContainer
-                            colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
-                            colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
-                            colRipple: (actionButton.modelData.destructive ?? false)
-                                ? Appearance.colors.colErrorContainerActive
-                                : Appearance.colors.colLayer2Active
-
-                            readonly property color contentColor: (actionButton.modelData.destructive ?? false)
-                                ? Appearance.colors.colOnErrorContainer
-                                : (actionButton.toggled
-                                    ? Appearance.colors.colOnPrimaryContainer
-                                    : Appearance.colors.colOnLayer2)
-
-                            releaseAction: () => {
-                                // Closed first: an action that opens another surface must not have
-                                // this one still sitting on top of it.
-                                root.close();
-                                actionButton.modelData.trigger?.();
-                            }
-
-                            contentItem: RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 18
-                                anchors.rightMargin: 18
-                                spacing: 16
-
-                                MaterialSymbol {
-                                    text: actionButton.modelData.symbol ?? "chevron_right"
-                                    iconSize: Math.round(root.rowHeight * 0.38)
-                                    color: actionButton.contentColor
-                                }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: actionButton.modelData.label ?? ""
-                                    font.pixelSize: Appearance.font.pixelSize.normal
-                                    color: actionButton.contentColor
-                                    elide: Text.ElideRight
-                                }
-
-                                MaterialSymbol {
-                                    visible: actionButton.toggled
-                                    text: "check"
-                                    iconSize: Appearance.font.pixelSize.larger
-                                    color: actionButton.contentColor
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        onActionTriggered: root.close()
     }
 }
