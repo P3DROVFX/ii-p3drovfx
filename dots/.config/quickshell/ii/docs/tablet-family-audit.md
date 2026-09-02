@@ -612,9 +612,9 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 | 7 | ✅ | `back` nas bordas laterais como default da tablet | 🟠 P1 | P | `common/Config.qml`, `TabletPoliciesDragHandler.qml` |
 | 8 | ✅ | Menu do card de recentes (flutuar, tela cheia, dividir, fechar) | 🟠 P1 | M | `tablet/recents/`, `tablet/menu/TabletMenuCard.qml` |
 | 9 | ✅ | "Clear all" em recentes, com undo | 🟠 P1 | P | `tablet/recents/TabletRecentsContent.qml` |
-| 10 | ⬜ | Dock desenhada dentro de recentes | 🟠 P1 | M | `tablet/recents/`, `tablet/dock/TabletDockButton.qml` |
+| 10 | ✅ | Dock desenhada dentro de recentes | 🟠 P1 | M | `tablet/recents/`, `tablet/dock/TabletDockButton.qml` |
 | 11 | ✅ | Densidade da gaveta (~6–7 colunas, ícones maiores) | 🟠 P1 | P | `tablet/appDrawer/TabletAppDrawerContent.qml` |
-| 12 | ⬜ | Índice A–Z / rolagem rápida na gaveta | 🟠 P1 | M | `tablet/appDrawer/` |
+| 12 | ✅ | Índice A–Z / rolagem rápida na gaveta | 🟠 P1 | M | `tablet/appDrawer/` |
 | 13 | ✅ | Ferramentas hospedadas sem afordância de teclado | 🟠 P1 | M | contêiner de ferramentas + capability |
 | 14 | ✅ | OSK reserva espaço quando aberta por auto-show | 🟠 P1 | P | `common/onScreenKeyboard/`, `services/OskAutoShow.qml` |
 | 15 | 🟨 | Split-screen a partir de recentes (dock → arrastar: não feito) | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
@@ -623,27 +623,56 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 | 18 | ✅ | "↑ e segurar" → recentes, e ↑ = Home (Q1 respondida) | 🟡 P2 | M | `tablet/navigation/TabletBottomEdgeHandler.qml` |
 | 19 | ⬜ | Teclado dividido (split keyboard) | 🟡 P2 | G | `common/onScreenKeyboard/DeckContent.qml` |
 | 20 | ⬜ | Sugestões de app na gaveta e na home | 🟡 P2 | M | `tablet/appDrawer/`, `services/AppStats` |
-| 21 | ⬜ | Toque longo na home → wallpaper & estilo | 🟡 P2 | P | `tablet/homeScreen/TabletHomeIconsLayer.qml` |
+| 21 | ⏸️ | Toque longo na home → wallpaper & estilo — **adiado, ver nota** | 🟡 P2 | P | `tablet/homeScreen/TabletHomeIconsLayer.qml` |
 | 22 | ⬜ | Pastas e arrastar ícone entre páginas | 🟡 P2 | M | `tablet/homeScreen/` |
 | 23 | ⬜ | Hub Mode (dock de carregamento vira display ambiente) | 🟡 P2 | G | novo; reusa `OledSaver` + widgets |
 | 24 | ⬜ | Alça de toque no divisor de janelas tiled | 🟡 P2 | M | fora do shell — precisa de decisão |
-| 25 | ⬜ | Ícones dentro das trilhas dos sliders da shade | 🔵 P3 | P | `common/quickToggles/` |
-| 26 | ⬜ | Escala de foco e centralização no carrossel de recentes | 🔵 P3 | P | `tablet/recents/` |
+| 25 | ❌ | ~~Ícones nas trilhas dos sliders~~ — **não era defeito**, já existem | — | — | — |
+| 26 | ✅ | Marcar o app atual em recentes (escala/centralização recusadas — ver nota) | 🔵 P3 | P | `tablet/recents/` |
 | 27 | ⬜ | Bar sem workspaces numerados em família touch-first | 🔵 P3 | P | `settings/configs/BarConfig.qml`, defaults |
 | 28 | ⬜ | Quick-switch (arrastar de lado na base) | 🔵 P3 | G | serviço de gestos |
-| 29 | ⬜ | Sensibilidade da borda ajustável / por DPI | 🔵 P3 | P | `common/Config.qml`, `TabletConfig.qml` |
+| 29 | ❌ | ~~Sensibilidade da borda ajustável~~ — **não era defeito**, já tem três presets | — | — | — |
 | 30 | ⬜ | Haptics em toque longo e commit de gesto | 🔵 P3 | M | novo serviço |
 
 **Ordem de execução:** 1–6 (bloqueadores) → 7, 9, 11, 14, 17 (tudo pequeno, muito retorno) →
 4/8/10 fecham recentes → 12, 13, 15 → o resto.
+
+### Três achados retirados
+
+Auditar a partir dos prints, sem abrir o código correspondente, produziu três alarmes falsos.
+Ficam registrados porque um documento que só lista acertos não é auditável.
+
+- **Item 25 — ícones dos sliders.** `AndroidSliderWidgetBase` já desenha o glifo, e ele
+  *acompanha o handle* quando o valor passa de 82%. O print mostrava o ícone na ponta direita
+  porque o valor estava baixo, não porque faltava ícone.
+- **Item 29 — sensibilidade da borda.** `widgets/TouchSensitivityConfig.qml` já expõe
+  `edgeWidth`, `cornerSize`, `minDistance` e `commitDistance`, com os três presets
+  (Balanced / Strict / Relaxed) que a auditoria pediu. Alcançável em Tablet › Gestos › Edge
+  and corner bindings. A varredura original só olhou o default no `Config.qml`.
+- **Item 26 — escala de foco.** Pedido como no Android, mas o AGENTS.md proíbe border e trata
+  diferença de tamanho permanente como decoração, e o carrossel é alinhado à esquerda em vez
+  de centrado. Entregue como preenchimento do header do card atual, que é a mesma informação
+  no vocabulário do resto do shell.
+
+### Item 21 — adiado deliberadamente
+
+Toque longo no wallpaper abrindo papel de parede é barato em código e caro em risco: a
+superfície é o `WidgetCanvas`, e o plano documenta três armadilhas de input já pagas ali
+(`z: -1` roubando o press, `preventStealing` no arrasto do ícone, long-press terminando em
+`clicked` e desarmando o badge). Sem touchscreen para validar, mexer no reconhecedor de
+gestos dessa superfície é apostar contra três bugs que já custaram tempo uma vez.
 
 ### Estado em 2026-09-02
 
 Bloqueadores **1–6 fechados**, o lote pequeno **7, 9, 11, 14, 17**, e — com as três decisões
 do §9 respondidas — **8, 13, 18** e a metade do **15** que cabia no escopo aprovado.
 
-Restam, na ordem: **10** (dock dentro de recentes), **12** (índice A–Z na gaveta), a metade
-de **15** que é arrastar da dock, **16** (seta de feedback do back) e o resto do P2/P3.
+Depois disso: **10** (dock dentro de recentes), **12** (índice A–Z), **26** (marcar o app
+atual) — e três achados retirados por não serem defeitos (ver acima).
+
+Restam: a metade de **15** que é arrastar da dock, **16** (seta de feedback do back), **19**
+(teclado dividido), **20** (sugestões de app), **22** (pastas), **23** (Hub Mode), **24**
+(alça no divisor), **28** (quick switch), **30** (haptics), e **21** adiado.
 
 Duas correções que a implementação impôs ao próprio documento:
 
