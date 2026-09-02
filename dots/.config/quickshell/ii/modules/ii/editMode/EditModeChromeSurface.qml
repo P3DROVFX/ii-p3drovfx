@@ -498,8 +498,40 @@ PanelWindow {
         root.styleSwitchCommand(`--mode ${dark ? "dark" : "light"} --noswitch`);
     }
 
+    // A preset replaces the whole config at once - the wallpaper, the scheme
+    // and everything else land together, through the file's reload rather
+    // than through anything the mode did. That is not a step the history can
+    // walk back, and recording its pieces would offer an undo that puts one
+    // wallpaper back under someone else's whole look. The stack is cleared
+    // when the apply (or the revert) starts, nothing is recorded until the
+    // reload has settled, and the baseline is taken again after.
+    property bool styleSuppressed: false
+    Timer {
+        id: styleSettle
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            root.styleSuppressed = false;
+            root.styleSnapshot();
+        }
+    }
+    Connections {
+        target: PresetStore
+        function onBusyChanged() {
+            const action = PresetStore.busyAction;
+            if (PresetStore.busy && (action === "apply" || action === "revert")) {
+                styleSettle.stop();
+                root.styleSuppressed = true;
+                GlobalStates.editHistoryClear();
+                return;
+            }
+            if (root.styleSuppressed)
+                styleSettle.restart();
+        }
+    }
+
     function recordStyleChange(before, after, replay) {
-        if (before === after)
+        if (before === after || root.styleSuppressed)
             return;
         GlobalStates.editHistoryPush({
             "undo": () => replay(before),

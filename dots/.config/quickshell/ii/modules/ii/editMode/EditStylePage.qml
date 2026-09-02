@@ -37,6 +37,9 @@ StyledFlickable {
     clip: true
 
     signal openPageRequested(string page)
+    // The presets block's name field, relayed to the panel that holds the keyboard.
+    signal fieldFocusRequested(Item field)
+    signal fieldFocusReleased()
 
     readonly property var background: Config.options.background
     readonly property bool darkMode: Appearance.m3colors.darkmode
@@ -89,8 +92,16 @@ StyledFlickable {
         width: root.width
         spacing: 3
 
+        // ── Presets ──────────────────────────────────────────────────────────
+        EditStylePresets {
+            Layout.fillWidth: true
+            onFieldFocusRequested: field => root.fieldFocusRequested(field)
+            onFieldFocusReleased: root.fieldFocusReleased()
+        }
+
         // ── Wallpaper ────────────────────────────────────────────────────────
         EditPanelSectionLabel {
+            Layout.topMargin: 10
             text: root.targetLabel
         }
 

@@ -148,7 +148,30 @@ Item {
     // The field says when it wants the keyboard and says when it has lost it.
     property bool searchWanted: false
     property bool searchHeld: false
-    readonly property bool searchFocused: root.searchWanted
+    // A second field that wants the keyboard the same way - the Style
+    // catalogue's preset name. One at a time: asking for it lets the search
+    // go, and the other way round.
+    property bool fieldWanted: false
+    property Item fieldItem: null
+    readonly property bool searchFocused: root.searchWanted || root.fieldWanted
+
+    function requestFieldFocus(item) {
+        if (!item)
+            return;
+        root.searchWanted = false;
+        root.searchHeld = false;
+        searchField.focus = false;
+        root.fieldItem = item;
+        root.fieldWanted = true;
+        item.forceActiveFocus();
+    }
+
+    function releaseFieldFocus() {
+        root.fieldWanted = false;
+        if (root.fieldItem)
+            root.fieldItem.focus = false;
+        root.fieldItem = null;
+    }
 
     // Fuzzysort, the matcher the launcher already searches these same apps
     // with: "fx" finds Firefox, which a substring test never will, and the
@@ -171,6 +194,7 @@ Item {
         root.searchWanted = false;
         root.searchHeld = false;
         searchField.focus = false;
+        root.releaseFieldFocus();
     }
 
     function clearSearch() {
@@ -184,7 +208,12 @@ Item {
     function pointInSearchField(x, y) {
         const from = root.ghostParent ?? root;
         const p = from.mapToItem(searchRow, x, y);
-        return p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height;
+        if (p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height)
+            return true;
+        if (!root.fieldWanted || !root.fieldItem)
+            return false;
+        const q = from.mapToItem(root.fieldItem, x, y);
+        return q.x >= 0 && q.y >= 0 && q.x <= root.fieldItem.width && q.y <= root.fieldItem.height;
     }
 
     onSectionChanged: root.clearSearch()
@@ -1182,6 +1211,8 @@ Item {
         id: stylePage
         EditStylePage {
             onOpenPageRequested: page => root.openPage(page)
+            onFieldFocusRequested: field => root.requestFieldFocus(field)
+            onFieldFocusReleased: root.releaseFieldFocus()
         }
     }
 

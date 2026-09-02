@@ -16,6 +16,26 @@ ContentPage {
     // 0 the presets on this machine · 1 what other people published · 2 yours
     property alias currentTab: tabBar.currentIndex
 
+    // A deep link may name a tab ("mine", "store", "published"): Edit Mode's
+    // Style catalogue hands off to the store this way.
+    function checkPendingTab() {
+        const wanted = GlobalStates.settingsPendingSubPage;
+        const index = wanted === "store" ? 1 : wanted === "published" ? 2 : wanted === "mine" ? 0 : -1;
+        if (index < 0)
+            return;
+        GlobalStates.settingsPendingSubPage = "";
+        tabBar.currentIndex = index;
+    }
+
+    Component.onCompleted: page.checkPendingTab()
+
+    Connections {
+        target: GlobalStates
+        function onSettingsNavigationRequestChanged() {
+            page.checkPendingTab();
+        }
+    }
+
     SecondaryTabBar {
         id: tabBar
         Layout.fillWidth: true
