@@ -21,7 +21,7 @@ import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.oledSaver
 import qs.modules.ii.keypressDisplay
-import qs.modules.ii.onScreenKeyboard
+import qs.modules.common.onScreenKeyboard
 import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.usage
