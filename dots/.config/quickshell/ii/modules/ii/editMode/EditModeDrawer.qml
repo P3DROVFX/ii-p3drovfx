@@ -1385,6 +1385,19 @@ Item {
                     onActivated: root.resetRequested("lockIslands")
                 }
 
+                // Clock formats, the notification list, the blur behind it,
+                // fingerprint: pages of forms, and this catalogue is about
+                // what sits on the lock screen, not how each part is set up.
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    symbol: "settings"
+                    title: Translation.tr("All lock screen settings")
+                    subtitle: Translation.tr("Leaves Edit Mode")
+                    trailingKind: "chevron"
+                    onActivated: GlobalStates.openSettingsFromEditMode("lockScreen")
+                }
+
                 Item {
                     Layout.fillWidth: true
                     implicitHeight: 8

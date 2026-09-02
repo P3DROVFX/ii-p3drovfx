@@ -194,6 +194,9 @@ StyledFlickable {
             onActivated: root.openPageRequested("wallpapers")
         }
 
+        // A disabled row with no reason on it reads as a bug, and this one
+        // is only ever disabled on the Lockscreen tab: the shuffle sets the
+        // desktop's wallpaper, which is not the one the page is showing.
         EditPanelRow {
             Layout.fillWidth: true
             first: false
@@ -201,6 +204,7 @@ StyledFlickable {
             rowEnabled: !root.lockTarget
             symbol: "shuffle"
             title: Translation.tr("Random from this folder")
+            subtitle: root.lockTarget ? Translation.tr("Not available for the lock screen wallpaper") : ""
             trailingKind: "none"
             onActivated: Wallpapers.randomFromCurrentFolder(root.darkMode)
         }

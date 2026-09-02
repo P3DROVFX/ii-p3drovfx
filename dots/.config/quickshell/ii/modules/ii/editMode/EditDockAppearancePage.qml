@@ -249,6 +249,19 @@ StyledFlickable {
             onActivated: Config.options.dock.smartGrouping = !Config.options.dock.smartGrouping
         }
 
+        // Live previews, the workspace strip, the presets manager: pages of
+        // forms rather than a handful of switches, the way the bar's own page
+        // points at its Settings page instead of mirroring it.
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            symbol: "settings"
+            title: Translation.tr("All dock settings")
+            subtitle: Translation.tr("Leaves Edit Mode")
+            trailingKind: "chevron"
+            onActivated: GlobalStates.openSettingsFromEditMode("dock")
+        }
+
         Item {
             Layout.fillWidth: true
             implicitHeight: 8

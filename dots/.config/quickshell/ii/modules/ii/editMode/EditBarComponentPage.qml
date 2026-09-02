@@ -120,6 +120,7 @@ StyledFlickable {
             visible: root.componentId !== ""
             symbol: "settings"
             title: Translation.tr("All of this widget's settings")
+            subtitle: Translation.tr("Leaves Edit Mode")
             trailingKind: "chevron"
             onActivated: GlobalStates.openSettingsFromEditMode(root.info?.pageId ?? "bar")
         }
