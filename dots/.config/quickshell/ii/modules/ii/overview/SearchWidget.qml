@@ -1502,14 +1502,10 @@ Item {
                 }
 
                 onBackspaceOnEmpty: root.handlePanelBackspace()
-                onPanelShortcut: methodName => searchKeyRouter.dispatch(methodName)
+                panelShortcutHandler: methodName => searchKeyRouter.dispatch(methodName)
 
                 onTogglePanelSection: {
                     searchKeyRouter.dispatch("toggleSection");
-                }
-
-                onCopySelected: {
-                    searchKeyRouter.dispatch("copySelected");
                 }
 
                 onOpenSelectedInCheatsheet: {
