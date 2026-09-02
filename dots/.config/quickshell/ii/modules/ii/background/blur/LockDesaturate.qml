@@ -22,8 +22,8 @@ Item {
 
     Connections {
         target: GlobalStates
-        function onScreenLockedChanged() {
-            if (GlobalStates.screenLocked) {
+        function onLockLookActiveChanged() {
+            if (GlobalStates.lockLookActive) {
                 unlockReleaseTimer.stop();
                 return;
             }
@@ -42,11 +42,11 @@ Item {
     Loader {
         id: desatLoader
         active: Config.options.lock.desaturate.enable && lockDesatRoot.sourceReady
-            && (GlobalStates.screenLocked || (desatLoader.status === Loader.Ready && desatLoader.item && desatLoader.item.saturation !== 0.0))
+            && (GlobalStates.lockLookActive || (desatLoader.status === Loader.Ready && desatLoader.item && desatLoader.item.saturation !== 0.0))
         anchors.fill: parent
         sourceComponent: MultiEffect {
             source: lockDesatRoot.sourceItem
-            saturation: GlobalStates.screenLocked ? lockDesatRoot.targetSaturation : 0.0
+            saturation: GlobalStates.lockLookActive ? lockDesatRoot.targetSaturation : 0.0
             Behavior on saturation {
                 NumberAnimation {
                     id: desaturationAnim

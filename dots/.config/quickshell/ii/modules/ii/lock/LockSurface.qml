@@ -13,10 +13,17 @@ import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
+import qs.modules.ii.editMode
+import "../../common/functions/lock_islands.js" as LockIslands
 
 MouseArea {
     id: root
-    required property LockContext context
+    // The real LockContext on the lock, LockPreviewContext on Edit Mode's
+    // Lockscreen tab. Typed loosely for exactly that reason.
+    required property QtObject context
+    // False for the preview: nothing here takes a click or a key, and the
+    // password field never takes focus away from the desktop being edited.
+    property bool interactive: true
     property bool active: false
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
@@ -31,8 +38,71 @@ MouseArea {
     property bool touchKeyboardOpen: true
     readonly property bool touchKeyboardShown: root.touchKeyboardAvailable && root.touchKeyboardOpen
 
+    // ── Island order ─────────────────────────────────────────────────────────
+    // The islands' children stay declared in their default order; the stored
+    // lists reorder them by reparenting, which a RowLayout reads as a new
+    // child order. Ids are lock_islands.js's vocabulary.
+    readonly property var islandItems: ({
+        "main": { "fingerprint": fingerprintLoader, "password": passwordBox, "confirm": confirmButton },
+        "left": { "battery": batteryButton, "capsLock": capsLockPill, "alarm": nextAlarmButton,
+            "weather": weatherButton, "keyboardLayout": layoutSwitcherButton, "keepAwake": keepAwakeButton,
+            "mode": modeButton },
+        "right": { "sleep": sleepButton, "power": powerButton, "reboot": rebootButton }
+    })
+    readonly property var islandToolbars: ({ "main": mainIsland, "left": leftIsland, "right": rightIsland })
+    readonly property var mainOrder: LockIslands.orderedItems(Config.options.lock.islands.main, LockIslands.MAIN_DEFAULT)
+    readonly property var leftOrder: LockIslands.orderedItems(Config.options.lock.islands.left, LockIslands.LEFT_DEFAULT)
+    readonly property var rightOrder: LockIslands.orderedItems(Config.options.lock.islands.right, LockIslands.RIGHT_DEFAULT)
+    readonly property bool editingIslands: !root.interactive && GlobalStates.editLockPreview
+
+    // What the two side islands have been asked not to draw. Index-walked
+    // rather than `indexOf`: a `list<string>` that has crossed the QML
+    // boundary keeps its length and loses its Array brand, which is the same
+    // trap lock_islands.js's own resolver walks around.
+    readonly property var hiddenIslands: Config.options.lock.islands.hidden
+    function islandHidden(id) {
+        const list = root.hiddenIslands;
+        const count = list && typeof list.length === "number" ? list.length : 0;
+        for (let i = 0; i < count; i++)
+            if (list[i] === id)
+                return true;
+        return false;
+    }
+
+    function islandOrder(island) {
+        if (island === "main") return root.mainOrder;
+        if (island === "left") return root.leftOrder;
+        return root.rightOrder;
+    }
+
+    function applyIslandOrder(island) {
+        const items = root.islandItems[island];
+        const order = root.islandOrder(island);
+        const wanted = order.map(id => items[id]).filter(Boolean);
+        if (wanted.length === 0)
+            return;
+        const siblings = wanted[0].parent.children;
+        const mapped = [];
+        for (let i = 0; i < siblings.length; i++)
+            if (wanted.indexOf(siblings[i]) !== -1)
+                mapped.push(siblings[i]);
+        if (mapped.every((it, i) => it === wanted[i]))
+            return;
+        for (const item of wanted) {
+            const parent = item.parent;
+            item.parent = null;
+            item.parent = parent;
+        }
+    }
+
+    onMainOrderChanged: root.applyIslandOrder("main")
+    onLeftOrderChanged: root.applyIslandOrder("left")
+    onRightOrderChanged: root.applyIslandOrder("right")
+
     // Force focus on entry
     function forceFieldFocus() {
+        if (!root.interactive)
+            return;
         passwordBox.forceActiveFocus();
     }
     Connections {
@@ -42,6 +112,7 @@ MouseArea {
         }
     }
     hoverEnabled: true
+    enabled: root.interactive
     acceptedButtons: Qt.LeftButton
     onPressed: mouse => {
         forceFieldFocus();
@@ -73,6 +144,9 @@ MouseArea {
 
     // Init
     Component.onCompleted: {
+        root.applyIslandOrder("main");
+        root.applyIslandOrder("left");
+        root.applyIslandOrder("right");
         forceFieldFocus();
         toolbarScale = 1;
         toolbarOpacity = 1;
@@ -81,6 +155,8 @@ MouseArea {
     // Key presses
     property bool ctrlHeld: false
     Keys.onPressed: event => {
+        if (!root.interactive)
+            return;
         root.context.resetClearTimer();
         lockContextMenu.close();
         if (event.key === Qt.Key_Control) {
@@ -96,6 +172,8 @@ MouseArea {
         forceFieldFocus();
     }
     Keys.onReleased: event => {
+        if (!root.interactive)
+            return;
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = false;
         }
@@ -307,6 +385,8 @@ MouseArea {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: {
+                if (!root.interactive)
+                    return;
                 SportsService.nextGame();
             }
 
@@ -531,6 +611,7 @@ MouseArea {
 
         // Fingerprint
         Loader {
+            id: fingerprintLoader
             Layout.rightMargin: 2
             Layout.fillHeight: true
             Layout.preferredWidth: height
@@ -633,6 +714,7 @@ MouseArea {
 
             // Password
             enabled: !root.context.unlockInProgress
+            readOnly: !root.interactive
             echoMode: TextInput.Password
             inputMethodHints: Qt.ImhSensitiveData
 
@@ -659,6 +741,8 @@ MouseArea {
                 acceptedButtons: Qt.RightButton
                 cursorShape: Qt.IBeamCursor
                 onPressed: mouse => {
+                    if (!root.interactive)
+                        return;
                     if (mouse.button === Qt.RightButton) {
                         layoutDialog.close();
                         const globalPos = passwordBox.mapToItem(root, mouse.x, mouse.y);
@@ -714,7 +798,11 @@ MouseArea {
             enabled: !root.context.unlockInProgress
             colBackgroundToggled: Appearance.colors.colPrimary
 
-            onClicked: root.context.tryUnlock()
+            onClicked: {
+                if (!root.interactive)
+                    return;
+                root.context.tryUnlock();
+            }
 
             contentItem: MaterialSymbol {
                 anchors.centerIn: parent
@@ -752,7 +840,7 @@ MouseArea {
             id: batteryButton
             Layout.fillHeight: true
             implicitWidth: height
-            visible: Battery.available
+            visible: Battery.available && !root.islandHidden("battery")
             pointingHandCursor: false
             
             colBackground: Appearance.colors.colPrimary
@@ -855,7 +943,7 @@ MouseArea {
             id: capsLockPill
             Layout.fillHeight: true
             Layout.preferredWidth: GlobalStates.capsLockActive ? 100 : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("capsLock")
             clip: true
             
             colBackground: Appearance.colors.colSecondaryContainer
@@ -955,7 +1043,7 @@ MouseArea {
             readonly property bool showNextAlarm: (Config.options.lock.showAlarm ?? true) && nextAlarm !== null
             
             Layout.preferredWidth: showNextAlarm ? (contentRow.implicitWidth + 24) : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("alarm")
             clip: true
             pointingHandCursor: false
             
@@ -1021,7 +1109,7 @@ MouseArea {
             
             readonly property bool showWeather: (Config.options.lock.showWeather ?? true) && Weather.data !== null && Weather.data.wCode !== undefined
             
-            visible: showWeather
+            visible: showWeather && !root.islandHidden("weather")
             pointingHandCursor: false
             
             colBackground: Appearance.colors.colSecondaryContainer
@@ -1040,7 +1128,7 @@ MouseArea {
             Layout.fillHeight: true
             Layout.preferredWidth: showSwitcher ? (layoutSwitcherRow.implicitWidth + 24) : 0
             readonly property bool showSwitcher: HyprlandXkb.layoutCodes.length > 1
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("keyboardLayout")
             clip: true
             
             colBackground: Appearance.colors.colSecondaryContainer
@@ -1075,6 +1163,8 @@ MouseArea {
             }
             
             onClicked: {
+                if (!root.interactive)
+                    return;
                 layoutDialog.toggle();
             }
         }
@@ -1111,7 +1201,7 @@ MouseArea {
             id: keepAwakeButton
             Layout.fillHeight: true
             Layout.preferredWidth: Idle.inhibit ? (keepAwakeRow.implicitWidth + 24) : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("keepAwake")
             clip: true
             pointingHandCursor: false
 
@@ -1154,7 +1244,7 @@ MouseArea {
             readonly property string colorKey: (Modes.activeMode && Modes.activeMode.color) ? Modes.activeMode.color : ""
             Layout.fillHeight: true
             Layout.preferredWidth: shown ? (modeRow.implicitWidth + 24) : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("mode")
             clip: true
             pointingHandCursor: false
 
@@ -1203,10 +1293,18 @@ MouseArea {
 
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
+        // An island whose every item has been taken off is an empty pill, and
+        // an empty pill on the lock screen reads as something failing to load.
+        visible: sleepButton.visible || powerButton.visible || rebootButton.visible
 
         IconToolbarButton {
             id: sleepButton
-            onClicked: Session.suspend()
+            visible: !root.islandHidden("sleep")
+            onClicked: {
+                if (!root.interactive)
+                    return;
+                Session.suspend();
+            }
             text: "dark_mode"
             iconFill: true
             colBackground: Appearance.colors.colSecondaryContainer
@@ -1226,6 +1324,7 @@ MouseArea {
 
         PasswordGuardedIconToolbarButton {
             id: powerButton
+            visible: !root.islandHidden("power")
             text: "power_settings_new"
             targetAction: LockContext.ActionEnum.Poweroff
 
@@ -1241,6 +1340,7 @@ MouseArea {
 
         PasswordGuardedIconToolbarButton {
             id: rebootButton
+            visible: !root.islandHidden("reboot")
             text: "restart_alt"
             targetAction: LockContext.ActionEnum.Reboot
 
@@ -1269,6 +1369,8 @@ MouseArea {
         colText: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
 
         onClicked: {
+            if (!root.interactive)
+                return;
             if (!root.requirePasswordToPower) {
                 root.context.unlocked(guardedBtn.targetAction);
                 return;
@@ -1429,5 +1531,13 @@ MouseArea {
             layoutDialog.close();
             lockContextMenu.close();
         }
+    }
+
+    // Edit Mode's reorder affordances, only over the Lockscreen tab's preview.
+    Loader {
+        active: root.editingIslands
+        anchors.fill: parent
+        z: 50
+        sourceComponent: LockIslandEditController { surface: root }
     }
 }

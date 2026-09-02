@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
 import qs.modules.ii.background
+import qs.modules.ii.background.desktopMenu
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
@@ -45,6 +46,7 @@ import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.touchGestures
+import qs.modules.ii.editMode
 
 Scope {
     property bool barExtraCondition: true
@@ -71,6 +73,16 @@ Scope {
     PanelLoader {
         extraCondition: Config.options.background.enable
         component: Background {}
+    }
+    PanelLoader {
+        // The desktop layout editor's chrome; nothing to edit without the background.
+        extraCondition: Config.options.background.enable
+        component: EditModeChrome {}
+    }
+    PanelLoader {
+        // The desktop's right-click menu; asked for by the background's surfaces.
+        extraCondition: Config.options.background.enable
+        component: DesktopMenu {}
     }
     PanelLoader {
         component: Cheatsheet {}

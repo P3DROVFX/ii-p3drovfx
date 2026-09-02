@@ -8,6 +8,8 @@ import qs.modules.common
 MouseArea {
     id: root
 
+    // Lets a WidgetCanvas find widgets in its subtree without walking into them.
+    readonly property bool isCanvasWidget: true
     property bool allowMiddleClick: false
     property alias animateXPos: xBehavior.enabled
     property alias animateYPos: yBehavior.enabled

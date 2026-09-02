@@ -68,6 +68,7 @@ Item {
                 property int actualIndex: root.targetCurrentIndex + lineOffset
                 property bool isValidLine: root.hasSyncedLines && actualIndex >= 0 && actualIndex < LyricsService.syncedLines.length
 
+                rowHeight: root.rowHeight
                 gradientDensity: 1 - root.gradientDensity
                 defaultLyricsSize: root.defaultLyricsSize
                 changeTextWeight: root.changeTextWeight

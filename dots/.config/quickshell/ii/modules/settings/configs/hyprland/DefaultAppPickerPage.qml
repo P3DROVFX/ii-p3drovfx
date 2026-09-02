@@ -119,7 +119,8 @@ Item {
 
                 required property var modelData
 
-                readonly property bool current: String(modelData.id ?? "") === subPageRoot.currentId
+                readonly property bool current: DefaultApps.desktopFileId(modelData.id ?? "")
+                    === DefaultApps.desktopFileId(subPageRoot.currentId)
 
                 width: appList.width
                 implicitHeight: 56

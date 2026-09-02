@@ -71,6 +71,7 @@ Item {
     readonly property bool isLocalArt: root.artUrl.startsWith("file://")
     readonly property string artFilePath: `${Directories.coverArt}/${Qt.md5(root.artUrl)}`
     property bool artDownloaded: false
+    property bool artRefreshPending: false
     readonly property string artSource: {
         if (!root.artUrl)
             return "";
@@ -79,23 +80,43 @@ Item {
         return root.artDownloaded ? Qt.resolvedUrl(root.artFilePath) : "";
     }
 
-    onArtFilePathChanged: {
+    function refreshArt() {
         if (!root.artUrl || root.artUrl.length === 0) {
             root.artDownloaded = false;
+            root.artRefreshPending = false;
             return;
         }
         if (root.isLocalArt) {
             root.artDownloaded = true;
+            root.artRefreshPending = false;
             return;
         }
+
         root.artDownloaded = false;
+        if (artDownloader.running) {
+            root.artRefreshPending = artDownloader.targetFile !== root.artUrl;
+            return;
+        }
+
+        root.artRefreshPending = false;
+        artDownloader.targetFile = root.artUrl;
+        artDownloader.targetPath = root.artFilePath;
         artDownloader.running = true;
     }
 
+    onArtUrlChanged: root.refreshArt()
+
     Process {
         id: artDownloader
-        command: ["bash", "-c", `[ -f '${root.artFilePath}' ] || (curl -4 -sSL '${root.artUrl}' -o '${root.artFilePath}.tmp' && mv '${root.artFilePath}.tmp' '${root.artFilePath}')`]
-        onExited: root.artDownloaded = true
+        property string targetFile: ""
+        property string targetPath: ""
+        command: ["bash", "-c", `[ -f '${targetPath}' ] || (curl -4 -sSL '${StringUtils.shellSingleQuoteEscape(targetFile)}' -o '${targetPath}.tmp' && mv '${targetPath}.tmp' '${targetPath}')`]
+        onExited: exitCode => {
+            const requestIsCurrent = targetFile === root.artUrl && targetPath === root.artFilePath;
+            root.artDownloaded = requestIsCurrent && exitCode === 0;
+            if (!requestIsCurrent || root.artRefreshPending)
+                Qt.callLater(root.refreshArt);
+        }
     }
 
     // ── Popup anchor ─────────────────────────────────────────────────────────
@@ -122,6 +143,10 @@ Item {
     }
 
     Component.onCompleted: {
+        // `artUrl` can already be populated when this style is selected. In that
+        // case no change signal is emitted after construction, so initialize the
+        // cache explicitly instead of waiting for the next track.
+        root.refreshArt();
         LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined")
             rootItem.toggleVisible(root.hasTrack);

@@ -87,7 +87,7 @@ Scope {
             required property var modelData
             screen: modelData
             
-            visible: !GlobalStates.screenLocked && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
+            visible: !GlobalStates.lockLookActive && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
             // using a flag for positionChanging is not really necessary, but it prevents some graphical issues caused by qml when the dock is moving
 
             readonly property real availableW: screen?.width ?? 1920
@@ -107,6 +107,27 @@ Scope {
             readonly property real dockThickness: dockRoot.sizing.dockThickness
             readonly property real unmagnifiedThickness: dockRoot.sizing.unmagnifiedThickness
             readonly property real surfaceMargin: dockRoot.sizing.surfaceMargin
+
+            // Edit Mode reserves this dock's edge from the thickness the dock reveals at rest -
+            // configuration-derived, unchanged by hover, magnification or a fullscreen window -
+            // published rather than re-derived by the mode, because the padding and the style
+            // that make up this number live here.
+            QtObject {
+                id: editInsetPublisher
+                readonly property string screenName: dockRoot.screen ? dockRoot.screen.name : ""
+                readonly property string side: dock.dockEffectivePosition
+                readonly property real thickness: dockRoot.unmagnifiedThickness
+
+                function publish() {
+                    GlobalStates.setDockInset(editInsetPublisher.screenName, editInsetPublisher.side, editInsetPublisher.thickness);
+                }
+
+                onSideChanged: publish()
+                onThicknessChanged: publish()
+                Component.onCompleted: publish()
+                Component.onDestruction: GlobalStates.setDockInset(editInsetPublisher.screenName, "", 0)
+            }
+
             readonly property bool anySidebarOpen: GlobalStates.effectiveLeftOpen || GlobalStates.effectiveRightOpen
 
             readonly property bool isSpecialWorkspaceOpen: {
@@ -116,7 +137,9 @@ Scope {
                 return monitor.specialWorkspace.name !== "";
             }
 
-            property bool reveal: dock.pinned || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
+            // Edit Mode holds the dock revealed: its viewport reserves the dock's edge whatever the
+            // dock is doing, and stage 6 edits the dock in place.
+            property bool reveal: dock.pinned || GlobalStates.editMode || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -431,6 +454,27 @@ Scope {
                             drop.accept(Qt.CopyAction)
                             dockContent.externalDragIcon = ""
                             dockContent.externalDragOver = false
+                        }
+                    }
+
+                    // A right-click on the dock's own body - between its icons,
+                    // on its padding - offers the desktop's menu told it is on
+                    // the dock. Under the content, so every icon's own menu
+                    // still wins; the menu's surface is the whole screen, so
+                    // the point is lifted from this window to it the way the
+                    // bar lifts its own.
+                    MouseArea {
+                        anchors.fill: dockVisualBackground
+                        z: 0
+                        acceptedButtons: Qt.RightButton
+                        onClicked: mouse => {
+                            if (!dockRoot.screen)
+                                return;
+                            const p = mapToItem(null, mouse.x, mouse.y);
+                            const side = dock.dockEffectivePosition;
+                            const offsetX = side === "right" ? dockRoot.screen.width - dockRoot.width : 0;
+                            const offsetY = side === "bottom" ? dockRoot.screen.height - dockRoot.height : 0;
+                            GlobalStates.openDesktopMenu(dockRoot.screen.name, p.x + offsetX, p.y + offsetY, "dock");
                         }
                     }
 

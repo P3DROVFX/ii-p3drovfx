@@ -62,6 +62,15 @@ Item {
         id: layout
     }
 
+    // ── Edit Mode ─────────────────────────────────────────────────────────────
+    property var barEditController: editController
+    BarEditController {
+        id: editController
+        anchors.fill: parent
+        z: 100
+        vertical: false
+    }
+
     // ── Theme ─────────────────────────────────────────────────────────────────
     BarThemes {
         id: barThemes

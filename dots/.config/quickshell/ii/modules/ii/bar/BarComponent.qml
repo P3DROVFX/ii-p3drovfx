@@ -42,6 +42,13 @@ Item {
 
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
+    // Edit Mode's drop preview: the room this widget stands aside to open.
+    // Margins rather than width, so the space belongs to the gap and not to
+    // the widget - nothing inside it moves or restyles while the row parts.
+    Layout.leftMargin: rootItem.vertical ? 0 : rootItem.editGapBefore
+    Layout.rightMargin: rootItem.vertical ? 0 : rootItem.editGapAfter
+    Layout.topMargin: rootItem.vertical ? rootItem.editGapBefore : 0
+    Layout.bottomMargin: rootItem.vertical ? rootItem.editGapAfter : 0
 
     property int barSection // 0: left, 1: center, 2: right
     property var list
@@ -293,7 +300,23 @@ Item {
         return modelData.id === modeState._displayMode;
     }
 
-    readonly property bool hasLayoutContent: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
+    // A widget that hides itself when it has nothing to say still reports that
+    // through `toggleVisible`, which is a *stored* flag - it is written back to
+    // the layout. Edit Mode must not touch it: the arrangement of the bar has
+    // nothing to do with whether a recording is running. So the mode is ORed in
+    // here instead, and each widget that wants to be arrangeable while idle
+    // draws itself as though it were active. One that stays blank is still
+    // skipped, exactly as before.
+    readonly property bool selfVisibleOrEditing: rootItem.widgetSelfVisible || GlobalStates.editMode
+    readonly property bool loadedItemVisible: itemLoader.item ? itemLoader.item.visible : false
+    // A widget drawing nothing is invisible to the layout, and in the mode that
+    // left it with no drag handle, no badge and no catalogue row - unreachable
+    // in every direction. The stand-in chip gives it a body while the mode is
+    // on; the widget itself is untouched (see BarEditPlaceholder).
+    readonly property bool editPlaceholderShown: GlobalStates.editMode
+        && rootItem.editController !== null && !rootItem.loadedItemVisible
+    readonly property bool hasLayoutContent: rootItem.selfVisibleOrEditing
+        && (rootItem.loadedItemVisible || rootItem.editPlaceholderShown)
     // A finger cannot reliably hit a 24px-wide indicator. Narrow widgets are padded out
     // to the minimum touch target on a touch-first family; wide ones are untouched, and a
     // widget with no content stays at zero so it still collapses out of the layout
@@ -374,7 +397,8 @@ Item {
     onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
     onIsNotchModeChanged: rootItem.beginBoxResize()
 
-    implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
+    implicitWidth: rootItem.editLifted ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth)
     Behavior on implicitWidth {
         enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -384,7 +408,8 @@ Item {
         }
     }
 
-    implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
+    implicitHeight: (rootItem.editLifted && rootItem.vertical) ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight)
     Behavior on implicitHeight {
         enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -394,7 +419,18 @@ Item {
         }
     }
 
-    opacity: targetWidth > 0 ? 1.0 : 0.0
+    // Transparent, not hidden: the drag's own MouseArea is inside this widget
+    // and has the pointer grab, so it has to stay alive until the release.
+    opacity: rootItem.editLifted ? 0.0 : (targetWidth > 0 ? 1.0 : 0.0)
+    // ...and it fades on the same clock its hole closes on, rather than
+    // blinking out in one frame and leaving an empty gap to animate shut
+    // behind it. Gated on the mode, because outside it this property is owned
+    // by the notch's own states and transitions (below) and a Behavior on a
+    // property a Transition is driving fights it for every frame.
+    Behavior on opacity {
+        enabled: !Appearance.reducedMotion && GlobalStates.editMode && !rootItem.isNotchMode
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+    }
     visible: !rootItem.layoutReady || (hasLayoutContent && (!isNotchMode || opacity > 0.01))
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
@@ -576,7 +612,7 @@ Item {
 
         transform: [entryTranslation, moveTranslation, verticalTranslation]
 
-        readonly property bool itemIsVisible: rootItem.widgetSelfVisible && (itemLoader.item ? itemLoader.item.visible : false)
+        readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
         leftPadding: paddingless ? 0 : padding
@@ -649,6 +685,20 @@ Item {
             Layout.fillHeight: item ? ((item.Layout !== undefined && item.Layout.fillHeight) || false) : false
             Layout.fillWidth: item ? ((item.Layout !== undefined && item.Layout.fillWidth) || false) : false
             Layout.alignment: rootItem.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
+        }
+
+        // The stand-in for a widget with nothing to draw. Invisible when it is
+        // not needed, not merely inactive: a layout counts an item with no size
+        // as an item and spaces the row around it.
+        Loader {
+            id: editPlaceholder
+            active: rootItem.editPlaceholderShown
+            visible: rootItem.editPlaceholderShown
+            Layout.alignment: rootItem.vertical ? Qt.AlignHCenter : Qt.AlignVCenter
+            sourceComponent: BarEditPlaceholder {
+                vertical: rootItem.vertical
+                widgetId: modelData.id
+            }
         }
     }
 
@@ -799,6 +849,69 @@ Item {
                 else if (barSection == 2)
                     Config.options.bar.layouts.right = Config.options.bar.layouts.right;
             }
+        }
+    }
+
+    // ── Edit Mode overlay ─────────────────────────────────────────────────
+    // The bar's controller sits on the content root; found by walking up, so
+    // every style and both orientations get it from this one insertion.
+    readonly property var editController: {
+        let p = rootItem.parent;
+        while (p) {
+            if (p.barEditController !== undefined)
+                return p.barEditController;
+            p = p.parent;
+        }
+        return null;
+    }
+
+    // ── Edit Mode drop preview ─────────────────────────────────────────────
+    // Answered by the bar's controller in pixels. Dependency capture reaches
+    // inside a called function, so these re-run whenever the carried widget or
+    // its landing place changes.
+    readonly property real editGapBeforeTarget: rootItem.editController
+        ? rootItem.editController.gapBefore(rootItem.barSection, rootItem.originalIndex) : 0
+    readonly property real editGapAfterTarget: rootItem.editController
+        ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
+    // This is the widget being carried: it leaves its place, and the row
+    // closes over it, so what the bar is worth stays what it was.
+    readonly property bool editLifted: rootItem.editController
+        ? rootItem.editController.isLifted(rootItem.barSection, rootItem.originalIndex) : false
+    onEditLiftedChanged: rootItem.beginBoxResize()
+
+    // Both halves of the gesture on ONE clock, which is the bar's own
+    // ([[bar-resize-single-clock]]). The hole the carried widget leaves closes
+    // through `implicitWidth` on `barResize` (280ms, expressiveFastSpatial);
+    // these two open the hole it would land in, and they were on
+    // `elementMoveFast` (200ms, expressiveEffects). Two clocks and two curves
+    // for one movement do not add - the row parts faster than the widget
+    // collapses, so the bar's total width wobbles mid-drag and the widgets
+    // between the two ends drift instead of sliding.
+    property real editGapBefore: rootItem.editGapBeforeTarget
+    Behavior on editGapBefore {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+    }
+    property real editGapAfter: rootItem.editGapAfterTarget
+    Behavior on editGapAfter {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+    }
+
+    Loader {
+        anchors.fill: wrapper
+        z: 5
+        active: GlobalStates.editMode && rootItem.hasLayoutContent && rootItem.editController !== null
+        sourceComponent: BarEditSlot {
+            controller: rootItem.editController
+            bucket: rootItem.barSection
+            storedIndex: rootItem.originalIndex
+            widgetId: modelData.id
+            // The hole beside this widget AS IT IS RIGHT NOW. The controller
+            // draws the drop indicator in it and cannot see the animated
+            // margin from where it sits, so the widget hands it over.
+            gapBefore: rootItem.editGapBefore
+            gapAfter: rootItem.editGapAfter
         }
     }
 

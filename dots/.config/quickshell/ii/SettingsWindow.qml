@@ -111,6 +111,12 @@ FloatingWindow {
 
     function restoreSubPagePath(encodedPath) {
         const path = encodedPath ? root.subPagePathFromState({ subPage: encodedPath }) : [];
+        // A page with no nested pages may still take a deep link - a tab name,
+        // say. It reads the raw id: resolved, "store" would be a file that
+        // does not exist.
+        if (path.length === 1 && pageLoader.item && typeof pageLoader.item.restoreSubPage === "function"
+                && pageLoader.item.restoreSubPage(String(path[0])))
+            return true;
         const resolved = path.map(entry => root.resolveSubPageEntry(entry));
         const host = root.findSubPageHost(pageLoader.item);
         if (host && host.restoreNavigationPath) {

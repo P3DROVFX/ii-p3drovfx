@@ -896,7 +896,6 @@ Item {
         { id: "controls", label: Translation.tr("Controls"), icon: "tune", sections: ["controls"] },
         { id: "tools", label: Translation.tr("Tools"), icon: "widgets", sections: ["tools", "actions"] },
         { id: "content", label: Translation.tr("Content"), icon: "article", sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"] },
-        { id: "media", label: Translation.tr("Media"), icon: "music_note", sections: ["media"] },
         { id: "settings", label: Translation.tr("Settings"), icon: "settings", sections: ["settings"] },
         { id: "other", label: Translation.tr("Other"), icon: "more_horiz", sections: ["other"] }
     ]
@@ -1503,14 +1502,10 @@ Item {
                 }
 
                 onBackspaceOnEmpty: root.handlePanelBackspace()
-                onPanelShortcut: methodName => searchKeyRouter.dispatch(methodName)
+                panelShortcutHandler: methodName => searchKeyRouter.dispatch(methodName)
 
                 onTogglePanelSection: {
                     searchKeyRouter.dispatch("toggleSection");
-                }
-
-                onCopySelected: {
-                    searchKeyRouter.dispatch("copySelected");
                 }
 
                 onOpenSelectedInCheatsheet: {

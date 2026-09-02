@@ -166,7 +166,9 @@ Scope {
         }
 
         property bool superShow: false
-        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
+        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode
+        // BarInteraction, not the stored flag: a touch-first family forces auto-hide off
+        // without rewriting the preference the user has saved.
         property real hiddenAmount: (BarInteraction.autoHide && !mustShow) ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
@@ -233,6 +235,18 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
+            // A right-click on the bar itself (no widget under it) offers the
+            // desktop's menu, told it is on the bar: no wallpaper row, and its
+            // catalogue row opens the bar's widgets. The menu's surface is the
+            // whole screen, so the point is lifted from the bar window to it.
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button !== Qt.RightButton)
+                    return;
+                const p = hoverRegion.mapToItem(null, mouse.x, mouse.y);
+                const offsetY = Config.options.bar.bottom ? root.screen.height - barRoot.height : 0;
+                GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, "bar");
+            }
             visible: barRoot.shellSeated
             opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             transform: Translate {

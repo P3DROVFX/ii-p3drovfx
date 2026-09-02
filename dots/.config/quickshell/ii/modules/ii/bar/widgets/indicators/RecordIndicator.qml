@@ -1,6 +1,7 @@
 import qs.modules.ii.bar.shared
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -28,14 +29,21 @@ MouseArea {
     cursorShape: Qt.PointingHandCursor
 
     // Size calculation (dynamic and perfectly padded to prevent any overlapping)
-    implicitWidth: (activelyRecording || isLoading)
+    // Edit Mode has to be able to reach a widget that is currently showing
+    // nothing: with nothing to show this takes no room at all, so there would
+    // be nothing to grab, drag or place. While the mode is on it is drawn as
+    // though it were active. Rendering only - the stored visibility flag stays
+    // on the real condition, and the bar ORs the mode in on its side.
+    readonly property bool shown: indicator.activelyRecording || indicator.isLoading || GlobalStates.editMode
+
+    implicitWidth: shown
         ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth)
         : 0
-    implicitHeight: (activelyRecording || isLoading)
+    implicitHeight: shown
         ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight)
         : 0
 
-    visible: activelyRecording || isLoading
+    visible: shown
 
     Component.onCompleted: {
         updateHighlight()

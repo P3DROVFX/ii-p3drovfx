@@ -69,10 +69,13 @@ RowLayout {
     signal deleteSelected
     signal ctrlKPressed
     signal backspaceOnEmpty
-    signal panelShortcut(string methodName)
+    // A hosted panel only claims the shortcuts it actually implements. The
+    // host wires this to its key router; the return value says whether the
+    // panel took the key. Anything it declines stays with the text field, so
+    // Ctrl+V and friends keep editing the query instead of doing nothing.
+    property var panelShortcutHandler: null
     signal copySvgPressed
     signal togglePanelSection
-    signal copySelected
     signal openSelectedInCheatsheet
     signal saveSelected
     signal editSelected
@@ -97,6 +100,12 @@ RowLayout {
         const entry = Array.from(Config.options.search.keybindings ?? [])
             .find(binding => String(binding?.actionId ?? "") === actionId);
         return root.normalizedShortcut(entry?.shortcut ?? fallback);
+    }
+
+    function requestPanelShortcut(methodName) {
+        if (!root.panelShortcutHandler)
+            return false;
+        return root.panelShortcutHandler(methodName) === true;
     }
 
     function eventShortcut(event) {
@@ -475,8 +484,8 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (root.matchesShortcut(event, "copy", "Ctrl+C") && root.activePanelMode) {
-                root.copySelected();
+            if (root.matchesShortcut(event, "copy", "Ctrl+C") && root.activePanelMode
+                    && root.requestPanelShortcut("copySelected")) {
                 event.accepted = true;
                 return;
             }
@@ -510,58 +519,58 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "select", "Ctrl+Space")) {
-                root.panelShortcut("toggleSelection");
+            if (root.activePanelMode && root.matchesShortcut(event, "select", "Ctrl+Space")
+                    && root.requestPanelShortcut("toggleSelection")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "cut", "Ctrl+X")) {
-                root.panelShortcut("cutSelected");
+            if (root.activePanelMode && root.matchesShortcut(event, "cut", "Ctrl+X")
+                    && root.requestPanelShortcut("cutSelected")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "paste", "Ctrl+V")) {
-                root.panelShortcut("pasteClipboard");
+            if (root.activePanelMode && root.matchesShortcut(event, "paste", "Ctrl+V")
+                    && root.requestPanelShortcut("pasteClipboard")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "createFolder", "Ctrl+Shift+N")) {
-                root.panelShortcut("createFolder");
+            if (root.activePanelMode && root.matchesShortcut(event, "createFolder", "Ctrl+Shift+N")
+                    && root.requestPanelShortcut("createFolder")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "duplicate", "Ctrl+D")) {
-                root.panelShortcut("duplicateSelected");
+            if (root.activePanelMode && root.matchesShortcut(event, "duplicate", "Ctrl+D")
+                    && root.requestPanelShortcut("duplicateSelected")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "toggleHidden", "Ctrl+H")) {
-                root.panelShortcut("toggleHidden");
+            if (root.activePanelMode && root.matchesShortcut(event, "toggleHidden", "Ctrl+H")
+                    && root.requestPanelShortcut("toggleHidden")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "refresh", "Ctrl+R")) {
-                root.panelShortcut("refreshDirectory");
+            if (root.activePanelMode && root.matchesShortcut(event, "refresh", "Ctrl+R")
+                    && root.requestPanelShortcut("refreshDirectory")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "stageCopy", "Ctrl+Shift+C")) {
-                root.panelShortcut("stageCopy");
+            if (root.activePanelMode && root.matchesShortcut(event, "stageCopy", "Ctrl+Shift+C")
+                    && root.requestPanelShortcut("stageCopy")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "sortFiles", "Ctrl+Shift+S")) {
-                root.panelShortcut("cycleSort");
+            if (root.activePanelMode && root.matchesShortcut(event, "sortFiles", "Ctrl+Shift+S")
+                    && root.requestPanelShortcut("cycleSort")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "goHome", "Ctrl+Home")) {
-                root.panelShortcut("goHome");
+            if (root.activePanelMode && root.matchesShortcut(event, "goHome", "Ctrl+Home")
+                    && root.requestPanelShortcut("goHome")) {
                 event.accepted = true;
                 return;
             }
-            if (root.activePanelMode && root.matchesShortcut(event, "forward", "Alt+Right")) {
-                root.panelShortcut("navigateForward");
+            if (root.activePanelMode && root.matchesShortcut(event, "forward", "Alt+Right")
+                    && root.requestPanelShortcut("navigateForward")) {
                 event.accepted = true;
                 return;
             }

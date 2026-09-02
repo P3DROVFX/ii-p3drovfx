@@ -9,16 +9,17 @@ Item {
     id: barOverlayRoot
     anchors.fill: parent
 
+    // The source must use this overlay's screen coordinate space. Keeping the
+    // overlay outside WallpaperImage makes its fade fixed while this capture
+    // still reflects the wallpaper's animated pixels.
     required property var sourceItem
-    required property real parallaxX
-    required property real parallaxY
     required property int screenWidth
     required property int screenHeight
 
     readonly property bool shouldShow: Config.options.bar.barBackgroundStyle === 0
         && Config.options.bar.transparentGlow
         && GlobalStates.barOpen
-        && !GlobalStates.screenLocked
+        && !GlobalStates.lockLookActive
 
     Item {
         id: barBlurOverlay
@@ -55,12 +56,8 @@ Item {
             ShaderEffectSource {
                 id: barBlurShaderSource
                 sourceItem: barOverlayRoot.sourceItem
-                sourceRect: Qt.rect(
-                    barBlurOverlay.overlayX - barOverlayRoot.parallaxX,
-                    barBlurOverlay.overlayY - barOverlayRoot.parallaxY,
-                    barBlurOverlay.overlayW,
-                    barBlurOverlay.overlayH
-                )
+                sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY,
+                    barBlurOverlay.overlayW, barBlurOverlay.overlayH)
                 width: barBlurOverlay.overlayW
                 height: barBlurOverlay.overlayH
                 // Only capture while the overlay is actually on screen. A permanently

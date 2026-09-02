@@ -17,6 +17,7 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.editMode
 
 PanelWindow {
     id: bgRoot
@@ -25,6 +26,34 @@ PanelWindow {
     required property var widgetStateManager
 
     property bool anyWidgetIsDragging: (widgetStateManager?.draggingActive) ?? false
+
+    // ── Edit Mode's viewport ──────────────────────────────────────────────────
+    // The desktop stops being the whole screen and becomes an object on it. The wallpaper plane
+    // here and the widget canvas in BackgroundWidgetsWindow take the same transform, derived
+    // from the same pure function on the same inputs, on the one animated scalar GlobalStates
+    // owns - so two windows in two scene graphs shrink as one rectangle. Only the screen the mode
+    // is on shrinks (decision D4); every other screen reads progress 0 and the identity.
+    readonly property string editScreenName: bgRoot.screen ? bgRoot.screen.name : ""
+    readonly property bool isEditMonitor: GlobalStates.editModeMonitor !== "" && GlobalStates.editModeMonitor === bgRoot.editScreenName
+    readonly property real editProgress: bgRoot.isEditMonitor ? GlobalStates.editProgress : 0
+    readonly property var editViewport: EditModeInsets.viewportFor(bgRoot.editScreenName, bgRoot.width, bgRoot.height)
+    readonly property real editShift: bgRoot.isEditMonitor
+        ? CF.EditModeLogic.drawerTravel(bgRoot.editViewport) * GlobalStates.editDrawerProgress : 0
+    readonly property var editTransform: CF.EditModeLogic.atProgress(bgRoot.editViewport, bgRoot.editProgress, bgRoot.editShift)
+    // A scale about the top-left followed by a translation, as one matrix rather than a
+    // [Scale, Translate] pair: the order a transform list composes in is exactly the kind of thing
+    // that is wrong by a factor of the scale and still looks plausible. What it DRAWS is a scale
+    // about the usable area's centre, and that is the geometry's doing: the offset it hands in is
+    // the centring offset for the scale beside it, on every frame.
+    readonly property matrix4x4 editMatrix: Qt.matrix4x4(
+        bgRoot.editTransform.scale, 0, 0, bgRoot.editTransform.x,
+        0, bgRoot.editTransform.scale, 0, bgRoot.editTransform.y,
+        0, 0, 1, 0,
+        0, 0, 0, 1)
+    readonly property var editCardGeometry: CF.EditModeLogic.cardRect(bgRoot.editViewport, bgRoot.editProgress, bgRoot.width, bgRoot.height, bgRoot.editShift)
+    readonly property rect editCard: Qt.rect(bgRoot.editCardGeometry.x, bgRoot.editCardGeometry.y, bgRoot.editCardGeometry.width, bgRoot.editCardGeometry.height)
+    // The corner grows with the shrink, so a desktop at rest has no radius applied to it at all.
+    readonly property real editCardRadius: Appearance.rounding.verylarge * bgRoot.editProgress
     property real baseWallpaperScale: 1 // Calculated scale from wallpaper size
     property int wallpaperWidth: modelData.width // Some reasonable init value, to be updated
     property int wallpaperHeight: modelData.height // Some reasonable init value, to be updated
@@ -242,13 +271,13 @@ PanelWindow {
 
     readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
     // Colors
-    property bool shouldBlur: (GlobalStates.screenLocked && Config.options.lock.blur.enable)
+    property bool shouldBlur: (GlobalStates.lockLookActive && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
     property bool dominantColorIsDark: dominantColor.hslLightness < 0.5
     property color colText: {
         if (wallpaperSafetyTriggered)
             return CF.ColorUtils.mix(Appearance.colors.colOnLayer0, Appearance.colors.colPrimary, 0.75);
-        return (GlobalStates.screenLocked && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
+        return (GlobalStates.lockLookActive && shouldBlur) ? Appearance.colors.colOnLayer0 : CF.ColorUtils.colorWithLightness(Appearance.colors.colPrimary, (dominantColorIsDark ? 0.8 : 0.12));
     }
     // Video Wallpaper Parallax via mpv IPC
     readonly property real videoPanX: (0.5 - parallax.effectiveValueX) * 0.08
@@ -579,6 +608,55 @@ PanelWindow {
             lockAnimationActive: bgRoot.lockAnimationActive
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
+            editMatrix: bgRoot.editMatrix
+        }
+
+        // The desktop menu when there is no widget surface to ask for it: with no widget shown
+        // the widgets window is unmapped and a right-click lands here, on the wallpaper.
+        MouseArea {
+            anchors.fill: parent
+            z: 0
+            acceptedButtons: Qt.RightButton
+            onClicked: mouse => GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y)
+
+            // A touch screen's long press: the same way in as the widget
+            // canvas offers when it is mapped.
+            TapHandler {
+                acceptedDevices: PointerDevice.TouchScreen
+                gesturePolicy: TapHandler.WithinBounds
+                onLongPressed: {
+                    if (!GlobalStates.editMode)
+                        GlobalStates.openEditMode(bgRoot.editScreenName);
+                }
+            }
+        }
+
+        // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk
+        // desktop, drawn over the wallpaper and cut out to the card. Loaded only while the mode is
+        // on or animating, so at rest nothing here exists. Non-interactive: the widgets surface
+        // above owns every click.
+        Loader {
+            id: editCardLoader
+            anchors.fill: parent
+            z: 1
+            enabled: false
+            active: bgRoot.editProgress > 0
+            opacity: Math.max(0, Math.min(1, bgRoot.editProgress))
+            sourceComponent: EditModeCard {
+                wallpaperLayer: wallpaperImage.wallpaperPlanesItem
+                card: bgRoot.editCard
+                cardRadius: bgRoot.editCardRadius
+            }
+        }
+
+        // This composition layer must stay in the screen coordinate space.
+        // WallpaperImage is transformed by the Gnome-like overview, but the
+        // transparent-bar fade must remain anchored below the real bar. Sampling
+        // WallpaperImage keeps the blur in sync with its rendered wallpaper.
+        BarGradientOverlay {
+            sourceItem: wallpaperImage
+            screenWidth: bgRoot.screen.width
+            screenHeight: bgRoot.screen.height
         }
 
         GlobalShortcut {

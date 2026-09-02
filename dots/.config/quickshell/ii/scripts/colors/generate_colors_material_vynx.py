@@ -63,6 +63,26 @@ def boost_chroma_tone (argb: int, chroma: float = 1, tone: float = 1) -> int:
     hct = Hct.from_int(argb)
     return Hct.from_hct(hct.hue, hct.chroma * chroma, hct.tone * tone).to_int()
 
+def resolve_auto_scheme(image_path):
+    """Mirror switchwall's `auto` handling: pick the scheme from the image's
+    colourfulness via scheme_for_image.py (single source of truth). Without an
+    image, or if that helper can't be imported, fall back to tonal spot."""
+    if not image_path:
+        return 'scheme-tonal-spot'
+    try:
+        import os as _os
+        _dir = _os.path.dirname(_os.path.abspath(__file__))
+        if _dir not in sys.path:
+            sys.path.insert(0, _dir)
+        import scheme_for_image
+        img = scheme_for_image.load_and_resize_image(image_path)
+        if img is None:
+            return 'scheme-tonal-spot'
+        return scheme_for_image.pick_scheme(scheme_for_image.image_colorfulness(img))
+    except Exception as e:
+        print(f"Auto scheme detection failed ({e}); using tonal spot", file=sys.stderr)
+        return 'scheme-tonal-spot'
+
 darkmode = (args.mode == 'dark')
 transparent = (args.transparency == 'transparent')
 
@@ -125,8 +145,12 @@ else:
 
 if args.all_previews:
     import os
+    auto_scheme = resolve_auto_scheme(args.path)
+
     def get_scheme_class(name):
-        if name in ('scheme-auto', 'scheme-tonal-spot'):
+        if name == 'scheme-auto':
+            name = auto_scheme
+        if name == 'scheme-tonal-spot':
             from materialyoucolor.scheme.scheme_tonal_spot import SchemeTonalSpot as S
         elif name == 'scheme-fruit-salad':
             from materialyoucolor.scheme.scheme_fruit_salad import SchemeFruitSalad as S
@@ -170,7 +194,8 @@ if args.all_previews:
         previews[s_name] = {
             "primary": m_colors.get("primary", "transparent"),
             "primary_container": m_colors.get("primaryContainer", "transparent"),
-            "secondary": m_colors.get("secondary", "transparent")
+            "secondary": m_colors.get("secondary", "transparent"),
+            "tertiary": m_colors.get("tertiary", "transparent")
         }
 
     if args.request_token and args.request_value:
@@ -200,6 +225,9 @@ if args.all_previews:
         os.replace(tmp_path, args.all_previews)
     except Exception as e:
         print(f"Error saving all previews: {e}")
+
+if args.scheme == 'scheme-auto':
+    args.scheme = resolve_auto_scheme(args.path)
 
 if args.scheme == 'scheme-fruit-salad':
     from materialyoucolor.scheme.scheme_fruit_salad import SchemeFruitSalad as Scheme
@@ -274,7 +302,8 @@ if args.preview:
     print(json.dumps({
         "primary": material_colors.get("primary"),
         "primary_container": material_colors.get("primaryContainer"),
-        "secondary": material_colors.get("secondary")
+        "secondary": material_colors.get("secondary"),
+        "tertiary": material_colors.get("tertiary")
     }))
     exit(0)
 

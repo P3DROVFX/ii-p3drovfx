@@ -103,7 +103,7 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         for action in ("select", "cut", "paste", "createFolder", "duplicate", "toggleHidden", "refresh", "stageCopy", "sortFiles", "goHome", "forward"):
             self.assertIn('"' + action + '"', search_bar)
             self.assertIn('actionId: "' + action + '"', shortcuts)
-        self.assertIn("onPanelShortcut", widget)
+        self.assertIn("panelShortcutHandler", widget)
         self.assertIn("handlePanelBackspace", widget)
         self.assertIn('typeof root.activePanelItem.handleEscape === "function"', widget)
         self.assertIn("active: searchResultsSurface.registeredPanelActive || keepAlive", widget)

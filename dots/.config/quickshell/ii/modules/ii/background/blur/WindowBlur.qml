@@ -22,8 +22,10 @@ Item {
     // Overview (and the plain search bar behind Super) deliberately does NOT clear the blur: the
     // wallpaper stays blurred underneath. This item sits below the overview dim layer, so the
     // overview's own dim/scale still composes on top of the blurred wallpaper.
+    // The layout editor parks the monitor on a temp workspace that maps back to the real one, so
+    // the windows-open test would keep the blur on inside the edit card; the card must stay sharp.
     readonly property bool shouldBlur: Config.options.background.blurWhenWindowsOpen
-        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
         && sourceReady && sourceWidth > 0 && sourceHeight > 0
 
     // Keep the Loader binding intact while still allowing a fresh grab once the plane's geometry

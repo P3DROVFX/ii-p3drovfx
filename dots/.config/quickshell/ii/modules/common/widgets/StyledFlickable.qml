@@ -16,6 +16,10 @@ Flickable {
     readonly property real minY: root.originY - root.topMargin
     readonly property real maxY: Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin)
     readonly property real maxBounceOvershoot: Math.min(60, Math.max(30, root.height * 0.12))
+    // Nothing to scroll means the wheel belongs to whatever is behind this:
+    // a nested flickable that grabs it anyway swallows the parent page's
+    // scroll and rubber-bands in place instead.
+    readonly property bool canScrollVertically: root.maxY - root.minY > 1
 
     // The Behavior below must smooth wheel jumps only. Left unguarded it also
     // intercepts the contentY that Flickable writes on every drag and flick
@@ -63,7 +67,7 @@ Flickable {
     // Do not overlay the content with a MouseArea: that would replace every
     // delegate's pointer cursor with the default arrow while scrolling is on.
     WheelHandler {
-        enabled: root.interactive
+        enabled: root.interactive && root.canScrollVertically
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
             const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;

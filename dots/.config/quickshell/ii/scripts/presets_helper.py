@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+import copy
 import json
 import os
 import sys
 import glob
 import re
+import tempfile
 
 SENSITIVE_KEY_NAMES = {
     "password", "passwd", "secret", "clientsecret", "token", "accesstoken",
@@ -42,6 +44,371 @@ DOCK_BLACKLIST_KEYS = {
     "showOverviewButton",
     "showPinButton",
 }
+
+# ---------------------------------------------------------------------------
+# Machine-local and personal config paths
+#
+# A preset is a whole config.json, so everything the author's machine knows
+# about rides along with it: paired-device MAC addresses, contact ids, the
+# folder they save recordings to, the name on their profile card. None of it
+# means anything on another machine and some of it is nobody else's business,
+# so it is stripped when a preset is written and taken from the importer's own
+# config when one is applied.
+#
+# Paths are dotted; "*" matches any dict key or list index.
+# ---------------------------------------------------------------------------
+
+# Blanked rather than removed. Presets published before merge() existed carry
+# these keys, and a neutral value is what those presets expect to find.
+MONITOR_BINDING_PATHS = (
+    "bar.onlyShowOnSingleMonitor",
+    "bar.singleMonitorName",
+    "bar.screenList",
+    "bar.floatingNotch.onlyShowOnSingleMonitor",
+    "bar.floatingNotch.singleMonitorName",
+    "background.widgets.showOnlyOnSingleMonitor",
+    "background.widgets.targetMonitor",
+    "interactions.touchGestures.targetMonitor",
+    "notifications.monitor.enable",
+    "notifications.monitor.name",
+)
+
+# Identity and paired hardware. Removed outright: there is no neutral value
+# worth shipping, and these travel no better than they anonymize.
+PERSONAL_PATHS = (
+    "userProfile.customName",
+    "userProfile.customBio",
+    "userProfile.customGreeting",
+    "userProfile.imagePath",
+    "sidebar.dashboardHeader.profileImagePath",
+    "background.widgets.*.imagePath",
+    "background.thumbnailPath",
+    "bluetoothDeviceImages",
+    "soundcore.macAddress",
+    "phone.contacts.favoriteIds",
+    "phone.microphone.wifiIp",
+    "phone.scrcpy.wirelessIp",
+    "phone.webcam.wifiIp",
+    "sidebar.booru.zerochan.username",
+    # The libinput id of a touchpad that exists on one laptop. Machine-local
+    # in the same way a monitor name is, and applying it silently stops touch
+    # gestures working on everyone else's.
+    "interactions.touchGestures.deviceId",
+    "todo.googleTasks.taskListId",
+    "todo.googleTasks.taskListTitle",
+    "tailscale.exitNode",
+    "tailscale.advertiseRoutes",
+    "vpn.defaultProfile",
+    "vpn.defaultLocation",
+    "vpn.recentProvider",
+    "bar.weather.city",
+    "bar.weather.enableGPS",
+    "update.lastAutoCheck",
+    "update.scriptPath",
+)
+
+# Folders that exist on the author's disk and probably nowhere else.
+LOCAL_FOLDER_PATHS = (
+    "screenRecord.savePath",
+    "screenSnip.savePath",
+    "localsend.downloadPath",
+    "mediaDownloader.downloadPath",
+    "wallpapers.paths",
+    "wallpaperSelector.customDefaultPath",
+    "wallpaperSelector.directories",
+)
+
+# Choices a theme has no business overriding.
+LOCAL_PREFERENCE_PATHS = (
+    "appearance.iconTheme",
+    "appearance.icons.enableThemed",
+    "language",
+    "bar.weather.useUSCS",
+    "policies",
+    "workSafety",
+)
+
+# Everything merge() hands back to the importer.
+LOCAL_ONLY_PATHS = (
+    MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
+)
+
+# Path fields a preset is meant to bring with it. Each falls back to a bundled
+# asset, then to whatever the importer already had, so applying a preset never
+# leaves a dead path behind. A kind of None skips the bundled-asset step.
+ASSET_PATHS = (
+    ("background.wallpaperPath", "wallpaper"),
+    ("background.lightModeWallpaperPath", None),
+    ("sidebar.bannerImage", "banner"),
+)
+
+# ---------------------------------------------------------------------------
+# Risk scanning
+#
+# A preset is a whole config file, and a handful of config keys are commands
+# the shell hands to a shell. Applying a stranger's preset is therefore a
+# decision that has to be made with the facts in hand, so everything a preset
+# would change that can run something, redirect traffic or widen what the
+# assistant may do on its own is collected up front and shown before a single
+# byte is written.
+# ---------------------------------------------------------------------------
+
+# (pattern, category, note). Patterns take the same dotted form as above.
+RISK_RULES = (
+    ("apps.*", "shell", "Command run when this shell action is picked"),
+    ("update.scriptFlags", "shell", "Arguments handed to the updater"),
+    ("mediaDownloader.extraArgs", "shell", "Extra arguments handed to the downloader"),
+    ("ai.tools.allowShellInLocalPolicy", "ai", "Lets the assistant run shell commands"),
+    ("ai.tools.alwaysAllow", "ai", "Assistant tools that stop asking first"),
+    ("dnsOverTls.serverName", "network", "Encrypted DNS resolver"),
+    ("dnsOverTls.serverAddress", "network", "Encrypted DNS resolver"),
+    ("mediaDownloader.proxy", "network", "Proxy every download goes through"),
+    ("search.engineBaseUrl", "network", "Where the search bar sends what is typed"),
+    ("search.imageSearch.imageSearchEngineBaseUrl", "network", "Where image searches are uploaded"),
+)
+
+# Modes and routines can carry a "shell" action whose value is run with sh -c
+# when the mode starts or ends, and a mode can start itself off a trigger, so
+# these run without anyone pressing anything.
+MODE_ACTION_PATTERNS = ("modes.modes.*.actions.*", "modes.routines.*.actions.*")
+
+SEVERITY = {"shell": "high", "ai": "high", "network": "medium", "unknown": "medium"}
+
+RISK_ORDER = ("shell", "ai", "network", "unknown")
+
+# Strings that read like a command line. Deliberately loose: a false positive
+# costs one more line in the dialog, a miss costs someone their session.
+COMMAND_HINT_RE = re.compile(
+    r"\$\(|`|&&|\|\||;\s*\S|\b(?:sh|bash|zsh|fish)\s+-c\b"
+    r"|\b(?:curl|wget|ncat|socat|ssh|scp)\b|\brm\s+-|\bnc\s+-"
+    r"|\b(?:pkexec|sudo|doas)\b|\bchmod\b|\beval\b|\bbase64\b"
+    r"|\bsystemctl\b|\bcrontab\b|\.sh\b|\.py\b"
+)
+
+# Long enough to read a command, short enough that one line cannot flood the
+# dialog and hide the rest of the findings.
+VALUE_PREVIEW_LIMIT = 300
+
+_MISSING = object()
+
+
+def user_home():
+    home = os.environ.get('HOME', '')
+    return home[:-1] if home.endswith('/') else home
+
+
+# ---------------------------------------------------------------------------
+# Schema compatibility
+#
+# "Migrate up, block newer". Config.qml carries every older schema forward on
+# its own, so an old preset is safe. A preset written against a newer schema
+# is not: it holds keys and shapes this build has never heard of, and
+# JsonAdapter coerces those into whatever the local type happens to be without
+# ever saying so.
+# ---------------------------------------------------------------------------
+
+def current_config_version():
+    """The schema version this build understands, read from Config.qml."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    qml = os.path.join(root, 'modules', 'common', 'Config.qml')
+    try:
+        with open(qml, 'r', encoding='utf-8') as handle:
+            match = re.search(r'currentConfigVersion\s*:\s*(\d+)', handle.read())
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
+    # Config.qml moved or could not be read. The live config was written by
+    # this build, so its own version is the next best answer.
+    try:
+        path = os.path.join(user_home(), '.config', 'illogical-impulse', 'config.json')
+        with open(path, 'r', encoding='utf-8') as handle:
+            value = json.load(handle).get('configVersion')
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    except Exception:
+        pass
+    return None
+
+
+def compatibility(preset_version):
+    """Say whether a preset can be applied, and why not when it cannot."""
+    ours = current_config_version()
+    known = isinstance(preset_version, int) and not isinstance(preset_version, bool)
+    if ours is None or not known:
+        # Nothing to compare. A preset from before versioning existed reads
+        # as unknown rather than old, and refusing those would lock out every
+        # preset exported before the store was built.
+        return {'ok': True, 'status': 'unknown', 'ours': ours, 'theirs': preset_version}
+    if preset_version > ours:
+        return {
+            'ok': False,
+            'status': 'too-new',
+            'ours': ours,
+            'theirs': preset_version,
+            'reason': 'This preset was made for a newer version of the shell. Update first.',
+        }
+    if preset_version < ours:
+        return {'ok': True, 'status': 'migrate', 'ours': ours, 'theirs': preset_version}
+    return {'ok': True, 'status': 'current', 'ours': ours, 'theirs': preset_version}
+
+
+def preset_config_version(preset_path):
+    """The schema version a preset file was written against, or None."""
+    try:
+        with open(preset_path, 'r', encoding='utf-8') as handle:
+            value = json.load(handle).get('configVersion')
+    except Exception:
+        return None
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def plain_path(value):
+    """Strip the file:// scheme and any ?query from a path-ish string."""
+    if not isinstance(value, str):
+        return ''
+    path = value.strip()
+    if path.startswith('file://'):
+        path = path[7:]
+    return path.split('?', 1)[0]
+
+
+def _match_children(node, token):
+    """Yield the keys of `node` that one path token selects."""
+    if isinstance(node, dict):
+        if token == '*':
+            for key in list(node.keys()):
+                yield key
+        elif token in node:
+            yield token
+    elif isinstance(node, list):
+        if token == '*':
+            for index in range(len(node)):
+                yield index
+        elif token.lstrip('-').isdigit() and -len(node) <= int(token) < len(node):
+            yield int(token)
+
+
+def find_paths(data, pattern):
+    """Every concrete path in `data` matching a dotted pattern."""
+    results = [[]]
+    for token in pattern.split('.'):
+        matches = []
+        for path in results:
+            node = get_path(data, path, _MISSING)
+            if node is _MISSING:
+                continue
+            for key in _match_children(node, token):
+                matches.append(path + [key])
+        results = matches
+        if not results:
+            break
+    return results
+
+
+def get_path(data, path, default=None):
+    node = data
+    for key in path:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        elif isinstance(node, list) and isinstance(key, int) and -len(node) <= key < len(node):
+            node = node[key]
+        else:
+            return default
+    return node
+
+
+def set_path(data, path, value):
+    node = data
+    for key in path[:-1]:
+        if isinstance(node, list):
+            node = node[key]
+            continue
+        if not isinstance(node.get(key), (dict, list)):
+            node[key] = {}
+        node = node[key]
+    node[path[-1]] = value
+
+
+def del_path(data, path):
+    parent = get_path(data, path[:-1], _MISSING)
+    if parent is _MISSING:
+        return
+    key = path[-1]
+    if isinstance(parent, dict):
+        parent.pop(key, None)
+    elif isinstance(parent, list) and isinstance(key, int) and -len(parent) <= key < len(parent):
+        del parent[key]
+
+
+def strip_paths(data, patterns):
+    for pattern in patterns:
+        # Deepest first, so deleting a parent never invalidates a pending path.
+        for path in sorted(find_paths(data, pattern), key=len, reverse=True):
+            del_path(data, path)
+
+
+def deep_merge(base, overlay):
+    """Overlay wins for scalars and lists; dicts merge key by key.
+
+    Merging rather than overwriting is what lets a preset omit the importer's
+    API keys, search aliases and dock pins instead of erasing them.
+    """
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return copy.deepcopy(overlay)
+    merged = copy.deepcopy(base)
+    for key, value in overlay.items():
+        merged[key] = deep_merge(merged[key], value) if key in merged else copy.deepcopy(value)
+    return merged
+
+
+def restore_local_only(merged, current):
+    """Put the importer's machine-local values back over the preset's."""
+    for pattern in LOCAL_ONLY_PATHS:
+        strip_paths(merged, (pattern,))
+        for path in find_paths(current, pattern):
+            set_path(merged, path, copy.deepcopy(get_path(current, path)))
+
+
+def resolve_asset_paths(merged, current, presets_dir, preset_name):
+    """Point each shipped asset field at something that actually exists."""
+    finders = {'wallpaper': find_wallpaper_fallback, 'banner': find_banner_fallback}
+    for dotted, kind in ASSET_PATHS:
+        path = dotted.split('.')
+        value = plain_path(get_path(merged, path))
+        if value and os.path.exists(value):
+            continue
+        bundled = None
+        if kind and presets_dir and preset_name:
+            bundled = finders[kind](presets_dir, preset_name)
+        if bundled:
+            set_path(merged, path, bundled)
+            continue
+        local = get_path(current, path)
+        if isinstance(local, str) and local:
+            set_path(merged, path, local)
+
+
+def atomic_write_json(path, data):
+    """Write via a temp file in the same directory, then rename over the target.
+
+    config.json is watched; a partial read of a half-written file would be
+    reported as malformed and block every subsequent save.
+    """
+    directory = os.path.dirname(os.path.abspath(path)) or '.'
+    os.makedirs(directory, exist_ok=True)
+    handle, tmp_path = tempfile.mkstemp(dir=directory, prefix='.preset-', suffix='.json')
+    try:
+        with os.fdopen(handle, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
 
 def remove_secrets_and_userdata(data):
     if isinstance(data, dict):
@@ -149,6 +516,11 @@ def reset_monitor_bindings(data):
 
 def sanitize_data(data, home_dir):
     data = remove_secrets_and_userdata(data)
+
+    # Identity and paired hardware never travel with a preset. These are
+    # dropped rather than blanked so that applying the preset falls through to
+    # whatever the importer already had.
+    strip_paths(data, PERSONAL_PATHS)
 
     if 'appearance' in data and isinstance(data['appearance'], dict):
         icons = data['appearance'].get('icons')
@@ -262,6 +634,204 @@ def expand(input_path, output_path, presets_dir, preset_name):
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)
 
+def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None):
+    """Apply a preset onto an existing config without destroying what is local.
+
+    The preset is layered over the current config rather than replacing it, so
+    keys a preset legitimately does not carry -- API keys, search aliases, dock
+    pins -- survive untouched. Whatever the preset does carry but should not
+    (monitor names, save folders, the author's profile card) is handed back
+    from the current config afterwards.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    if not isinstance(preset, dict):
+        raise ValueError('preset is not a JSON object')
+
+    current = {}
+    if os.path.exists(config_path):
+        # A config that no longer parses is the only source of truth for the
+        # user's settings, so refuse rather than merge onto an empty dict and
+        # silently reset everything the file still held.
+        with open(config_path, 'r', encoding='utf-8') as f:
+            current = json.load(f)
+        if not isinstance(current, dict):
+            raise ValueError('existing config is not a JSON object')
+
+    preset = expand_val(preset, user_home())
+    merged = deep_merge(current, preset)
+    restore_local_only(merged, current)
+    resolve_asset_paths(merged, current, presets_dir, preset_name)
+
+    # migrateRaw() in Config.qml only runs when the file still says which
+    # version it was written for, so the preset's version has to survive the
+    # merge. Stamping the current version here would skip every migration the
+    # preset needs and leave retyped keys to be mangled by JsonAdapter.
+    if 'configVersion' in preset:
+        merged['configVersion'] = preset['configVersion']
+
+    atomic_write_json(out_path, merged)
+
+
+def _dotted(path):
+    return '.'.join(str(key) for key in path)
+
+
+def _preview(value):
+    """One-line, length-capped rendering of a value for the dialog."""
+    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+    text = ' '.join(text.split())
+    if len(text) > VALUE_PREVIEW_LIMIT:
+        text = text[:VALUE_PREVIEW_LIMIT - 1] + '\u2026'
+    return text
+
+
+def _is_empty(value):
+    """True for values that change nothing worth warning about."""
+    return value is None or value is False or (isinstance(value, (str, list, dict)) and not value)
+
+
+def _changed(merged, current, path):
+    return get_path(merged, path, _MISSING) != get_path(current, path, _MISSING)
+
+
+def _walk_strings(node, path=()):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            for found in _walk_strings(value, path + (key,)):
+                yield found
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            for found in _walk_strings(value, path + (index,)):
+                yield found
+    elif isinstance(node, str):
+        yield list(path), node
+
+
+def _shell_action_commands(action):
+    """The start/end command pair of one mode or routine action, if it has any."""
+    if not isinstance(action, dict) or action.get('type') != 'shell':
+        return []
+    value = action.get('value')
+    pairs = value if isinstance(value, dict) else {'start': value}
+    return [(when, pairs.get(when)) for when in ('start', 'end')
+            if isinstance(pairs.get(when), str) and pairs.get(when).strip()]
+
+
+def _existing_shell_commands(current):
+    """Every shell command the config already runs, so re-listing one is quiet.
+
+    Matching on the command text rather than the path is what keeps a
+    reordered mode list from being reported as a page of new commands.
+    """
+    commands = set()
+    for pattern in MODE_ACTION_PATTERNS:
+        for path in find_paths(current, pattern):
+            for _, command in _shell_action_commands(get_path(current, path)):
+                commands.add(command)
+    return commands
+
+
+def _scan_mode_actions(merged, current, seen):
+    known = _existing_shell_commands(current)
+    findings = []
+    for pattern in MODE_ACTION_PATTERNS:
+        for path in find_paths(merged, pattern):
+            action = get_path(merged, path)
+            owner = get_path(merged, path[:-2], {})
+            name = owner.get('name') or owner.get('id') or _dotted(path[:-2])
+            # Also claim the bare value path: a shell action may hold its
+            # command as a plain string, and the sweep below would then list
+            # the same command a second time as an unrecognised one.
+            seen.add(tuple(path + ['value']))
+            for when, command in _shell_action_commands(action):
+                if command in known:
+                    continue
+                seen.add(tuple(path + ['value', when]))
+                findings.append({
+                    'category': 'shell',
+                    'path': _dotted(path + ['value', when]),
+                    'label': '%s (%s)' % (name, 'on start' if when == 'start' else 'on end'),
+                    'note': 'Run by a mode or routine, which can start on its own',
+                    'value': _preview(command),
+                })
+    return findings
+
+
+def scan(preset_path, config_path=None):
+    """What applying this preset would let run, reach or unlock.
+
+    Reported against the merged result rather than the preset itself: anything
+    merge() hands back from the local config cannot be delivered by a preset,
+    so warning about it would be a lie in the one direction that matters.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    if not isinstance(preset, dict):
+        raise ValueError('preset is not a JSON object')
+
+    current = {}
+    if config_path and os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            current = loaded
+
+    verdict = compatibility(preset.get('configVersion'))
+    preset = expand_val(preset, user_home())
+    merged = deep_merge(current, preset)
+    restore_local_only(merged, current)
+
+    seen = set()
+    findings = _scan_mode_actions(merged, current, seen)
+
+    for pattern, category, note in RISK_RULES:
+        for path in find_paths(merged, pattern):
+            if tuple(path) in seen or not _changed(merged, current, path):
+                continue
+            value = get_path(merged, path)
+            if _is_empty(value):
+                continue
+            seen.add(tuple(path))
+            findings.append({
+                'category': category,
+                'path': _dotted(path),
+                'label': _dotted(path),
+                'note': note,
+                'value': _preview(value),
+            })
+
+    # Keys nobody has classified yet. A preset written for a newer build can
+    # carry a command in a setting this list has never heard of, so anything
+    # that merely reads like a command line is surfaced too.
+    for path, value in _walk_strings(preset):
+        if tuple(path) in seen or not COMMAND_HINT_RE.search(value):
+            continue
+        if not _changed(merged, current, path):
+            continue
+        seen.add(tuple(path))
+        findings.append({
+            'category': 'unknown',
+            'path': _dotted(path),
+            'label': _dotted(path),
+            'note': 'Unrecognised setting that reads like a command',
+            'value': _preview(value),
+        })
+
+    groups = []
+    for category in RISK_ORDER:
+        items = [f for f in findings if f['category'] == category]
+        if items:
+            groups.append({
+                'id': category,
+                'severity': SEVERITY[category],
+                'count': len(items),
+                'items': items,
+            })
+
+    return {'ok': True, 'total': len(findings), 'groups': groups, 'compatibility': verdict}
+
+
 def find_wallpaper_fallback(presets_dir, preset_name):
     pattern = os.path.join(presets_dir, f"{preset_name}.*")
     for filepath in glob.glob(pattern):
@@ -318,7 +888,13 @@ def list_presets(presets_dir):
             if fallback:
                 wall_path = fallback
                 
-        print(json.dumps({"name": preset_name, "wallpaper": wall_path}))
+        # 0, never null: a ListModel fixes its roles on the first row, and a
+        # null there would type the role as something no other row fits.
+        version = data.get('configVersion')
+        if not isinstance(version, int) or isinstance(version, bool):
+            version = 0
+        print(json.dumps({"name": preset_name, "wallpaper": wall_path,
+                          "configVersion": version}))
 
 def main():
     if len(sys.argv) < 2:
@@ -333,6 +909,31 @@ def main():
         if len(sys.argv) < 6:
             sys.exit(1)
         expand(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+    elif action == 'merge':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        presets_dir = sys.argv[5] if len(sys.argv) > 5 else None
+        preset_name = sys.argv[6] if len(sys.argv) > 6 else None
+        try:
+            merge(sys.argv[2], sys.argv[3], sys.argv[4], presets_dir, preset_name)
+        except Exception as exc:
+            print(f'merge failed: {exc}', file=sys.stderr)
+            sys.exit(1)
+    elif action == 'scan':
+        if len(sys.argv) < 3:
+            sys.exit(1)
+        config_path = sys.argv[3] if len(sys.argv) > 3 else None
+        # Always one JSON line, failure included: the dialog that reads this
+        # has to be able to say why it could not vouch for a preset.
+        try:
+            print(json.dumps(scan(sys.argv[2], config_path)))
+        except Exception as exc:
+            print(json.dumps({'ok': False, 'error': str(exc)}))
+            sys.exit(1)
+    elif action == 'compat':
+        if len(sys.argv) < 3:
+            sys.exit(1)
+        print(json.dumps(compatibility(preset_config_version(sys.argv[2]))))
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)

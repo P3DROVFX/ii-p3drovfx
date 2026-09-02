@@ -1106,6 +1106,20 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("onMaxResultsHeightChanged", widget)
         self.assertNotIn("readonly property real maxResultsHeight: 600", widget)
 
+    def test_center_search_suppresses_top_layer_search_drop(self):
+        top_layer = source("modules/ii/topLayer/TopLayerPanel.qml")
+        search_drop = source("modules/ii/topLayer/search/SearchDrop.qml")
+        global_states = source("GlobalStates.qml")
+
+        # TopLayerPanel must suppress SearchDrop when searchConnectActive is false
+        self.assertIn("!GlobalStates.searchConnectActive", top_layer)
+
+        # SearchDrop must only be open when searchConnectActive is true
+        self.assertIn("readonly property bool isOpen: GlobalStates.overviewOpen && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor", search_drop)
+
+        # GlobalStates must not grant search ownership to floating notch if center mode is active
+        self.assertIn("if (root.searchCenterMode)", global_states)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,10 @@ Singleton {
     property var values: ({})
 
     // Written by generate_colors_material.py --all-previews, keyed by scheme
-    // name ("scheme-tonal-spot", ...) with primary/primary_container/secondary.
+    // name ("scheme-tonal-spot", ...) with primary/primary_container/secondary/
+    // tertiary. Tertiary is what the swatch shows third: secondary is just a
+    // desaturated primary, so it hid the difference between e.g. Content and
+    // Fidelity, whereas tertiary is where the schemes actually diverge.
     property var wallpaperPreviews: ({})
     readonly property bool wallpaperPreviewsReady: Object.keys(root.wallpaperPreviews).length > 0
 
@@ -32,7 +35,7 @@ Singleton {
         return {
             primary: entry.primary || "transparent",
             secondary: entry.primary_container || "transparent",
-            tertiary: entry.secondary || "transparent"
+            tertiary: entry.tertiary || entry.secondary || "transparent"
         };
     }
 
@@ -127,7 +130,7 @@ Singleton {
                     root.values[pathLoaded] = {
                         primary: data.primary || "transparent",
                         secondary: data.primary_container || "transparent",
-                        tertiary: data.secondary || "transparent"
+                        tertiary: data.tertiary || data.secondary || "transparent"
                     };
                     root.cacheChanged(pathLoaded);
                 }

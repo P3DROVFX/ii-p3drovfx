@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -31,9 +32,16 @@ MouseArea {
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     cursorShape: Qt.PointingHandCursor
 
-    implicitWidth: active ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth) : 0
-    implicitHeight: active ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight) : 0
-    visible: active
+    // Edit Mode has to be able to reach a widget that is currently showing
+    // nothing: with nothing to show this takes no room at all, so there would
+    // be nothing to grab, drag or place. While the mode is on it is drawn as
+    // though it were active. Rendering only - the stored visibility flag stays
+    // on the real condition, and the bar ORs the mode in on its side.
+    readonly property bool shown: indicator.active || GlobalStates.editMode
+
+    implicitWidth: shown ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth) : 0
+    implicitHeight: shown ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight) : 0
+    visible: shown
 
     Component.onCompleted: indicator.updateVisibility()
     onActiveChanged: indicator.updateVisibility()

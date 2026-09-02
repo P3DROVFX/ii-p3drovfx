@@ -45,13 +45,13 @@ Item {
     Loader {
         id: blurLoader
         active: Config.options.lock.blur.enable && lockBlurRoot.sourceReady && !lockBlurRoot.reloadRequested
-            && (GlobalStates.screenLocked || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
+            && (GlobalStates.lockLookActive || opacityAnim.running) && !lockBlurRoot.wallpaperIsVideo
         anchors.fill: parent
-        opacity: GlobalStates.screenLocked ? 1.0 : 0.0
+        opacity: GlobalStates.lockLookActive ? 1.0 : 0.0
         Behavior on opacity {
             SequentialAnimation {
                 id: opacityAnim
-                PauseAnimation { duration: GlobalStates.screenLocked ? Math.round(150 * Appearance.animMultiplier) : 0 }
+                PauseAnimation { duration: GlobalStates.lockLookActive ? Math.round(150 * Appearance.animMultiplier) : 0 }
                 NumberAnimation {
                     duration: Math.round(350 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic

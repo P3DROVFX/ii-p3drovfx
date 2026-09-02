@@ -87,6 +87,20 @@ DockContextMenuBase {
             }
         }
 
+        // The way into Edit Mode from the dock itself: the mode opens with the
+        // panel on the dock's own page, where its looks and its apps live.
+        DockMenuButton {
+            visible: !GlobalStates.editMode
+            Layout.fillWidth: true
+            symbolName: "edit"
+            labelText: Translation.tr("Edit dock")
+            onTriggered: {
+                root.close();
+                const screenName = (typeof dockRoot !== "undefined" && dockRoot.screen) ? dockRoot.screen.name : "";
+                GlobalStates.openEditCatalogue("dock", screenName, "appearance");
+            }
+        }
+
         DockMenuButton {
             visible: (root.appToplevel?.toplevels?.length ?? 0) > 0
             Layout.fillWidth: true
