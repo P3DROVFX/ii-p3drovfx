@@ -336,6 +336,14 @@ Item {
                 }
             }
         }
+
+        // The taskbar, so "not this one — something else" is one tap away. See the component
+        // for why it is drawn here instead of letting the real dock show through.
+        TabletRecentsDockRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            onLaunchRequested: action => root.deferredRequested(action)
+        }
     }
 
     component RecentsPill: Rectangle {
