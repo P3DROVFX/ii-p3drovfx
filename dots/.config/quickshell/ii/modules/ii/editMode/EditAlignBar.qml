@@ -100,7 +100,11 @@ Item {
         id: button
         property string mode: ""
         property string label: ""
+        // IconToolbarButton names its glyph `text`, which reads as a caption
+        // everywhere else in this file; `symbol` is what the model calls it.
+        property string symbol: ""
 
+        text: button.symbol
         Layout.alignment: Qt.AlignVCenter
         implicitWidth: 34
         implicitHeight: 34
