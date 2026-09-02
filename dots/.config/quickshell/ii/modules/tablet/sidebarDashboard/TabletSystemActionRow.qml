@@ -149,6 +149,19 @@ Item {
             onClicked: root.editModeToggled(!root.editMode)
         }
 
+        // The way back out of this family. Everything else on this row is reachable from a
+        // desktop too; this one is the reason a tablet with no keyboard is not a one-way
+        // door — the chooser was IPC-and-keybind only until it had a button somewhere.
+        TabletTouchButton {
+            diameter: root.circleSize
+            Layout.alignment: Qt.AlignVCenter
+            buttonIcon: "swap_horiz"
+            onClicked: {
+                root.dismissRequested();
+                GlobalStates.shellSwitcherOpen = true;
+            }
+        }
+
         TabletTouchButton {
             diameter: root.circleSize
             Layout.alignment: Qt.AlignVCenter
