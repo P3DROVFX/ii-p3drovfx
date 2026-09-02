@@ -185,6 +185,45 @@ Item {
             onStepUp: root.stepSize(1)
         }
 
+        // Beside the size, the way back to the plain one - a widget resized
+        // by the grip has no other route to exactly 100%.
+        EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
+            Layout.fillWidth: true
+            first: false
+            last: false
+            visible: root.widget !== null && Math.abs(root.scaleFactor - 1) > 0.001
+            symbol: "fit_screen"
+            title: Translation.tr("Reset size")
+            trailingKind: "none"
+            onActivated: {
+                if (root.widget && root.widget.commitResizeScale)
+                    root.widget.commitResizeScale(1);
+            }
+        }
+
+        // One more of this one, a step down and to the right. A widget can
+        // be placed more than once, and the catalogue's row gives a fresh
+        // copy at a default spot; this gives one that keeps its settings.
+        EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
+            Layout.fillWidth: true
+            first: false
+            last: false
+            rowEnabled: root.instance !== null
+            symbol: "content_copy"
+            title: Translation.tr("Duplicate")
+            trailingKind: "none"
+            onActivated: {
+                const instanceId = root.instanceId;
+                const monitor = root.instance ? (root.instance.monitorName ?? "") : "";
+                root.dismissRequested();
+                Config.duplicateWidgetInstance(instanceId, monitor);
+            }
+        }
+
         EditPanelRow {
             hostRadius: Appearance.rounding.windowRounding
             hostPadding: root.padding

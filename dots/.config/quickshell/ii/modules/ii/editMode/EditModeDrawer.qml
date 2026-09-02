@@ -12,8 +12,9 @@ import qs.modules.ii.background.widgets
 /**
  * Edit Mode's panel: the surface that slides in from the right of the card.
  *
- * Four catalogues - the desktop's widgets, the bar, the dock and the lock
- * screen's own switches - and each of them is a ROOT with sub-pages rather
+ * Five catalogues - the desktop's widgets, the bar, the dock, the lock
+ * screen's own switches and the style (wallpaper, theme, palette) - and each
+ * of them is a ROOT with sub-pages rather
  * than a list of accordions. That is the change: sections that expanded in
  * place put eighty rows in one scroll and left no room for anything a section
  * might want to say about itself, which is why the bar's style variants and
@@ -54,6 +55,10 @@ Item {
     signal barDragCancelled()
     signal dockToggleRequested(string appId)
     signal lockLayoutResetRequested()
+    // A whole surface back to the shell's defaults: "widgets" (every desktop
+    // widget removed), "bar", "dock" or "lockIslands". The surface answers
+    // with one history entry, so the reset is one Ctrl+Z.
+    signal resetRequested(string what)
 
     readonly property string section: GlobalStates.editDrawerSection
     // The address, validated against the catalogue showing it: a page belongs
@@ -74,6 +79,8 @@ Item {
             return page === "appearance" || page.startsWith("component:");
         if (section === "dock")
             return page === "appearance" || page === "widgets" || page.startsWith("apps:");
+        if (section === "style")
+            return page.startsWith("wallpapers") || page === "colours";
         return false;
     }
 
@@ -129,7 +136,7 @@ Item {
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
     // after where it lives. The lock screen's switches are not worth a box.
-    readonly property bool searchable: root.section !== "lock"
+    readonly property bool searchable: root.section !== "lock" && root.section !== "style"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
     readonly property bool searching: root.searchable && root.needle !== ""
@@ -145,7 +152,30 @@ Item {
     // The field says when it wants the keyboard and says when it has lost it.
     property bool searchWanted: false
     property bool searchHeld: false
-    readonly property bool searchFocused: root.searchWanted
+    // A second field that wants the keyboard the same way - the Style
+    // catalogue's preset name. One at a time: asking for it lets the search
+    // go, and the other way round.
+    property bool fieldWanted: false
+    property Item fieldItem: null
+    readonly property bool searchFocused: root.searchWanted || root.fieldWanted
+
+    function requestFieldFocus(item) {
+        if (!item)
+            return;
+        root.searchWanted = false;
+        root.searchHeld = false;
+        searchField.focus = false;
+        root.fieldItem = item;
+        root.fieldWanted = true;
+        item.forceActiveFocus();
+    }
+
+    function releaseFieldFocus() {
+        root.fieldWanted = false;
+        if (root.fieldItem)
+            root.fieldItem.focus = false;
+        root.fieldItem = null;
+    }
 
     // Fuzzysort, the matcher the launcher already searches these same apps
     // with: "fx" finds Firefox, which a substring test never will, and the
@@ -168,6 +198,7 @@ Item {
         root.searchWanted = false;
         root.searchHeld = false;
         searchField.focus = false;
+        root.releaseFieldFocus();
     }
 
     function clearSearch() {
@@ -181,7 +212,12 @@ Item {
     function pointInSearchField(x, y) {
         const from = root.ghostParent ?? root;
         const p = from.mapToItem(searchRow, x, y);
-        return p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height;
+        if (p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height)
+            return true;
+        if (!root.fieldWanted || !root.fieldItem)
+            return false;
+        const q = from.mapToItem(root.fieldItem, x, y);
+        return q.x >= 0 && q.y >= 0 && q.x <= root.fieldItem.width && q.y <= root.fieldItem.height;
     }
 
     onSectionChanged: root.clearSearch()
@@ -474,8 +510,20 @@ Item {
                 return Translation.tr("Dock");
             if (root.section === "lock")
                 return Translation.tr("Lock screen");
+            if (root.section === "style")
+                return Translation.tr("Style");
             return Translation.tr("Widgets");
         }
+        if (root.page.startsWith("wallpapers")) {
+            const target = root.wallpaperPageTarget;
+            if (target === "lockscreen")
+                return Translation.tr("Lock screen wallpaper");
+            if (target === "lightmode")
+                return Translation.tr("Light mode wallpaper");
+            return Translation.tr("Wallpaper");
+        }
+        if (root.page === "colours")
+            return Translation.tr("Colour scheme");
         if (root.page.startsWith("category:"))
             return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
         if (root.page.startsWith("apps:"))
@@ -496,6 +544,8 @@ Item {
             return "dock";
         if (root.section === "lock")
             return "lock";
+        if (root.section === "style")
+            return "palette";
         return "widgets";
     }
 
@@ -617,17 +667,21 @@ Item {
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
-                    rightmost: true
                     buttonText: Translation.tr("Dock")
                     toggled: root.section === "dock"
                     onClicked: root.setSection("dock")
                 }
                 SelectionGroupButton {
                     visible: root.lockTab
-                    rightmost: true
                     buttonText: Translation.tr("Lock screen")
                     toggled: root.section === "lock"
                     onClicked: root.setSection("lock")
+                }
+                SelectionGroupButton {
+                    rightmost: true
+                    buttonText: Translation.tr("Style")
+                    toggled: root.section === "style"
+                    onClicked: root.setSection("style")
                 }
             }
 
@@ -642,6 +696,8 @@ Item {
                         : Translation.tr("Drag a widget onto the desktop to place it, or click to add one. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
+                    : root.section === "style"
+                        ? Translation.tr("The wallpaper and the colours everything is drawn in. Changes apply at once; undo takes them back.")
                     : root.section === "bar"
                         ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
                         : Translation.tr("Pin apps, and choose how the dock itself is drawn.")
@@ -769,6 +825,13 @@ Item {
                             return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
+                        if (root.section === "style") {
+                            if (root.page.startsWith("wallpapers"))
+                                return wallpaperPage;
+                            if (root.page === "colours")
+                                return colourPage;
+                            return stylePage;
+                        }
                         if (root.section === "bar") {
                             if (root.page === "appearance")
                                 return barAppearancePage;
@@ -818,6 +881,31 @@ Item {
                 valueText: added > 0 ? `${added}/${modelData.items.length}` : `${modelData.items.length}`
                 trailingKind: "chevron"
                 onActivated: root.openPage("category:" + modelData.key)
+            }
+
+            // A clean slate, one Ctrl+Z away. Shown only while there is
+            // something to clear, so the catalogue's root is not a place
+            // that offers to delete nothing.
+            footer: Item {
+                width: categoryList.width
+                height: root.activeWidgets.length > 0 ? clearRow.height + 13 : 0
+                visible: root.activeWidgets.length > 0
+
+                EditPanelRow {
+                    id: clearRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.topMargin: 10
+                    first: true
+                    last: true
+                    destructive: true
+                    symbol: "delete_sweep"
+                    title: Translation.tr("Remove every widget")
+                    valueText: `${root.activeWidgets.length}`
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("widgets")
+                }
             }
         }
     }
@@ -899,6 +987,19 @@ Item {
                 title: Translation.tr("Bar appearance")
                 subtitle: Translation.tr("Position, size, corners and background")
                 onActivated: root.openPage("appearance")
+            }
+
+            EditPanelRow {
+                Layout.fillWidth: true
+                Layout.topMargin: 3
+                first: true
+                last: true
+                destructive: true
+                symbol: "reset_wrench"
+                title: Translation.tr("Reset the bar's layout")
+                subtitle: Translation.tr("The widgets and groups the shell ships with")
+                trailingKind: "none"
+                onActivated: root.resetRequested("bar")
             }
 
             EditPanelNotice {
@@ -1072,6 +1173,19 @@ Item {
                     onActivated: root.openPage("widgets")
                 }
 
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 3
+                    first: true
+                    last: true
+                    destructive: true
+                    symbol: "reset_wrench"
+                    title: Translation.tr("Reset the dock")
+                    subtitle: Translation.tr("The pins and the order the shell ships with")
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("dock")
+                }
+
                 EditPanelSectionLabel {
                     text: Translation.tr("Apps")
                 }
@@ -1151,6 +1265,45 @@ Item {
         EditDockWidgetsPage {}
     }
 
+    // The Style catalogue: the wallpaper, the theme and the palette, with the
+    // folder and the swatch grid a page down each.
+    Component {
+        id: stylePage
+        EditStylePage {
+            onOpenPageRequested: page => root.openPage(page)
+            onFieldFocusRequested: field => root.requestFieldFocus(field)
+            onFieldFocusReleased: root.releaseFieldFocus()
+        }
+    }
+
+    // Which wallpaper the folder page sets. "wallpapers:lockscreen" and
+    // "wallpapers:lightmode" are the variant rows asking for their own; a bare
+    // "wallpapers" follows the tab and the theme, the way the card does.
+    readonly property string wallpaperPageTarget: {
+        if (root.page === "wallpapers:lockscreen")
+            return "lockscreen";
+        if (root.page === "wallpapers:lightmode")
+            return "lightmode";
+        const background = Config.options.background;
+        if (GlobalStates.editLockPreview && (background.useSeparateLockscreenWallpaper ?? false))
+            return "lockscreen";
+        if ((background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
+            return "lightmode";
+        return "desktop";
+    }
+
+    Component {
+        id: wallpaperPage
+        EditWallpaperPage {
+            target: root.wallpaperPageTarget
+        }
+    }
+
+    Component {
+        id: colourPage
+        EditColourPage {}
+    }
+
     // The lock screen's own face: the switches, whatever its toolbars have
     // been asked to hide, and the way back to the desktop's layout.
     Component {
@@ -1211,13 +1364,38 @@ Item {
                     Layout.fillWidth: true
                     Layout.topMargin: 10
                     first: true
-                    last: true
+                    last: false
                     rowEnabled: root.anyLockFork
                     symbol: "reset_wrench"
                     title: Translation.tr("Use desktop layout")
                     subtitle: Translation.tr("Drop the positions this screen's lock keeps of its own")
                     trailingKind: "none"
                     onActivated: root.lockLayoutResetRequested()
+                }
+
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    first: false
+                    last: true
+                    destructive: true
+                    symbol: "view_agenda"
+                    title: Translation.tr("Reset the islands")
+                    subtitle: Translation.tr("Their order, and everything hidden from them")
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("lockIslands")
+                }
+
+                // Clock formats, the notification list, the blur behind it,
+                // fingerprint: pages of forms, and this catalogue is about
+                // what sits on the lock screen, not how each part is set up.
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    symbol: "settings"
+                    title: Translation.tr("All lock screen settings")
+                    subtitle: Translation.tr("Leaves Edit Mode")
+                    trailingKind: "chevron"
+                    onActivated: GlobalStates.openSettingsFromEditMode("lockScreen")
                 }
 
                 Item {

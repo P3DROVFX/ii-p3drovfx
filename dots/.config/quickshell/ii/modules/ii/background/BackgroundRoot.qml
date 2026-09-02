@@ -618,6 +618,17 @@ PanelWindow {
             z: 0
             acceptedButtons: Qt.RightButton
             onClicked: mouse => GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y)
+
+            // A touch screen's long press: the same way in as the widget
+            // canvas offers when it is mapped.
+            TapHandler {
+                acceptedDevices: PointerDevice.TouchScreen
+                gesturePolicy: TapHandler.WithinBounds
+                onLongPressed: {
+                    if (!GlobalStates.editMode)
+                        GlobalStates.openEditMode(bgRoot.editScreenName);
+                }
+            }
         }
 
         // Edit Mode's card: the blurred backdrop, corner, shadow and edge around the shrunk

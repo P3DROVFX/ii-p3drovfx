@@ -457,6 +457,27 @@ Scope {
                         }
                     }
 
+                    // A right-click on the dock's own body - between its icons,
+                    // on its padding - offers the desktop's menu told it is on
+                    // the dock. Under the content, so every icon's own menu
+                    // still wins; the menu's surface is the whole screen, so
+                    // the point is lifted from this window to it the way the
+                    // bar lifts its own.
+                    MouseArea {
+                        anchors.fill: dockVisualBackground
+                        z: 0
+                        acceptedButtons: Qt.RightButton
+                        onClicked: mouse => {
+                            if (!dockRoot.screen)
+                                return;
+                            const p = mapToItem(null, mouse.x, mouse.y);
+                            const side = dock.dockEffectivePosition;
+                            const offsetX = side === "right" ? dockRoot.screen.width - dockRoot.width : 0;
+                            const offsetY = side === "bottom" ? dockRoot.screen.height - dockRoot.height : 0;
+                            GlobalStates.openDesktopMenu(dockRoot.screen.name, p.x + offsetX, p.y + offsetY, "dock");
+                        }
+                    }
+
                     DockContent {
                         id: dockContent
                         anchors.fill: dockVisualBackground

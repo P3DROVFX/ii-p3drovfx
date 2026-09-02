@@ -773,6 +773,13 @@ Singleton {
             property int duration: Math.round(200 * root.animMultiplier)
             property int type: Easing.BezierSpline
             property list<real> bezierCurve: root.animationCurves.standardDecel
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.scroll.duration
+                    easing.type: root.animation.scroll.type
+                    easing.bezierCurve: root.animation.scroll.bezierCurve
+                }
+            }
         }
 
         property QtObject menuDecel: QtObject {

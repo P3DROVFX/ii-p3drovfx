@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -61,6 +62,9 @@ Item {
     signal drawerBarDragCancelled()
     signal drawerDockToggleRequested(string appId)
     signal drawerLockLayoutResetRequested()
+    // "widgets", "bar", "dock" or "lockIslands": that surface back to the
+    // shell's defaults, as one history entry.
+    signal drawerResetRequested(string what)
 
     // The drawer's reveal, from the same geometry the card is: its width is
     // the drawer's on the drawer's scalar, so the panel slides out of the
@@ -79,7 +83,7 @@ Item {
     // ── The toolbar's cascade ────────────────────────────────────────────────
     // The pill rises out of the band as one piece (its `y` is a function of
     // `card`), and its contents used to arrive with it in a single flat frame:
-    // nine controls appearing at once, which reads as a screenshot rather than
+    // eight controls appearing at once, which reads as a screenshot rather than
     // as a toolbar being handed to you.
     //
     // Derived from `editProgress` rather than animated here, and that is the
@@ -151,6 +155,33 @@ Item {
             onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
         }
 
+        // Which screen the mode is on, with more than one: a click moves the
+        // mode to the next. Named by the screen's own name - the only name
+        // the user has for it in the compositor's config too.
+        IconAndTextToolbarButton {
+            id: monitorButton
+            readonly property var screens: Quickshell.screens
+            visible: monitorButton.screens.length > 1
+            opacity: root.slotReveal(1)
+            scale: (monitorButton.down ? 0.92 : 1) * root.slotScale(1)
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 4
+            iconText: "monitor"
+            text: GlobalStates.editModeMonitor
+            onClicked: {
+                const names = Array.from(monitorButton.screens).map(screen => screen.name);
+                if (names.length < 2)
+                    return;
+                const at = names.indexOf(GlobalStates.editModeMonitor);
+                GlobalStates.switchEditMonitor(names[(at + 1) % names.length]);
+            }
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Edit the next screen")
+            }
+        }
+
         Rectangle {
             opacity: root.slotReveal(1)
             scale: root.slotScale(1)
@@ -164,49 +195,97 @@ Item {
             color: Appearance.colors.colOutlineVariant
         }
 
-        // The panel's toggle, on the catalogue it opens on.
-        IconAndTextToolbarButton {
-            id: drawerButton
+        // The panel's catalogues, as one group of chips: Widgets, Bar, Dock,
+        // Style - and on the Lockscreen tab, Widgets, the lock's own switches
+        // and Style. The
+        // chips mirror the panel's own tabs one for one, so the toolbar and
+        // the panel can never disagree about what there is to edit; a chip
+        // reads toggled while the panel is open on its catalogue, and a click
+        // on that chip closes the panel again. Bar and Dock open on their
+        // appearance pages - what the panel is for when you already know
+        // which surface you came to change - and the rest on their roots.
+        //
+        // One group rather than three loose buttons because the three used to
+        // read as unrelated actions ("Add widgets", "Bar", "Dock"), and a
+        // fourth would have made the toolbar wider than the card on a small
+        // screen. Grouped, they are one control with one job: which catalogue.
+        Rectangle {
+            id: sectionGroup
             opacity: root.slotReveal(2)
-            scale: (drawerButton.down ? 0.92 : 1) * root.slotScale(2)
+            scale: root.slotScale(2)
             Layout.alignment: Qt.AlignVCenter
-            iconText: "widgets"
-            text: Translation.tr("Add widgets")
-            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets"
-            onClicked: {
-                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets") {
-                    root.drawerToggleRequested();
-                    return;
-                }
-                root.drawerPageRequested("widgets", "");
-            }
-        }
+            implicitWidth: sectionRow.implicitWidth + 6
+            implicitHeight: Appearance.sizes.toolbarHeight - 12
+            radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+            color: Appearance.colors.colSurfaceContainerHigh
 
-        // The bar's own quick settings. The catalogue is where every layout
-        // edit already lives, so this is an address in it rather than a second
-        // panel: position, height, corner and background, the handful of keys
-        // that change what the bar LOOKS like, without a trip to Settings.
-        // Hidden on the Lockscreen tab, where there is no bar to edit.
-        IconAndTextToolbarButton {
-            id: barButton
-            opacity: root.slotReveal(3)
-            scale: (barButton.down ? 0.92 : 1) * root.slotScale(3)
-            Layout.alignment: Qt.AlignVCenter
-            visible: !GlobalStates.editLockPreview
-            iconText: "dock_to_bottom"
-            text: Translation.tr("Bar")
-            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar"
-            onClicked: {
-                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar") {
-                    root.drawerToggleRequested();
-                    return;
+            component SectionChip: IconAndTextToolbarButton {
+                id: chip
+                required property string section
+                property string page: ""
+                property string tooltip: ""
+                readonly property bool open: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === chip.section
+
+                Layout.fillHeight: false
+                implicitHeight: sectionGroup.implicitHeight - 6
+                scale: chip.down ? 0.92 : 1
+                toggled: chip.open
+                onClicked: {
+                    if (chip.open) {
+                        root.drawerToggleRequested();
+                        return;
+                    }
+                    root.drawerPageRequested(chip.section, chip.page);
                 }
-                root.drawerPageRequested("bar", "appearance");
+
+                StyledToolTip {
+                    requireOverlay: false
+                    text: chip.tooltip
+                }
             }
 
-            StyledToolTip {
-                requireOverlay: false
-                text: Translation.tr("Bar appearance and widgets")
+            Row {
+                id: sectionRow
+                anchors.centerIn: parent
+                spacing: 2
+
+                SectionChip {
+                    section: "widgets"
+                    iconText: "widgets"
+                    text: Translation.tr("Widgets")
+                    tooltip: GlobalStates.editLockPreview
+                        ? Translation.tr("Widgets on the lock screen")
+                        : Translation.tr("Desktop widgets")
+                }
+                SectionChip {
+                    visible: !GlobalStates.editLockPreview
+                    section: "bar"
+                    page: "appearance"
+                    iconText: "dock_to_bottom"
+                    text: Translation.tr("Bar")
+                    tooltip: Translation.tr("Bar appearance and widgets")
+                }
+                SectionChip {
+                    visible: !GlobalStates.editLockPreview
+                    section: "dock"
+                    page: "appearance"
+                    iconText: "dock"
+                    text: Translation.tr("Dock")
+                    tooltip: Translation.tr("Dock appearance and apps")
+                }
+                SectionChip {
+                    visible: GlobalStates.editLockPreview
+                    section: "lock"
+                    iconText: "lock"
+                    text: Translation.tr("Lock screen")
+                    tooltip: Translation.tr("What the lock screen shows")
+                }
+                SectionChip {
+                    section: "style"
+                    iconText: "palette"
+                    text: Translation.tr("Style")
+                    tooltip: Translation.tr("Wallpaper, theme and colours")
+                }
             }
         }
 
@@ -216,8 +295,8 @@ Item {
         // spend the words.
         IconToolbarButton {
             id: snapButton
-            opacity: root.slotReveal(4)
-            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(4)
+            opacity: root.slotReveal(3)
+            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(3)
             Layout.alignment: Qt.AlignVCenter
             // The guides ARE the feature - the dot lattice and the alignment
             // lines a dragged widget latches onto. The alignment glyph this
@@ -236,8 +315,8 @@ Item {
         }
 
         Rectangle {
-            opacity: root.slotReveal(5)
-            scale: root.slotScale(5)
+            opacity: root.slotReveal(4)
+            scale: root.slotScale(4)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             Layout.rightMargin: 4
@@ -256,8 +335,8 @@ Item {
             // RippleButton dims a disabled button through this same property,
             // and an outer binding replaces its rule rather than joining it -
             // so the dimming is multiplied back in by hand.
-            opacity: root.slotReveal(6) * (undoButton.enabled ? 1 : 0.4)
-            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(6)
+            opacity: root.slotReveal(5) * (undoButton.enabled ? 1 : 0.4)
+            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(5)
             Layout.alignment: Qt.AlignVCenter
             text: "undo"
             enabled: GlobalStates.editCanUndo
@@ -271,8 +350,8 @@ Item {
 
         IconToolbarButton {
             id: redoButton
-            opacity: root.slotReveal(7) * (redoButton.enabled ? 1 : 0.4)
-            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(7)
+            opacity: root.slotReveal(6) * (redoButton.enabled ? 1 : 0.4)
+            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(6)
             Layout.alignment: Qt.AlignVCenter
             text: "redo"
             enabled: GlobalStates.editCanRedo
@@ -290,8 +369,8 @@ Item {
         // rendered flat beside the title it read as a second label.
         IconAndTextToolbarButton {
             id: doneButton
-            opacity: root.slotReveal(8)
-            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(8)
+            opacity: root.slotReveal(7)
+            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(7)
             Layout.alignment: Qt.AlignVCenter
             iconText: "done"
             text: Translation.tr("Done")
@@ -338,6 +417,7 @@ Item {
             ghostParent: root
             onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
             onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
+            onResetRequested: what => root.drawerResetRequested(what)
             onAddInstanceRequested: widgetId => root.drawerAddWidgetRequested(widgetId)
             onBarPlaceRequested: (componentId, bucket) => root.drawerBarPlaceRequested(componentId, bucket)
             onBarRemoveRequested: componentId => root.drawerBarRemoveRequested(componentId)

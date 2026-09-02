@@ -294,8 +294,9 @@ StyledFlickable {
             Layout.topMargin: 10
             symbol: "settings"
             title: Translation.tr("All bar settings")
+            subtitle: Translation.tr("Leaves Edit Mode")
             trailingKind: "chevron"
-            onActivated: GlobalStates.openSettingsPage("bar")
+            onActivated: GlobalStates.openSettingsFromEditMode("bar")
         }
 
         Item {

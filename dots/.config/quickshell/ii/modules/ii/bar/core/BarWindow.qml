@@ -238,7 +238,7 @@ Scope {
                     return;
                 const p = hoverRegion.mapToItem(null, mouse.x, mouse.y);
                 const offsetY = Config.options.bar.bottom ? root.screen.height - barRoot.height : 0;
-                GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, true);
+                GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, "bar");
             }
             visible: barRoot.shellSeated
             opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0

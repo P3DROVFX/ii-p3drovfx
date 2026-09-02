@@ -511,6 +511,9 @@ PanelWindow {
                 const p = widgetCanvas.mapToItem(null, atX, atY);
                 GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
             }
+            // A touch screen's long press on the wallpaper: into the mode,
+            // on this screen.
+            onCanvasLongPressed: GlobalStates.openEditMode(bgWidgetsWindow.editScreenName)
 
             // The selection's toolbar, over whatever is picked. A child of the
             // canvas so it shares the widgets' coordinate space and follows a

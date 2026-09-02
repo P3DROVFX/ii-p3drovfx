@@ -396,6 +396,7 @@ Singleton {
     //   widgets  "category:<key>"
     //   bar      "appearance" | "component:<id>"
     //   dock     "appearance" | "widgets" | "apps:<key>"
+    //   style    "wallpapers" | "colours"
     //
     // A page address belongs to the section that minted it, and the panel
     // ignores one that does not - rather than this clearing it on every
@@ -436,15 +437,20 @@ Singleton {
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
-    // Where the click landed. The bar asks for the menu too, and that decides
-    // both what the menu offers - a bar is not a place to pick a wallpaper
-    // from - and which catalogue its widgets row opens.
-    property bool desktopMenuOnBar: false
+    // Where the click landed: "desktop", "bar" or "dock". The bar and the dock
+    // ask for the menu too, and the origin decides what it offers - a bar is
+    // not a place to pick a wallpaper from, the dock's row opens the dock's
+    // own page - and which catalogue its widgets row opens.
+    property string desktopMenuOrigin: "desktop"
+    readonly property bool desktopMenuOnBar: root.desktopMenuOrigin === "bar"
 
-    function openDesktopMenu(screenName, x, y, onBar = false) {
+    function openDesktopMenu(screenName, x, y, origin = "desktop") {
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
-        root.desktopMenuOnBar = onBar;
+        // The bar used to pass a boolean for "on the bar"; still honoured.
+        if (origin === true)
+            origin = "bar";
+        root.desktopMenuOrigin = (origin === "bar" || origin === "dock") ? origin : "desktop";
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;
@@ -666,7 +672,7 @@ Singleton {
             return;
         // The bar and the dock are no part of the lock's face: asking for one
         // of them from the lock preview means the desktop.
-        if (root.editLockPreview && section !== "widgets" && section !== "lock")
+        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style")
             root.editTab = EditModeLogic.desktopTab;
         root.editDrawerOpen = true;
     }
@@ -675,11 +681,52 @@ Singleton {
         root.editMode = false;
     }
 
+    // The hand-off out of the mode. Settings is a window: it would open on
+    // the workspace the mode parked the desktop on, under the mode's chrome,
+    // so the mode closes first.
+    function openSettingsFromEditMode(pageId, subPageId, sectionId) {
+        if (root.editMode)
+            root.closeEditMode();
+        root.openSettingsPage(pageId, subPageId, sectionId);
+    }
+
+    // The wallpaper selector is a layer surface like the mode's own chrome,
+    // so it opens over the mode and the mode stays: pick a wallpaper, keep
+    // editing. A click back on the chrome or the desktop dismisses it.
+    function openWallpaperSelectorFromEditMode(target = "desktop") {
+        root.wallpaperSelectorTarget = target;
+        root.wallpaperSelectorOpen = true;
+    }
+
     function toggleEditMode() {
         if (root.editMode)
             root.closeEditMode();
         else
             root.openEditMode();
+    }
+
+    // Another screen, without the round trip: the mode is one screen at a
+    // time (decision D4), so moving it is an exit and a fresh entry. The
+    // entry waits for the exit's animation, since a mode that is still on
+    // the way out refuses to open.
+    property string _editReopenMonitor: ""
+    function switchEditMonitor(monitorName) {
+        if (!root.editMode || !monitorName || monitorName === root.editModeMonitor)
+            return;
+        root._editReopenMonitor = monitorName;
+        root.closeEditMode();
+        editReopenTimer.restart();
+    }
+    Timer {
+        id: editReopenTimer
+        interval: Appearance.reducedMotion ? 50 : Appearance.animation.elementMove.duration + 80
+        repeat: false
+        onTriggered: {
+            const monitor = root._editReopenMonitor;
+            root._editReopenMonitor = "";
+            if (monitor !== "")
+                root.openEditMode(monitor);
+        }
     }
 
     function _enterEditMode() {

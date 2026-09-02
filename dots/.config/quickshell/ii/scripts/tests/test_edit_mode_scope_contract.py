@@ -96,13 +96,25 @@ PREFERENCE_PATHS = {
     "dock.showDividers",
 }
 
-ALLOWED_PATHS = LAYOUT_PATHS | PREFERENCE_PATHS
+# What the Style catalogue may choose. The wallpaper paths themselves are
+# written by the Wallpapers service on the catalogue's behalf and are not in
+# here on purpose: the mode never writes them directly, and the service is
+# the one place that also runs the switch script.
+STYLE_PATHS = {
+    "background.useSeparateLockscreenWallpaper",
+    "background.useSeparateLightModeWallpaper",
+    # The scheme, written back by a history replay of the swatch grid's pick.
+    "appearance.palette.type",
+}
+
+ALLOWED_PATHS = LAYOUT_PATHS | PREFERENCE_PATHS | STYLE_PATHS
 
 # Config helpers the mode may call; each must write only ALLOWED_PATHS.
 ALLOWED_HELPERS = {
     "addWidgetToDesktop",
     "removeWidgetFromDesktop",
     "removeWidgetInstance",
+    "duplicateWidgetInstance",
     "updateWidgetPosition",
     "updateWidgetLockBehavior",
     "updateWidgetScale",
@@ -110,6 +122,9 @@ ALLOWED_HELPERS = {
     "clearWidgetLockPositions",
     "setLockIslandOrder",
     "setLockIslandHidden",
+    # Flushes the adapter; writes no option of its own. A history replay of a
+    # scheme pick calls it so the switch script reads the scheme it was given.
+    "saveOptionsNow",
 }
 
 MODE_FILES = sorted(
