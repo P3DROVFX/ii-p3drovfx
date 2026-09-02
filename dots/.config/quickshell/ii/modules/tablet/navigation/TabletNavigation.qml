@@ -113,6 +113,51 @@ Singleton {
         Hyprland.dispatch(`hl.dsp.focus({ workspace = ${root.homeWorkspaceId(screenName ?? "")} })`);
     }
 
+    // ── Quick switch ────────────────────────────────────────────────────────
+    /**
+     * Walking the focus stack by swiping sideways along the bottom edge, as Android does.
+     *
+     * The list is snapshotted when a session starts and not rebuilt while it lasts. Rebuilding
+     * would break the gesture in a way that looks like it works: activating a window moves it
+     * to the front of the focus history, so a freshly sorted list has the app you just landed
+     * on at index 0 and the one you came from at index 1 — swiping again would walk straight
+     * back instead of further along. A session ends after a pause, which is also what makes
+     * "swipe twice quickly" mean two steps rather than two flip-flops.
+     */
+    readonly property int switchSessionMs: 1500
+    property var _switchList: []
+    property int _switchCursor: 0
+    property real _lastSwitchMs: -Infinity
+
+    function quickSwitch(delta) {
+        const now = Date.now();
+        if (now - root._lastSwitchMs > root.switchSessionMs) {
+            root._switchList = Array.from(HyprlandData.windowList ?? [])
+                // Ordinary workspaces only: the special workspace is the scratchpad, and
+                // walking into it is not what "the app before this one" means.
+                .filter(window => Number(window?.workspace?.id ?? -1) > 0)
+                .sort((left, right) => Number(left?.focusHistoryID ?? 9999)
+                                     - Number(right?.focusHistoryID ?? 9999))
+                .map(window => String(window?.address ?? "").trim())
+                .filter(address => address.length > 0);
+            root._switchCursor = 0;
+        }
+        root._lastSwitchMs = now;
+
+        if (root._switchList.length < 2)
+            return false;
+
+        const next = Math.max(0, Math.min(root._switchList.length - 1, root._switchCursor + delta));
+        if (next === root._switchCursor)
+            return false;
+        root._switchCursor = next;
+
+        const raw = root._switchList[next];
+        const address = raw.startsWith("0x") ? raw : `0x${raw}`;
+        Hyprland.dispatch(`hl.dsp.focus({ window = "address:${address}" })`);
+        return true;
+    }
+
     function recents(screenName) {
         root.closeShellSurfaces();
         GlobalStates.openRecents(screenName ?? "");

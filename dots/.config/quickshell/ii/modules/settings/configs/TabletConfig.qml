@@ -439,7 +439,7 @@ Item {
                 Layout.fillWidth: true
                 icon: "swipe_up"
                 title: Translation.tr("Bottom edge")
-                tooltip: Translation.tr("Android's layout: up is Home, up from the home screen opens the app drawer, and up-and-hold opens Recents. App drawer only keeps the older behaviour, where this edge does one thing — at the cost of Home and Recents having no gesture.")
+                tooltip: Translation.tr("Android's layout: up is Home, up from the home screen opens the app drawer, up-and-hold opens Recents, and sideways along the edge walks back through the apps you were just in. App drawer only keeps the older behaviour, where this edge does one thing — at the cost of Home, Recents and quick switch having no gesture.")
 
                 ConfigSelectionArray {
                     currentValue: Config.options.tablet.gestures.bottomEdge

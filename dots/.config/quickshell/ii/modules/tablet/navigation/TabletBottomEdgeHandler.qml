@@ -8,9 +8,10 @@ import qs.modules.tablet.appDrawer
 /**
  * The bottom edge, in the shape Android gives it.
  *
- *   swipe up            → Home
- *   swipe up from Home  → the app drawer, following the finger
- *   swipe up and hold   → Recents
+ *   swipe up             → Home
+ *   swipe up from Home   → the app drawer, following the finger
+ *   swipe up and hold    → Recents
+ *   swipe sideways along → the previous app, and further back if you keep going
  *
  * This edge used to open the drawer unconditionally. That was defensible — the home screen
  * is a bare workspace, so "go home" had little to show for itself — but it spent the most
@@ -38,6 +39,10 @@ QtObject {
     readonly property real flingVelocity: 380
     /// A hold below this is a tap that wobbled, not a deliberate stop.
     readonly property real holdMinimumTravel: 90
+    /// Sideways along the edge is Android's quick switch. Distance first, then a bias test:
+    /// a diagonal flick towards Home should stay Home rather than becoming an app switch.
+    readonly property real quickSwitchDistance: 70
+    readonly property real quickSwitchBias: 1.4
     /// Movement smaller than this does not restart the hold clock; a finger resting on glass
     /// still reports a pixel or two.
     readonly property real holdSlop: 6
@@ -48,6 +53,8 @@ QtObject {
     property real _travel: 0
     property real _lastHoldTravel: 0
     property bool _recentsArmed: false
+    property bool _quickSwitchArmed: false
+    property real _dx: 0
     /// Where the drag started, so a drag begun with the drawer already open gets the
     /// controller's cheaper close threshold.
     property real _startProgress: 0
@@ -94,6 +101,8 @@ QtObject {
         handler._travel = 0;
         handler._lastHoldTravel = 0;
         handler._recentsArmed = false;
+        handler._quickSwitchArmed = false;
+        handler._dx = 0;
         handler._holdTimer.stop();
 
         if (handler._drawerFollows()) {
@@ -104,9 +113,25 @@ QtObject {
         }
     }
 
-    function update(origin, screenName, travel, velocity) {
+    function update(origin, screenName, travel, velocity, dx, dy) {
         handler._screenName = screenName ?? handler._screenName;
         handler._travel = travel;
+        handler._dx = dx ?? 0;
+
+        // Sideways wins over everything else on this edge, and it wins once: after arming,
+        // the drawer stops following and the hold clock stops, so a wandering finger cannot
+        // end up doing two things.
+        if (handler.androidMode && !handler._quickSwitchArmed
+            && Math.abs(handler._dx) >= handler.quickSwitchDistance
+            && Math.abs(handler._dx) > Math.abs(dy ?? 0) * handler.quickSwitchBias) {
+            handler._quickSwitchArmed = true;
+            handler._holdTimer.stop();
+            if (handler._drawerFollows())
+                TabletAppDrawerGestureController.cancelTracking();
+        }
+
+        if (handler._quickSwitchArmed)
+            return;
 
         if (handler._drawerFollows() && !handler._recentsArmed) {
             const screen = Quickshell.screens.find(s => s.name === handler._screenName)
@@ -133,6 +158,13 @@ QtObject {
 
     function release(origin, velocity) {
         handler._holdTimer.stop();
+
+        if (handler._quickSwitchArmed) {
+            // Rightwards walks back through the focus stack, leftwards returns along it.
+            TabletNavigation.quickSwitch(handler._dx > 0 ? 1 : -1);
+            handler._reset();
+            return;
+        }
 
         if (handler._recentsArmed) {
             TabletNavigation.recents(handler._screenName);
@@ -165,6 +197,8 @@ QtObject {
         handler._travel = 0;
         handler._lastHoldTravel = 0;
         handler._recentsArmed = false;
+        handler._quickSwitchArmed = false;
+        handler._dx = 0;
     }
 
     Component.onCompleted: TouchGestureDragRegistry.register(handler)
