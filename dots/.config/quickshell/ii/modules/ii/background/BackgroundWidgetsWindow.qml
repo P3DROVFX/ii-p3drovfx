@@ -512,6 +512,46 @@ PanelWindow {
                 GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
             }
 
+            // The selection's toolbar, over whatever is picked. A child of the
+            // canvas so it shares the widgets' coordinate space and follows a
+            // group drag with no mapping; the only thing it has to undo is the
+            // mode's shrink, which is one number.
+            //
+            // Hidden while a drag is running: the cluster is moving, so what
+            // the buttons would act on is not settled yet, and a toolbar riding
+            // along under the pointer is one more thing to drag by accident.
+            Loader {
+                id: alignBar
+                z: 200
+                active: GlobalStates.editMode && !GlobalStates.screenLocked
+                    && widgetCanvas.selectedWidgets.length >= 2
+                    && !widgetCanvas.draggingActive
+                    && bgWidgetsWindow.isEditMonitor
+
+                readonly property real counterScale: 1 / Math.max(0.05, bgWidgetsWindow.editTransform.scale)
+                readonly property rect selection: widgetCanvas.selectionRect
+                readonly property real gap: 12 * alignBar.counterScale
+                readonly property real barHeight: alignBar.item ? alignBar.item.implicitHeight : 0
+                // Above the selection, unless there is no room up there - a
+                // widget at the top of the card would push the toolbar off it.
+                readonly property bool below: alignBar.selection.y - alignBar.gap - alignBar.barHeight
+                    < -widgetCanvas.y
+
+                x: alignBar.selection.x + (alignBar.selection.width - width) / 2
+                y: alignBar.below
+                    ? alignBar.selection.y + alignBar.selection.height + alignBar.gap
+                    : alignBar.selection.y - alignBar.gap - alignBar.barHeight
+                // Around the edge that faces the selection, so the gap above
+                // stays the gap however far the desktop has been shrunk.
+                transformOrigin: alignBar.below ? Item.Top : Item.Bottom
+                scale: alignBar.counterScale
+
+                sourceComponent: EditAlignBar {
+                    count: widgetCanvas.selectedWidgets.length
+                    onRequested: mode => widgetCanvas.alignSelection(mode)
+                }
+            }
+
             anchors {
                 left: parent.left
                 right: parent.right

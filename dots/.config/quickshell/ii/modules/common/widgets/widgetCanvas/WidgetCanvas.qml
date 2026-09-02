@@ -325,6 +325,77 @@ MouseArea {
         root.applySelection([]);
     }
 
+    // ── Align and distribute ─────────────────────────────────────────────────
+    // The selection could be moved as a rigid cluster and nothing else. Putting
+    // three widgets on one line meant dragging each of them at a dot grid until
+    // they looked right, which is the job an editor is supposed to do for you.
+    //
+    // The arithmetic is in widget_align.js, for the same reason the nudge's is:
+    // nothing about a rendered widget is reachable from a test, so where each
+    // member lands has to live somewhere that can be called without one.
+
+    // The selection's drawn bounds, in canvas coordinates. A binding rather
+    // than a function so the toolbar over it follows a group drag: reading
+    // each member's x/y here is what makes this re-run when they move.
+    readonly property rect selectionRect: {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const widget of root.selectedWidgets) {
+            if (!widget || !widget.visible)
+                continue;
+            const box = root.widgetVisualRect(widget);
+            minX = Math.min(minX, box.x);
+            minY = Math.min(minY, box.y);
+            maxX = Math.max(maxX, box.x + box.width);
+            maxY = Math.max(maxY, box.y + box.height);
+        }
+        if (!isFinite(minX))
+            return Qt.rect(0, 0, 0, 0);
+        return Qt.rect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    // Members in the shape widget_align.js wants: the DRAWN box, the STORED
+    // coordinate, and each widget's own clamp. The two coordinates differ for
+    // a scaled widget, which is why the module answers in deltas.
+    function alignMembers() {
+        const members = [];
+        for (let i = 0; i < root.selectedWidgets.length; i++) {
+            const widget = root.selectedWidgets[i];
+            if (!widget || !widget.draggable || !widget.commitPlacement)
+                continue;
+            members.push({
+                "id": widget.widgetInstance ? widget.widgetInstance.id : ("member" + i),
+                "widget": widget,
+                "x": widget.targetX,
+                "y": widget.targetY,
+                "box": root.widgetVisualRect(widget),
+                "minX": widget.dragMinimumX(),
+                "maxX": widget.dragMaximumX(),
+                "minY": widget.dragMinimumY(),
+                "maxY": widget.dragMaximumY()
+            });
+        }
+        return members;
+    }
+
+    function alignSelection(mode) {
+        root.flushNudge();
+        const members = root.alignMembers();
+        const moves = WidgetAlign.deltas(members, mode);
+        // One gesture, one Ctrl+Z, however many widgets it moved.
+        GlobalStates.editHistoryBeginBatch();
+        for (const member of members) {
+            const move = moves[member.id];
+            if (!move)
+                continue;
+            // Only the commit: the widget re-reads its own placement and
+            // slides there through the position Behavior it already has, so
+            // asking it to draw the move as well would be the same movement
+            // written twice.
+            member.widget.commitPlacement(member.x + move.dx, member.y + move.dy);
+        }
+        GlobalStates.editHistoryEndBatch();
+    }
+
     // A widget destroyed while selected or mid-drag never reaches its own
     // release, so the canvas drops it here (the widget calls this from
     // Component.onDestruction).
