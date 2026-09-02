@@ -44,12 +44,6 @@ Item {
     readonly property string query: searchField.text
     property string activeToolId: ""
 
-    /// A fresh open starts at the top of the list, whatever the last one was looking at.
-    onRevealProgressChanged: {
-        if (root.revealProgress < 0.02)
-            appGrid.userScrolled = false;
-    }
-
     // ── Touch metrics ───────────────────────────────────────────────────────
     // Everything is derived from the screen so one layout serves a small tablet and a
     // large scaled display, the same way the shade does it.
@@ -148,23 +142,11 @@ Item {
         return root.categoryGroups.filter(group => present.has(group.id)).map(group => group.id);
     }
 
-    /**
-     * Everything the grid shows, in one list.
-     *
-     * The shell's own surfaces and its panels used to lead the grid as a fixed block, on the
-     * grounds that they read as their own group there. In practice a fixed block is a block
-     * you scroll past every time, and it made the A–Z rail lie: the rail indexes the
-     * alphabet, and a dozen entries sitting outside it meant "A" and the first A were two
-     * different places. They are filed with everything else now.
-     *
-     * Not merged in every mode. A query has already ranked the applications and there is
-     * nothing to interleave that ranking with, and neither usage nor category has anything
-     * to say about a surface that is not an application — in those three the shell's items
-     * keep an end of their own rather than being sorted by a key they do not have.
-     *
-     * Each row carries a stable key, which is what lets the grid animate a reorder instead
-     * of rebuilding: see applyGridDiff.
-     */
+    /// Everything the grid shows: matching system apps first, then installed applications.
+    /// System apps are wrapped so the delegate can tell them apart without inspecting types.
+    ///
+    /// Each row carries a stable key, which is what lets the grid animate a reorder instead
+    /// of rebuilding: see applyGridDiff.
     readonly property var gridEntries: {
         const shellRows = [];
         // A category filter is a filter on applications; the shell's own surfaces are not
@@ -172,9 +154,9 @@ Item {
         if (root.categoryFilter.length === 0) {
             for (const app of root.matchingSystemApps)
                 shellRows.push({ key: "sys:" + app.id, systemAppId: app.id, name: app.name, icon: app.icon, entry: null });
-            // Panels ride the same row shape as the shell's own apps, so they get the same
-            // tinted-plate treatment and the same delegate. The "tool:" prefix on the id is
-            // what tells the tap handler to open one in place instead of launching it.
+            // Panels ride the same row shape, so they get the same delegate and the same
+            // tinted plate. The "tool:" prefix on the id is what tells the tap handler to
+            // open one in place instead of launching it.
             for (const panel of root.shelfTools)
                 shellRows.push({ key: "tool:" + panel.id, systemAppId: "tool:" + panel.id,
                                  name: panel.label ?? panel.id, icon: panel.icon ?? "wand_stars", entry: null });
@@ -184,6 +166,10 @@ Item {
         for (const entry of root.apps)
             appRows.push({ key: "app:" + entry.id, systemAppId: "", name: entry.name, icon: "", entry: entry });
 
+        // A query has already ranked the applications and there is nothing to interleave
+        // that ranking with; usage and category have nothing to say about a surface that is
+        // not an application. In those three the shell's items keep an end of their own
+        // rather than being sorted by a key they do not have.
         if (root.query.trim().length > 0)
             return shellRows.concat(appRows);
         if (root.sortMode === "usage" || root.sortMode === "category")
@@ -239,10 +225,9 @@ Item {
      * anything past the middle of the alphabet, and this family has no scrollbar to throw a
      * thumb at. Android's launcher solves it with a letter rail; so does this.
      *
-     * Every row is indexed now, not only the applications. The shell's surfaces used to lead
-     * the grid in their own order, so letting them claim letters sent "A" to the top of the
-     * list rather than to the first thing beginning with A; with one sorted list that
-     * distinction is gone.
+     * Every row is indexed. The shell's surfaces used to lead the grid in their own order, so
+     * letting them claim letters sent "A" to the top of the list rather than to the first
+     * thing beginning with A; with one sorted list that distinction is gone.
      */
     readonly property bool alphabetIndexAvailable: root.query.trim().length === 0
         && (root.sortMode === "name" || root.sortMode === "nameDesc")
@@ -414,11 +399,9 @@ Item {
     /**
      * The shell's own panels, listed in the grid as if they were applications.
      *
-     * They have been three things in three days — hidden behind typing a name, a labelled
-     * row of their own, then icon buttons beside the field — and each version made them a
-     * separate kind of object the user had to learn about. They are not: from where you are
-     * standing the clipboard and the translator open the same way an app does. So they are
-     * tiles, next to the shell's other surfaces, and the drawer has one list again.
+     * They were a row of labelled pills under the categories, which made them a separate
+     * kind of object to learn about before you could use one. They are not: from where the
+     * user is standing, the clipboard and the translator open the same way an app does.
      */
     readonly property var shelfTools: {
         if (!root.toolHostComponent || !(root.drawerConfig?.showToolShelf ?? true))
@@ -591,28 +574,11 @@ Item {
 
         // Search bar. Android puts it at the top of the drawer and it keeps focus while
         // you scroll, so typing at any point filters without a second tap.
-        /**
-         * The only thing that does not scroll.
-         *
-         * Categories, the predicted row and the grid move together below, so the drawer
-         * reads as one list with a field pinned over it rather than four stacked strips
-         * each holding its own line whether or not you have scrolled a thousand apps past.
-         */
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: root.outerMargin * 0.5
-
-            // Balances the tools rail opposite, so the field stays centred on the surface
-            // instead of drifting left as tools are added.
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-            }
-
         Rectangle {
             id: searchBar
-            Layout.preferredWidth: Math.min(720, root.width * 0.6)
-            Layout.alignment: Qt.AlignVCenter
+            Layout.fillWidth: true
+            Layout.maximumWidth: Math.min(720, root.width * 0.6)
+            Layout.alignment: Qt.AlignHCenter
             Layout.preferredHeight: root.searchHeight
             radius: height / 2
             color: Appearance.colors.colLayer1
@@ -700,11 +666,133 @@ Item {
             }
         }
 
-            // Balances the spacer on the other side, so the field stays centred on the
-            // surface rather than sitting wherever the row's contents leave it.
-            Item {
+        // Category chips. Android's drawer is one flat list, but a desktop's application
+        // menu is thousands of entries deep, and the categories are already in the .desktop
+        // files — not offering them means the only way through the list is scrolling.
+        Flickable {
+            id: categoryStrip
+            Layout.fillWidth: true
+            Layout.preferredHeight: categoryStrip.shown ? categoryRow.implicitHeight : 0
+            visible: Layout.preferredHeight > 0
+            opacity: root.revealProgress
+            contentWidth: categoryRow.implicitWidth
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            // Hidden while a panel owns the body: the chips filter a grid that is not on
+            // screen, so leaving them up offers a control that does nothing visible.
+            readonly property bool shown: (root.drawerConfig?.showCategoryFilter ?? true)
+                && root.activeToolId.length === 0
+                && root.query.trim().length === 0
+                && root.availableCategories.length > 1
+
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(categoryStrip)
+            }
+
+            RowLayout {
+                id: categoryRow
+                spacing: 8
+
+                Repeater {
+                    model: [""].concat(root.availableCategories)
+
+                    delegate: Rectangle {
+                        id: categoryChip
+                        required property string modelData
+                        readonly property bool selected: root.categoryFilter === categoryChip.modelData
+
+                        implicitWidth: categoryChipRow.implicitWidth + 28
+                        implicitHeight: Math.max(40, Math.round(root.searchHeight * 0.68))
+                        radius: height / 2
+                        color: categoryChip.selected ? Appearance.colors.colPrimary
+                            : (categoryChipArea.pressed ? Appearance.colors.colLayer2Active : Appearance.colors.colLayer2)
+
+                        Behavior on color {
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(categoryChip)
+                        }
+
+                        RowLayout {
+                            id: categoryChipRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: categoryChip.modelData.length === 0
+                                    ? "apps" : root.categorySymbol(categoryChip.modelData)
+                                iconSize: 18
+                                color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                            }
+
+                            StyledText {
+                                text: categoryChip.modelData.length === 0
+                                    ? Translation.tr("All") : Translation.tr(categoryChip.modelData)
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                            }
+                        }
+
+                        MouseArea {
+                            id: categoryChipArea
+                            anchors.fill: parent
+                            onClicked: root.categoryFilter = categoryChip.modelData
+                        }
+                    }
+                }
+            }
+        }
+
+        // A predicted row, above the alphabet. See root.suggestedApps for when it appears.
+        ColumnLayout {
+            id: suggestions
+            Layout.fillWidth: true
+            visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
+            // A predicted row and the alphabet below it are two different lists. Without a
+            // gap wider than the column's own spacing they read as one grid whose first row
+            // happens to be out of order.
+            Layout.bottomMargin: suggestions.visible ? Math.round(root.outerMargin * 0.9) : 0
+            spacing: 2
+
+            StyledText {
+                Layout.leftMargin: 4
+                text: Translation.tr("Most used")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredWidth: 0
+                spacing: 0
+
+                Repeater {
+                    model: root.suggestedApps
+
+                    delegate: TabletAppTile {
+                        id: suggestionTile
+                        required property var modelData
+
+                        Layout.preferredWidth: root.tileWidth
+                        Layout.preferredHeight: root.suggestionTileHeight
+                        entry: suggestionTile.modelData
+                        iconSize: root.appIconSize
+
+                        onActivated: {
+                            suggestionTile.modelData.execute();
+                            root.dismissRequested();
+                        }
+                        onHeld: {
+                            if (root.drawerConfig?.longPressMenu ?? true)
+                                root.openAppMenu(suggestionTile, suggestionTile.modelData);
+                            else
+                                root.appHeld(suggestionTile.modelData.id);
+                        }
+                        onContextRequested: root.openAppMenu(suggestionTile, suggestionTile.modelData)
+                    }
+                }
+
+                // Left-aligned: the row is short and centring it would leave the grid below
+                // starting in a different column, which reads as two unrelated lists.
+                Item { Layout.fillWidth: true }
             }
         }
 
@@ -752,15 +840,30 @@ Item {
             /// Deep enough to take most of a row, or a row that straddles the edge still
             /// shows a solid top half above the fade and reads as cut.
             readonly property real fadeSize: Math.round(root.tileHeight * 0.9)
-            /// Shallower than the bottom's: that one swallows a whole row running off the
-            /// screen edge, this one only has to say "there is more above".
-            readonly property real topFadeSize: Math.round(root.tileHeight * 0.32)
 
-            /// The scrolling region: the grid and the strips that ride above it, faded
-            /// together at both ends. The rail and the side column stay outside — a fade over
-            /// a scrubber is a scrubber whose ends you cannot see.
-            Item {
-                id: scrollArea
+            GridView {
+                id: appGrid
+                // Fades the grid's own alpha, not a colour band over it. ScrollEdgeFade
+                // paints a colour, which ends content only when the surface behind is that
+                // colour — this one sits on a blurred screencopy, so any colour it could
+                // paint is itself see-through and the last row stayed visibly sliced under
+                // the wash. What shows through here is the backdrop, which is the point.
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: Math.max(1, appGrid.width)
+                        height: Math.max(1, appGrid.height)
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "white" }
+                            GradientStop {
+                                position: appGrid.height > 0
+                                    ? Math.max(0, 1 - body.fadeSize / appGrid.height) : 1
+                                color: "white"
+                            }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+                }
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
@@ -768,98 +871,8 @@ Item {
                 anchors.rightMargin: body.sideColumnWidth > 0
                     ? body.sideColumnWidth + 24
                     : (letterRail.width > 0 ? letterRail.width + 8 : 0)
-                clip: true
                 visible: root.activeToolId.length === 0
                 enabled: visible
-
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.max(1, scrollArea.width)
-                        height: Math.max(1, scrollArea.height)
-                        gradient: Gradient {
-                            GradientStop {
-                                position: 0.0
-                                color: Qt.rgba(1, 1, 1, 1 - appGrid.topFade)
-                            }
-                            GradientStop {
-                                position: scrollArea.height > 0
-                                    ? Math.min(0.45, body.topFadeSize / scrollArea.height) : 0
-                                color: "white"
-                            }
-                            GradientStop {
-                                position: scrollArea.height > 0
-                                    ? Math.max(0.55, 1 - body.fadeSize / scrollArea.height) : 1
-                                color: "white"
-                            }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
-                }
-
-            GridView {
-                id: appGrid
-                /// Reserves the strip above. The resting position is `originY - topMargin`,
-                /// which is what headerBlock measures its own offset against.
-                topMargin: headerBlock.height
-
-                /**
-                 * Put the list back at the top when the strip above it changes size.
-                 *
-                 * A Flickable does not move its content when a margin changes, so a header
-                 * that measures itself after the view already exists leaves the list scrolled
-                 * down by exactly the height that appeared — which is why the drawer opened
-                 * on the middle of the app list with the categories already gone.
-                 *
-                 * Only while the user has not scrolled. After they have, where they are is
-                 * theirs, and a header resizing underneath them must not yank them back.
-                 */
-                /**
-                 * Keep the list at its beginning until the user moves it themselves.
-                 *
-                 * The view is built before its model is filled and before the strip above it
-                 * has measured itself, and neither of those settling events moves the
-                 * content — so without this the drawer opens somewhere in the middle of the
-                 * app list with the categories already scrolled past.
-                 *
-                 * `positionViewAtBeginning()` rather than assigning contentY. Three attempts
-                 * at computing the resting offset by hand — from `-topMargin`, from
-                 * `originY`, then from both — each got it wrong in a different way, because
-                 * where a view rests is a function of its margins, its origin and its content
-                 * height all at once. This is the API that already knows that.
-                 *
-                 * Only armed once the drawer is fully open: the reveal animation can move
-                 * the view on its own, and treating that as the user scrolling would leave
-                 * the correction permanently disabled.
-                 */
-                property bool userScrolled: false
-                onMovementStarted: {
-                    if (root.revealProgress > 0.99)
-                        appGrid.userScrolled = true;
-                }
-                onTopMarginChanged: appGrid.returnToTopIfUntouched()
-                onCountChanged: appGrid.returnToTopIfUntouched()
-
-                function returnToTopIfUntouched() {
-                    if (appGrid.userScrolled)
-                        return;
-                    // Deferred: called from the middle of a layout pass, a position set now
-                    // is undone by the clamp that pass is still on its way to doing.
-                    Qt.callLater(() => {
-                        if (!appGrid.userScrolled)
-                            appGrid.positionViewAtBeginning();
-                    });
-                }
-                /// How much of the top fade is in. Zero until something has actually scrolled
-                /// off the top, or the categories would sit washed out in their resting place.
-                property real topFade: Math.max(0, Math.min(1,
-                    (appGrid.contentY - appGrid.originY + appGrid.topMargin) / 48))
-                // Fades the grid's own alpha, not a colour band over it. ScrollEdgeFade
-                // paints a colour, which ends content only when the surface behind is that
-                // colour — this one sits on a blurred screencopy, so any colour it could
-                // paint is itself see-through and the last row stayed visibly sliced under
-                // the wash. What shows through here is the backdrop, which is the point.
-                anchors.fill: parent
 
                 cellWidth: root.tileWidth
                 cellHeight: root.tileHeight
@@ -888,7 +901,6 @@ Item {
                 Component.onCompleted: {
                     root._gridReady = true;
                     root.applyGridDiff(root.gridEntries);
-                    appGrid.returnToTopIfUntouched();
                 }
 
                 // What makes a narrowing query read as the grid rearranging itself rather
@@ -944,8 +956,9 @@ Item {
                             if (appCell.isSystemApp) {
                                 const id = String(appCell.modelData.systemAppId);
                                 if (id.startsWith("tool:")) {
-                                    // Opens inside the drawer rather than launching, so the
-                                    // surface stays where the user's attention already is.
+                                    // Opens inside the drawer: the surface stays where the
+                                    // user's attention already is, so the drawer must not
+                                    // dismiss itself afterwards.
                                     root.openTool(id.substring(5));
                                     return;
                                 }
@@ -975,170 +988,6 @@ Item {
                         }
                     }
                 }
-            }
-
-            /**
-             * Everything above the first row of apps, riding the grid's own scroll offset.
-             *
-             * GridView.header is the obvious home and does not work here — a trivial
-             * rectangle in its place never appears either — so this is a sibling instead. The
-             * grid reserves its height as a top margin and this sits at minus however far the
-             * grid has been scrolled from its resting position.
-             *
-             * That resting position is `originY - topMargin`, not `originY`: the margin is
-             * content area *above* the origin, so a view sitting at the very top reports
-             * `contentY - originY == -topMargin`. Leaving the margin out of the sum pushed
-             * the whole strip down by exactly its own height, straight over the first rows
-             * of apps — which is what it looked like.
-             *
-             * A sibling rather than one outer Flickable wrapping everything, because that
-             * would make the grid full-height and give up virtualising several hundred tiles.
-             */
-            Item {
-                id: headerBlock
-                width: appGrid.width
-                x: appGrid.x
-                y: appGrid.y - appGrid.topMargin - (appGrid.contentY - appGrid.originY)
-                height: headerColumn.implicitHeight + root.outerMargin * 0.4
-
-                ColumnLayout {
-                    id: headerColumn
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: root.outerMargin * 0.6
-
-                    // Category chips. Android's drawer is one flat list, but a desktop's application
-                    // menu is thousands of entries deep, and the categories are already in the .desktop
-                    // files — not offering them means the only way through the list is scrolling.
-                    Flickable {
-                        id: categoryStrip
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: categoryStrip.shown ? categoryRow.implicitHeight : 0
-                        visible: Layout.preferredHeight > 0
-                        opacity: root.revealProgress
-                        contentWidth: categoryRow.implicitWidth
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        // Hidden while a panel owns the body: the chips filter a grid that is not on
-                        // screen, so leaving them up offers a control that does nothing visible.
-                        readonly property bool shown: (root.drawerConfig?.showCategoryFilter ?? true)
-                            && root.activeToolId.length === 0
-                            && root.query.trim().length === 0
-                            && root.availableCategories.length > 1
-
-                        Behavior on Layout.preferredHeight {
-                            animation: Appearance.animation.elementMove.numberAnimation.createObject(categoryStrip)
-                        }
-
-                        RowLayout {
-                            id: categoryRow
-                            spacing: 8
-
-                            Repeater {
-                                model: [""].concat(root.availableCategories)
-
-                                delegate: Rectangle {
-                                    id: categoryChip
-                                    required property string modelData
-                                    readonly property bool selected: root.categoryFilter === categoryChip.modelData
-
-                                    implicitWidth: categoryChipRow.implicitWidth + 28
-                                    implicitHeight: Math.max(40, Math.round(root.searchHeight * 0.68))
-                                    radius: height / 2
-                                    color: categoryChip.selected ? Appearance.colors.colPrimary
-                                        : (categoryChipArea.pressed ? Appearance.colors.colLayer2Active : Appearance.colors.colLayer2)
-
-                                    Behavior on color {
-                                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(categoryChip)
-                                    }
-
-                                    RowLayout {
-                                        id: categoryChipRow
-                                        anchors.centerIn: parent
-                                        spacing: 6
-
-                                        MaterialSymbol {
-                                            text: categoryChip.modelData.length === 0
-                                                ? "apps" : root.categorySymbol(categoryChip.modelData)
-                                            iconSize: 18
-                                            color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                                        }
-
-                                        StyledText {
-                                            text: categoryChip.modelData.length === 0
-                                                ? Translation.tr("All") : Translation.tr(categoryChip.modelData)
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            color: categoryChip.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: categoryChipArea
-                                        anchors.fill: parent
-                                        onClicked: root.categoryFilter = categoryChip.modelData
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // A predicted row, above the alphabet. See root.suggestedApps for when it appears.
-                    ColumnLayout {
-                        id: suggestions
-                        Layout.fillWidth: true
-                        visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
-                        // A predicted row and the alphabet below it are two different lists. Without a
-                        // gap wider than the column's own spacing they read as one grid whose first row
-                        // happens to be out of order.
-                        Layout.bottomMargin: suggestions.visible ? Math.round(root.outerMargin * 0.9) : 0
-                        spacing: 2
-
-                        StyledText {
-                            Layout.leftMargin: 4
-                            text: Translation.tr("Most used")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            Repeater {
-                                model: root.suggestedApps
-
-                                delegate: TabletAppTile {
-                                    id: suggestionTile
-                                    required property var modelData
-
-                                    Layout.preferredWidth: root.tileWidth
-                                    Layout.preferredHeight: root.suggestionTileHeight
-                                    entry: suggestionTile.modelData
-                                    iconSize: root.appIconSize
-
-                                    onActivated: {
-                                        suggestionTile.modelData.execute();
-                                        root.dismissRequested();
-                                    }
-                                    onHeld: {
-                                        if (root.drawerConfig?.longPressMenu ?? true)
-                                            root.openAppMenu(suggestionTile, suggestionTile.modelData);
-                                        else
-                                            root.appHeld(suggestionTile.modelData.id);
-                                    }
-                                    onContextRequested: root.openAppMenu(suggestionTile, suggestionTile.modelData)
-                                }
-                            }
-
-                            // Left-aligned: the row is short and centring it would leave the grid below
-                            // starting in a different column, which reads as two unrelated lists.
-                            Item { Layout.fillWidth: true }
-                        }
-                    }
-                }
-            }
             }
 
             // ── A–Z scrubber ────────────────────────────────────────────────
@@ -1173,10 +1022,6 @@ Item {
                         return;
                     const slot = Math.floor((y - letters.y) / letterRail.rowHeight);
                     const clamped = Math.max(0, Math.min(root.alphabetIndex.length - 1, slot));
-                    // Counts as the user placing the list: positionViewAtIndex emits no
-                    // movement signal, so without this the next header resize would snap
-                    // them back to A.
-                    appGrid.userScrolled = true;
                     appGrid.positionViewAtIndex(root.alphabetIndex[clamped].index, GridView.Beginning);
                     letterRail.activeSlot = clamped;
                 }
