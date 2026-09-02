@@ -1465,6 +1465,16 @@ Singleton {
             // apart from `dock` lets the ii dock retain its desktop defaults while the two
             // families still share the user's pinned apps and adaptive-icon treatment.
             property JsonObject tablet: JsonObject {
+                /**
+                 * The workspace the Home button lands on. 0 means the lowest ordinary
+                 * workspace of whichever monitor Home was pressed on.
+                 *
+                 * Home has to be the same place every time: the home screen's icons are
+                 * stored per workspace, so "any empty workspace" shows a blank screen and
+                 * leaves the arrangement on the workspace it was made on.
+                 */
+                property int homeWorkspace: 0
+
                 property JsonObject dock: JsonObject {
                     // The taskbar is a real layer-shell reservation by default. It can be
                     // released only when the user deliberately prefers overlay behaviour.

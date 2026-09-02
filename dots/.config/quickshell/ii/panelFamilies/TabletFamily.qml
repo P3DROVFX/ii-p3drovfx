@@ -143,7 +143,9 @@ Scope {
             // drawer raises the event and the home screen owns the store; neither knows
             // about the other, so the wiring lives here.
             onAppHeld: appId => {
-                const workspace = TabletHomeIcons.currentWorkspace;
+                // Not necessarily the workspace in front of you: the drawer opens from
+                // anywhere here, and an icon dropped behind a full workspace is invisible.
+                const workspace = TabletHomeIcons.addTargetWorkspace;
                 const slot = TabletHomeIcons.nextFreeSlot(workspace, 8);
                 TabletHomeIcons.add(workspace, appId, slot.x, slot.y);
             }

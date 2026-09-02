@@ -63,10 +63,12 @@ Scope {
         // Back is the gesture a phone user reaches for most, so it has to be bindable like
         // any other. TabletNavigation knows the order to unwind in; GlobalStates does not.
         GlobalStates.navigateBackHandler = () => TabletNavigation.back();
+        GlobalStates.navigateHomeHandler = screenName => TabletNavigation.home(screenName ?? "");
     }
     Component.onDestruction: {
         GlobalStates.leftSidebarHandler = null;
         GlobalStates.navigateBackHandler = null;
+        GlobalStates.navigateHomeHandler = null;
     }
 
     GlobalShortcut {

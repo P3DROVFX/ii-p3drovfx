@@ -302,6 +302,24 @@ Item {
             icon: "grid_view"
 
             ConfigSpinBox {
+                icon: "home"
+                text: Translation.tr("Home workspace")
+                // 0 = the lowest ordinary workspace of the monitor Home was pressed on,
+                // which is what a default Hyprland gives each output.
+                value: Config.options.tablet.homeWorkspace
+                from: 0
+                to: 20
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.homeWorkspace)
+                        Config.options.tablet.homeWorkspace = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Which workspace the Home button lands on. 0 picks the monitor's first workspace automatically. Home has to be the same place every time — icons are stored per workspace, so landing on any free one would show a blank screen and leave your arrangement behind.")
+                }
+            }
+
+            ConfigSpinBox {
                 icon: "grid_4x4"
                 text: Translation.tr("Icon grid step (px)")
                 // 0 in the config means "let the family decide". The fallback reads

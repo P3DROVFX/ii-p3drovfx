@@ -133,10 +133,16 @@ Singleton {
             break;
 
         case "home":
-            // The family's home screen is an empty workspace, not a surface to open.
+            // Which workspace is "home" is the family's to answer — the icons on it are
+            // stored per workspace, so landing on any free one shows a blank screen and
+            // strands the arrangement. Falling back to an empty workspace keeps a family
+            // that installed no handler behaving as it did.
             GlobalStates.appDrawerOpen = false;
             GlobalStates.recentsOpen = false;
-            Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+            if (GlobalStates.navigateHomeHandler)
+                GlobalStates.navigateHomeHandler(screenName);
+            else
+                Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
             break;
 
         case "workspaceNext":

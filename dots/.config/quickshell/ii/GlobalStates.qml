@@ -1019,6 +1019,9 @@ Singleton {
     /// Android's back, installed by whichever family knows what "back" means there. Shared
     /// code cannot: modules/common must not import a family to find out.
     property var navigateBackHandler: null
+    /// Same contract for home. "An empty workspace" is not a stable answer — the home
+    /// screen's icons are stored per workspace, so the family has to name one.
+    property var navigateHomeHandler: null
 
     function toggleLeftSidebar(monitorName) {
         if (PanelFamily.nativeAppWindows) {

@@ -205,7 +205,7 @@ PanelWindow {
         if (action === "back")
             TabletNavigation.back();
         else if (action === "home")
-            TabletNavigation.home();
+            TabletNavigation.home(root.screenName);
         else
             TabletNavigation.recents(root.screenName);
     }

@@ -7,6 +7,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.tablet.navigation
 
 /**
  * Which app icons sit on which home screen, and where.
@@ -27,6 +28,21 @@ Singleton {
     property int revision: 0
 
     readonly property int currentWorkspace: Hyprland.focusedMonitor?.activeWorkspace?.id ?? 1
+
+    /**
+     * Where an icon added from the drawer should land.
+     *
+     * The current workspace when it is bare, because that is the page the user is looking
+     * at. The home workspace otherwise: dropping an icon onto a workspace full of windows
+     * puts it somewhere invisible, and an action whose result cannot be seen reads as an
+     * action that failed. The drawer can be opened from anywhere in this family, so "the
+     * page you are on" is not always a page.
+     */
+    readonly property int addTargetWorkspace: {
+        const current = root.currentWorkspace;
+        const occupied = HyprlandData.hyprlandClientsForWorkspace(current).length > 0;
+        return occupied ? TabletNavigation.homeWorkspaceId("") : current;
+    }
 
     function _all() {
         try {
