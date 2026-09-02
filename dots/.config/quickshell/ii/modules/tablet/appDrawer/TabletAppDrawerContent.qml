@@ -171,15 +171,37 @@ Item {
         // not an application. In those three the shell's items keep an end of their own
         // rather than being sorted by a key they do not have.
         if (root.query.trim().length > 0)
-            return shellRows.concat(appRows);
+            return root.withUniqueKeys(shellRows.concat(appRows));
         if (root.sortMode === "usage" || root.sortMode === "category")
-            return appRows.concat(shellRows);
+            return root.withUniqueKeys(appRows.concat(shellRows));
 
         const all = shellRows.concat(appRows);
         all.sort((left, right) => root.sortMode === "nameDesc"
             ? String(right.name ?? "").localeCompare(String(left.name ?? ""))
             : String(left.name ?? "").localeCompare(String(right.name ?? "")));
-        return all;
+        return root.withUniqueKeys(all);
+    }
+
+    /**
+     * Make every row's key unique.
+     *
+     * The diff identifies a row by its key and finds it with indexOf, which returns the
+     * *first* match. Two rows sharing a key therefore both resolve to the same model row:
+     * one gets moved twice and the other is never placed, which is how the grid ended up
+     * with tiles stacked on each other and cells left empty. Duplicate ids are not
+     * hypothetical here — the same application shipped in /usr/share and again in
+     * ~/.local/share yields two entries the launcher is right to show separately.
+     */
+    function withUniqueKeys(rows) {
+        const seen = {};
+        for (const row of rows) {
+            const base = row.key;
+            const count = seen[base] ?? 0;
+            seen[base] = count + 1;
+            if (count > 0)
+                row.key = `${base}#${count}`;
+        }
+        return rows;
     }
 
     onGridEntriesChanged: root.applyGridDiff(root.gridEntries)
@@ -308,6 +330,33 @@ Item {
         const wanted = new Set();
         for (const row of rows)
             wanted.add(row.key);
+
+        /**
+         * Rebuild outright when little survives.
+         *
+         * The incremental path exists so a narrowing query reads as the grid rearranging
+         * itself, and for that it is worth the moves. Typing into an empty field, or
+         * clearing the field again, replaces essentially the whole list — hundreds of moves
+         * whose transitions run over each other, and a delegate whose move is interrupted
+         * is left wherever it was: stacked on a neighbour, or nowhere at all. Below half
+         * survival there is no rearrangement to show anyway.
+         */
+        let retained = 0;
+        for (const key of currentKeys)
+            if (wanted.has(key))
+                retained++;
+        if (currentKeys.length > 0 && retained < Math.min(currentKeys.length, rows.length) * 0.5) {
+            gridModel.clear();
+            for (const row of rows)
+                gridModel.append({
+                    key: row.key,
+                    systemAppId: row.systemAppId,
+                    name: row.name,
+                    icon: row.icon,
+                    entry: row.entry
+                });
+            return;
+        }
 
         // Backwards, so the indexes of the rows still to be examined stay valid.
         for (let i = currentKeys.length - 1; i >= 0; i--) {
