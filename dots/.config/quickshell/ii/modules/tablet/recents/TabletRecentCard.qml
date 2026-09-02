@@ -33,6 +33,12 @@ Item {
     readonly property string appId: root.toplevel?.appId ?? ""
     readonly property string title: root.toplevel?.title ?? ""
 
+    /// The app you were in when Recents opened. Every card looked identical, so the one
+    /// thing the screen is certain about — where you just came from — was the one thing it
+    /// did not say. Marked by filling its header, not by an outline or a size: this project
+    /// bans borders outright and treats a permanent scale difference as decoration.
+    property bool isCurrent: false
+
     // How far up the card has been dragged. Reset unless the drag commits.
     property real dragOffset: 0
     readonly property real dismissDistance: Math.max(120, root.height * 0.28)
@@ -60,9 +66,11 @@ Item {
             Layout.preferredHeight: Math.max(Appearance.sizes.minimumTouchTarget - 12, 32)
 
             buttonRadius: Appearance.rounding.full
-            colBackground: "transparent"
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colRipple: Appearance.colors.colLayer1Active
+            colBackground: root.isCurrent ? Appearance.colors.colSecondaryContainer : "transparent"
+            colBackgroundHover: root.isCurrent
+                ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer1Hover
+            colRipple: root.isCurrent
+                ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer1Active
 
             onClicked: {
                 const point = header.mapToItem(null, header.width / 2, header.height);
@@ -84,14 +92,16 @@ Item {
                     Layout.fillWidth: true
                     text: root.title.length > 0 ? root.title : root.appId
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.m3colors.m3onSurface
+                    color: root.isCurrent
+                        ? Appearance.colors.colOnSecondaryContainer : Appearance.m3colors.m3onSurface
                     elide: Text.ElideRight
                 }
 
                 MaterialSymbol {
                     text: "more_horiz"
                     iconSize: 18
-                    color: Appearance.colors.colSubtext
+                    color: root.isCurrent
+                        ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
                 }
             }
         }

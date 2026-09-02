@@ -247,10 +247,13 @@ Item {
 
                         delegate: TabletRecentCard {
                             required property var modelData
+                            required property int index
                             Layout.preferredWidth: root.cardWidth
                             Layout.preferredHeight: root.cardHeight
                             Layout.alignment: Qt.AlignVCenter
                             toplevel: modelData
+                            // MRU order puts it first, so index 0 is where you came from.
+                            isCurrent: index === 0
                             onActivated: root.activate(modelData)
                             onClosed: root.closeWindow(modelData)
                             onMenuRequested: (x, y) => {
