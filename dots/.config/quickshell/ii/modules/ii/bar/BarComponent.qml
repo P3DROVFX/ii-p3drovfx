@@ -415,6 +415,15 @@ Item {
     // Transparent, not hidden: the drag's own MouseArea is inside this widget
     // and has the pointer grab, so it has to stay alive until the release.
     opacity: rootItem.editLifted ? 0.0 : (targetWidth > 0 ? 1.0 : 0.0)
+    // ...and it fades on the same clock its hole closes on, rather than
+    // blinking out in one frame and leaving an empty gap to animate shut
+    // behind it. Gated on the mode, because outside it this property is owned
+    // by the notch's own states and transitions (below) and a Behavior on a
+    // property a Transition is driving fights it for every frame.
+    Behavior on opacity {
+        enabled: !Appearance.reducedMotion && GlobalStates.editMode && !rootItem.isNotchMode
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+    }
     visible: !rootItem.layoutReady || (hasLayoutContent && (!isNotchMode || opacity > 0.01))
 
     readonly property bool isNotchMode: isNotchActive && !isNotchExpanded
@@ -863,15 +872,23 @@ Item {
         ? rootItem.editController.isLifted(rootItem.barSection, rootItem.originalIndex) : false
     onEditLiftedChanged: rootItem.beginBoxResize()
 
+    // Both halves of the gesture on ONE clock, which is the bar's own
+    // ([[bar-resize-single-clock]]). The hole the carried widget leaves closes
+    // through `implicitWidth` on `barResize` (280ms, expressiveFastSpatial);
+    // these two open the hole it would land in, and they were on
+    // `elementMoveFast` (200ms, expressiveEffects). Two clocks and two curves
+    // for one movement do not add - the row parts faster than the widget
+    // collapses, so the bar's total width wobbles mid-drag and the widgets
+    // between the two ends drift instead of sliding.
     property real editGapBefore: rootItem.editGapBeforeTarget
     Behavior on editGapBefore {
         enabled: !Appearance.reducedMotion
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rootItem)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
     }
     property real editGapAfter: rootItem.editGapAfterTarget
     Behavior on editGapAfter {
         enabled: !Appearance.reducedMotion
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rootItem)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
     }
 
     Loader {
@@ -883,6 +900,11 @@ Item {
             bucket: rootItem.barSection
             storedIndex: rootItem.originalIndex
             widgetId: modelData.id
+            // The hole beside this widget AS IT IS RIGHT NOW. The controller
+            // draws the drop indicator in it and cannot see the animated
+            // margin from where it sits, so the widget hands it over.
+            gapBefore: rootItem.editGapBefore
+            gapAfter: rootItem.editGapAfter
         }
     }
 

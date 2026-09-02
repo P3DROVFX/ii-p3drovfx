@@ -296,11 +296,14 @@ Item {
             root.settledTicks = root.settledTicks + 1;
             return;
         }
-        const extent = Math.max(12, root.dragExtent - 4);
         const inBucket = root.slots.filter(s => s !== root.dragSlot && s.bucket === target.bucket)
             .sort((a, b) => a.storedIndex - b.storedIndex);
-        let along, crossCentre, crossSize;
+        let along, extent, crossCentre, crossSize;
         if (inBucket.length === 0) {
+            // Nothing drawn in this list, so there is no margin animating and
+            // nothing to measure: the anchor and the drag's own extent are all
+            // there is.
+            extent = Math.max(12, root.dragExtent - 4);
             const a = root.mapFromItem(null, root.anchorFor(target.bucket).x, root.anchorFor(target.bucket).y);
             along = (root.vertical ? a.y : a.x) - extent / 2;
             crossCentre = root.vertical ? a.x : a.y;
@@ -313,9 +316,14 @@ Item {
             const tl = ref.mapToItem(root, 0, 0);
             const size = root.vertical ? ref.height : ref.width;
             const start = root.vertical ? tl.y : tl.x;
-            // The room has already been opened on the far side of `ref`, so
-            // the placeholder sits in it rather than on the seam.
-            along = after ? start + size + 2 : start - root.dragExtent + 2;
+            // The room as it IS, not as it will be. `ref` animates its own
+            // margin open on the bar's clock, and an indicator drawn at the
+            // drop's final extent covered the neighbour for the whole of that
+            // - so it is measured off the live margin instead, and grows with
+            // the hole it marks.
+            const hole = Math.max(0, after ? ref.gapAfter : ref.gapBefore);
+            extent = Math.max(0, hole - 4);
+            along = after ? start + size + 2 : start - hole + 2;
             crossCentre = root.vertical ? tl.x + ref.width / 2 : tl.y + ref.height / 2;
             crossSize = root.vertical ? ref.width : ref.height;
         }

@@ -81,6 +81,23 @@ Item {
     property int navDirection: 1
     readonly property bool atRoot: root.page === "" || root.searching
 
+    // 0 while a page is arriving, 1 once it has. The Behavior would animate
+    // the way BACK to 0 as well, which would fade the outgoing page out before
+    // fading the incoming one in - two half-second beats for one step - so the
+    // reset is made with the Behavior held off and only the rise is animated.
+    property real pageReveal: 1
+    property bool pageRevealSnapping: false
+    Behavior on pageReveal {
+        enabled: !Appearance.reducedMotion && !root.pageRevealSnapping
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    onContentKeyChanged: {
+        root.pageRevealSnapping = true;
+        root.pageReveal = 0;
+        root.pageRevealSnapping = false;
+        root.pageReveal = 1;
+    }
+
     function openPage(page) {
         root.navDirection = 1;
         GlobalStates.editDrawerPage = page;
@@ -714,37 +731,15 @@ Item {
                     // animated here rather than by each page: they would all
                     // have to carry the same block and could not agree on the
                     // direction, which only the navigation knows.
+                    //
+                    // One scalar, one Behavior, no one-shot animation: the
+                    // mode's motion audit allows a duration and a curve only
+                    // through an Appearance tier, and a hand-built
+                    // `ParallelAnimation` cannot get one. `root.pageReveal`
+                    // carries both the fade and the slide.
+                    opacity: root.pageReveal
                     transform: Translate {
-                        id: pageTransform
-                    }
-
-                    Connections {
-                        target: root
-                        function onContentKeyChanged() {
-                            pageEnter.restart();
-                        }
-                    }
-
-                    ParallelAnimation {
-                        id: pageEnter
-                        NumberAnimation {
-                            target: pageLoader
-                            property: "opacity"
-                            from: 0
-                            to: 1
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            target: pageTransform
-                            property: "x"
-                            from: 28 * root.navDirection
-                            to: 0
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
+                        x: (1 - root.pageReveal) * 28 * root.navDirection
                     }
 
                     sourceComponent: {

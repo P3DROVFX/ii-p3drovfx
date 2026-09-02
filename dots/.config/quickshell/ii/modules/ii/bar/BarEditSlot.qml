@@ -16,6 +16,12 @@ Item {
     property int bucket: 0
     property int storedIndex: -1
     property string widgetId: ""
+    // The room the drop preview has opened on either side of this widget, live
+    // (BarComponent animates it on the bar's own clock). The controller reads
+    // it to size the indicator: drawn at the drop's FINAL extent it sat on top
+    // of the neighbour for the whole 280ms the row took to part.
+    property real gapBefore: 0
+    property real gapAfter: 0
 
     readonly property bool dragging: root.controller ? root.controller.dragSlot === root : false
 
