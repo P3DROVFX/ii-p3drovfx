@@ -295,7 +295,7 @@ StyledFlickable {
             symbol: "settings"
             title: Translation.tr("All bar settings")
             trailingKind: "chevron"
-            onActivated: GlobalStates.openSettingsPage("bar")
+            onActivated: GlobalStates.openSettingsFromEditMode("bar")
         }
 
         Item {

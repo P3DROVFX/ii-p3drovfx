@@ -164,8 +164,9 @@ Item {
             color: Appearance.colors.colOutlineVariant
         }
 
-        // The panel's catalogues, as one group of chips: Widgets, Bar, Dock -
-        // and on the Lockscreen tab, Widgets and the lock's own switches. The
+        // The panel's catalogues, as one group of chips: Widgets, Bar, Dock,
+        // Style - and on the Lockscreen tab, Widgets, the lock's own switches
+        // and Style. The
         // chips mirror the panel's own tabs one for one, so the toolbar and
         // the panel can never disagree about what there is to edit; a chip
         // reads toggled while the panel is open on its catalogue, and a click
@@ -247,6 +248,12 @@ Item {
                     iconText: "lock"
                     text: Translation.tr("Lock screen")
                     tooltip: Translation.tr("What the lock screen shows")
+                }
+                SectionChip {
+                    section: "style"
+                    iconText: "palette"
+                    text: Translation.tr("Style")
+                    tooltip: Translation.tr("Wallpaper, theme and colours")
                 }
             }
         }

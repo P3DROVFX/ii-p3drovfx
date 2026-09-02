@@ -121,7 +121,7 @@ StyledFlickable {
             symbol: "settings"
             title: Translation.tr("All of this widget's settings")
             trailingKind: "chevron"
-            onActivated: GlobalStates.openSettingsPage(root.info?.pageId ?? "bar")
+            onActivated: GlobalStates.openSettingsFromEditMode(root.info?.pageId ?? "bar")
         }
 
         Item {

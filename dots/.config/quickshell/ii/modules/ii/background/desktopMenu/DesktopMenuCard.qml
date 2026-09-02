@@ -66,7 +66,7 @@ Item {
                 label: Translation.tr("Wallpaper & style")
                 onClicked: {
                     root.dismissRequested();
-                    GlobalStates.wallpaperSelectorOpen = true;
+                    GlobalStates.openEditCatalogue("style", GlobalStates.desktopMenuScreenName);
                 }
             }
             EditMenuRow {
@@ -115,11 +115,7 @@ Item {
                 label: Translation.tr("Settings")
                 onClicked: {
                     root.dismissRequested();
-                    // A window, not a panel: it would open on the workspace the
-                    // mode parked the desktop on, under the mode's own chrome.
-                    if (GlobalStates.editMode)
-                        GlobalStates.closeEditMode();
-                    GlobalStates.openSettings();
+                    GlobalStates.openSettingsFromEditMode("");
                 }
             }
         }

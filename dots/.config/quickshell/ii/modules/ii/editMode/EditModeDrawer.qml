@@ -12,8 +12,9 @@ import qs.modules.ii.background.widgets
 /**
  * Edit Mode's panel: the surface that slides in from the right of the card.
  *
- * Four catalogues - the desktop's widgets, the bar, the dock and the lock
- * screen's own switches - and each of them is a ROOT with sub-pages rather
+ * Five catalogues - the desktop's widgets, the bar, the dock, the lock
+ * screen's own switches and the style (wallpaper, theme, palette) - and each
+ * of them is a ROOT with sub-pages rather
  * than a list of accordions. That is the change: sections that expanded in
  * place put eighty rows in one scroll and left no room for anything a section
  * might want to say about itself, which is why the bar's style variants and
@@ -74,6 +75,8 @@ Item {
             return page === "appearance" || page.startsWith("component:");
         if (section === "dock")
             return page === "appearance" || page === "widgets" || page.startsWith("apps:");
+        if (section === "style")
+            return page === "wallpapers" || page === "colours";
         return false;
     }
 
@@ -129,7 +132,7 @@ Item {
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
     // after where it lives. The lock screen's switches are not worth a box.
-    readonly property bool searchable: root.section !== "lock"
+    readonly property bool searchable: root.section !== "lock" && root.section !== "style"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
     readonly property bool searching: root.searchable && root.needle !== ""
@@ -474,8 +477,15 @@ Item {
                 return Translation.tr("Dock");
             if (root.section === "lock")
                 return Translation.tr("Lock screen");
+            if (root.section === "style")
+                return Translation.tr("Style");
             return Translation.tr("Widgets");
         }
+        if (root.page === "wallpapers")
+            return GlobalStates.editLockPreview && (Config.options.background.useSeparateLockscreenWallpaper ?? false)
+                ? Translation.tr("Lock screen wallpaper") : Translation.tr("Wallpaper");
+        if (root.page === "colours")
+            return Translation.tr("Colour scheme");
         if (root.page.startsWith("category:"))
             return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
         if (root.page.startsWith("apps:"))
@@ -496,6 +506,8 @@ Item {
             return "dock";
         if (root.section === "lock")
             return "lock";
+        if (root.section === "style")
+            return "palette";
         return "widgets";
     }
 
@@ -617,17 +629,21 @@ Item {
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
-                    rightmost: true
                     buttonText: Translation.tr("Dock")
                     toggled: root.section === "dock"
                     onClicked: root.setSection("dock")
                 }
                 SelectionGroupButton {
                     visible: root.lockTab
-                    rightmost: true
                     buttonText: Translation.tr("Lock screen")
                     toggled: root.section === "lock"
                     onClicked: root.setSection("lock")
+                }
+                SelectionGroupButton {
+                    rightmost: true
+                    buttonText: Translation.tr("Style")
+                    toggled: root.section === "style"
+                    onClicked: root.setSection("style")
                 }
             }
 
@@ -642,6 +658,8 @@ Item {
                         : Translation.tr("Drag a widget onto the desktop to place it, or click to add one. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
+                    : root.section === "style"
+                        ? Translation.tr("The wallpaper and the colours everything is drawn in. Changes apply at once; undo takes them back.")
                     : root.section === "bar"
                         ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
                         : Translation.tr("Pin apps, and choose how the dock itself is drawn.")
@@ -769,6 +787,13 @@ Item {
                             return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
+                        if (root.section === "style") {
+                            if (root.page === "wallpapers")
+                                return wallpaperPage;
+                            if (root.page === "colours")
+                                return colourPage;
+                            return stylePage;
+                        }
                         if (root.section === "bar") {
                             if (root.page === "appearance")
                                 return barAppearancePage;
@@ -1149,6 +1174,30 @@ Item {
     Component {
         id: dockWidgetsPage
         EditDockWidgetsPage {}
+    }
+
+    // The Style catalogue: the wallpaper, the theme and the palette, with the
+    // folder and the swatch grid a page down each.
+    Component {
+        id: stylePage
+        EditStylePage {
+            onOpenPageRequested: page => root.openPage(page)
+        }
+    }
+
+    Component {
+        id: wallpaperPage
+        EditWallpaperPage {
+            target: GlobalStates.editLockPreview && (Config.options.background.useSeparateLockscreenWallpaper ?? false)
+                ? "lockscreen"
+                : ((Config.options.background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
+                    ? "lightmode" : "desktop"
+        }
+    }
+
+    Component {
+        id: colourPage
+        EditColourPage {}
     }
 
     // The lock screen's own face: the switches, whatever its toolbars have

@@ -396,6 +396,7 @@ Singleton {
     //   widgets  "category:<key>"
     //   bar      "appearance" | "component:<id>"
     //   dock     "appearance" | "widgets" | "apps:<key>"
+    //   style    "wallpapers" | "colours"
     //
     // A page address belongs to the section that minted it, and the panel
     // ignores one that does not - rather than this clearing it on every
@@ -671,13 +672,30 @@ Singleton {
             return;
         // The bar and the dock are no part of the lock's face: asking for one
         // of them from the lock preview means the desktop.
-        if (root.editLockPreview && section !== "widgets" && section !== "lock")
+        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style")
             root.editTab = EditModeLogic.desktopTab;
         root.editDrawerOpen = true;
     }
 
     function closeEditMode() {
         root.editMode = false;
+    }
+
+    // Hand-offs out of the mode. Settings is a window, and the wallpaper
+    // selector a strip across the top of the screen: the first would open on
+    // the workspace the mode parked the desktop on, under the mode's chrome,
+    // and the second where the mode's toolbar sits. Both leave the mode first.
+    function openSettingsFromEditMode(pageId, subPageId, sectionId) {
+        if (root.editMode)
+            root.closeEditMode();
+        root.openSettingsPage(pageId, subPageId, sectionId);
+    }
+
+    function openWallpaperSelectorFromEditMode(target = "desktop") {
+        if (root.editMode)
+            root.closeEditMode();
+        root.wallpaperSelectorTarget = target;
+        root.wallpaperSelectorOpen = true;
     }
 
     function toggleEditMode() {
