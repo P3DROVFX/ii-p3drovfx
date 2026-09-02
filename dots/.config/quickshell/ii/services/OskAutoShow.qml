@@ -20,7 +20,30 @@ Singleton {
     id: root
 
     readonly property var opts: Config.options?.osk?.autoShow ?? null
-    readonly property bool enabled: root.opts?.enable ?? false
+    /// Whether the user wants auto-show. Separate from `enabled`, which also needs the helper
+    /// to exist — Settings shows the build instructions off the difference between the two.
+    readonly property bool wanted: root.opts?.enable ?? true
+    readonly property bool enabled: root.wanted && root.binaryExists
+
+    /// The helper ships as source. Without this check, a fresh install spawns a process for a
+    /// path that is not there on every config reload, and the only sign is a log line.
+    property bool binaryExists: false
+    readonly property string binaryPath: `${Directories.scriptPath}/osk/osk_autoshow`
+
+    Process {
+        id: binaryCheck
+        command: ["test", "-f", root.binaryPath]
+        onExited: code => root.binaryExists = (code === 0)
+    }
+
+    function checkBinary() {
+        if (Directories.scriptPath.length === 0)
+            return;
+        binaryCheck.running = false;
+        Qt.callLater(() => binaryCheck.running = true);
+    }
+
+    Component.onCompleted: root.checkBinary()
 
     // Keyboard bounds in 0..1 screen coordinates, published by OnScreenKeyboard.qml.
     // Normalized so it can be compared against helper coordinates without knowing
@@ -155,7 +178,7 @@ Singleton {
     Process {
         id: helper
         running: root.enabled && !GlobalStates.screenLocked
-        command: [`${Directories.scriptPath}/osk/osk_autoshow`]
+        command: [root.binaryPath]
 
         stdout: SplitParser {
             onRead: data => root.handleLine(data)

@@ -333,6 +333,80 @@ Item {
             }
         }
 
+        // The one surface this family cannot assume exists elsewhere. A tablet with no
+        // keyboard reaches every text field through these two settings, so they are here
+        // rather than only under the desktop shell's overlay page.
+        ContentSection {
+            title: Translation.tr("Keyboard")
+            icon: "keyboard"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.osk.autoShow.enable && !OskAutoShow.binaryExists
+                materialIcon: "build"
+                text: Translation.tr("The keyboard cannot raise itself yet: its helper has not been built. Open On-screen keyboard below for the one-line build command.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "touch_app"
+                text: Translation.tr("Raise the keyboard when a text field is tapped")
+                checked: Config.options.osk.autoShow.enable
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.osk.autoShow.enable)
+                        Config.options.osk.autoShow.enable = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Only focus caused by a finger or a pen counts, so a mouse click never raises it.")
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "lock"
+                title: Translation.tr("Keyboard on the lock screen")
+                tooltip: Translation.tr("The regular on-screen keyboard cannot appear on the lock screen — the session lock protocol covers every layer — so the lock screen draws its own. Without it, a device with no physical keyboard cannot be unlocked at all.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.lock.touchKeyboard.show
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.lock.touchKeyboard.show = newValue;
+                    }
+                    options: [
+                        { value: "auto", icon: "auto_awesome", displayName: Translation.tr("Auto") },
+                        { value: "always", icon: "keyboard", displayName: Translation.tr("Always") },
+                        { value: "never", icon: "keyboard_hide", displayName: Translation.tr("Never") }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "dialpad"
+                title: Translation.tr("Lock keyboard layout")
+                tooltip: Translation.tr("Letters gives a full keyboard with a symbols layer. PIN pad gives a numeric keypad, for a password that is only digits.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.lock.touchKeyboard.mode
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.lock.touchKeyboard.mode = newValue;
+                    }
+                    options: [
+                        { value: "text", icon: "keyboard", displayName: Translation.tr("Letters") },
+                        { value: "pin", icon: "dialpad", displayName: Translation.tr("PIN pad") }
+                    ]
+                }
+            }
+
+            ConfigSubpageRow {
+                buttonIcon: "keyboard_alt"
+                title: Translation.tr("On-screen keyboard")
+                description: Translation.tr("Style, height, layout, and when it raises itself")
+                configPage: Qt.resolvedUrl("widgets/OnScreenKeyboardConfig.qml")
+            }
+        }
+
         ContentSection {
             title: Translation.tr("Gestures")
             icon: "gesture"

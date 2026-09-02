@@ -3930,8 +3930,14 @@ Singleton {
 
                 // Raises the keyboard when a text field is focused by finger or pen.
                 // Requires the osk_autoshow helper (see scripts/osk/README.md).
+                //
+                // On by default, and safe to be: the helper only reports focus that a touch
+                // or pen caused, so a machine with neither never raises anything, and the
+                // service does not even spawn the helper unless the binary is there. Off by
+                // default meant a tablet — where tapping a text field is the whole way in —
+                // did nothing until the user found a switch they had no reason to look for.
                 property JsonObject autoShow: JsonObject {
-                    property bool enable: false
+                    property bool enable: true
                     property bool allowTouch: true
                     property bool allowPen: true
                     // How long after a touch a text field may claim focus and still count as touch-driven.

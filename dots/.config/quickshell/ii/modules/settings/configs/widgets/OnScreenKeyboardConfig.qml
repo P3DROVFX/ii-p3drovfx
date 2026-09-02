@@ -85,6 +85,31 @@ Item {
                 spacing: 4
 
                 ConfigSwitch {
+                    buttonIcon: "touch_app"
+                    text: Translation.tr("Raise the keyboard when a text field is tapped")
+                    checked: Config.options.osk.autoShow.enable
+                    onCheckedChanged: Config.options.osk.autoShow.enable = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Only focus caused by a finger or a pen counts. A mouse click or Tab never raises the keyboard.")
+                    }
+                }
+
+                // The switch above is the user's intent; this is whether it can be honoured.
+                // Without the box, turning the switch on does nothing and says nothing.
+                HelperCodeBox {
+                    visible: Config.options.osk.autoShow.enable && !OskAutoShow.binaryExists
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    icon: "terminal"
+                    title: Translation.tr("Compile the keyboard helper")
+                    text: Translation.tr("Wayland tells an input method when a text field is focused, and Quickshell has no binding for that protocol — so a small helper observes it. Build it once, then restart Quickshell:")
+                    codeSnippet: "cd " + Directories.scriptPath + "/osk/osk_autoshow_src && cargo build --release && cp target/release/osk_autoshow ../osk_autoshow"
+                    snippetWrapMode: Text.Wrap
+                }
+
+                ConfigSwitch {
                     buttonIcon: "pan_tool"
                     text: Translation.tr("Trigger with finger")
                     enabled: Config.options.osk.autoShow.enable
