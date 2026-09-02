@@ -351,6 +351,66 @@ Item {
             }
         }
 
+        ContentSection {
+            title: Translation.tr("Hub mode")
+            icon: "dock"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Charging and left alone, the tablet turns into a clock, weather and now-playing display readable from across a room — what a Pixel Tablet does when you dock it. Any touch brings it back.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "dock"
+                text: Translation.tr("Turn into a display when idle")
+                checked: Config.options.tablet.hubMode.enable
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.hubMode.enable)
+                        Config.options.tablet.hubMode.enable = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "power"
+                text: Translation.tr("Only while charging")
+                visible: Config.options.tablet.hubMode.enable
+                checked: Config.options.tablet.hubMode.requireCharging
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.hubMode.requireCharging)
+                        Config.options.tablet.hubMode.requireCharging = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("A charging cable is the closest this shell can get to knowing the device is docked rather than in your hands. Turn it off to use this as a desk display.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "play_circle"
+                text: Translation.tr("Stay out of the way while something is playing")
+                visible: Config.options.tablet.hubMode.enable
+                checked: Config.options.tablet.hubMode.pauseWhilePlaying
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.hubMode.pauseWhilePlaying)
+                        Config.options.tablet.hubMode.pauseWhilePlaying = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "timer"
+                text: Translation.tr("Idle before it takes over (s)")
+                visible: Config.options.tablet.hubMode.enable
+                value: Config.options.tablet.hubMode.idleSeconds
+                from: 15
+                to: 900
+                stepSize: 15
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.hubMode.idleSeconds)
+                        Config.options.tablet.hubMode.idleSeconds = value;
+                }
+            }
+        }
+
         // The one surface this family cannot assume exists elsewhere. A tablet with no
         // keyboard reaches every text field through these two settings, so they are here
         // rather than only under the desktop shell's overlay page.

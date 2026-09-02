@@ -11,6 +11,7 @@ import qs.modules.tablet.appDrawer
 import qs.modules.tablet.appWindow
 import qs.modules.tablet.dock
 import qs.modules.tablet.homeScreen
+import qs.modules.tablet.hubMode
 import qs.modules.tablet.navigation
 import qs.modules.tablet.recents
 import qs.modules.tablet.sidebarDashboard
@@ -247,6 +248,12 @@ Scope {
     // is asking anything, and nothing is built until it is.
     PanelLoader { component: BluetoothPairing {} }
     PanelLoader { component: OledSaver {} }
+
+    // Charging and idle: the tablet stops being a tablet and becomes a display. The Pixel
+    // Tablet's defining trick, and the one thing in the reference product this family had no
+    // answer to. Not a PanelLoader — it owns its own per-screen Variants and has to watch
+    // idle state whether or not it is showing anything.
+    TabletHubMode {}
 
     // ── Feedback ────────────────────────────────────────────────────────────
     PanelLoader { component: NotificationPopup {} }

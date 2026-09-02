@@ -1521,6 +1521,23 @@ Singleton {
                     property bool compactWhenPageCounterHidden: true
                 }
 
+                /**
+                 * What the tablet becomes when it is charging and nobody is using it: an
+                 * ambient clock, weather and now-playing display, readable across a room.
+                 *
+                 * The Pixel Tablet does this when docked. "Docked" is not something this
+                 * shell can know, so charging is the proxy — it is the state where the
+                 * device is parked rather than in your hands.
+                 */
+                property JsonObject hubMode: JsonObject {
+                    property bool enable: false
+                    property bool requireCharging: true
+                    /// Seconds of no input before it takes over.
+                    property int idleSeconds: 120
+                    /// Never interrupt something being watched.
+                    property bool pauseWhilePlaying: true
+                }
+
                 property JsonObject gestures: JsonObject {
                     /**
                      * What swiping in from the left and right edges does.
