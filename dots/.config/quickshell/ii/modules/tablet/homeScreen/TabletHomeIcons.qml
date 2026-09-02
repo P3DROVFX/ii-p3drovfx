@@ -103,6 +103,36 @@ Singleton {
         root._save(all);
     }
 
+    /**
+     * Send an icon to another home page.
+     *
+     * The obvious gesture is dragging it to the screen edge until the page turns, and that
+     * is a much harder thing than it looks: the icon would have to survive a workspace
+     * switch mid-drag, on a surface that is rebuilt per workspace. This keeps the same
+     * store operation and lets the caller offer it as a target instead of a journey.
+     *
+     * The position is carried across rather than recomputed, so an icon lands where its
+     * owner had it — and a collision on the destination is left alone, because two icons
+     * overlapping is visible and fixable, while silently relocating one is neither.
+     */
+    function moveToWorkspace(fromWorkspaceId, toWorkspaceId, appId) {
+        if (fromWorkspaceId === toWorkspaceId || !appId)
+            return false;
+        const icon = root.iconsFor(fromWorkspaceId).find(entry => entry.id === appId);
+        if (!icon || root.has(toWorkspaceId, appId))
+            return false;
+
+        const all = root._all();
+        const fromKey = String(fromWorkspaceId);
+        const toKey = String(toWorkspaceId);
+        all[fromKey] = (Array.isArray(all[fromKey]) ? all[fromKey] : [])
+            .filter(entry => entry.id !== appId);
+        all[toKey] = (Array.isArray(all[toKey]) ? all[toKey].slice() : [])
+            .concat([{ id: appId, x: icon.x, y: icon.y }]);
+        root._save(all);
+        return true;
+    }
+
     /// Somewhere free-ish on the current home screen, for an icon added from the drawer
     /// rather than dropped at a point. Fills left to right, then wraps.
     ///

@@ -218,6 +218,72 @@ Item {
                     }
                 }
             }
+
+            /**
+             * Send the icon to the page either side, while the badge state is armed.
+             *
+             * Dragging it to the screen edge until the page turns is the gesture Android
+             * uses, and it is a much harder thing than it looks here: the icon would have to
+             * survive a workspace switch mid-drag, on a surface that is rebuilt per
+             * workspace. These reuse the state a long press already arms, so moving an icon
+             * costs one more tap and no new gesture — and no risk to the drag path, which
+             * has already cost this file three separate input bugs.
+             */
+            component PageMoveBadge: Rectangle {
+                id: badge
+
+                required property int delta
+                required property string symbol
+
+                width: 26
+                height: 26
+                radius: height / 2
+                color: Appearance.colors.colPrimary
+                z: 20
+
+                readonly property int targetWorkspace: root.workspaceId + badge.delta
+
+                visible: iconItem.editing && badge.targetWorkspace >= 1
+                scale: iconItem.editing ? 1 : 0.4
+                Behavior on scale {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: badge.symbol
+                    iconSize: 16
+                    color: Appearance.colors.colOnPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -6
+                    onClicked: {
+                        iconItem.editing = false;
+                        TabletHomeIcons.moveToWorkspace(root.workspaceId, badge.targetWorkspace,
+                                                        iconItem.appId);
+                    }
+                }
+            }
+
+            PageMoveBadge {
+                anchors.left: visual.left
+                anchors.top: visual.top
+                anchors.leftMargin: 2
+                anchors.topMargin: 2
+                delta: -1
+                symbol: "chevron_left"
+            }
+
+            PageMoveBadge {
+                anchors.left: visual.left
+                anchors.bottom: visual.bottom
+                anchors.leftMargin: 2
+                anchors.bottomMargin: 2
+                delta: 1
+                symbol: "chevron_right"
+            }
         }
     }
 }
