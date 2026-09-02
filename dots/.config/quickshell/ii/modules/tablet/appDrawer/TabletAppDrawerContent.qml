@@ -154,6 +154,12 @@ Item {
         if (root.categoryFilter.length === 0) {
             for (const app of root.matchingSystemApps)
                 entries.push({ key: "sys:" + app.id, systemAppId: app.id, name: app.name, icon: app.icon, entry: null });
+            // Panels ride the same row shape as the shell's own apps, so they get the same
+            // tinted-plate treatment and the same delegate. The "tool:" prefix on the id is
+            // what tells the tap handler to open one in place instead of launching it.
+            for (const panel of root.shelfTools)
+                entries.push({ key: "tool:" + panel.id, systemAppId: "tool:" + panel.id,
+                               name: panel.label ?? panel.id, icon: panel.icon ?? "wand_stars", entry: null });
         }
         for (const entry of root.apps)
             entries.push({ key: "app:" + entry.id, systemAppId: "", name: entry.name, icon: "", entry: entry });
@@ -376,10 +382,26 @@ Item {
      * because they answer a different question and a row that looks the same reads as more
      * of the same.
      */
+    /**
+     * The shell's own panels, listed in the grid as if they were applications.
+     *
+     * They have been three things in three days — hidden behind typing a name, a labelled
+     * row of their own, then icon buttons beside the field — and each version made them a
+     * separate kind of object the user had to learn about. They are not: from where you are
+     * standing the clipboard and the translator open the same way an app does. So they are
+     * tiles, next to the shell's other surfaces, and the drawer has one list again.
+     */
     readonly property var shelfTools: {
         if (!root.toolHostComponent || !(root.drawerConfig?.showToolShelf ?? true))
             return [];
-        return SearchPanelRegistry.enabledPanels;
+        const q = root.query.trim().toLowerCase();
+        if (q.length === 0)
+            return SearchPanelRegistry.enabledPanels;
+        return SearchPanelRegistry.enabledPanels.filter(panel => {
+            if (String(panel.label).toLowerCase().includes(q))
+                return true;
+            return (panel.keywords ?? []).some(keyword => String(keyword).toLowerCase().startsWith(q));
+        });
     }
 
     readonly property var matchingTools: {
@@ -649,129 +671,11 @@ Item {
             }
         }
 
-            /**
-             * The shell's own panels, collapsed to their icons, in the space beside the
-             * field that was empty anyway.
-             *
-             * They were a labelled row under the categories, which spent a whole line of the
-             * drawer on something reached occasionally. Icon-only costs no vertical space at
-             * all, and these are the icons the panels already wear everywhere else in the
-             * shell. Scrolls sideways when there are more than fit.
-             */
-            Flickable {
-                id: toolRail
+            // Balances the spacer on the other side, so the field stays centred on the
+            // surface rather than sitting wherever the row's contents leave it.
+            Item {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
-                Layout.preferredHeight: root.searchHeight
-                Layout.alignment: Qt.AlignVCenter
-                visible: root.shelfTools.length > 0 && root.activeToolId.length === 0
-                opacity: root.revealProgress
-                contentWidth: toolRailRow.implicitWidth
-                clip: true
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-
-                RowLayout {
-                    id: toolRailRow
-                    height: toolRail.height
-                    spacing: 6
-
-                    Repeater {
-                        model: root.shelfTools
-
-                        delegate: RippleButton {
-                            id: toolButton
-                            required property var modelData
-
-                            readonly property real diameter: Math.round(root.searchHeight * 0.78)
-                            Layout.preferredWidth: toolButton.diameter
-                            Layout.preferredHeight: toolButton.diameter
-                            Layout.alignment: Qt.AlignVCenter
-
-                            buttonRadius: Appearance.rounding.full
-                            colBackground: Appearance.colors.colLayer1
-                            colBackgroundHover: Appearance.colors.colSecondaryContainer
-                            colRipple: Appearance.colors.colSecondaryContainerActive
-
-                            onClicked: root.openTool(toolButton.modelData.id)
-
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: toolButton.modelData.icon ?? "wand_stars"
-                                iconSize: Math.round(toolButton.diameter * 0.46)
-                                fill: 1
-                                color: toolButton.hovered
-                                    ? Appearance.colors.colOnSecondaryContainer
-                                    : Appearance.colors.colOnLayer1
-                            }
-
-                            StyledToolTip {
-                                text: toolButton.modelData.label ?? toolButton.modelData.id
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Tool suggestions, between the field and the grid, like Android's result chips.
-        Flickable {
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.matchingTools.length > 0 ? toolRow.implicitHeight : 0
-            visible: Layout.preferredHeight > 0
-            contentWidth: toolRow.implicitWidth
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-
-            Behavior on Layout.preferredHeight {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-            }
-
-            RowLayout {
-                id: toolRow
-                spacing: 10
-
-                Repeater {
-                    model: root.matchingTools
-
-                    delegate: Rectangle {
-                        id: toolChip
-                        required property var modelData
-
-                        implicitWidth: chipRow.implicitWidth + 32
-                        implicitHeight: Math.max(44, Math.round(root.searchHeight * 0.78))
-                        radius: height / 2
-                        color: chipArea.pressed ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                        }
-
-                        RowLayout {
-                            id: chipRow
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            MaterialSymbol {
-                                text: toolChip.modelData.icon ?? "wand_stars"
-                                iconSize: 20
-                                color: Appearance.colors.colOnLayer2
-                            }
-
-                            StyledText {
-                                text: toolChip.modelData.label ?? toolChip.modelData.id
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colOnLayer2
-                            }
-                        }
-
-                        MouseArea {
-                            id: chipArea
-                            anchors.fill: parent
-                            onClicked: root.openTool(toolChip.modelData.id)
-                        }
-                    }
-                }
             }
         }
 
@@ -884,10 +788,21 @@ Item {
                 property bool userScrolled: false
                 onMovementStarted: appGrid.userScrolled = true
                 onTopMarginChanged: appGrid.returnToTopIfUntouched()
+                // The model is filled after the view exists, and a view whose content was
+                // empty has its contentY clamped to zero — so the row that finally arrives
+                // lands with the margin already scrolled past. This is the moment that
+                // actually needed catching; the margin change alone was not enough.
+                onCountChanged: appGrid.returnToTopIfUntouched()
 
                 function returnToTopIfUntouched() {
-                    if (!appGrid.userScrolled)
-                        appGrid.contentY = appGrid.originY - appGrid.topMargin;
+                    if (appGrid.userScrolled)
+                        return;
+                    // Deferred: called from the middle of a layout pass, an assignment to
+                    // contentY is undone by the clamp that pass is still on its way to doing.
+                    Qt.callLater(() => {
+                        if (!appGrid.userScrolled)
+                            appGrid.contentY = appGrid.originY - appGrid.topMargin;
+                    });
                 }
                 /// How much of the top fade is in. Zero until something has actually scrolled
                 /// off the top, or the categories would sit washed out in their resting place.
@@ -980,9 +895,16 @@ Item {
                         systemIcon: appCell.isSystemApp ? appCell.modelData.icon : ""
                         iconSize: root.appIconSize
                         onActivated: {
-                            if (appCell.isSystemApp)
-                                TabletSystemApps.launch(appCell.modelData.systemAppId);
-                            else
+                            if (appCell.isSystemApp) {
+                                const id = String(appCell.modelData.systemAppId);
+                                if (id.startsWith("tool:")) {
+                                    // Opens inside the drawer rather than launching, so the
+                                    // surface stays where the user's attention already is.
+                                    root.openTool(id.substring(5));
+                                    return;
+                                }
+                                TabletSystemApps.launch(id);
+                            } else
                                 appCell.modelData.entry.execute();
                             root.dismissRequested();
                         }
