@@ -10,16 +10,22 @@ import qs.modules.ii.editMode
  * The desktop's right-click menu: what the desktop offers when a click lands
  * on no widget. Four rows, deliberately (decision D6): the wallpaper picker,
  * the catalogue for whatever was clicked, the layout editor, and Settings.
+ *
+ * The bar and the dock ask for the same menu. Where the click landed decides
+ * the rows: a bar is not a place to pick a wallpaper from, the bar's
+ * catalogue row opens the bar's widgets instead of the desktop's, and the
+ * dock keeps only its own way into the mode - its page in the catalogue -
+ * because the dock's icons already carry their own menu.
  */
 Item {
     id: root
 
     signal dismissRequested()
 
-    // Whether the click was on the bar rather than the desktop. It decides two
-    // rows: a bar is not a place to pick a wallpaper from, and the catalogue
-    // row opens the bar's widgets instead of the desktop's.
-    property bool onBar: false
+    // "desktop", "bar" or "dock".
+    property string origin: "desktop"
+    readonly property bool onBar: root.origin === "bar"
+    readonly property bool onDock: root.origin === "dock"
 
     readonly property real padding: 6
     implicitWidth: 236
@@ -64,6 +70,7 @@ Item {
                 }
             }
             EditMenuRow {
+                visible: !root.onDock
                 cardPadding: root.padding
                 symbol: "widgets"
                 label: root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
@@ -73,16 +80,24 @@ Item {
                     GlobalStates.openEditCatalogue(section, GlobalStates.desktopMenuScreenName);
                 }
             }
+            // From the dock, the mode opens on the dock's own page: what was
+            // clicked is what gets edited, the same rule as the rows above.
             EditMenuRow {
                 cardPadding: root.padding
-                symbol: GlobalStates.editMode ? "done" : "edit"
-                label: GlobalStates.editMode ? Translation.tr("Done editing") : Translation.tr("Edit layout")
+                symbol: GlobalStates.editMode ? "done" : (root.onDock ? "dock" : "edit")
+                label: GlobalStates.editMode ? Translation.tr("Done editing")
+                    : root.onDock ? Translation.tr("Edit dock") : Translation.tr("Edit layout")
                 onClicked: {
                     root.dismissRequested();
-                    if (GlobalStates.editMode)
+                    if (GlobalStates.editMode) {
                         GlobalStates.closeEditMode();
-                    else
-                        GlobalStates.openEditMode();
+                        return;
+                    }
+                    if (root.onDock) {
+                        GlobalStates.openEditCatalogue("dock", GlobalStates.desktopMenuScreenName, "appearance");
+                        return;
+                    }
+                    GlobalStates.openEditMode(GlobalStates.desktopMenuScreenName);
                 }
             }
 
@@ -100,6 +115,10 @@ Item {
                 label: Translation.tr("Settings")
                 onClicked: {
                     root.dismissRequested();
+                    // A window, not a panel: it would open on the workspace the
+                    // mode parked the desktop on, under the mode's own chrome.
+                    if (GlobalStates.editMode)
+                        GlobalStates.closeEditMode();
                     GlobalStates.openSettings();
                 }
             }

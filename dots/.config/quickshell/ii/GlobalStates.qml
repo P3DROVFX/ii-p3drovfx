@@ -436,15 +436,20 @@ Singleton {
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
-    // Where the click landed. The bar asks for the menu too, and that decides
-    // both what the menu offers - a bar is not a place to pick a wallpaper
-    // from - and which catalogue its widgets row opens.
-    property bool desktopMenuOnBar: false
+    // Where the click landed: "desktop", "bar" or "dock". The bar and the dock
+    // ask for the menu too, and the origin decides what it offers - a bar is
+    // not a place to pick a wallpaper from, the dock's row opens the dock's
+    // own page - and which catalogue its widgets row opens.
+    property string desktopMenuOrigin: "desktop"
+    readonly property bool desktopMenuOnBar: root.desktopMenuOrigin === "bar"
 
-    function openDesktopMenu(screenName, x, y, onBar = false) {
+    function openDesktopMenu(screenName, x, y, origin = "desktop") {
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
-        root.desktopMenuOnBar = onBar;
+        // The bar used to pass a boolean for "on the bar"; still honoured.
+        if (origin === true)
+            origin = "bar";
+        root.desktopMenuOrigin = (origin === "bar" || origin === "dock") ? origin : "desktop";
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;

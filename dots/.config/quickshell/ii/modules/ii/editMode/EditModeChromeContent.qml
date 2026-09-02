@@ -91,7 +91,7 @@ Item {
     // scalar runs back down to zero. An animation of its own could do none of
     // that, and a declarative one whose target moves every frame restarts
     // every frame and never ticks at all (b710ef731).
-    readonly property real staggerStep: 0.06
+    readonly property real staggerStep: 0.05
     readonly property real revealSpan: 0.5
 
     function slotReveal(slot) {
@@ -210,14 +210,41 @@ Item {
             }
         }
 
+        // The dock's, on the same terms: its page is where it is placed, how
+        // tall it is and how its icons are drawn, with the apps a step down.
+        // The dock used to be reachable only through the panel's own tabs -
+        // the one surface the mode edits that the toolbar did not name.
+        IconAndTextToolbarButton {
+            id: dockButton
+            opacity: root.slotReveal(4)
+            scale: (dockButton.down ? 0.92 : 1) * root.slotScale(4)
+            Layout.alignment: Qt.AlignVCenter
+            visible: !GlobalStates.editLockPreview
+            iconText: "dock"
+            text: Translation.tr("Dock")
+            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "dock"
+            onClicked: {
+                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "dock") {
+                    root.drawerToggleRequested();
+                    return;
+                }
+                root.drawerPageRequested("dock", "appearance");
+            }
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Dock appearance and apps")
+            }
+        }
+
         // Edge snapping, drawn as state. It reads and toggles the key Settings
         // already offers rather than a switch of its own. Icon-only: the
         // toolbar's width is the card's inset and the labels beside it already
         // spend the words.
         IconToolbarButton {
             id: snapButton
-            opacity: root.slotReveal(4)
-            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(4)
+            opacity: root.slotReveal(5)
+            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(5)
             Layout.alignment: Qt.AlignVCenter
             // The guides ARE the feature - the dot lattice and the alignment
             // lines a dragged widget latches onto. The alignment glyph this
@@ -236,8 +263,8 @@ Item {
         }
 
         Rectangle {
-            opacity: root.slotReveal(5)
-            scale: root.slotScale(5)
+            opacity: root.slotReveal(6)
+            scale: root.slotScale(6)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             Layout.rightMargin: 4
@@ -256,8 +283,8 @@ Item {
             // RippleButton dims a disabled button through this same property,
             // and an outer binding replaces its rule rather than joining it -
             // so the dimming is multiplied back in by hand.
-            opacity: root.slotReveal(6) * (undoButton.enabled ? 1 : 0.4)
-            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(6)
+            opacity: root.slotReveal(7) * (undoButton.enabled ? 1 : 0.4)
+            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(7)
             Layout.alignment: Qt.AlignVCenter
             text: "undo"
             enabled: GlobalStates.editCanUndo
@@ -271,8 +298,8 @@ Item {
 
         IconToolbarButton {
             id: redoButton
-            opacity: root.slotReveal(7) * (redoButton.enabled ? 1 : 0.4)
-            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(7)
+            opacity: root.slotReveal(8) * (redoButton.enabled ? 1 : 0.4)
+            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(8)
             Layout.alignment: Qt.AlignVCenter
             text: "redo"
             enabled: GlobalStates.editCanRedo
@@ -290,8 +317,8 @@ Item {
         // rendered flat beside the title it read as a second label.
         IconAndTextToolbarButton {
             id: doneButton
-            opacity: root.slotReveal(8)
-            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(8)
+            opacity: root.slotReveal(9)
+            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(9)
             Layout.alignment: Qt.AlignVCenter
             iconText: "done"
             text: Translation.tr("Done")
