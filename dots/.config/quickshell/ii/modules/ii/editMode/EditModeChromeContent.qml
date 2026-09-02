@@ -76,6 +76,35 @@ Item {
     // screen-sized layer surface that may take a click.
     readonly property alias toolbarItem: toolbar
 
+    // ── The toolbar's cascade ────────────────────────────────────────────────
+    // The pill rises out of the band as one piece (its `y` is a function of
+    // `card`), and its contents used to arrive with it in a single flat frame:
+    // nine controls appearing at once, which reads as a screenshot rather than
+    // as a toolbar being handed to you.
+    //
+    // Derived from `editProgress` rather than animated here, and that is the
+    // whole trick. That scalar already carries the mode's clock - one Behavior,
+    // in GlobalStates - so a piece's own reveal is arithmetic on it: the piece
+    // at slot N waits `N * staggerStep` of the entry and then takes
+    // `revealSpan` to arrive. Nothing here holds a timer, nothing restarts, and
+    // the cascade plays BACKWARDS on the way out for free, because the same
+    // scalar runs back down to zero. An animation of its own could do none of
+    // that, and a declarative one whose target moves every frame restarts
+    // every frame and never ticks at all (b710ef731).
+    readonly property real staggerStep: 0.06
+    readonly property real revealSpan: 0.5
+
+    function slotReveal(slot) {
+        const t = (GlobalStates.editProgress - slot * root.staggerStep) / root.revealSpan;
+        return Math.max(0, Math.min(1, t));
+    }
+
+    // Scale rather than an offset: a `y` translate would take the control
+    // outside the pill it is arriving into, and the pill does not clip.
+    function slotScale(slot) {
+        return 0.72 + 0.28 * root.slotReveal(slot);
+    }
+
     // The toolbar's own body, claiming the cursor for the whole of it. Without
     // it the gaps between the buttons - the toolbar's padding and the rules -
     // set no cursor at all, so whatever the last surface asked for stays up
@@ -108,6 +137,8 @@ Item {
         // agree on one spelling.
         ToolbarTabBar {
             id: tabBar
+            opacity: root.slotReveal(0)
+            scale: root.slotScale(0)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             implicitHeight: Appearance.sizes.toolbarHeight - 12
@@ -121,6 +152,8 @@ Item {
         }
 
         Rectangle {
+            opacity: root.slotReveal(1)
+            scale: root.slotScale(1)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             Layout.rightMargin: 4
@@ -134,6 +167,8 @@ Item {
         // The panel's toggle, on the catalogue it opens on.
         IconAndTextToolbarButton {
             id: drawerButton
+            opacity: root.slotReveal(2)
+            scale: (drawerButton.down ? 0.92 : 1) * root.slotScale(2)
             Layout.alignment: Qt.AlignVCenter
             iconText: "widgets"
             text: Translation.tr("Add widgets")
@@ -154,6 +189,8 @@ Item {
         // Hidden on the Lockscreen tab, where there is no bar to edit.
         IconAndTextToolbarButton {
             id: barButton
+            opacity: root.slotReveal(3)
+            scale: (barButton.down ? 0.92 : 1) * root.slotScale(3)
             Layout.alignment: Qt.AlignVCenter
             visible: !GlobalStates.editLockPreview
             iconText: "dock_to_bottom"
@@ -179,6 +216,8 @@ Item {
         // spend the words.
         IconToolbarButton {
             id: snapButton
+            opacity: root.slotReveal(4)
+            scale: (snapButton.down ? 0.92 : 1) * root.slotScale(4)
             Layout.alignment: Qt.AlignVCenter
             // The guides ARE the feature - the dot lattice and the alignment
             // lines a dragged widget latches onto. The alignment glyph this
@@ -197,6 +236,8 @@ Item {
         }
 
         Rectangle {
+            opacity: root.slotReveal(5)
+            scale: root.slotScale(5)
             Layout.alignment: Qt.AlignVCenter
             Layout.leftMargin: 4
             Layout.rightMargin: 4
@@ -212,6 +253,11 @@ Item {
         // row would slide under the pointer on the first edit.
         IconToolbarButton {
             id: undoButton
+            // RippleButton dims a disabled button through this same property,
+            // and an outer binding replaces its rule rather than joining it -
+            // so the dimming is multiplied back in by hand.
+            opacity: root.slotReveal(6) * (undoButton.enabled ? 1 : 0.4)
+            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(6)
             Layout.alignment: Qt.AlignVCenter
             text: "undo"
             enabled: GlobalStates.editCanUndo
@@ -225,6 +271,8 @@ Item {
 
         IconToolbarButton {
             id: redoButton
+            opacity: root.slotReveal(7) * (redoButton.enabled ? 1 : 0.4)
+            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(7)
             Layout.alignment: Qt.AlignVCenter
             text: "redo"
             enabled: GlobalStates.editCanRedo
@@ -242,6 +290,8 @@ Item {
         // rendered flat beside the title it read as a second label.
         IconAndTextToolbarButton {
             id: doneButton
+            opacity: root.slotReveal(8)
+            scale: (doneButton.down ? 0.92 : 1) * root.slotScale(8)
             Layout.alignment: Qt.AlignVCenter
             iconText: "done"
             text: Translation.tr("Done")
