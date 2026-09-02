@@ -227,10 +227,32 @@ AbstractWidget {
     Behavior on entryProgress {
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(root)
     }
-    readonly property real lifecycleOpacity: exiting ? 0 : entryProgress
-    // 0.92 → 1 on the way in, 0.94 on the way out: enough to read as arriving
-    // and leaving without turning into a bounce.
-    readonly property real lifecycleScale: exiting ? 0.94 : (0.92 + 0.08 * entryProgress)
+
+    // The exit gets a scalar of its own because it runs on a different clock.
+    // The entry can take the whole `elementMoveEnter` (400ms) to settle; the
+    // exit has to be FINISHED before WidgetStateManager reaps the model entry
+    // at 260ms, so it takes `elementMoveFast` (200ms) and lands with 60ms to
+    // spare.
+    //
+    // Expressed as a scalar rather than as a target for the two outer
+    // Behaviors (`opacity`, `scale`) because those are on other tiers: the
+    // scale's is `elementResize` (300ms), so the shrink was still moving when
+    // the widget was destroyed and never arrived, and what shipped read as a
+    // widget blinking out rather than leaving. Both are held off for the
+    // length of the exit below, so this is the only animation of it - a second
+    // one chasing a target that is still moving does not add, it lags.
+    property real exitProgress: 1
+    Behavior on exitProgress {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    onExitingChanged: root.exitProgress = root.exiting ? 0 : 1
+
+    readonly property real lifecycleOpacity: root.entryProgress * root.exitProgress
+    // 0.92 → 1 on the way in, and 1 → 0.82 on the way out: enough to read as
+    // arriving and leaving without turning into a bounce. The way out is the
+    // larger of the two on purpose - it is over in half the time.
+    readonly property real lifecycleScale: (0.92 + 0.08 * root.entryProgress)
+        * (0.82 + 0.18 * root.exitProgress)
 
     Timer {
         id: entryTimer
@@ -762,6 +784,9 @@ AbstractWidget {
     }
     opacity: lockOpacity * lifecycleOpacity
     Behavior on opacity {
+        // See `exitProgress`: while the widget is leaving, that scalar is the
+        // one animation of the movement and this one would only lag behind it.
+        enabled: !root.exiting
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
     readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
@@ -774,6 +799,10 @@ AbstractWidget {
     scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0)
         * lockScaleFactor * lifecycleScale * dragLift
     Behavior on scale {
+        // Same as the opacity above: `elementResize` is 300ms and the reap is
+        // at 260ms, so left armed this Behavior turns the exit's shrink into a
+        // movement that is cut off before it arrives.
+        enabled: !root.exiting
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
