@@ -104,6 +104,19 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "trending_up"
+                text: Translation.tr("Show a \"Most used\" row above the grid")
+                checked: Config.options.tablet.appDrawer.showSuggestions
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.appDrawer.showSuggestions)
+                        Config.options.tablet.appDrawer.showSuggestions = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("The apps you actually open, from the same launch history the \"Most used\" sort reads. Hides itself when that sort is already on, or while you are searching.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "touch_app"
                 text: Translation.tr("Long-press opens a menu")
                 checked: Config.options.tablet.appDrawer.longPressMenu

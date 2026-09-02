@@ -162,6 +162,39 @@ Item {
 
     onGridEntriesChanged: root.applyGridDiff(root.gridEntries)
 
+    /**
+     * The handful of apps you actually open, above the grid.
+     *
+     * Android's drawer opens on a predicted row because most launches are a small set of
+     * apps and hunting for them alphabetically every time is work the launcher can do for
+     * you. `AppUsage` has been scoring launches all along — the "Most used" sort already
+     * reads it — so this is surfacing a signal the shell already had rather than a new one.
+     *
+     * Hidden when the grid is already frecency-ordered, since the row would then just be its
+     * own first line, and hidden while searching, because a query is a better predictor than
+     * a history and the two would disagree in front of the user.
+     */
+    readonly property bool suggestionsAvailable: root.query.trim().length === 0
+        && root.categoryFilter.length === 0
+        && root.sortMode !== "usage"
+        && (root.drawerConfig?.showSuggestions ?? true)
+
+    /// Tall enough for the tile's own contents and no taller. The grid's cell height leaves
+    /// deliberate air around each tile so rows breathe; a single row of six inherits that as
+    /// a band of dead space under the labels instead.
+    readonly property real suggestionTileHeight: Math.round(
+        root.appIconSize + 6 + Appearance.font.pixelSize.smaller * 2.4 + 18)
+
+    readonly property var suggestedApps: {
+        if (!root.suggestionsAvailable)
+            return [];
+        // Only apps with a real score: frecencyQuery pads its result with everything else in
+        // alphabetical order, and an alphabetical tail dressed up as a prediction is worse
+        // than no row at all.
+        const ranked = AppSearch.frecencyQuery("").filter(entry => AppUsage.getScore(entry.id) > 0);
+        return ranked.slice(0, 6);
+    }
+
     // ── A–Z index ───────────────────────────────────────────────────────────
     /**
      * Where each letter starts in the grid, for the scrubber down the right-hand side.
@@ -715,6 +748,56 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        // A predicted row, above the alphabet. See root.suggestedApps for when it appears.
+        ColumnLayout {
+            id: suggestions
+            Layout.fillWidth: true
+            visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
+            spacing: 2
+
+            StyledText {
+                Layout.leftMargin: 4
+                text: Translation.tr("Most used")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                Repeater {
+                    model: root.suggestedApps
+
+                    delegate: TabletAppTile {
+                        id: suggestionTile
+                        required property var modelData
+
+                        Layout.preferredWidth: root.tileWidth
+                        Layout.preferredHeight: root.suggestionTileHeight
+                        entry: suggestionTile.modelData
+                        iconSize: root.appIconSize
+
+                        onActivated: {
+                            suggestionTile.modelData.execute();
+                            root.dismissRequested();
+                        }
+                        onHeld: {
+                            if (root.drawerConfig?.longPressMenu ?? true)
+                                root.openAppMenu(suggestionTile, suggestionTile.modelData);
+                            else
+                                root.appHeld(suggestionTile.modelData.id);
+                        }
+                        onContextRequested: root.openAppMenu(suggestionTile, suggestionTile.modelData)
+                    }
+                }
+
+                // Left-aligned: the row is short and centring it would leave the grid below
+                // starting in a different column, which reads as two unrelated lists.
+                Item { Layout.fillWidth: true }
             }
         }
 

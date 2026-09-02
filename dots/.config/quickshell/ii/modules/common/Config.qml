@@ -1559,6 +1559,9 @@ Singleton {
                     /// Long-press opens an Android-style menu on the tile. Off restores the
                     /// old behaviour, where a long-press dropped the app on the home screen.
                     property bool longPressMenu: true
+                    /// A predicted row above the grid, from the same launch history the
+                    /// "Most used" sort reads. Hidden automatically when that sort is on.
+                    property bool showSuggestions: true
                     property bool showClipboardResults: true
                     property bool showFileResults: true
                     property int sideResultLimit: 6
