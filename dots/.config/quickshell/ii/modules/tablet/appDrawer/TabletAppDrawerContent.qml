@@ -871,7 +871,8 @@ Item {
                 topMargin: headerBlock.height
                 /// How much of the top fade is in. Zero until something has actually scrolled
                 /// off the top, or the categories would sit washed out in their resting place.
-                property real topFade: Math.max(0, Math.min(1, (appGrid.contentY - appGrid.originY) / 48))
+                property real topFade: Math.max(0, Math.min(1,
+                    (appGrid.contentY - appGrid.originY + appGrid.topMargin) / 48))
                 // Fades the grid's own alpha, not a colour band over it. ScrollEdgeFade
                 // paints a colour, which ends content only when the surface behind is that
                 // colour — this one sits on a blurred screencopy, so any colour it could
@@ -993,10 +994,13 @@ Item {
              * GridView.header is the obvious home and does not work here — a trivial
              * rectangle in its place never appears either — so this is a sibling instead. The
              * grid reserves its height as a top margin and this sits at minus however far the
-             * grid has been scrolled from its resting position. Measured against `originY`,
-             * not against `-topMargin`: a Flickable guarantees where its content rests only
-             * relative to its own origin, and assuming the literal margin put the whole strip
-             * a header's height above the clip.
+             * grid has been scrolled from its resting position.
+             *
+             * That resting position is `originY - topMargin`, not `originY`: the margin is
+             * content area *above* the origin, so a view sitting at the very top reports
+             * `contentY - originY == -topMargin`. Leaving the margin out of the sum pushed
+             * the whole strip down by exactly its own height, straight over the first rows
+             * of apps — which is what it looked like.
              *
              * A sibling rather than one outer Flickable wrapping everything, because that
              * would make the grid full-height and give up virtualising several hundred tiles.
@@ -1005,7 +1009,7 @@ Item {
                 id: headerBlock
                 width: appGrid.width
                 x: appGrid.x
-                y: appGrid.y - (appGrid.contentY - appGrid.originY)
+                y: appGrid.y - appGrid.topMargin - (appGrid.contentY - appGrid.originY)
                 height: headerColumn.implicitHeight + root.outerMargin * 0.4
 
                 ColumnLayout {
