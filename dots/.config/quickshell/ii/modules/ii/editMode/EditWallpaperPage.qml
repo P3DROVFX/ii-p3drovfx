@@ -95,6 +95,41 @@ Item {
         cellHeight: root.cellHeight + root.cellGap
         model: root.files
         boundsBehavior: Flickable.StopAtBounds
+        maximumFlickVelocity: 3500
+
+        // The selector's accelerated wheel, behind the same switch. A
+        // handler rather than a MouseArea over the grid: an item layered
+        // over the tiles would take the pointer cursor from every one of them.
+        property real scrollTargetY: 0
+        readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
+        readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
+        readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
+
+        WheelHandler {
+            enabled: (Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false) && grid.contentHeight > grid.height
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: wheelEvent => {
+                const delta = wheelEvent.angleDelta.y / grid.mouseScrollDeltaThreshold;
+                const scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= grid.mouseScrollDeltaThreshold
+                    ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
+                const maxY = Math.max(0, grid.contentHeight - grid.height);
+                const base = scrollAnim.running ? grid.scrollTargetY : grid.contentY;
+                const targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
+                grid.scrollTargetY = targetY;
+                grid.contentY = targetY;
+                wheelEvent.accepted = true;
+            }
+        }
+
+        Behavior on contentY {
+            enabled: !grid.dragging && !grid.flicking
+            NumberAnimation {
+                id: scrollAnim
+                duration: Appearance.animation.scroll.duration
+                easing.type: Appearance.animation.scroll.type
+                easing.bezierCurve: Appearance.animation.scroll.bezierCurve
+            }
+        }
 
         delegate: Item {
             id: cell
