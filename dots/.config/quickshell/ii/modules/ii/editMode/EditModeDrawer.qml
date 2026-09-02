@@ -54,6 +54,9 @@ Item {
     signal barDropRequested(string componentId, real x, real y)
     signal barDragCancelled()
     signal dockToggleRequested(string appId)
+    signal addAppRequested(string appId, real dropX, real dropY)
+    signal toggleAppOnHomeScreenRequested(string appId)
+    signal clearHomeScreenAppsRequested()
     signal lockLayoutResetRequested()
     // A whole surface back to the shell's defaults: "widgets" (every desktop
     // widget removed), "bar", "dock" or "lockIslands". The surface answers
@@ -72,6 +75,8 @@ Item {
 
     function pageValidFor(section, page) {
         if (page === "")
+            return true;
+        if (section === "apps")
             return true;
         if (section === "widgets")
             return page.startsWith("category:");
@@ -446,9 +451,28 @@ Item {
         return group ? group.items : [];
     }
 
+    readonly property var homeAppsItems: {
+        void GlobalStates.homeScreenAppsRevision;
+        const q = root.needle;
+        const all = Array.from(AppSearch.list ?? []).filter(e => e && e.id && !e.noDisplay);
+        const isAppOnHome = GlobalStates.isAppOnHomeScreenHandler ?? (() => false);
+        const mapped = all.map(entry => ({
+            "id": entry.id,
+            "name": entry.name ?? entry.id,
+            "genericName": entry.genericName ?? "",
+            "comment": entry.comment ?? "",
+            "onScreen": isAppOnHome(entry.id)
+        }));
+        if (!q)
+            return mapped;
+        return mapped.filter(item => item.name.toLowerCase().includes(q)
+            || item.id.toLowerCase().includes(q)
+            || item.genericName.toLowerCase().includes(q));
+    }
+
     readonly property bool lockTab: GlobalStates.editLockPreview
     onLockTabChanged: {
-        if (root.lockTab ? (root.section === "bar" || root.section === "dock") : root.section === "lock")
+        if (root.lockTab ? (root.section === "bar" || root.section === "dock" || root.section === "apps") : root.section === "lock")
             GlobalStates.editDrawerSection = "widgets";
     }
     readonly property bool anyLockFork: root.activeWidgets.some(entry =>
@@ -504,10 +528,12 @@ Item {
         if (root.searching)
             return Translation.tr("Results");
         if (root.page === "") {
+            if (root.section === "apps")
+                return Translation.tr("Home screen apps");
             if (root.section === "bar")
                 return Translation.tr("Bar");
             if (root.section === "dock")
-                return Translation.tr("Dock");
+                return PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock");
             if (root.section === "lock")
                 return Translation.tr("Lock screen");
             if (root.section === "style")
@@ -531,17 +557,21 @@ Item {
         if (root.page.startsWith("component:"))
             return BarComponentRegistry.getComponent(root.page.substring(10))?.title ?? Translation.tr("Widget");
         if (root.page === "appearance")
-            return root.section === "dock" ? Translation.tr("Dock appearance") : Translation.tr("Bar appearance");
+            return root.section === "dock"
+                ? (PanelFamily.touchFirst ? Translation.tr("Taskbar appearance & items") : Translation.tr("Dock appearance"))
+                : Translation.tr("Bar appearance");
         if (root.page === "widgets")
             return Translation.tr("Dock widgets");
         return Translation.tr("Edit");
     }
 
     readonly property string headerSymbol: {
+        if (root.section === "apps")
+            return "apps";
         if (root.section === "bar")
             return "dock_to_bottom";
         if (root.section === "dock")
-            return "dock";
+            return PanelFamily.touchFirst ? "dock_to_bottom" : "dock";
         if (root.section === "lock")
             return "lock";
         if (root.section === "style")
@@ -729,7 +759,8 @@ Item {
                     leftPadding: 34
                     rightPadding: 34
                     colBackground: Appearance.colors.colLayer1
-                    placeholderText: root.section === "dock" ? Translation.tr("Search apps")
+                    placeholderText: root.section === "apps" ? Translation.tr("Search applications")
+                        : root.section === "dock" ? Translation.tr("Search apps")
                         : root.section === "bar" ? Translation.tr("Search bar widgets")
                         : Translation.tr("Search widgets")
                     onTextChanged: root.query = searchField.text
@@ -820,7 +851,11 @@ Item {
                     sourceComponent: {
                         if (root.searching)
                             return root.section === "bar" ? barListPage
-                                : root.section === "dock" ? dockAppListPage : widgetListPage;
+                                : root.section === "dock" ? dockAppListPage
+                                : root.section === "apps" ? appsListPage
+                                : widgetListPage;
+                        if (root.section === "apps")
+                            return appsListPage;
                         if (root.section === "widgets")
                             return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
@@ -840,7 +875,7 @@ Item {
                             return barRootPage;
                         }
                         if (root.page === "appearance")
-                            return dockAppearancePage;
+                            return PanelFamily.touchFirst ? tabletDockAppearancePage : dockAppearancePage;
                         if (root.page === "widgets")
                             return dockWidgetsPage;
                         if (root.page.startsWith("apps:"))
@@ -1154,6 +1189,7 @@ Item {
                 spacing: 3
 
                 EditPanelRow {
+                    visible: !PanelFamily.touchFirst
                     Layout.fillWidth: true
                     first: true
                     last: false
@@ -1164,6 +1200,7 @@ Item {
                 }
 
                 EditPanelRow {
+                    visible: !PanelFamily.touchFirst
                     Layout.fillWidth: true
                     first: false
                     last: true
@@ -1174,14 +1211,27 @@ Item {
                 }
 
                 EditPanelRow {
+                    visible: PanelFamily.touchFirst
+                    Layout.fillWidth: true
+                    first: true
+                    last: true
+                    symbol: "dock_to_bottom"
+                    title: Translation.tr("Taskbar appearance & items")
+                    subtitle: Translation.tr("Height, search pill, navigation and buttons")
+                    onActivated: root.openPage("appearance")
+                }
+
+                EditPanelRow {
                     Layout.fillWidth: true
                     Layout.topMargin: 3
                     first: true
                     last: true
                     destructive: true
                     symbol: "reset_wrench"
-                    title: Translation.tr("Reset the dock")
-                    subtitle: Translation.tr("The pins and the order the shell ships with")
+                    title: PanelFamily.touchFirst ? Translation.tr("Reset the taskbar") : Translation.tr("Reset the dock")
+                    subtitle: PanelFamily.touchFirst
+                        ? Translation.tr("Restore tablet dock defaults")
+                        : Translation.tr("The pins and the order the shell ships with")
                     trailingKind: "none"
                     onActivated: root.resetRequested("dock")
                 }
@@ -1261,8 +1311,82 @@ Item {
     }
 
     Component {
+        id: tabletDockAppearancePage
+        EditTabletDockAppearancePage {}
+    }
+
+    Component {
         id: dockWidgetsPage
         EditDockWidgetsPage {}
+    }
+
+    Component {
+        id: appsListPage
+
+        Item {
+            StyledListView {
+                id: appsList
+                anchors.fill: parent
+                popin: false
+                animateAppearance: false
+                clip: true
+                spacing: 3
+                model: root.homeAppsItems
+
+                delegate: EditPanelRow {
+                    required property var modelData
+                    required property int index
+                    width: appsList.width
+                    first: index === 0
+                    last: index === root.homeAppsItems.length - 1
+                    iconSource: Quickshell.iconPath(AppSearch.guessIcon(modelData.id ?? ""), "image-missing")
+                    title: modelData.name ?? modelData.id
+                    subtitle: modelData.genericName || modelData.comment || ""
+                    trailingKind: modelData.onScreen ? "check" : "add"
+                    valueText: modelData.onScreen ? Translation.tr("On home") : ""
+                    draggable: true
+                    dragOwner: appsList
+                    onActivated: root.toggleAppOnHomeScreenRequested(modelData.id ?? "")
+                    onDragBegan: root.dragMetadata = { icon: "apps", name: modelData.name, appId: modelData.id }
+                    onDragMovedTo: (x, y) => root.moveGhost(x, y)
+                    onDragFinished: (x, y) => {
+                        root.dragMetadata = null;
+                        const p = root.toGhost(x, y);
+                        root.addAppRequested(modelData.id ?? "", p.x, p.y);
+                    }
+                    onDragCancelled: root.dragMetadata = null
+                }
+
+                footer: Item {
+                    width: appsList.width
+                    height: clearHomeRow.height + 13
+                    visible: (GlobalStates.isAppOnHomeScreenHandler !== null)
+
+                    EditPanelRow {
+                        id: clearHomeRow
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: 10
+                        first: true
+                        last: true
+                        destructive: true
+                        symbol: "delete_sweep"
+                        title: Translation.tr("Clear home screen icons")
+                        subtitle: Translation.tr("Remove all app icons from this workspace")
+                        trailingKind: "none"
+                        onActivated: root.clearHomeScreenAppsRequested()
+                    }
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                visible: appsList.count === 0
+                text: Translation.tr("No applications found")
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+        }
     }
 
     // The Style catalogue: the wallpaper, the theme and the palette, with the

@@ -1671,6 +1671,13 @@ Singleton {
     /// screen's icons are stored per workspace, so the family has to name one.
     property var navigateHomeHandler: null
 
+    /// Home screen app placement handlers, installed by the panel family owning home screen icons (Tablet).
+    property var addAppToHomeScreenHandler: null
+    property var removeAppFromHomeScreenHandler: null
+    property var isAppOnHomeScreenHandler: null
+    property var clearHomeScreenAppsHandler: null
+    property int homeScreenAppsRevision: 0
+
     function toggleLeftSidebar(monitorName) {
         if (PanelFamily.nativeAppWindows) {
             if (root.leftSidebarHandler)

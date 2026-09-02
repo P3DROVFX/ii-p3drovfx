@@ -66,7 +66,7 @@ Scope {
                     z: 100
                     readonly property real moveThreshold: 6
                     property bool armed: true
-                    enabled: dismissGuard.armed
+                    enabled: dismissGuard.armed && !PanelFamily.touchFirst
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                     onPositionChanged: mouse => {
@@ -75,7 +75,15 @@ Scope {
                             return;
                         dismissGuard.armed = false;
                     }
-                    onPressed: GlobalStates.closeDesktopMenu()
+                    onPressed: mouse => {
+                        if (Math.abs(mouse.x - GlobalStates.desktopMenuX) > dismissGuard.moveThreshold
+                            || Math.abs(mouse.y - GlobalStates.desktopMenuY) > dismissGuard.moveThreshold) {
+                            dismissGuard.armed = false;
+                            mouse.accepted = false;
+                            return;
+                        }
+                        GlobalStates.closeDesktopMenu();
+                    }
                 }
 
                 Item {

@@ -23,6 +23,8 @@ import qs.modules.tablet.sidebarDashboard
 // qs.modules.ii.* — only this file, so the coupling stays countable in one place.
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.background
+import qs.modules.ii.background.desktopMenu
+import qs.modules.ii.editMode
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
@@ -124,6 +126,17 @@ Scope {
         TabletHomeIconsLayer {}
     }
 
+    PanelLoader {
+        // The desktop layout editor's chrome; nothing to edit without the background.
+        extraCondition: Config.options.background.enable
+        component: EditModeChrome {}
+    }
+    PanelLoader {
+        // The desktop's context menu; asked for by the background's surfaces.
+        extraCondition: Config.options.background.enable
+        component: DesktopMenu {}
+    }
+
     // The swipe that moves between workspaces. The workspaces are this family's home screens.
     PanelLoader { component: TabletHomeScreen {} }
 
@@ -199,23 +212,60 @@ Scope {
     Component { id: policiesAnime; Anime {} }
     Component { id: policiesPhone; Phone {} }
 
-    Component.onCompleted: TabletSystemApps.hostedContent = {
-        "usage": usageAppContent,
-        "modes": modesAppContent,
-        "timetable": timetableAppContent,
-        "keybinds": keybindsAppContent,
-        "elements": elementsAppContent,
-        "aminoAcids": aminoAcidsAppContent,
-        "commands": commandsAppContent,
-        "workspaces": workspacesAppContent,
-        "email": emailAppContent,
-        "typingTest": typingTestAppContent,
-        "policies.intelligence": policiesIntelligence,
-        "policies.translator": policiesTranslator,
-        "policies.media": policiesMedia,
-        "policies.wallpapers": policiesWallpapers,
-        "policies.anime": policiesAnime,
-        "policies.phone": policiesPhone
+    Connections {
+        target: TabletHomeIcons
+        function onRevisionChanged() {
+            GlobalStates.homeScreenAppsRevision++;
+        }
+    }
+
+    Component.onCompleted: {
+        TabletSystemApps.hostedContent = {
+            "usage": usageAppContent,
+            "modes": modesAppContent,
+            "timetable": timetableAppContent,
+            "keybinds": keybindsAppContent,
+            "elements": elementsAppContent,
+            "aminoAcids": aminoAcidsAppContent,
+            "commands": commandsAppContent,
+            "workspaces": workspacesAppContent,
+            "email": emailAppContent,
+            "typingTest": typingTestAppContent,
+            "policies.intelligence": policiesIntelligence,
+            "policies.translator": policiesTranslator,
+            "policies.media": policiesMedia,
+            "policies.wallpapers": policiesWallpapers,
+            "policies.anime": policiesAnime,
+            "policies.phone": policiesPhone
+        };
+        GlobalStates.addAppToHomeScreenHandler = (appId, x, y) => {
+            const workspace = TabletHomeIcons.currentWorkspace;
+            if (x !== undefined && y !== undefined) {
+                TabletHomeIcons.add(workspace, appId, x, y);
+            } else {
+                const slot = TabletHomeIcons.nextFreeSlot(workspace, 8);
+                TabletHomeIcons.add(workspace, appId, slot.x, slot.y);
+            }
+        };
+        GlobalStates.removeAppFromHomeScreenHandler = (appId) => {
+            TabletHomeIcons.remove(TabletHomeIcons.currentWorkspace, appId);
+        };
+        GlobalStates.isAppOnHomeScreenHandler = (appId) => {
+            return TabletHomeIcons.has(TabletHomeIcons.currentWorkspace, appId);
+        };
+        GlobalStates.clearHomeScreenAppsHandler = () => {
+            const ws = TabletHomeIcons.currentWorkspace;
+            for (const icon of TabletHomeIcons.iconsFor(ws)) {
+                TabletHomeIcons.remove(ws, icon.id);
+            }
+        };
+    }
+
+    Component.onDestruction: {
+        GlobalStates.addAppToHomeScreenHandler = null;
+        GlobalStates.removeAppFromHomeScreenHandler = null;
+        GlobalStates.isAppOnHomeScreenHandler = null;
+        GlobalStates.clearHomeScreenAppsHandler = null;
     }
 
     // Both side edges go Back, as on Android. They have to *claim* the drag: an edge the

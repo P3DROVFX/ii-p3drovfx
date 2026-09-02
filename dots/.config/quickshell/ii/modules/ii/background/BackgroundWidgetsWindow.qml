@@ -171,6 +171,8 @@ PanelWindow {
         // marquee, and later the drop targets, live on it.
         if (GlobalStates.editMode)
             return true;
+        if (bgWidgetsWindow.canvasOverlay !== null)
+            return true;
         if (!hasWidgets)
             return false;
         void widgetStateManager.syncVersion; // re-evaluate when the model's roles are rewritten
@@ -524,9 +526,11 @@ PanelWindow {
                 const p = widgetCanvas.mapToItem(null, atX, atY);
                 GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
             }
-            // A touch screen's long press on the wallpaper: into the mode,
-            // on this screen.
-            onCanvasLongPressed: GlobalStates.openEditMode(bgWidgetsWindow.editScreenName)
+            // A long press on the wallpaper/canvas: opens the desktop menu at the touch position.
+            onCanvasLongPressed: (atX, atY) => {
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+            }
 
             // The selection's toolbar, over whatever is picked. A child of the
             // canvas so it shares the widgets' coordinate space and follows a

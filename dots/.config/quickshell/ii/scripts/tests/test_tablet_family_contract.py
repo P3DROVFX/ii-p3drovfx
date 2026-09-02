@@ -129,7 +129,7 @@ class TabletFamilyContractTests(unittest.TestCase):
 
     def test_long_press_offers_a_menu_instead_of_silently_adding_to_the_home_screen(self):
         content = read("modules/tablet/appDrawer/TabletAppDrawerContent.qml")
-        menu = read("modules/tablet/appDrawer/TabletInlineMenu.qml")
+        menu = read("modules/tablet/menu/TabletInlineMenu.qml")
         tile = read("modules/tablet/appDrawer/TabletAppTile.qml")
 
         self.assertIn("root.openAppMenu(appTile, appCell.modelData.entry)", content)
@@ -368,7 +368,7 @@ class TabletFamilyContractTests(unittest.TestCase):
 
     def test_every_tablet_menu_is_built_from_one_card(self):
         card = read("modules/tablet/menu/TabletMenuCard.qml")
-        inline = read("modules/tablet/appDrawer/TabletInlineMenu.qml")
+        inline = read("modules/tablet/menu/TabletInlineMenu.qml")
         context = read("modules/tablet/dock/TabletDockContextMenu.qml")
         overflow = read("modules/tablet/dock/TabletDockOverflowMenu.qml")
 
@@ -383,6 +383,59 @@ class TabletFamilyContractTests(unittest.TestCase):
         # A menu taller than the screen is a menu with unreachable entries.
         self.assertIn("property real maximumHeight: 0", card)
         self.assertIn("Flickable {", card)
+
+    def test_tablet_family_loads_desktop_menu_and_edit_mode_with_touch_longpress(self):
+        family = read("panelFamilies/TabletFamily.qml")
+        self.assertIn("import qs.modules.ii.background.desktopMenu", family)
+        self.assertIn("import qs.modules.ii.editMode", family)
+        self.assertIn("component: DesktopMenu {}", family)
+        self.assertIn("component: EditModeChrome {}", family)
+
+        canvas = read("modules/common/widgets/widgetCanvas/WidgetCanvas.qml")
+        self.assertIn("signal canvasLongPressed(real atX, real atY)", canvas)
+        self.assertIn("canvasLongPressed(canvasLongPressHandler.point.position.x, canvasLongPressHandler.point.position.y)", canvas)
+
+        bg_window = read("modules/ii/background/BackgroundWidgetsWindow.qml")
+        self.assertIn("GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y)", bg_window)
+        self.assertIn("if (bgWidgetsWindow.canvasOverlay !== null)", bg_window)
+
+        bg_root = read("modules/ii/background/BackgroundRoot.qml")
+        self.assertIn("GlobalStates.openDesktopMenu(bgRoot.editScreenName, bgRootLongPress.point.position.x, bgRootLongPress.point.position.y)", bg_root)
+
+        desktop_menu = read("modules/ii/background/desktopMenu/DesktopMenu.qml")
+        self.assertIn("!PanelFamily.touchFirst", desktop_menu)
+
+    def test_tablet_family_edit_mode_edits_tablet_dock_and_manages_home_screen_apps(self):
+        tablet_page = read("modules/ii/editMode/EditTabletDockAppearancePage.qml")
+        self.assertIn("Config.options.tablet.dock.height", tablet_page)
+        self.assertIn("Config.options.tablet.dock.iconSize", tablet_page)
+        self.assertIn("Config.options.tablet.dock.reserveSpace", tablet_page)
+        self.assertIn("Config.options.tablet.dock.showSearchBar", tablet_page)
+        self.assertIn("Config.options.tablet.dock.showNavigation", tablet_page)
+
+        drawer = read("modules/ii/editMode/EditModeDrawer.qml")
+        self.assertIn("PanelFamily.touchFirst ? tabletDockAppearancePage : dockAppearancePage", drawer)
+        self.assertIn('if (root.section === "apps")', drawer)
+        self.assertIn("id: appsListPage", drawer)
+        self.assertIn("signal addAppRequested(string appId, real dropX, real dropY)", drawer)
+        self.assertIn("signal toggleAppOnHomeScreenRequested(string appId)", drawer)
+
+        chrome_content = read("modules/ii/editMode/EditModeChromeContent.qml")
+        self.assertIn('section: "apps"', chrome_content)
+        self.assertIn("drawerAddAppRequested", chrome_content)
+
+        chrome_surface = read("modules/ii/editMode/EditModeChromeSurface.qml")
+        self.assertIn("GlobalStates.addAppToHomeScreenHandler(appId, p.x, p.y)", chrome_surface)
+        self.assertIn("GlobalStates.removeAppFromHomeScreenHandler(appId)", chrome_surface)
+
+        family = read("panelFamilies/TabletFamily.qml")
+        self.assertIn("GlobalStates.addAppToHomeScreenHandler =", family)
+        self.assertIn("TabletHomeIcons.add(workspace, appId", family)
+        self.assertIn("GlobalStates.removeAppFromHomeScreenHandler =", family)
+        self.assertIn("GlobalStates.homeScreenAppsRevision++", family)
+
+        desktop_menu_card = read("modules/ii/background/desktopMenu/DesktopMenuCard.qml")
+        self.assertIn('GlobalStates.openEditCatalogue("apps"', desktop_menu_card)
 
     def test_bar_widgets_scale_their_insides_with_the_bar(self):
         appearance = read("modules/common/Appearance.qml")

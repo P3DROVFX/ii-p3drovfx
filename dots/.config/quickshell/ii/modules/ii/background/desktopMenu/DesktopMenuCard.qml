@@ -80,13 +80,24 @@ Item {
                     GlobalStates.openEditCatalogue(section, GlobalStates.desktopMenuScreenName);
                 }
             }
+            EditMenuRow {
+                visible: PanelFamily.touchFirst && !root.onBar && !root.onDock
+                cardPadding: root.padding
+                symbol: "apps"
+                label: Translation.tr("Home screen apps")
+                onClicked: {
+                    root.dismissRequested();
+                    GlobalStates.openEditCatalogue("apps", GlobalStates.desktopMenuScreenName);
+                }
+            }
             // From the dock, the mode opens on the dock's own page: what was
             // clicked is what gets edited, the same rule as the rows above.
             EditMenuRow {
                 cardPadding: root.padding
-                symbol: GlobalStates.editMode ? "done" : (root.onDock ? "dock" : "edit")
+                symbol: GlobalStates.editMode ? "done" : (root.onDock ? (PanelFamily.touchFirst ? "dock_to_bottom" : "dock") : "edit")
                 label: GlobalStates.editMode ? Translation.tr("Done editing")
-                    : root.onDock ? Translation.tr("Edit dock") : Translation.tr("Edit layout")
+                    : root.onDock ? (PanelFamily.touchFirst ? Translation.tr("Edit taskbar") : Translation.tr("Edit dock"))
+                    : Translation.tr("Edit layout")
                 onClicked: {
                     root.dismissRequested();
                     if (GlobalStates.editMode) {

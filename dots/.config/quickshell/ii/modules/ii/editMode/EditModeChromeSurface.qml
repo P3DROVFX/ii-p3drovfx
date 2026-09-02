@@ -246,6 +246,34 @@ PanelWindow {
             GlobalStates.editLockPreview ? "lockOnly" : "hide");
     }
 
+    function addAppAt(appId, dropX, dropY) {
+        if (EditModeLogic.pointInDrawerReveal(chrome.drawer, dropX, dropY))
+            return;
+        const card = root.cardGeometry;
+        if (dropX < card.x || dropX > card.x + card.width || dropY < card.y || dropY > card.y + card.height)
+            return;
+        const p = EditModeLogic.canvasPointFromScreen(root.viewport, root.progress, root.editShift, dropX, dropY);
+        if (GlobalStates.addAppToHomeScreenHandler)
+            GlobalStates.addAppToHomeScreenHandler(appId, p.x, p.y);
+    }
+
+    function toggleAppOnHomeScreen(appId) {
+        if (!GlobalStates.isAppOnHomeScreenHandler)
+            return;
+        if (GlobalStates.isAppOnHomeScreenHandler(appId)) {
+            if (GlobalStates.removeAppFromHomeScreenHandler)
+                GlobalStates.removeAppFromHomeScreenHandler(appId);
+        } else {
+            if (GlobalStates.addAppToHomeScreenHandler)
+                GlobalStates.addAppToHomeScreenHandler(appId);
+        }
+    }
+
+    function clearHomeScreenApps() {
+        if (GlobalStates.clearHomeScreenAppsHandler)
+            GlobalStates.clearHomeScreenAppsHandler();
+    }
+
     // ── The bar's centre while the Dynamic Island owns it ────────────────────
     // `bar.floatingNotch.centerInBar` makes BarLayout hand the centre section
     // an empty list: the island is drawn over that stretch of bar and anything
@@ -632,6 +660,33 @@ PanelWindow {
             return;
         }
         if (what === "dock") {
+            if (PanelFamily.touchFirst) {
+                const tabletDockDefaults = {
+                    reserveSpace: true,
+                    height: 96,
+                    iconSize: 48,
+                    showAppRow: true,
+                    autoHideOnOccupiedWorkspace: true,
+                    keepNavigationVisible: true,
+                    showNavigation: true,
+                    showRunningApps: true,
+                    maximumRecents: 0,
+                    showAppDrawerButton: true,
+                    showSearchBar: true,
+                    searchBarWidth: 320,
+                    searchBarStyle: "extended",
+                    showAppDividers: true,
+                    showWorkspaceArrows: true,
+                    showPageCounter: true,
+                    hidePageCounterOnOccupiedWorkspace: true,
+                    compactWhenPageCounterHidden: true
+                };
+                for (const key in tabletDockDefaults) {
+                    if (Config.options.tablet.dock.hasOwnProperty(key))
+                        Config.options.tablet.dock[key] = tabletDockDefaults[key];
+                }
+                Config.options.dock.pinnedOnStartup = false;
+            }
             const pinnedBefore = EditModeLogic.listCopy(Config.options.dock.pinnedApps ?? []);
             const orderBefore = EditModeLogic.listCopy(Config.options.dock.order ?? []);
             const pinnedAfter = EditModeLogic.listCopy(root.defaultsFor("dock.pinnedApps") ?? []);
@@ -851,6 +906,9 @@ PanelWindow {
         onDrawerBarDropRequested: (componentId, x, y) => root.barDrop(componentId, x, y)
         onDrawerBarDragCancelled: root.barController()?.externalDragEnd()
         onDrawerDockToggleRequested: appId => root.toggleDockPin(appId)
+        onDrawerAddAppRequested: (appId, dropX, dropY) => root.addAppAt(appId, dropX, dropY)
+        onDrawerToggleAppRequested: appId => root.toggleAppOnHomeScreen(appId)
+        onDrawerClearHomeScreenAppsRequested: root.clearHomeScreenApps()
         onDrawerResetRequested: what => root.resetSurface(what)
         // A preference, not a layout edit: no history entry, same as the
         // Settings toggle that writes the same key.

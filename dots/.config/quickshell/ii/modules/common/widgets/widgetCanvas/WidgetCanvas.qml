@@ -49,18 +49,17 @@ MouseArea {
     signal contextMenuRequested(string instanceId, real atX, real atY)
     // A right-click that landed on no widget: the desktop's own menu.
     signal canvasContextMenuRequested(real atX, real atY)
-    // A long press on the wallpaper, from a touch screen: the way into Edit
-    // Mode for a hand that has no right button and no Super key.
-    signal canvasLongPressed()
+    // A long press on the wallpaper / background: opens the desktop context menu.
+    signal canvasLongPressed(real atX, real atY)
     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
     TapHandler {
-        acceptedDevices: PointerDevice.TouchScreen
+        id: canvasLongPressHandler
         gesturePolicy: TapHandler.WithinBounds
         onLongPressed: {
-            if (root.editMode || root.draggingWidget() !== null)
+            if (root.draggingWidget() !== null)
                 return;
-            root.canvasLongPressed();
+            root.canvasLongPressed(canvasLongPressHandler.point.position.x, canvasLongPressHandler.point.position.y);
         }
     }
 
