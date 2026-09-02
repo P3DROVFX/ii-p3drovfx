@@ -74,7 +74,11 @@ Item {
         }
     }
 
-    function focusInput() { focusedControlIndex = 0 }
+    // -1 is "the caret is in the URL field", the same convention the
+    // translator panel uses. Focusing control 0 instead put the ring on the
+    // first type chip, so Enter re-picked that chip (a no-op) rather than
+    // starting the download, and Left/Right stopped moving the caret.
+    function focusInput() { focusedControlIndex = -1 }
 
     // This is a flat panel — there is no sub-level to back out of. Without
     // this, Backspace on an empty query falls through to
@@ -141,6 +145,12 @@ Item {
     }
 
     function activateSelected() {
+        // Nothing in the panel is focused, so the caret is still in the URL
+        // field: Enter means "download this", the same as pressing the button.
+        if (focusedControlIndex === -1) {
+            startDownloadAction();
+            return;
+        }
         if (focusedControlIndex >= 0 && focusedControlIndex <= 2) {
             root.selectedType = root.typeOptions[focusedControlIndex].id;
         } else if (focusedControlIndex >= 3 && focusedControlIndex <= 8) {
