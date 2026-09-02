@@ -52,18 +52,13 @@ StyledFlickable {
             text: Translation.tr("With a Wallpaper Engine scene the swatches are drawn from the last image wallpaper.")
         }
 
-        // Rebuilt on a source change: the grid loads its swatches on a timer
-        // that runs once, so a grid that merely re-bound its list would show
-        // the new schemes unloaded.
-        Loader {
+        ColorPreviewGrid {
             Layout.fillWidth: true
             Layout.topMargin: 8
             Layout.leftMargin: 2
             Layout.rightMargin: 2
-            sourceComponent: ColorPreviewGrid {
-                builtInTheme: root.source === "builtin"
-                customTheme: root.source === "custom"
-            }
+            builtInTheme: root.source === "builtin"
+            customTheme: root.source === "custom"
         }
 
         Item {
