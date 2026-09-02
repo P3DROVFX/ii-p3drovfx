@@ -44,6 +44,12 @@ Item {
     readonly property string query: searchField.text
     property string activeToolId: ""
 
+    /// A fresh open starts at the top of the list, whatever the last one was looking at.
+    onRevealProgressChanged: {
+        if (root.revealProgress < 0.02)
+            appGrid.userScrolled = false;
+    }
+
     // ── Touch metrics ───────────────────────────────────────────────────────
     // Everything is derived from the screen so one layout serves a small tablet and a
     // large scaled display, the same way the shade does it.
@@ -142,28 +148,52 @@ Item {
         return root.categoryGroups.filter(group => present.has(group.id)).map(group => group.id);
     }
 
-    /// Everything the grid shows: matching system apps first, then installed applications.
-    /// System apps are wrapped so the delegate can tell them apart without inspecting types.
-    ///
-    /// Each row carries a stable key, which is what lets the grid animate a reorder instead
-    /// of rebuilding: see applyGridDiff.
+    /**
+     * Everything the grid shows, in one list.
+     *
+     * The shell's own surfaces and its panels used to lead the grid as a fixed block, on the
+     * grounds that they read as their own group there. In practice a fixed block is a block
+     * you scroll past every time, and it made the A–Z rail lie: the rail indexes the
+     * alphabet, and a dozen entries sitting outside it meant "A" and the first A were two
+     * different places. They are filed with everything else now.
+     *
+     * Not merged in every mode. A query has already ranked the applications and there is
+     * nothing to interleave that ranking with, and neither usage nor category has anything
+     * to say about a surface that is not an application — in those three the shell's items
+     * keep an end of their own rather than being sorted by a key they do not have.
+     *
+     * Each row carries a stable key, which is what lets the grid animate a reorder instead
+     * of rebuilding: see applyGridDiff.
+     */
     readonly property var gridEntries: {
-        const entries = [];
+        const shellRows = [];
         // A category filter is a filter on applications; the shell's own surfaces are not
         // .desktop entries and have no category to be filtered by.
         if (root.categoryFilter.length === 0) {
             for (const app of root.matchingSystemApps)
-                entries.push({ key: "sys:" + app.id, systemAppId: app.id, name: app.name, icon: app.icon, entry: null });
+                shellRows.push({ key: "sys:" + app.id, systemAppId: app.id, name: app.name, icon: app.icon, entry: null });
             // Panels ride the same row shape as the shell's own apps, so they get the same
             // tinted-plate treatment and the same delegate. The "tool:" prefix on the id is
             // what tells the tap handler to open one in place instead of launching it.
             for (const panel of root.shelfTools)
-                entries.push({ key: "tool:" + panel.id, systemAppId: "tool:" + panel.id,
-                               name: panel.label ?? panel.id, icon: panel.icon ?? "wand_stars", entry: null });
+                shellRows.push({ key: "tool:" + panel.id, systemAppId: "tool:" + panel.id,
+                                 name: panel.label ?? panel.id, icon: panel.icon ?? "wand_stars", entry: null });
         }
+
+        const appRows = [];
         for (const entry of root.apps)
-            entries.push({ key: "app:" + entry.id, systemAppId: "", name: entry.name, icon: "", entry: entry });
-        return entries;
+            appRows.push({ key: "app:" + entry.id, systemAppId: "", name: entry.name, icon: "", entry: entry });
+
+        if (root.query.trim().length > 0)
+            return shellRows.concat(appRows);
+        if (root.sortMode === "usage" || root.sortMode === "category")
+            return appRows.concat(shellRows);
+
+        const all = shellRows.concat(appRows);
+        all.sort((left, right) => root.sortMode === "nameDesc"
+            ? String(right.name ?? "").localeCompare(String(left.name ?? ""))
+            : String(left.name ?? "").localeCompare(String(right.name ?? "")));
+        return all;
     }
 
     onGridEntriesChanged: root.applyGridDiff(root.gridEntries)
@@ -209,9 +239,10 @@ Item {
      * anything past the middle of the alphabet, and this family has no scrollbar to throw a
      * thumb at. Android's launcher solves it with a letter rail; so does this.
      *
-     * Only the applications are indexed. The shell's own surfaces lead the grid in their own
-     * order, so letting them claim letters would send "A" to the top of the list rather than
-     * to the applications that begin with it.
+     * Every row is indexed now, not only the applications. The shell's surfaces used to lead
+     * the grid in their own order, so letting them claim letters sent "A" to the top of the
+     * list rather than to the first thing beginning with A; with one sorted list that
+     * distinction is gone.
      */
     readonly property bool alphabetIndexAvailable: root.query.trim().length === 0
         && (root.sortMode === "name" || root.sortMode === "nameDesc")
@@ -224,8 +255,6 @@ Item {
         const inOrder = [];
         for (let i = 0; i < root.gridEntries.length; i++) {
             const row = root.gridEntries[i];
-            if ((row.systemAppId ?? "").length > 0)
-                continue;
             const name = String(row.name ?? "").trim();
             if (name.length === 0)
                 continue;
@@ -785,23 +814,40 @@ Item {
                  * Only while the user has not scrolled. After they have, where they are is
                  * theirs, and a header resizing underneath them must not yank them back.
                  */
+                /**
+                 * Keep the list at its beginning until the user moves it themselves.
+                 *
+                 * The view is built before its model is filled and before the strip above it
+                 * has measured itself, and neither of those settling events moves the
+                 * content — so without this the drawer opens somewhere in the middle of the
+                 * app list with the categories already scrolled past.
+                 *
+                 * `positionViewAtBeginning()` rather than assigning contentY. Three attempts
+                 * at computing the resting offset by hand — from `-topMargin`, from
+                 * `originY`, then from both — each got it wrong in a different way, because
+                 * where a view rests is a function of its margins, its origin and its content
+                 * height all at once. This is the API that already knows that.
+                 *
+                 * Only armed once the drawer is fully open: the reveal animation can move
+                 * the view on its own, and treating that as the user scrolling would leave
+                 * the correction permanently disabled.
+                 */
                 property bool userScrolled: false
-                onMovementStarted: appGrid.userScrolled = true
+                onMovementStarted: {
+                    if (root.revealProgress > 0.99)
+                        appGrid.userScrolled = true;
+                }
                 onTopMarginChanged: appGrid.returnToTopIfUntouched()
-                // The model is filled after the view exists, and a view whose content was
-                // empty has its contentY clamped to zero — so the row that finally arrives
-                // lands with the margin already scrolled past. This is the moment that
-                // actually needed catching; the margin change alone was not enough.
                 onCountChanged: appGrid.returnToTopIfUntouched()
 
                 function returnToTopIfUntouched() {
                     if (appGrid.userScrolled)
                         return;
-                    // Deferred: called from the middle of a layout pass, an assignment to
-                    // contentY is undone by the clamp that pass is still on its way to doing.
+                    // Deferred: called from the middle of a layout pass, a position set now
+                    // is undone by the clamp that pass is still on its way to doing.
                     Qt.callLater(() => {
                         if (!appGrid.userScrolled)
-                            appGrid.contentY = appGrid.originY - appGrid.topMargin;
+                            appGrid.positionViewAtBeginning();
                     });
                 }
                 /// How much of the top fade is in. Zero until something has actually scrolled
