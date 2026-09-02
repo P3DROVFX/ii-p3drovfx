@@ -33,15 +33,45 @@ Item {
     readonly property real cardHeight: Math.round(root.cardWidth * 0.68)
     readonly property real cardSpacing: Math.max(16, Math.round(root.cardWidth * 0.06))
 
-    /// Most recently focused last in ToplevelManager's order, so reverse it: Android puts
-    /// what you were just in nearest to hand.
+    /**
+     * Every open window, most recently *used* first.
+     *
+     * This used to reverse ToplevelManager's own order and call the result most-recent-first.
+     * That order is creation order — activating a window does not move it — so the screen
+     * whose entire job is answering "what was I just doing" was answering "what did I open
+     * last", and the two only agree if you never switch back to anything.
+     *
+     * Hyprland already keeps the real answer: `focusHistoryID` is 0 for the focused window
+     * and counts up through the focus stack. The toplevels and the client list are two views
+     * of the same windows, joined on the address — the same join GlobalStates already does to
+     * find the active window when foreign-toplevel focus comes back empty.
+     */
     readonly property var windows: {
-        const list = [];
-        for (const toplevel of (ToplevelManager.toplevels?.values ?? [])) {
-            if (toplevel)
-                list.push(toplevel);
+        const focusOrderByAddress = {};
+        for (const client of (HyprlandData.windowList ?? [])) {
+            const raw = String(client?.address ?? "").trim();
+            if (raw.length === 0)
+                continue;
+            const address = raw.startsWith("0x") ? raw : `0x${raw}`;
+            focusOrderByAddress[address] = Number(client?.focusHistoryID ?? 9999);
         }
-        return list.reverse();
+
+        const entries = [];
+        for (const toplevel of (ToplevelManager.toplevels?.values ?? [])) {
+            if (!toplevel)
+                continue;
+            const raw = String(toplevel.HyprlandToplevel?.address ?? "").trim();
+            const address = raw.length === 0 ? "" : (raw.startsWith("0x") ? raw : `0x${raw}`);
+            entries.push({
+                toplevel: toplevel,
+                // A window Hyprland has not listed yet sorts to the end rather than to the
+                // front: an unknown position is not evidence of being the most recent one.
+                focusOrder: focusOrderByAddress[address] ?? 9999
+            });
+        }
+
+        entries.sort((left, right) => left.focusOrder - right.focusOrder);
+        return entries.map(entry => entry.toplevel);
     }
 
     function activate(toplevel) {
@@ -88,6 +118,25 @@ Item {
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.DragOverBounds
                 clip: true
+
+                // Inset so the first and last card are not welded to the bezel. Without it the
+                // leftmost card — which is now the app you were just in — reads as clipped
+                // rather than as the start of a row.
+                leftMargin: root.cardSpacing
+                rightMargin: root.cardSpacing
+
+                // The most recent card is at index 0, so the useful position is the start.
+                // A Flickable keeps its contentX, and this surface is rebuilt per open only as
+                // long as nothing keeps it mapped — resetting on the way out costs nothing and
+                // does not depend on that.
+                Component.onCompleted: carousel.contentX = -carousel.leftMargin
+                Connections {
+                    target: root
+                    function onRevealProgressChanged() {
+                        if (root.revealProgress < 0.02)
+                            carousel.contentX = -carousel.leftMargin;
+                    }
+                }
 
                 RowLayout {
                     id: cardRow
