@@ -3,6 +3,7 @@ import QtQuick.Layouts
 
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 /**
@@ -22,13 +23,44 @@ RippleButton {
 
     readonly property bool activeState: card.focus || card.hovered || card.isPressed
 
-    implicitWidth: 260
-    implicitHeight: 300
+    /// The one you are running is deliberately bigger, not only differently coloured. Size
+    /// is the difference you read before you have looked at anything, which is what "which
+    /// one am I in" should be.
+    implicitWidth: card.isCurrent ? 300 : 256
+    implicitHeight: card.isCurrent ? 344 : 300
+
+    Behavior on implicitWidth {
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
+    }
+    Behavior on implicitHeight {
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
+    }
 
     buttonRadius: Appearance.rounding.verylarge
-    colBackground: card.isCurrent ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer1
-    colBackgroundHover: Appearance.colors.colLayer1Hover
-    colRipple: Appearance.colors.colLayer1Active
+
+    /**
+     * Three states that have to be told apart at a glance, so each gets a whole surface
+     * step rather than a tint of the last one:
+     *
+     *   current   colPrimaryContainer — the only card in the accent itself
+     *   pointed at a third of the way from the resting surface to that accent
+     *   resting   colLayer1
+     *
+     * Three named tokens were tried for the middle state and all three failed on this
+     * theme: colLayer1Hover is colLayer1 mixed 8% towards its foreground, colLayer2 is one
+     * surface step, and colSecondaryContainer turns out to be another dark navy here. Each
+     * is a correct choice for a list row an inch tall and none of them reads across a
+     * 300px card. Mixing towards the accent by a fixed fraction is not a token, but it is
+     * the only version that cannot collapse into the resting colour whatever the palette
+     * does — and it puts the middle state visibly *between* the other two, which is what it
+     * means.
+     */
+    colBackground: card.isCurrent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1
+    colBackgroundHover: card.isCurrent
+        ? Appearance.colors.colPrimaryContainer
+        : ColorUtils.mix(Appearance.colors.colPrimaryContainer, Appearance.colors.colLayer1, 0.34)
+    colRipple: card.isCurrent
+        ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainer
 
     // The cascade and the spring are the SessionScreen's, so the two surfaces read as the
     // same gesture of the shell offering a choice.
@@ -89,10 +121,17 @@ RippleButton {
 
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 96
-            Layout.preferredHeight: 96
-            radius: card.activeState ? width / 2 : Appearance.rounding.large
-            color: card.isCurrent ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+            Layout.preferredWidth: card.isCurrent ? 108 : 92
+            Layout.preferredHeight: card.isCurrent ? 108 : 92
+            radius: card.activeState || card.isCurrent ? width / 2 : Appearance.rounding.large
+            // Steps with the card, so the plate is a second reading of the same state
+            // rather than a constant that makes hover look like nothing happened.
+            // On a hovered card the plate has to leave the container colour behind, or the
+            // two merge into one flat shape.
+            color: card.isCurrent
+                ? Appearance.colors.colPrimary
+                : (card.activeState ? Appearance.colors.colPrimaryContainer
+                                    : Appearance.colors.colLayer2)
 
             Behavior on radius {
                 NumberAnimation {
@@ -107,9 +146,16 @@ RippleButton {
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: card.family?.icon ?? "widgets"
-                iconSize: 44
+                iconSize: card.isCurrent ? 50 : 42
                 fill: card.isCurrent ? 1 : 0
-                color: card.isCurrent ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                color: card.isCurrent
+                    ? Appearance.colors.colOnPrimary
+                    : (card.activeState ? Appearance.colors.colOnPrimaryContainer
+                                        : Appearance.colors.colOnLayer2)
+
+                Behavior on iconSize {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                }
             }
         }
 
@@ -118,8 +164,12 @@ RippleButton {
             horizontalAlignment: Text.AlignHCenter
             text: Translation.tr(card.family?.name ?? "")
             font.family: Appearance.font.family.title
-            font.pixelSize: Appearance.font.pixelSize.large
-            color: Appearance.colors.colOnLayer1
+            font.pixelSize: card.isCurrent
+                ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.large
+            color: card.isCurrent
+                ? Appearance.colors.colOnPrimaryContainer
+                : (card.activeState ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colOnLayer1)
             elide: Text.ElideRight
         }
 
@@ -129,7 +179,10 @@ RippleButton {
             horizontalAlignment: Text.AlignHCenter
             text: Translation.tr(card.family?.description ?? "")
             font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
+            color: card.isCurrent
+                ? Appearance.colors.colOnPrimaryContainer
+                : (card.activeState ? Appearance.colors.colOnPrimaryContainer
+                                    : Appearance.colors.colSubtext)
             wrapMode: Text.Wrap
         }
 
@@ -166,7 +219,8 @@ RippleButton {
             visible: !card.isCurrent
             text: Translation.tr(card.family?.summary ?? "")
             font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colOnLayer1Inactive
+            color: card.activeState
+                ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1Inactive
         }
     }
 }

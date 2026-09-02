@@ -1579,6 +1579,9 @@ Singleton {
                     /// A predicted row above the grid, from the same launch history the
                     /// "Most used" sort reads. Hidden automatically when that sort is on.
                     property bool showSuggestions: true
+                    /// The shell's own panels — clipboard, emoji, translator, downloader —
+                    /// offered as a row instead of only when their name is typed.
+                    property bool showToolShelf: true
                     property bool showClipboardResults: true
                     property bool showFileResults: true
                     property int sideResultLimit: 6

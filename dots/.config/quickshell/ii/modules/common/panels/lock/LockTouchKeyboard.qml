@@ -37,6 +37,10 @@ Item {
 
     /// The host unlocks; this only ever collects characters.
     signal submitRequested
+    /// Asks the host to put the keyboard away. The lock screen's toolbar can bring it back,
+    /// but a control on the far side of the screen is not where anyone looks for it — the
+    /// way out of a keyboard is on the keyboard.
+    signal collapseRequested
 
     // 0 = off, 1 = next character only, 2 = locked. Android's three states, on one key.
     property int shiftState: 0
@@ -44,7 +48,8 @@ Item {
 
     readonly property bool numeric: root.mode === "pin"
 
-    implicitHeight: keyGrid.implicitHeight + root.verticalPadding * 2
+    implicitHeight: handleStrip.height + root.keySpacing + keyGrid.implicitHeight
+        + root.verticalPadding * 2
 
     // ── Metrics ─────────────────────────────────────────────────────────────
     // Keys are sized from the surface, so one layout serves a 10" tablet and a scaled 27"
@@ -137,10 +142,42 @@ Item {
         }
     }
 
+    // A grab bar, in the place every sheet on a touch device puts one. Tapping it hides the
+    // keyboard; it is also the only affordance saying the keyboard can be hidden at all.
+    Item {
+        id: handleStrip
+        anchors.top: parent.top
+        anchors.topMargin: root.verticalPadding
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: root.maxRowWidth
+        height: 34
+
+        RippleButton {
+            id: collapseButton
+            anchors.centerIn: parent
+            implicitWidth: 96
+            implicitHeight: 30
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer2
+            colBackgroundHover: Appearance.colors.colLayer2Hover
+            colRipple: Appearance.colors.colLayer2Active
+
+            onClicked: root.collapseRequested()
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: "keyboard_hide"
+                iconSize: 18
+                color: Appearance.colors.colOnLayer2
+            }
+        }
+    }
+
     ColumnLayout {
         id: keyGrid
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: handleStrip.bottom
+        anchors.topMargin: root.keySpacing
         width: root.maxRowWidth
         spacing: root.keySpacing
 

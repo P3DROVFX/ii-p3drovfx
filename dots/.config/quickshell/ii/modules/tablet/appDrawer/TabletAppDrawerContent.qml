@@ -364,6 +364,24 @@ Item {
         return parts[parts.length - 1] || path;
     }
 
+    /**
+     * Every tool the shell can host, offered without typing for one.
+     *
+     * Categories filter applications; these are not applications. They are the shell's own
+     * panels — clipboard, emoji, the translator, the media downloader — and until now the
+     * only way to one was to guess its name into the search field, which means only someone
+     * who already knew it existed could find it.
+     *
+     * Drawn as icon-led pills in an accent tint rather than as more outlined category chips,
+     * because they answer a different question and a row that looks the same reads as more
+     * of the same.
+     */
+    readonly property var shelfTools: {
+        if (!root.toolHostComponent || !(root.drawerConfig?.showToolShelf ?? true))
+            return [];
+        return SearchPanelRegistry.enabledPanels;
+    }
+
     readonly property var matchingTools: {
         const q = root.query.trim().toLowerCase();
         if (q.length === 0 || !root.toolHostComponent)
@@ -690,6 +708,70 @@ Item {
             }
         }
 
+        // The tools shelf. Sits under the categories and above everything else, because it
+        // is a peer of the category row, not a result of the query.
+        Flickable {
+            id: toolShelf
+            Layout.fillWidth: true
+            Layout.preferredHeight: toolShelf.shown ? shelfRow.implicitHeight : 0
+            visible: Layout.preferredHeight > 0
+            opacity: root.revealProgress
+            contentWidth: shelfRow.implicitWidth
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            readonly property bool shown: root.shelfTools.length > 0
+                && root.activeToolId.length === 0
+                && root.query.trim().length === 0
+
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(toolShelf)
+            }
+
+            RowLayout {
+                id: shelfRow
+                spacing: 8
+
+                Repeater {
+                    model: root.shelfTools
+
+                    delegate: RippleButton {
+                        id: shelfPill
+                        required property var modelData
+
+                        implicitWidth: shelfPillRow.implicitWidth + 30
+                        implicitHeight: Math.max(42, Math.round(root.searchHeight * 0.70))
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                        colRipple: Appearance.colors.colSecondaryContainerActive
+
+                        onClicked: root.openTool(shelfPill.modelData.id)
+
+                        contentItem: RowLayout {
+                            id: shelfPillRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            MaterialSymbol {
+                                text: shelfPill.modelData.icon ?? "wand_stars"
+                                iconSize: 19
+                                fill: 1
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+
+                            StyledText {
+                                text: shelfPill.modelData.label ?? shelfPill.modelData.id
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Tool suggestions, between the field and the grid, like Android's result chips.
         Flickable {
             Layout.fillWidth: true
@@ -756,6 +838,10 @@ Item {
             id: suggestions
             Layout.fillWidth: true
             visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
+            // A predicted row and the alphabet below it are two different lists. Without a
+            // gap wider than the column's own spacing they read as one grid whose first row
+            // happens to be out of order.
+            Layout.bottomMargin: suggestions.visible ? Math.round(root.outerMargin * 0.9) : 0
             spacing: 2
 
             StyledText {
@@ -883,7 +969,11 @@ Item {
                 cellHeight: root.tileHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                cacheBuffer: 600
+                // Two screens' worth rather than a flat 600px. Tiles are ~240px tall now, so
+                // the old buffer held barely two rows and delegates were being destroyed and
+                // rebuilt constantly while scrolling — every rebuild re-runs the icon theme
+                // lookup, which is the moment a tile can come back without one.
+                cacheBuffer: Math.max(600, Math.round(root.tileHeight * 8))
 
                 // Room to scroll the last row clear of the fade. Without it the bottom row
                 // can only ever be reached half-covered by the gradient.
@@ -992,13 +1082,20 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: body.fadeSize
+                // Not inset by the grid's bottom fade. That fade ends the *grid's* content;
+                // applying it here cost the rail two hundred pixels of height, which is what
+                // squeezed twenty-six letters into a third of the column.
+                anchors.bottomMargin: Appearance.sizes.elevationMargin
                 width: root.alphabetIndexAvailable && body.sideColumnWidth < 1 ? letterRailWidth : 0
                 visible: width > 0 && root.activeToolId.length === 0
 
-                readonly property real letterRailWidth: Math.max(28, Math.round(root.tileWidth * 0.22))
+                // Wide enough to be aimed at rather than hit by luck: a 28px strip is a
+                // pointer target, and this is scrubbed with a thumb.
+                readonly property real letterRailWidth: Math.max(52, Math.round(root.tileWidth * 0.34))
+                /// Rows share the column's height. Twenty-six letters rarely reach the cap,
+                /// so the cap only matters on a short list or a very tall screen.
                 readonly property real rowHeight: root.alphabetIndex.length > 0
-                    ? Math.min(30, letterRail.height / root.alphabetIndex.length) : 0
+                    ? Math.min(46, letterRail.height / root.alphabetIndex.length) : 0
 
                 /// Turns a y inside the rail into a jump. Clamped, because a drag that runs
                 /// off either end should stick to the first or last letter rather than stop
@@ -1013,6 +1110,16 @@ Item {
                 }
 
                 property int activeSlot: -1
+                /// Kept a moment after the finger lifts so the letter you landed on fades
+                /// out instead of snapping back the instant you let go.
+                property bool scrubbing: false
+
+                Timer {
+                    id: railRelease
+                    interval: 450
+                    repeat: false
+                    onTriggered: letterRail.activeSlot = -1
+                }
 
                 Column {
                     id: letters
@@ -1031,13 +1138,48 @@ Item {
                             width: letters.width
                             height: letterRail.rowHeight
 
+                            /// 1 on the letter under the finger, falling off over the two
+                            /// either side. A single highlighted letter tells you where you
+                            /// are; a gradient tells you which way you are going, which is
+                            /// what a scrub needs.
+                            // Not readonly: a Behavior cannot animate a readonly property,
+                            // and the whole point of this one is that it eases.
+                            property real emphasis: {
+                                if (letterRail.activeSlot < 0)
+                                    return 0;
+                                const distance = Math.abs(letterRail.activeSlot - letterSlot.index);
+                                return distance > 2 ? 0 : 1 - distance / 3;
+                            }
+
+                            Behavior on emphasis {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(letterSlot)
+                            }
+
+                            // A filled pill under the active letter, not an outline: this
+                            // project has no borders, and a fill also reads at arm's length.
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: letterRail.letterRailWidth * 0.82 * letterSlot.emphasis
+                                height: width
+                                radius: height / 2
+                                color: Appearance.colors.colPrimary
+                                opacity: letterSlot.emphasis
+                            }
+
                             StyledText {
                                 anchors.centerIn: parent
                                 text: letterSlot.modelData.letter
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: letterRail.activeSlot === letterSlot.index ? Font.Bold : Font.Normal
-                                color: letterRail.activeSlot === letterSlot.index
-                                    ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                                // Grows towards the finger. The step is small on purpose —
+                                // the rail must not reflow while it is being dragged.
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                    + Math.round(letterSlot.emphasis * 8)
+                                font.weight: letterSlot.emphasis > 0.66 ? Font.Bold : Font.Medium
+                                color: letterSlot.emphasis > 0.66
+                                    ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+
+                                Behavior on color {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                                }
                             }
                         }
                     }
@@ -1045,13 +1187,36 @@ Item {
 
                 MouseArea {
                     anchors.fill: parent
-                    onPressed: mouse => letterRail.jumpTo(mouse.y)
-                    onPositionChanged: mouse => {
-                        if (pressed)
-                            letterRail.jumpTo(mouse.y);
+                    hoverEnabled: true
+                    onPressed: mouse => {
+                        railRelease.stop();
+                        letterRail.scrubbing = true;
+                        letterRail.jumpTo(mouse.y);
                     }
-                    onReleased: letterRail.activeSlot = -1
-                    onCanceled: letterRail.activeSlot = -1
+                    onPositionChanged: mouse => {
+                        // Hovering previews which letter you would land on; pressing goes
+                        // there. Same handler, because on a touchscreen there is no hover and
+                        // the first event is always a press anyway.
+                        if (pressed) {
+                            letterRail.jumpTo(mouse.y);
+                        } else if (letterRail.rowHeight > 0) {
+                            const slot = Math.floor((mouse.y - letters.y) / letterRail.rowHeight);
+                            letterRail.activeSlot = Math.max(0,
+                                Math.min(root.alphabetIndex.length - 1, slot));
+                        }
+                    }
+                    onReleased: {
+                        letterRail.scrubbing = false;
+                        railRelease.restart();
+                    }
+                    onCanceled: {
+                        letterRail.scrubbing = false;
+                        railRelease.restart();
+                    }
+                    onExited: {
+                        if (!letterRail.scrubbing)
+                            railRelease.restart();
+                    }
                 }
             }
 

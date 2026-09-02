@@ -93,10 +93,35 @@ Item {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
+            /**
+             * The application's icon, and something to show when there is not one.
+             *
+             * A tile that paints nothing is indistinguishable from a tile that failed to
+             * load, and both read as the drawer being broken. The theme lookup can come back
+             * with nothing for plenty of ordinary reasons — an app with no icon at all, a
+             * name the guesser cannot map, a theme still warming up after a reload — so the
+             * fallback is a first-letter plate rather than an empty square.
+             */
             IconImage {
+                id: appIcon
                 anchors.fill: parent
-                visible: !root.isSystem
+                visible: !root.isSystem && appIcon.status === Image.Ready
                 source: Quickshell.iconPath(AppSearch.guessIcon(root.entry?.id ?? ""), "image-missing")
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                visible: !root.isSystem && !appIcon.visible
+                radius: width * 0.28
+                color: Appearance.colors.colSecondaryContainer
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: (root.entry?.name ?? "?").trim().charAt(0).toLocaleUpperCase()
+                    font.pixelSize: Math.round(root.iconSize * 0.44)
+                    font.family: Appearance.font.family.title
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
             }
 
             // A shell surface has no application icon, so it gets a symbol on a tinted

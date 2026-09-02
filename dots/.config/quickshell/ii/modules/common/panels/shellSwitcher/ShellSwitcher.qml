@@ -219,6 +219,9 @@ Scope {
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 18
+                    // Cards differ in height now, so they hang from a shared centre line
+                    // instead of stretching to the tallest.
+                    uniformCellSizes: false
                     enabled: !switcherWindow.switching
                     opacity: switcherWindow.switching ? 0.45 : 1.0
 
@@ -235,6 +238,7 @@ Scope {
                             required property var modelData
                             required property int index
 
+                            Layout.alignment: Qt.AlignVCenter
                             family: familyCard.modelData
                             animIndex: familyCard.index
                             isCurrent: familyCard.modelData.id === PanelFamily.current

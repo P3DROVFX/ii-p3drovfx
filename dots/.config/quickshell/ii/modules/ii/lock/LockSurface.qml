@@ -507,6 +507,7 @@ MouseArea {
             shown: root.touchKeyboardShown
             mode: Config.options.lock.touchKeyboard?.mode ?? "text"
             onSubmitRequested: root.context.tryUnlock()
+            onCollapseRequested: root.touchKeyboardOpen = false
         }
     }
 
