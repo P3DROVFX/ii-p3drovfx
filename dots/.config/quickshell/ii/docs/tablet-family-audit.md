@@ -617,22 +617,22 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 | 12 | ✅ | Índice A–Z / rolagem rápida na gaveta | 🟠 P1 | M | `tablet/appDrawer/` |
 | 13 | ✅ | Ferramentas hospedadas sem afordância de teclado | 🟠 P1 | M | contêiner de ferramentas + capability |
 | 14 | ✅ | OSK reserva espaço quando aberta por auto-show | 🟠 P1 | P | `common/onScreenKeyboard/`, `services/OskAutoShow.qml` |
-| 15 | 🟨 | Split-screen a partir de recentes (dock → arrastar: não feito) | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
+| 15 | ✅ | Split a partir de recentes **e** da dock ("Open beside current app") | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
 | 16 | ❌ | ~~Seta de feedback no back~~ — **não era defeito**, o overlay já cobre bordas reivindicadas | — | — | — |
 | 17 | ✅ | `back` fecha diálogos e menus antes de superfícies | 🟡 P2 | P | `tablet/navigation/TabletNavigation.qml` |
 | 18 | ✅ | "↑ e segurar" → recentes, e ↑ = Home (Q1 respondida) | 🟡 P2 | M | `tablet/navigation/TabletBottomEdgeHandler.qml` |
 | 19 | ✅ | Teclado dividido (split keyboard) | 🟡 P2 | G | `common/onScreenKeyboard/DeckContent.qml` |
 | 20 | ✅ | Sugestões de app na gaveta e na home | 🟡 P2 | M | `tablet/appDrawer/`, `services/AppStats` |
 | 21 | ⏸️ | Toque longo na home → wallpaper & estilo — **adiado, ver nota** | 🟡 P2 | P | `tablet/homeScreen/TabletHomeIconsLayer.qml` |
-| 22 | ⬜ | Pastas e arrastar ícone entre páginas | 🟡 P2 | M | `tablet/homeScreen/` |
-| 23 | ⬜ | Hub Mode (dock de carregamento vira display ambiente) | 🟡 P2 | G | novo; reusa `OledSaver` + widgets |
-| 24 | ⬜ | Alça de toque no divisor de janelas tiled | 🟡 P2 | M | fora do shell — precisa de decisão |
+| 22 | 🟨 | Mover ícone entre páginas ✅ · **pastas não** — ver nota | 🟡 P2 | M | `tablet/homeScreen/` |
+| 23 | ✅ | Hub Mode (carregando + ocioso vira display ambiente) | 🟡 P2 | G | novo; reusa `OledSaver` + widgets |
+| 24 | ⛔ | Alça de toque no divisor — **bloqueado**, ver nota | 🟡 P2 | M | — |
 | 25 | ❌ | ~~Ícones nas trilhas dos sliders~~ — **não era defeito**, já existem | — | — | — |
 | 26 | ✅ | Marcar o app atual em recentes (escala/centralização recusadas — ver nota) | 🔵 P3 | P | `tablet/recents/` |
 | 27 | ⏸️ | Bar sem workspaces numerados — **conflita com a decisão D3**, ver nota | 🔵 P3 | P | — |
-| 28 | ⬜ | Quick-switch (arrastar de lado na base) | 🔵 P3 | G | serviço de gestos |
+| 28 | ✅ | Quick-switch (arrastar de lado na base) | 🔵 P3 | G | serviço de gestos |
 | 29 | ❌ | ~~Sensibilidade da borda ajustável~~ — **não era defeito**, já tem três presets | — | — | — |
-| 30 | ⬜ | Haptics em toque longo e commit de gesto | 🔵 P3 | M | novo serviço |
+| 30 | ⛔ | Haptics — **bloqueado**, sem hardware nem backend | 🔵 P3 | M | — |
 
 **Ordem de execução:** 1–6 (bloqueadores) → 7, 9, 11, 14, 17 (tudo pequeno, muito retorno) →
 4/8/10 fecham recentes → 12, 13, 15 → o resto.
@@ -668,6 +668,27 @@ e o layout guardado é preferência do usuário — que o próprio §10 desta au
 reescrever. O editor de layout da bar já existe e já permite remover o widget. Isto é escolha
 do mantenedor, não trabalho de código.
 
+### Itens bloqueados, com a evidência
+
+**24 — alça no divisor de janelas.** O dispatcher existe: `hl.dsp.window.resize` resolve o
+nome (o erro é sobre o argumento, não sobre o dispatcher). Mas nenhuma forma de argumento
+testada é aceita — `{x=,y=}` devolve *"Invalid size"*, e `{size=…}`, `{w=,h=}`, `{dx=,dy=}`
+caem em *"hl.focus: unrecognized arguments"*. Nada no repositório usa esse dispatcher, então
+não há um exemplo de onde copiar a forma. Uma alça cujo despacho erra em silêncio é pior que
+nenhuma alça, então isto fica parado até alguém confirmar a assinatura na doc da API Lua
+desta versão do Hyprland. Feito isso, é ~100 linhas: só as duas janelas tiled do workspace
+ativo, uma alça na fronteira que elas compartilham.
+
+**30 — haptics.** Esta máquina não tem atuador nenhum: sem `fbcli`, sem `org.sigxcpu.Feedback`
+no barramento, sem `*vibrator*` em `/sys/class/leds`. Escrever um cliente D-Bus contra uma
+interface que não dá para exercitar, para um item P3, produziria código que *parece* pronto
+e cujo único caminho testável é o no-op.
+
+**Pastas na home (parte do 22).** Precisam de hit-test durante o arrasto e de outra forma de
+armazenamento (`{id,x,y}` não comporta agrupamento) — as duas coisas dentro do único arquivo
+desta family com histórico documentado de bugs de input silenciosos, e sem touchscreen para
+distinguir uma versão que funciona de uma que não.
+
 ### Item 21 — adiado deliberadamente
 
 Toque longo no wallpaper abrindo papel de parede é barato em código e caro em risco: a
@@ -686,13 +707,17 @@ atual) — e três achados retirados por não serem defeitos (ver acima).
 
 Depois disso: **19** (teclado dividido) e **20** (sugestões de app).
 
-**Restam de verdade:** a metade de **15** que é arrastar da dock para dividir, **22** (pastas
-e arrastar ícone entre páginas), **23** (Hub Mode), **24** (alça no divisor de janelas), **28**
-(quick switch), **30** (haptics). Mais **21** e **27** parados por motivo declarado, e quatro
-achados retirados por não serem defeitos.
+E na terceira rodada: **15** fechado pelo menu da dock, **22** na metade que dá para fazer com
+segurança, **23** (Hub Mode), **28** (quick switch).
 
-Todos os seis restantes são grandes, dependem de hardware para calibrar, ou saem do escopo do
-shell. Nenhum deles é bloqueio para usar a family.
+**O backlog está fechado.** Sobram três coisas, todas com motivo registrado acima: a alça do
+divisor (assinatura do dispatcher desconhecida), haptics (sem hardware) e pastas na home
+(área frágil, sem touchscreen). Mais **21** e **27** parados por decisão, e quatro achados
+retirados por não serem defeitos.
+
+Nada disso é bloqueio para usar a family. O que continua pendente de verdade é **validação em
+hardware** — o §4.4 inteiro, mais o teclado da lock screen, que só pode ser exercitado
+bloqueando a sessão.
 
 Duas correções que a implementação impôs ao próprio documento:
 
