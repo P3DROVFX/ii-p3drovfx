@@ -618,18 +618,18 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 | 13 | ✅ | Ferramentas hospedadas sem afordância de teclado | 🟠 P1 | M | contêiner de ferramentas + capability |
 | 14 | ✅ | OSK reserva espaço quando aberta por auto-show | 🟠 P1 | P | `common/onScreenKeyboard/`, `services/OskAutoShow.qml` |
 | 15 | 🟨 | Split-screen a partir de recentes (dock → arrastar: não feito) | 🟠 P1 | G | recentes, dock, dispatchers do Hyprland |
-| 16 | ⬜ | Seta de feedback no gesto de voltar | 🟡 P2 | M | `ii/touchGestures/` |
+| 16 | ❌ | ~~Seta de feedback no back~~ — **não era defeito**, o overlay já cobre bordas reivindicadas | — | — | — |
 | 17 | ✅ | `back` fecha diálogos e menus antes de superfícies | 🟡 P2 | P | `tablet/navigation/TabletNavigation.qml` |
 | 18 | ✅ | "↑ e segurar" → recentes, e ↑ = Home (Q1 respondida) | 🟡 P2 | M | `tablet/navigation/TabletBottomEdgeHandler.qml` |
-| 19 | ⬜ | Teclado dividido (split keyboard) | 🟡 P2 | G | `common/onScreenKeyboard/DeckContent.qml` |
-| 20 | ⬜ | Sugestões de app na gaveta e na home | 🟡 P2 | M | `tablet/appDrawer/`, `services/AppStats` |
+| 19 | ✅ | Teclado dividido (split keyboard) | 🟡 P2 | G | `common/onScreenKeyboard/DeckContent.qml` |
+| 20 | ✅ | Sugestões de app na gaveta e na home | 🟡 P2 | M | `tablet/appDrawer/`, `services/AppStats` |
 | 21 | ⏸️ | Toque longo na home → wallpaper & estilo — **adiado, ver nota** | 🟡 P2 | P | `tablet/homeScreen/TabletHomeIconsLayer.qml` |
 | 22 | ⬜ | Pastas e arrastar ícone entre páginas | 🟡 P2 | M | `tablet/homeScreen/` |
 | 23 | ⬜ | Hub Mode (dock de carregamento vira display ambiente) | 🟡 P2 | G | novo; reusa `OledSaver` + widgets |
 | 24 | ⬜ | Alça de toque no divisor de janelas tiled | 🟡 P2 | M | fora do shell — precisa de decisão |
 | 25 | ❌ | ~~Ícones nas trilhas dos sliders~~ — **não era defeito**, já existem | — | — | — |
 | 26 | ✅ | Marcar o app atual em recentes (escala/centralização recusadas — ver nota) | 🔵 P3 | P | `tablet/recents/` |
-| 27 | ⬜ | Bar sem workspaces numerados em família touch-first | 🔵 P3 | P | `settings/configs/BarConfig.qml`, defaults |
+| 27 | ⏸️ | Bar sem workspaces numerados — **conflita com a decisão D3**, ver nota | 🔵 P3 | P | — |
 | 28 | ⬜ | Quick-switch (arrastar de lado na base) | 🔵 P3 | G | serviço de gestos |
 | 29 | ❌ | ~~Sensibilidade da borda ajustável~~ — **não era defeito**, já tem três presets | — | — | — |
 | 30 | ⬜ | Haptics em toque longo e commit de gesto | 🔵 P3 | M | novo serviço |
@@ -637,7 +637,7 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 **Ordem de execução:** 1–6 (bloqueadores) → 7, 9, 11, 14, 17 (tudo pequeno, muito retorno) →
 4/8/10 fecham recentes → 12, 13, 15 → o resto.
 
-### Três achados retirados
+### Quatro achados retirados
 
 Auditar a partir dos prints, sem abrir o código correspondente, produziu três alarmes falsos.
 Ficam registrados porque um documento que só lista acertos não é auditável.
@@ -649,10 +649,24 @@ Ficam registrados porque um documento que só lista acertos não é auditável.
   `edgeWidth`, `cornerSize`, `minDistance` e `commitDistance`, com os três presets
   (Balanced / Strict / Relaxed) que a auditoria pediu. Alcançável em Tablet › Gestos › Edge
   and corner bindings. A varredura original só olhou o default no `Config.qml`.
+- **Item 16 — seta de feedback do back.** `GestureFeedbackContent` já desenha um cartão que
+  entra pela borda com o ícone e o nome da ação, cresce com o progresso e muda de cor no
+  commit — e `TouchGestureService.actionForOrigin` consulta o `TouchGestureDragRegistry`
+  primeiro, então uma borda **reivindicada** também alimenta o overlay. Com o handler novo
+  devolvendo `back`, o gesto já mostra `arrow_back` + "Back". O que falta é só a *forma* de
+  seta do Android, que é cosmética e não dá para calibrar sem touchscreen.
 - **Item 26 — escala de foco.** Pedido como no Android, mas o AGENTS.md proíbe border e trata
   diferença de tamanho permanente como decoração, e o carrossel é alinhado à esquerda em vez
   de centrado. Entregue como preenchimento do header do card atual, que é a mesma informação
   no vocabulário do resto do shell.
+
+### Item 27 — conflita com uma decisão vinculante
+
+Tirar os workspaces numerados da bar da tablet contraria a **D3** do plano ("Personalização da
+bar preservada. Mantém os designs de bar **e** o editor de layout/reordenamento de widgets"),
+e o layout guardado é preferência do usuário — que o próprio §10 desta auditoria proíbe
+reescrever. O editor de layout da bar já existe e já permite remover o widget. Isto é escolha
+do mantenedor, não trabalho de código.
 
 ### Item 21 — adiado deliberadamente
 
@@ -670,9 +684,15 @@ do §9 respondidas — **8, 13, 18** e a metade do **15** que cabia no escopo ap
 Depois disso: **10** (dock dentro de recentes), **12** (índice A–Z), **26** (marcar o app
 atual) — e três achados retirados por não serem defeitos (ver acima).
 
-Restam: a metade de **15** que é arrastar da dock, **16** (seta de feedback do back), **19**
-(teclado dividido), **20** (sugestões de app), **22** (pastas), **23** (Hub Mode), **24**
-(alça no divisor), **28** (quick switch), **30** (haptics), e **21** adiado.
+Depois disso: **19** (teclado dividido) e **20** (sugestões de app).
+
+**Restam de verdade:** a metade de **15** que é arrastar da dock para dividir, **22** (pastas
+e arrastar ícone entre páginas), **23** (Hub Mode), **24** (alça no divisor de janelas), **28**
+(quick switch), **30** (haptics). Mais **21** e **27** parados por motivo declarado, e quatro
+achados retirados por não serem defeitos.
+
+Todos os seis restantes são grandes, dependem de hardware para calibrar, ou saem do escopo do
+shell. Nenhum deles é bloqueio para usar a family.
 
 Duas correções que a implementação impôs ao próprio documento:
 
