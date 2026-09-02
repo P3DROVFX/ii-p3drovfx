@@ -43,14 +43,18 @@ StyledFlickable {
 
     readonly property var background: Config.options.background
     readonly property bool darkMode: Appearance.m3colors.darkmode
-    readonly property bool lockTarget: GlobalStates.editLockPreview && (root.background.useSeparateLockscreenWallpaper ?? false)
-    readonly property bool lightTarget: !root.lockTarget && (root.background.useSeparateLightModeWallpaper ?? false) && !root.darkMode
+    readonly property bool lockTarget: GlobalStates.editLockPreview && root.separateLock
+    readonly property bool lightTarget: !root.lockTarget && root.separateLight && !root.darkMode
     readonly property string targetPath: FileUtils.trimFileProtocol(String(
         (root.lockTarget ? root.background.lockscreenWallpaperPath
             : root.lightTarget ? root.background.lightModeWallpaperPath
             : root.background.wallpaperPath) ?? ""))
-    readonly property string targetName: {
-        const path = root.targetPath;
+    readonly property string targetName: root.fileName(root.targetPath)
+    readonly property bool separateLock: root.background.useSeparateLockscreenWallpaper ?? false
+    readonly property bool separateLight: root.background.useSeparateLightModeWallpaper ?? false
+
+    function fileName(rawPath) {
+        const path = FileUtils.trimFileProtocol(String(rawPath ?? ""));
         if (path === "")
             return Translation.tr("No wallpaper set");
         return path.substring(path.lastIndexOf("/") + 1);
@@ -246,30 +250,52 @@ StyledFlickable {
             text: Translation.tr("Variants")
         }
 
+        // Each switch is followed by the row that picks the variant's own
+        // wallpaper, so neither needs a tab or a theme change to get to.
         EditPanelRow {
             Layout.fillWidth: true
             first: true
             last: false
             symbol: "lock"
             title: Translation.tr("Separate lock screen wallpaper")
-            subtitle: (root.background.useSeparateLockscreenWallpaper ?? false)
-                ? Translation.tr("Pick it from the Lock screen tab") : ""
             trailingKind: "switch"
-            switchChecked: root.background.useSeparateLockscreenWallpaper ?? false
-            onActivated: Config.options.background.useSeparateLockscreenWallpaper = !(root.background.useSeparateLockscreenWallpaper ?? false)
+            switchChecked: root.separateLock
+            onActivated: Config.options.background.useSeparateLockscreenWallpaper = !root.separateLock
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: root.separateLock
+            first: false
+            last: false
+            symbol: "wallpaper"
+            title: Translation.tr("Lock screen wallpaper")
+            subtitle: root.fileName(root.background.lockscreenWallpaperPath)
+            trailingKind: "chevron"
+            onActivated: root.openPageRequested("wallpapers:lockscreen")
         }
 
         EditPanelRow {
             Layout.fillWidth: true
             first: false
-            last: true
+            last: !root.separateLight
             symbol: "light_mode"
             title: Translation.tr("Separate light mode wallpaper")
-            subtitle: (root.background.useSeparateLightModeWallpaper ?? false)
-                ? Translation.tr("Pick it while the theme is light") : ""
             trailingKind: "switch"
-            switchChecked: root.background.useSeparateLightModeWallpaper ?? false
-            onActivated: Config.options.background.useSeparateLightModeWallpaper = !(root.background.useSeparateLightModeWallpaper ?? false)
+            switchChecked: root.separateLight
+            onActivated: Config.options.background.useSeparateLightModeWallpaper = !root.separateLight
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: root.separateLight
+            first: false
+            last: true
+            symbol: "wallpaper"
+            title: Translation.tr("Light mode wallpaper")
+            subtitle: root.fileName(root.background.lightModeWallpaperPath)
+            trailingKind: "chevron"
+            onActivated: root.openPageRequested("wallpapers:lightmode")
         }
 
         // App theming, scheduling, Wallpaper Engine, the online browser: pages

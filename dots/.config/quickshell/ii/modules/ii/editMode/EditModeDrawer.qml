@@ -80,7 +80,7 @@ Item {
         if (section === "dock")
             return page === "appearance" || page === "widgets" || page.startsWith("apps:");
         if (section === "style")
-            return page === "wallpapers" || page === "colours";
+            return page.startsWith("wallpapers") || page === "colours";
         return false;
     }
 
@@ -514,9 +514,14 @@ Item {
                 return Translation.tr("Style");
             return Translation.tr("Widgets");
         }
-        if (root.page === "wallpapers")
-            return GlobalStates.editLockPreview && (Config.options.background.useSeparateLockscreenWallpaper ?? false)
-                ? Translation.tr("Lock screen wallpaper") : Translation.tr("Wallpaper");
+        if (root.page.startsWith("wallpapers")) {
+            const target = root.wallpaperPageTarget;
+            if (target === "lockscreen")
+                return Translation.tr("Lock screen wallpaper");
+            if (target === "lightmode")
+                return Translation.tr("Light mode wallpaper");
+            return Translation.tr("Wallpaper");
+        }
         if (root.page === "colours")
             return Translation.tr("Colour scheme");
         if (root.page.startsWith("category:"))
@@ -821,7 +826,7 @@ Item {
                         if (root.section === "lock")
                             return lockPage;
                         if (root.section === "style") {
-                            if (root.page === "wallpapers")
+                            if (root.page.startsWith("wallpapers"))
                                 return wallpaperPage;
                             if (root.page === "colours")
                                 return colourPage;
@@ -1271,13 +1276,26 @@ Item {
         }
     }
 
+    // Which wallpaper the folder page sets. "wallpapers:lockscreen" and
+    // "wallpapers:lightmode" are the variant rows asking for their own; a bare
+    // "wallpapers" follows the tab and the theme, the way the card does.
+    readonly property string wallpaperPageTarget: {
+        if (root.page === "wallpapers:lockscreen")
+            return "lockscreen";
+        if (root.page === "wallpapers:lightmode")
+            return "lightmode";
+        const background = Config.options.background;
+        if (GlobalStates.editLockPreview && (background.useSeparateLockscreenWallpaper ?? false))
+            return "lockscreen";
+        if ((background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
+            return "lightmode";
+        return "desktop";
+    }
+
     Component {
         id: wallpaperPage
         EditWallpaperPage {
-            target: GlobalStates.editLockPreview && (Config.options.background.useSeparateLockscreenWallpaper ?? false)
-                ? "lockscreen"
-                : ((Config.options.background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
-                    ? "lightmode" : "desktop"
+            target: root.wallpaperPageTarget
         }
     }
 
