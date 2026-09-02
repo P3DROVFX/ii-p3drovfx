@@ -376,11 +376,6 @@ ColumnLayout {
                             root.pick(card.name);
                     }
                 }
-
-                StyledToolTip {
-                    requireOverlay: false
-                    text: card.active ? Translation.tr("%1 - applied").arg(card.name) : card.name
-                }
             }
         }
     }

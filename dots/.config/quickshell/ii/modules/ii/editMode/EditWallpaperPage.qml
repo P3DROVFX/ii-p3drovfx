@@ -36,7 +36,12 @@ Item {
 
     readonly property int columns: 3
     readonly property real cellGap: 6
-    readonly property real cellWidth: Math.floor((root.width - root.cellGap * (root.columns - 1)) / root.columns)
+    // The view's cell carries the gap, so the cell is the width divided by
+    // the columns and the tile is what is left of it: a tile sized first and
+    // a gap added after came to a hair more than the width, and the view
+    // fitted two.
+    readonly property real cellStride: Math.floor(root.width / root.columns)
+    readonly property real cellWidth: root.cellStride - root.cellGap
     readonly property real cellHeight: Math.round(root.cellWidth * 10 / 16)
 
     // The folder's files, in the service's sorted order. Directories are the
@@ -86,7 +91,7 @@ Item {
         id: grid
         anchors.fill: parent
         clip: true
-        cellWidth: root.cellWidth + root.cellGap
+        cellWidth: root.cellStride
         cellHeight: root.cellHeight + root.cellGap
         model: root.files
         boundsBehavior: Flickable.StopAtBounds
@@ -147,6 +152,8 @@ Item {
                     }
                 }
 
+                // No tooltip with the file's name: a StyledToolTip inside a
+                // view's delegate draws itself without a hover.
                 MouseArea {
                     id: tileMouse
                     anchors.fill: parent
@@ -156,11 +163,6 @@ Item {
                         if (!cell.applied)
                             root.apply(cell.modelData.filePath);
                     }
-                }
-
-                StyledToolTip {
-                    requireOverlay: false
-                    text: cell.modelData.fileName
                 }
             }
         }
