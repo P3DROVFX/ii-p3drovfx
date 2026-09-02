@@ -769,7 +769,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: isSelected ? Font.SemiBold : Font.Normal
+                                        font.weight: isSelected ? Font.DemiBold : Font.Normal
                                         color: isSelected
                                                ? Appearance.colors.colOnTertiaryContainer
                                                : Appearance.colors.colOnSurface
@@ -816,7 +816,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: isSelected ? Font.SemiBold : Font.Normal
+                                        font.weight: isSelected ? Font.DemiBold : Font.Normal
                                         color: isSelected
                                                ? Appearance.colors.colOnTertiaryContainer
                                                : Appearance.colors.colOnSurface
