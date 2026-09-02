@@ -4,6 +4,7 @@ import qs
 import qs.services
 
 import qs.modules.common
+import qs.modules.common.panels.shellSwitcher
 import qs.modules.ii.background
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
@@ -173,6 +174,11 @@ Scope {
     }
     PanelLoader {
         component: SessionScreen {}
+    }
+    // Every family loads the chooser: a family that did not offer it would be one the
+    // user could switch into and never find the way out of.
+    PanelLoader {
+        component: ShellSwitcher {}
     }
     PanelLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate

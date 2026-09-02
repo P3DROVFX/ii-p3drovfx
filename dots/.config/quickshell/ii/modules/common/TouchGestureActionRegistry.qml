@@ -29,6 +29,7 @@ Singleton {
         // Tablet: the game/widget overlay is a desktop surface, permanently out.
         { id: "overlay", name: "Game / Widget Overlay", icon: "layers" , families: ["ii", "waffle"] },
         { id: "session", name: "Session / Power Menu", icon: "power_settings_new" },
+        { id: "shellSwitcher", name: "Switch Shell", icon: "swap_horiz" },
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
         { id: "usage", name: "App Usage Stats", icon: "query_stats" },
@@ -189,6 +190,10 @@ Singleton {
 
         case "session":
             GlobalStates.sessionOpen = !GlobalStates.sessionOpen;
+            break;
+
+        case "shellSwitcher":
+            GlobalStates.shellSwitcherOpen = !GlobalStates.shellSwitcherOpen;
             break;
 
         case "settings":

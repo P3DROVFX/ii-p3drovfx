@@ -71,12 +71,10 @@ ShellRoot {
         root.applyOpenRgbIfEnabled();
     }
 
-    // Panel families
-    property var families: ["ii", "tablet", "waffle"]
+    // Panel families. The list and the switch itself live on PanelFamily now — this file
+    // owning a second copy of the family names is how the two drift apart.
     function cyclePanelFamily() {
-        const currentIndex = families.indexOf(Config.options.panelFamily);
-        const nextIndex = (currentIndex + 1) % families.length;
-        Config.options.panelFamily = families[nextIndex];
+        PanelFamily.cycle();
     }
 
     function applyOpenRgbIfEnabled() {
@@ -217,6 +215,20 @@ ShellRoot {
         function cycle() {
             root.cyclePanelFamily();
         }
+
+        /// Opens the chooser rather than switching. The cycle above stays for anyone who
+        /// scripted it, but it is the wrong default: it walks through the family in between.
+        function pick(): void {
+            GlobalStates.shellSwitcherOpen = true;
+        }
+
+        function set(familyId: string): void {
+            PanelFamily.select(familyId);
+        }
+
+        function list(): string {
+            return PanelFamily.available.map(family => family.id).join("\n");
+        }
     }
 
     GlobalShortcut {
@@ -224,5 +236,12 @@ ShellRoot {
         description: "Cycles panel family"
 
         onPressed: root.cyclePanelFamily()
+    }
+
+    GlobalShortcut {
+        name: "panelFamilyPicker"
+        description: "Opens the shell chooser"
+
+        onPressed: GlobalStates.shellSwitcherOpen = !GlobalStates.shellSwitcherOpen
     }
 }

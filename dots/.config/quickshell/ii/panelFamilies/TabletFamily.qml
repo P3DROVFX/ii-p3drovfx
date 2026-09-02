@@ -4,6 +4,7 @@ import qs
 import qs.services
 
 import qs.modules.common
+import qs.modules.common.panels.shellSwitcher
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
@@ -237,6 +238,9 @@ Scope {
     // ── System surfaces ─────────────────────────────────────────────────────
     PanelLoader { component: Lock {} }
     PanelLoader { component: SessionScreen {} }
+    // Every family loads the chooser: a family that did not offer it would be one the user
+    // could switch into and never find the way out of.
+    PanelLoader { component: ShellSwitcher {} }
     PanelLoader { component: Polkit {} }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.

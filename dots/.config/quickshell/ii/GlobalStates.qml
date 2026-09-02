@@ -301,6 +301,10 @@ Singleton {
     // Scope in the shell tree, not a singleton.
     signal snipForAiRequested
     property bool sessionOpen: false
+    // The panel-family chooser. Every family loads it, because a family with no way out of
+    // itself is a family the user can be stuck in — and until this existed, the only ways
+    // between them were an IPC call and a keybind, neither of which is discoverable.
+    property bool shellSwitcherOpen: false
     property bool superDown: false
     property bool usageOpen: false
     property bool modesOpen: false
