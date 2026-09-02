@@ -217,9 +217,10 @@ Scope {
         "policies.phone": policiesPhone
     }
 
-    // The left edge opens policies as an app rather than as a sidebar, so it has to claim
-    // the drag — otherwise the same swipe would also fire the user's leftEdge binding.
-    TabletPoliciesDragHandler {}
+    // Both side edges go Back, as on Android. They have to *claim* the drag: an edge the
+    // registry does not own also fires whatever the user bound to it, and the gesture would
+    // do two things. Settings can hand either edge back, or put policies on the left again.
+    TabletSideEdgeDragHandler {}
 
     PanelLoader {
         extraCondition: GlobalStates.videoEditorOpen

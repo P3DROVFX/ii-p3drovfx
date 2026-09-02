@@ -432,7 +432,27 @@ Item {
             NoticeBox {
                 Layout.fillWidth: true
                 materialIcon: "swipe"
-                text: Translation.tr("The top edge pulls down the shade, the bottom edge opens the app drawer, the left edge opens Policies, and swiping across the wallpaper moves between home screens. Those four are owned by this family and are not rebindable.")
+                text: Translation.tr("The top edge pulls down the shade, the bottom edge opens the app drawer, and swiping across the wallpaper moves between home screens. Those three are owned by this family and are not rebindable.")
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "swipe_left"
+                title: Translation.tr("Side edges")
+                tooltip: Translation.tr("On Android, swiping in from either side is Back — the most used gesture after Home. Policies puts the first Intelligence app back on the left edge instead, and leaves Back on the right. Unclaimed hands both edges to the bindings below.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.gestures.sideEdges
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.gestures.sideEdges = newValue;
+                    }
+                    options: [
+                        { value: "back", icon: "arrow_back", displayName: Translation.tr("Back") },
+                        { value: "policies", icon: "neurology", displayName: Translation.tr("Policies on the left") },
+                        { value: "none", icon: "block", displayName: Translation.tr("Unclaimed") }
+                    ]
+                }
             }
 
             ConfigSubpageRow {

@@ -1145,6 +1145,7 @@ Singleton {
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
             "lock.centerAlignment": ["vertical", "horizontal"],
             "lock.touchKeyboard.show": ["auto", "always", "never"],
+            "tablet.gestures.sideEdges": ["back", "policies", "none"],
             "lock.touchKeyboard.mode": ["text", "pin"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
@@ -1517,6 +1518,20 @@ Singleton {
                     property bool showPageCounter: true
                     property bool hidePageCounterOnOccupiedWorkspace: true
                     property bool compactWhenPageCounterHidden: true
+                }
+
+                property JsonObject gestures: JsonObject {
+                    /**
+                     * What swiping in from the left and right edges does.
+                     *
+                     * "back"     — both edges go back, as on Android, where it is the most
+                     *              used gesture after Home.
+                     * "policies" — the left edge opens the first policies app instead, which
+                     *              is what it did before; the right edge still goes back.
+                     * "none"     — neither edge is claimed, so both fall through to whatever
+                     *              is bound under Edge and corner bindings.
+                     */
+                    property string sideEdges: "back"
                 }
 
                 property JsonObject appDrawer: JsonObject {
