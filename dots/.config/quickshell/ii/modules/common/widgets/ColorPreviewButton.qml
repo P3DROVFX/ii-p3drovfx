@@ -18,11 +18,11 @@ RippleButton {
 
     property bool builtInTheme: false
     readonly property string builtInThemeFilePath: builtInThemeDirectory + "/" + colorScheme + ".json"
-    readonly property string builtInThemeCommand: `jq -r '.primary, .primary_container, .secondary' ${builtInThemeFilePath}`
+    readonly property string builtInThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${builtInThemeFilePath}`
 
     property bool customTheme: false
     readonly property string customThemeFilePath: customThemeDirectory + "/" + colorScheme + ".json"
-    readonly property string customThemeCommand: `jq -r '.primary, .primary_container, .secondary' ${customThemeFilePath}`
+    readonly property string customThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${customThemeFilePath}`
 
     readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath)
         ? Config.options.background.wallpaperPath : ""
@@ -33,10 +33,10 @@ RippleButton {
     }
     readonly property string scriptPath: FileUtils.trimFileProtocol(
         `${Directories.scriptPath}/colors/generate_colors_material.py`)
-    readonly property string resolvedScheme: colorScheme === "scheme-auto"
-        ? "scheme-tonal-spot" : colorScheme
+    // scheme-auto is passed through: the script resolves it from the image the
+    // same way switchwall does, instead of always previewing tonal spot.
     readonly property string fullCommand: activeWallpaperPath !== ""
-        ? `${scriptPath} --path "${activeWallpaperPath}" --scheme ${resolvedScheme} --preview`
+        ? `${scriptPath} --path "${activeWallpaperPath}" --scheme ${colorScheme} --preview`
         : ""
 
     // Widget color previews receive their colors directly and do not need a
@@ -212,7 +212,7 @@ RippleButton {
                         const data = JSON.parse(this.text);
                         root.primaryColor = data.primary || "transparent";
                         root.secondaryColor = data.primary_container || "transparent";
-                        root.tertiaryColor = data.secondary || "transparent";
+                        root.tertiaryColor = data.tertiary || data.secondary || "transparent";
                     }
 
                     root.loaded = true;
