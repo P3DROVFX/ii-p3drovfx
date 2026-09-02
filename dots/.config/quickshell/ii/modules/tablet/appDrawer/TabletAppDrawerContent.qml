@@ -840,6 +840,10 @@ Item {
             /// Deep enough to take most of a row, or a row that straddles the edge still
             /// shows a solid top half above the fade and reads as cut.
             readonly property real fadeSize: Math.round(root.tileHeight * 0.9)
+            /// Shallower than the bottom's. The bottom fade has to swallow a whole row
+            /// running off the screen edge; the top one only has to say "there is more
+            /// above", and a deep one there would eat the row you just scrolled to.
+            readonly property real topFadeSize: Math.round(root.tileHeight * 0.32)
 
             GridView {
                 id: appGrid
@@ -848,16 +852,28 @@ Item {
                 // colour — this one sits on a blurred screencopy, so any colour it could
                 // paint is itself see-through and the last row stayed visibly sliced under
                 // the wash. What shows through here is the backdrop, which is the point.
+                /// How much of the top fade is in. Zero at rest, so the first row is not
+                /// dimmed until there is something above it to have scrolled past.
+                property real topFade: Math.max(0, Math.min(1, (appGrid.contentY - appGrid.originY) / 48))
+
                 layer.enabled: true
                 layer.effect: OpacityMask {
                     maskSource: Rectangle {
                         width: Math.max(1, appGrid.width)
                         height: Math.max(1, appGrid.height)
                         gradient: Gradient {
-                            GradientStop { position: 0.0; color: "white" }
+                            GradientStop {
+                                position: 0.0
+                                color: Qt.rgba(1, 1, 1, 1 - appGrid.topFade)
+                            }
                             GradientStop {
                                 position: appGrid.height > 0
-                                    ? Math.max(0, 1 - body.fadeSize / appGrid.height) : 1
+                                    ? Math.min(0.45, body.topFadeSize / appGrid.height) : 0
+                                color: "white"
+                            }
+                            GradientStop {
+                                position: appGrid.height > 0
+                                    ? Math.max(0.55, 1 - body.fadeSize / appGrid.height) : 1
                                 color: "white"
                             }
                             GradientStop { position: 1.0; color: "transparent" }
