@@ -599,6 +599,21 @@ Singleton {
     // stage 7b; until then this only ever holds the desktop.
     property string editTab: EditModeLogic.desktopTab
     readonly property bool editLockPreview: root.editMode && root.editTab === EditModeLogic.lockscreenTab
+    // The tab's own scalar, beside the boolean rather than instead of it.
+    //
+    // The Lockscreen tab is a FILTER on the same desktop, and flipping it used
+    // to swap two faces in one frame: the lock's islands appeared and vanished
+    // with the Loader that builds them, which is the one part of the mode that
+    // arrived without any motion at all. Everything else about the swap was
+    // already animated - the widgets fade on their own `opacity` Behavior, the
+    // wallpaper's blur, wash and vignette each ramp their own - so the tab
+    // needed a scalar to fade the surface ON, and to keep it alive long enough
+    // to fade it back OFF.
+    property real editTabProgress: root.editLockPreview ? 1 : 0
+    Behavior on editTabProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
     // "The lock's LOOK is on screen": the real lock session or the preview of
     // it. The one derivation the theme sites are meant to read, so the preview
     // can never show the lock's wallpaper under the desktop's palette.

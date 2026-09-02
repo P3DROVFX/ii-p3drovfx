@@ -462,7 +462,14 @@ PanelWindow {
             id: lockPreview
             anchors.fill: parent
             z: 5
-            active: GlobalStates.editLockPreview && bgWidgetsWindow.isTargetMonitor
+            // Kept alive by the tab's SCALAR, not by its boolean: the surface
+            // fades in over the desktop and has to outlive the flip back long
+            // enough to fade out again. Built on the boolean alone, it
+            // appeared and vanished in one frame - the one part of the swap
+            // that had no motion, while the widgets and the wallpaper's own
+            // treatments were already cross-fading around it.
+            opacity: GlobalStates.editTabProgress
+            active: GlobalStates.editTabProgress > 0.001 && bgWidgetsWindow.isTargetMonitor
                 && GlobalStates.editModeMonitor === (bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
             sourceComponent: LockSurface {
                 interactive: false
