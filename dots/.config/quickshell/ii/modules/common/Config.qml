@@ -654,6 +654,31 @@ Singleton {
     // dragged back into the catalogue - and before a widget could be placed
     // twice they all went through the widgetId path below, which removes the
     // first match and would now remove the wrong copy.
+    // One more of this exact widget, beside the original: its behaviour, its
+    // pin and its size come along, its per-monitor positions do not - the
+    // copy starts as a plain placement a step down and to the right of where
+    // the original is drawn on `monitorName`, so it is visible next to it.
+    function duplicateWidgetInstance(instanceId, monitorName) {
+        let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
+        const at = root._widgetEntryIndex(cloned, instanceId);
+        if (at === -1)
+            return "";
+        const source = cloned[at];
+        const placed = WidgetPlacement.resolve(source, monitorName);
+        const copy = root._widgetEntryClone(source);
+        delete copy.positions;
+        delete copy.lockPositions;
+        copy.id = root._freeWidgetInstanceId(cloned, source.widgetId);
+        copy.x = placed.x + 40;
+        copy.y = placed.y + 40;
+        if (placed.scale !== undefined && placed.scale !== null)
+            copy.scale = placed.scale;
+        cloned.splice(at + 1, 0, copy);
+        root.options.background.activeWidgets = cloned;
+        root._recordWidgetEdit(copy.id, null, root._widgetEntryClone(copy), at + 1);
+        return copy.id;
+    }
+
     function removeWidgetInstance(instanceId) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
         const at = root._widgetEntryIndex(cloned, instanceId);

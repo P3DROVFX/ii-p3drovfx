@@ -582,6 +582,93 @@ PanelWindow {
         }
     }
 
+    // ── Back to the defaults ─────────────────────────────────────────────────
+    // A surface set back to what the shell ships with, as ONE history entry.
+    // The defaults are the snapshot Config takes of its own declarations at
+    // load, so a reset here and a fresh install agree. Written here, like
+    // every other layout write, so the before/after pair is recorded where
+    // the write is made.
+    function defaultsFor(path) {
+        let node = Config.defaultOptions;
+        for (const key of path.split(".")) {
+            if (node === null || node === undefined || typeof node !== "object")
+                return undefined;
+            node = node[key];
+        }
+        return node;
+    }
+
+    function resetSurface(what) {
+        if (what === "widgets") {
+            const ids = (Config.options.background.activeWidgets ?? []).filter(e => e && e.id).map(e => e.id);
+            if (ids.length === 0)
+                return;
+            GlobalStates.editHistoryBeginBatch();
+            for (const id of ids)
+                Config.removeWidgetInstance(id);
+            GlobalStates.editHistoryEndBatch();
+            return;
+        }
+        if (what === "bar") {
+            const layouts = Config.options.bar.layouts;
+            const defaults = root.defaultsFor("bar.layouts");
+            if (!layouts || !defaults)
+                return;
+            const buckets = ["left", "center", "right"];
+            const before = {};
+            const after = {};
+            for (const name of buckets) {
+                before[name] = EditModeLogic.listCopy(layouts[name] ?? []).map(e => Object.assign({}, e));
+                after[name] = EditModeLogic.listCopy(defaults[name] ?? []).map(e => Object.assign({}, e));
+            }
+            if (JSON.stringify(before) === JSON.stringify(after))
+                return;
+            for (const name of buckets)
+                layouts[name] = after[name];
+            GlobalStates.editHistoryPush({
+                "undo": () => { for (const name of buckets) Config.options.bar.layouts[name] = before[name]; },
+                "redo": () => { for (const name of buckets) Config.options.bar.layouts[name] = after[name]; }
+            });
+            return;
+        }
+        if (what === "dock") {
+            const pinnedBefore = EditModeLogic.listCopy(Config.options.dock.pinnedApps ?? []);
+            const orderBefore = EditModeLogic.listCopy(Config.options.dock.order ?? []);
+            const pinnedAfter = EditModeLogic.listCopy(root.defaultsFor("dock.pinnedApps") ?? []);
+            const orderAfter = EditModeLogic.listCopy(root.defaultsFor("dock.order") ?? []);
+            if (JSON.stringify([pinnedBefore, orderBefore]) === JSON.stringify([pinnedAfter, orderAfter]))
+                return;
+            Config.options.dock.pinnedApps = pinnedAfter;
+            Config.options.dock.order = orderAfter;
+            GlobalStates.editHistoryPush({
+                "undo": () => { Config.options.dock.pinnedApps = pinnedBefore; Config.options.dock.order = orderBefore; },
+                "redo": () => { Config.options.dock.pinnedApps = pinnedAfter; Config.options.dock.order = orderAfter; }
+            });
+            return;
+        }
+        if (what === "lockIslands") {
+            const islands = Config.options.lock.islands;
+            const defaults = root.defaultsFor("lock.islands");
+            if (!islands || !defaults)
+                return;
+            const keys = ["main", "left", "right", "hidden"];
+            const before = {};
+            const after = {};
+            for (const key of keys) {
+                before[key] = EditModeLogic.listCopy(islands[key] ?? []);
+                after[key] = EditModeLogic.listCopy(defaults[key] ?? []);
+            }
+            if (JSON.stringify(before) === JSON.stringify(after))
+                return;
+            for (const key of keys)
+                islands[key] = after[key];
+            GlobalStates.editHistoryPush({
+                "undo": () => { for (const key of keys) Config.options.lock.islands[key] = before[key]; },
+                "redo": () => { for (const key of keys) Config.options.lock.islands[key] = after[key]; }
+            });
+        }
+    }
+
     function toggleDockPin(appId) {
         const before = EditModeLogic.listCopy(Config.options.dock.pinnedApps ?? []);
         TaskbarApps.togglePin(appId);
@@ -764,6 +851,7 @@ PanelWindow {
         onDrawerBarDropRequested: (componentId, x, y) => root.barDrop(componentId, x, y)
         onDrawerBarDragCancelled: root.barController()?.externalDragEnd()
         onDrawerDockToggleRequested: appId => root.toggleDockPin(appId)
+        onDrawerResetRequested: what => root.resetSurface(what)
         // A preference, not a layout edit: no history entry, same as the
         // Settings toggle that writes the same key.
         onSnapToggleRequested: Config.options.background.widgets.enableSnap = !Config.options.background.widgets.enableSnap

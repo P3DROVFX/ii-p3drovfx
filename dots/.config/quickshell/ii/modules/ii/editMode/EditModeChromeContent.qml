@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -61,6 +62,9 @@ Item {
     signal drawerBarDragCancelled()
     signal drawerDockToggleRequested(string appId)
     signal drawerLockLayoutResetRequested()
+    // "widgets", "bar", "dock" or "lockIslands": that surface back to the
+    // shell's defaults, as one history entry.
+    signal drawerResetRequested(string what)
 
     // The drawer's reveal, from the same geometry the card is: its width is
     // the drawer's on the drawer's scalar, so the panel slides out of the
@@ -149,6 +153,33 @@ Item {
             requestOnly: true
             currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
             onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
+        }
+
+        // Which screen the mode is on, with more than one: a click moves the
+        // mode to the next. Named by the screen's own name - the only name
+        // the user has for it in the compositor's config too.
+        IconAndTextToolbarButton {
+            id: monitorButton
+            readonly property var screens: Quickshell.screens
+            visible: monitorButton.screens.length > 1
+            opacity: root.slotReveal(1)
+            scale: (monitorButton.down ? 0.92 : 1) * root.slotScale(1)
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 4
+            iconText: "monitor"
+            text: GlobalStates.editModeMonitor
+            onClicked: {
+                const names = Array.from(monitorButton.screens).map(screen => screen.name);
+                if (names.length < 2)
+                    return;
+                const at = names.indexOf(GlobalStates.editModeMonitor);
+                GlobalStates.switchEditMonitor(names[(at + 1) % names.length]);
+            }
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Edit the next screen")
+            }
         }
 
         Rectangle {
@@ -386,6 +417,7 @@ Item {
             ghostParent: root
             onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
             onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
+            onResetRequested: what => root.drawerResetRequested(what)
             onAddInstanceRequested: widgetId => root.drawerAddWidgetRequested(widgetId)
             onBarPlaceRequested: (componentId, bucket) => root.drawerBarPlaceRequested(componentId, bucket)
             onBarRemoveRequested: componentId => root.drawerBarRemoveRequested(componentId)

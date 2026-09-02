@@ -55,6 +55,10 @@ Item {
     signal barDragCancelled()
     signal dockToggleRequested(string appId)
     signal lockLayoutResetRequested()
+    // A whole surface back to the shell's defaults: "widgets" (every desktop
+    // widget removed), "bar", "dock" or "lockIslands". The surface answers
+    // with one history entry, so the reset is one Ctrl+Z.
+    signal resetRequested(string what)
 
     readonly property string section: GlobalStates.editDrawerSection
     // The address, validated against the catalogue showing it: a page belongs
@@ -873,6 +877,31 @@ Item {
                 trailingKind: "chevron"
                 onActivated: root.openPage("category:" + modelData.key)
             }
+
+            // A clean slate, one Ctrl+Z away. Shown only while there is
+            // something to clear, so the catalogue's root is not a place
+            // that offers to delete nothing.
+            footer: Item {
+                width: categoryList.width
+                height: root.activeWidgets.length > 0 ? clearRow.height + 13 : 0
+                visible: root.activeWidgets.length > 0
+
+                EditPanelRow {
+                    id: clearRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.topMargin: 10
+                    first: true
+                    last: true
+                    destructive: true
+                    symbol: "delete_sweep"
+                    title: Translation.tr("Remove every widget")
+                    valueText: `${root.activeWidgets.length}`
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("widgets")
+                }
+            }
         }
     }
 
@@ -953,6 +982,19 @@ Item {
                 title: Translation.tr("Bar appearance")
                 subtitle: Translation.tr("Position, size, corners and background")
                 onActivated: root.openPage("appearance")
+            }
+
+            EditPanelRow {
+                Layout.fillWidth: true
+                Layout.topMargin: 3
+                first: true
+                last: true
+                destructive: true
+                symbol: "reset_wrench"
+                title: Translation.tr("Reset the bar's layout")
+                subtitle: Translation.tr("The widgets and groups the shell ships with")
+                trailingKind: "none"
+                onActivated: root.resetRequested("bar")
             }
 
             EditPanelNotice {
@@ -1126,6 +1168,19 @@ Item {
                     onActivated: root.openPage("widgets")
                 }
 
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 3
+                    first: true
+                    last: true
+                    destructive: true
+                    symbol: "reset_wrench"
+                    title: Translation.tr("Reset the dock")
+                    subtitle: Translation.tr("The pins and the order the shell ships with")
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("dock")
+                }
+
                 EditPanelSectionLabel {
                     text: Translation.tr("Apps")
                 }
@@ -1291,13 +1346,25 @@ Item {
                     Layout.fillWidth: true
                     Layout.topMargin: 10
                     first: true
-                    last: true
+                    last: false
                     rowEnabled: root.anyLockFork
                     symbol: "reset_wrench"
                     title: Translation.tr("Use desktop layout")
                     subtitle: Translation.tr("Drop the positions this screen's lock keeps of its own")
                     trailingKind: "none"
                     onActivated: root.lockLayoutResetRequested()
+                }
+
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    first: false
+                    last: true
+                    destructive: true
+                    symbol: "view_agenda"
+                    title: Translation.tr("Reset the islands")
+                    subtitle: Translation.tr("Their order, and everything hidden from them")
+                    trailingKind: "none"
+                    onActivated: root.resetRequested("lockIslands")
                 }
 
                 Item {

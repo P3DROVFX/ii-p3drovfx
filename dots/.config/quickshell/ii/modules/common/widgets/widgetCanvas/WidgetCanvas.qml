@@ -48,7 +48,53 @@ MouseArea {
     signal contextMenuRequested(string instanceId, real atX, real atY)
     // A right-click that landed on no widget: the desktop's own menu.
     signal canvasContextMenuRequested(real atX, real atY)
+    // A long press on the wallpaper, from a touch screen: the way into Edit
+    // Mode for a hand that has no right button and no Super key.
+    signal canvasLongPressed()
     acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+    TapHandler {
+        acceptedDevices: PointerDevice.TouchScreen
+        gesturePolicy: TapHandler.WithinBounds
+        onLongPressed: {
+            if (root.editMode || root.draggingWidget() !== null)
+                return;
+            root.canvasLongPressed();
+        }
+    }
+
+    // The selection, taken off the desktop - one history entry for the lot.
+    function removeSelection() {
+        const ids = [];
+        for (const widget of root.selectedWidgets) {
+            if (widget && widget.widgetInstance && widget.widgetInstance.id)
+                ids.push(widget.widgetInstance.id);
+        }
+        if (ids.length === 0)
+            return;
+        root.flushNudge();
+        root.clearSelection();
+        GlobalStates.editHistoryBeginBatch();
+        for (const id of ids)
+            Config.removeWidgetInstance(id);
+        GlobalStates.editHistoryEndBatch();
+    }
+
+    // One more of each selected widget, beside its original.
+    function duplicateSelection() {
+        const members = [];
+        for (const widget of root.selectedWidgets) {
+            if (widget && widget.widgetInstance && widget.widgetInstance.id)
+                members.push({ "id": widget.widgetInstance.id, "monitor": widget.widgetInstance.monitorName ?? "" });
+        }
+        if (members.length === 0)
+            return;
+        root.flushNudge();
+        GlobalStates.editHistoryBeginBatch();
+        for (const member of members)
+            Config.duplicateWidgetInstance(member.id, member.monitor);
+        GlobalStates.editHistoryEndBatch();
+    }
 
     // The desktop's layer surface only takes keys while it is OnDemand; the
     // owning window reads this to arm it. A live selection needs the arrows
@@ -119,6 +165,25 @@ MouseArea {
                 return;
             GlobalStates.editDrawerOpen = true;
             GlobalStates.editSearchFocusRequested();
+            return;
+        }
+        // Delete takes the selection off; Ctrl+D doubles it. By keysym, like
+        // Ctrl+Z above, so the layout does not matter; auto-repeat dropped so
+        // a held key is one edit.
+        if (root.editMode && (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace)
+            && root.selectedWidgets.length > 0) {
+            event.accepted = true;
+            if (event.isAutoRepeat)
+                return;
+            root.removeSelection();
+            return;
+        }
+        if (root.editMode && event.key === Qt.Key_D && (event.modifiers & Qt.ControlModifier)
+            && root.selectedWidgets.length > 0) {
+            event.accepted = true;
+            if (event.isAutoRepeat)
+                return;
+            root.duplicateSelection();
             return;
         }
         const nudge = WidgetNudge.direction(event.key, root.arrowKeys);

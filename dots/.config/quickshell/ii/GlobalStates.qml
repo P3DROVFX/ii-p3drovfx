@@ -705,6 +705,30 @@ Singleton {
             root.openEditMode();
     }
 
+    // Another screen, without the round trip: the mode is one screen at a
+    // time (decision D4), so moving it is an exit and a fresh entry. The
+    // entry waits for the exit's animation, since a mode that is still on
+    // the way out refuses to open.
+    property string _editReopenMonitor: ""
+    function switchEditMonitor(monitorName) {
+        if (!root.editMode || !monitorName || monitorName === root.editModeMonitor)
+            return;
+        root._editReopenMonitor = monitorName;
+        root.closeEditMode();
+        editReopenTimer.restart();
+    }
+    Timer {
+        id: editReopenTimer
+        interval: Appearance.reducedMotion ? 50 : Appearance.animation.elementMove.duration + 80
+        repeat: false
+        onTriggered: {
+            const monitor = root._editReopenMonitor;
+            root._editReopenMonitor = "";
+            if (monitor !== "")
+                root.openEditMode(monitor);
+        }
+    }
+
     function _enterEditMode() {
         root.editTab = EditModeLogic.desktopTab;
         root.editModeMonitor = root._editRequestedMonitor !== "" ? root._editRequestedMonitor

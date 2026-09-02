@@ -114,6 +114,7 @@ ALLOWED_HELPERS = {
     "addWidgetToDesktop",
     "removeWidgetFromDesktop",
     "removeWidgetInstance",
+    "duplicateWidgetInstance",
     "updateWidgetPosition",
     "updateWidgetLockBehavior",
     "updateWidgetScale",
