@@ -102,6 +102,7 @@ ALLOWED_PATHS = LAYOUT_PATHS | PREFERENCE_PATHS
 ALLOWED_HELPERS = {
     "addWidgetToDesktop",
     "removeWidgetFromDesktop",
+    "removeWidgetInstance",
     "updateWidgetPosition",
     "updateWidgetLockBehavior",
     "updateWidgetScale",

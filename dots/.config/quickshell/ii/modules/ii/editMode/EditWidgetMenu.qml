@@ -217,12 +217,15 @@ Item {
                 ? Translation.tr("Hide on lock screen") : Translation.tr("Remove from desktop")
             trailingKind: "none"
             onActivated: {
-                const widgetId = root.instance.widgetId;
+                const instanceId = root.instanceId;
                 root.dismissRequested();
                 if (GlobalStates.editLockPreview && !root.lockOnly)
-                    Config.updateWidgetLockBehavior(root.instanceId, "hide");
+                    Config.updateWidgetLockBehavior(instanceId, "hide");
                 else
-                    Config.removeWidgetFromDesktop(widgetId);
+                    // THIS copy, not every widget of its kind: the menu is
+                    // about the one the pointer opened it on, and a widget can
+                    // now be placed more than once.
+                    Config.removeWidgetInstance(instanceId);
             }
         }
     }

@@ -53,7 +53,7 @@ Item {
     signal drawerPageRequested(string section, string page)
     // The drawer's gestures, relayed: the surface owns the geometry and every write.
     signal drawerAddRequested(string widgetId, real dropX, real dropY)
-    signal drawerToggleWidgetRequested(string widgetId)
+    signal drawerAddWidgetRequested(string widgetId)
     signal drawerBarPlaceRequested(string componentId, string bucket)
     signal drawerBarRemoveRequested(string componentId)
     signal drawerBarDragMoved(string componentId, real x, real y)
@@ -338,7 +338,7 @@ Item {
             ghostParent: root
             onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
             onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
-            onToggleRequested: widgetId => root.drawerToggleWidgetRequested(widgetId)
+            onAddInstanceRequested: widgetId => root.drawerAddWidgetRequested(widgetId)
             onBarPlaceRequested: (componentId, bucket) => root.drawerBarPlaceRequested(componentId, bucket)
             onBarRemoveRequested: componentId => root.drawerBarRemoveRequested(componentId)
             onBarDragMoved: (componentId, x, y) => root.drawerBarDragMoved(componentId, x, y)

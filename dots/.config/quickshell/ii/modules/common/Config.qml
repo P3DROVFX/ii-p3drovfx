@@ -435,12 +435,20 @@ Singleton {
     }
 
     function isWidgetActive(widgetId) {
+        return root.countWidgetInstances(widgetId) > 0;
+    }
+
+    // How many of this widget the desktop holds. A widget can be placed more
+    // than once - two clocks in two corners, one weather card per city - so
+    // "is it there" is a special case of "how many", not the other way round.
+    function countWidgetInstances(widgetId) {
         let list = root.options.background.activeWidgets || [];
+        let count = 0;
         for (let i = 0; i < list.length; i++) {
             if (list[i].widgetId === widgetId)
-                return true;
+                count++;
         }
-        return false;
+        return count;
     }
 
     function getWidgetLockBehavior(widgetId) {
@@ -556,25 +564,52 @@ Singleton {
         root._recordWidgetEdit(instanceId, before, root._widgetEntryClone(cloned[at]), at);
     }
 
+    // By KIND, so every copy follows - the callers are Settings' widget cards,
+    // which ask the question about the widget rather than about one of its
+    // copies. `getWidgetLockBehavior` answers with the first, because a card
+    // has one control to show it in; the two are asymmetric on purpose, and
+    // the per-copy answer lives in Edit Mode's widget menu.
     function setWidgetLockBehavior(widgetId, newLockBehavior) {
-        let list = root.options.background.activeWidgets || [];
+        const list = root.options.background.activeWidgets || [];
+        const ids = [];
         for (let i = 0; i < list.length; i++) {
-            if (list[i].widgetId === widgetId) {
-                root.updateWidgetLockBehavior(list[i].id, newLockBehavior);
-                return;
-            }
+            if (list[i].widgetId === widgetId)
+                ids.push(list[i].id);
         }
+        if (ids.length === 0)
+            return;
+        GlobalStates.editHistoryBeginBatch();
+        for (const id of ids)
+            root.updateWidgetLockBehavior(id, newLockBehavior);
+        GlobalStates.editHistoryEndBatch();
+    }
+
+    // A widget instance id that nothing else holds. `Date.now()` alone is not
+    // one: two widgets added inside the same millisecond - a batch, or a
+    // double click on a catalogue row, both of which are ordinary now that a
+    // widget can be placed twice - would share an id, and every lookup in this
+    // file finds an entry BY id.
+    function _freeWidgetInstanceId(list, widgetId) {
+        const base = "widget_" + widgetId + "_" + Date.now();
+        let candidate = base;
+        let suffix = 1;
+        while (list.some(entry => entry && entry.id === candidate)) {
+            candidate = base + "_" + suffix;
+            suffix++;
+        }
+        return candidate;
     }
 
     // Collision placement reads what `monitorName` shows (see WidgetPlacement);
     // the new entry itself is written as legacy x/y so every monitor starts it
     // from the same spot.
+    //
+    // Adding one that is already on the desktop adds ANOTHER, and that is the
+    // point: this used to return early on a matching `widgetId`, which made
+    // "two clocks in two corners" impossible to express. Returns the new
+    // instance id so a caller can act on the one it just made.
     function addWidgetToDesktop(widgetId, defaultX, defaultY, monitorName, lockBehavior = "hide") {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].widgetId === widgetId)
-                return;
-        }
 
         let startX = defaultX !== undefined ? defaultX : 200;
         let startY = defaultY !== undefined ? defaultY : 200;
@@ -599,7 +634,7 @@ Singleton {
             }
         }
 
-        let instanceId = "widget_" + widgetId + "_" + Date.now();
+        let instanceId = root._freeWidgetInstanceId(cloned, widgetId);
         const entry = {
             "id": instanceId,
             "widgetId": widgetId,
@@ -611,23 +646,42 @@ Singleton {
         cloned.push(entry);
         root.options.background.activeWidgets = cloned;
         root._recordWidgetEdit(instanceId, null, root._widgetEntryClone(entry), cloned.length - 1);
+        return instanceId;
     }
 
-    function removeWidgetFromDesktop(widgetId) {
+    // ONE instance, by its own id. This is what every caller that already knows
+    // which widget it is talking about wants - the menu on a widget, a widget
+    // dragged back into the catalogue - and before a widget could be placed
+    // twice they all went through the widgetId path below, which removes the
+    // first match and would now remove the wrong copy.
+    function removeWidgetInstance(instanceId) {
         let cloned = JSON.parse(JSON.stringify(root.options.background.activeWidgets || []));
-        let indexToRemove = -1;
-        for (let i = 0; i < cloned.length; i++) {
-            if (cloned[i].widgetId === widgetId) {
-                indexToRemove = i;
-                break;
-            }
+        const at = root._widgetEntryIndex(cloned, instanceId);
+        if (at === -1)
+            return;
+        const before = root._widgetEntryClone(cloned[at]);
+        cloned.splice(at, 1);
+        root.options.background.activeWidgets = cloned;
+        root._recordWidgetEdit(instanceId, before, null, at);
+    }
+
+    // EVERY instance of a kind, which is what "remove this widget from the
+    // desktop" means where the question is about the kind rather than about a
+    // copy - Settings' widget cards, the extension list. One history entry for
+    // the lot, so undoing brings them all back.
+    function removeWidgetFromDesktop(widgetId) {
+        const list = root.options.background.activeWidgets || [];
+        const ids = [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].widgetId === widgetId)
+                ids.push(list[i].id);
         }
-        if (indexToRemove !== -1) {
-            const before = root._widgetEntryClone(cloned[indexToRemove]);
-            cloned.splice(indexToRemove, 1);
-            root.options.background.activeWidgets = cloned;
-            root._recordWidgetEdit(before.id, before, null, indexToRemove);
-        }
+        if (ids.length === 0)
+            return;
+        GlobalStates.editHistoryBeginBatch();
+        for (const id of ids)
+            root.removeWidgetInstance(id);
+        GlobalStates.editHistoryEndBatch();
     }
 
     // With a monitor name the write lands in that monitor's fork, created from

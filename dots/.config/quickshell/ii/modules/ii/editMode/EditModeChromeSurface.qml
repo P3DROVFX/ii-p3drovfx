@@ -183,9 +183,11 @@ PanelWindow {
     Connections {
         target: GlobalStates
         function onEditWidgetDroppedOnDrawer(instanceId) {
-            const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.id === instanceId);
-            if (entry)
-                Config.removeWidgetFromDesktop(entry.widgetId);
+            // By INSTANCE. It used to look the entry up and then remove by
+            // kind, which took the first copy rather than the one that was
+            // dropped - invisible while a widget could only be placed once,
+            // and wrong the moment it could be placed twice.
+            Config.removeWidgetInstance(instanceId);
         }
     }
 
@@ -214,48 +216,31 @@ PanelWindow {
         Config.addWidgetToDesktop(widgetId, placed.x, placed.y, root.screenName, "hide");
     }
 
-    // The same drop on the Lockscreen tab. A widget that is not on the desktop
-    // becomes a lock-only one where it was let go. One that IS on the desktop
-    // keeps its desktop place and gets a lock fork at the drop point instead -
-    // and is shown on the lock if it was hidden there, because dropping a
-    // widget onto the lock screen is asking for it to be on the lock screen.
-    // Without this the drop was silently nothing: the add returns early for a
-    // widget it already knows.
+    // The same drop on the Lockscreen tab: a new lock-only instance where it
+    // was let go.
+    //
+    // This used to look for an existing copy and fork ITS lock placement
+    // instead, because a widget could only be placed once and the add would
+    // have returned early. With copies allowed, "which copy did you mean" has
+    // no answer the drop could give, and the honest reading of dragging a
+    // widget out of the catalogue is the same on both tabs: one more of it.
+    // Forking a copy that already exists is still the drag ON the widget,
+    // which writes the lock fork directly.
     function placeOnLock(widgetId, x, y) {
-        const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.widgetId === widgetId) ?? null;
-        if (entry === null) {
-            Config.addWidgetToDesktop(widgetId, x, y, root.screenName, "lockOnly");
-            return;
-        }
-        // One gesture, one Ctrl+Z, even when it both shows and moves.
-        GlobalStates.editHistoryBeginBatch();
-        if ((entry.lockBehavior || "hide") === "hide")
-            Config.updateWidgetLockBehavior(entry.id, "keep");
-        Config.updateWidgetPosition(entry.id, x, y, root.screenName, true);
-        GlobalStates.editHistoryEndBatch();
+        Config.addWidgetToDesktop(widgetId, x, y, root.screenName, "lockOnly");
     }
 
-    // On the Lockscreen tab a widget already on the desktop is shown or hidden
-    // there (lock behaviour hide <-> keep); one that is not becomes a
-    // lock-only instance, absent from the desktop.
-    function toggleWidget(widgetId) {
-        const entry = (Config.options.background.activeWidgets ?? []).find(e => e && e.widgetId === widgetId) ?? null;
-        if (GlobalStates.editLockPreview) {
-            if (entry === null) {
-                Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName, "lockOnly");
-                return;
-            }
-            const behavior = entry.lockBehavior || "hide";
-            if (behavior === "lockOnly")
-                Config.removeWidgetFromDesktop(widgetId);
-            else
-                Config.updateWidgetLockBehavior(entry.id, behavior === "hide" ? "keep" : "hide");
-            return;
-        }
-        if (entry !== null)
-            Config.removeWidgetFromDesktop(widgetId);
-        else
-            Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName);
+    // A catalogue row's click: one more of this widget. On the Lockscreen tab
+    // the new copy is lock-only, which is what the tab is for.
+    //
+    // It used to toggle - add if absent, remove if present, and cycle the lock
+    // behaviour on the other tab - which is the only thing a catalogue CAN do
+    // while a widget is a yes/no. Removal is now the widget's own affordance:
+    // its menu, or dragging it back into the panel, both of which say which
+    // copy they mean.
+    function addWidgetInstance(widgetId) {
+        Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName,
+            GlobalStates.editLockPreview ? "lockOnly" : "hide");
     }
 
     // ── The bar's centre while the Dynamic Island owns it ────────────────────
@@ -606,7 +591,7 @@ PanelWindow {
             GlobalStates.editDrawerOpen = true;
         }
         onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
-        onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)
+        onDrawerAddWidgetRequested: widgetId => root.addWidgetInstance(widgetId)
         onDrawerBarPlaceRequested: (componentId, bucket) => root.placeBarComponent(componentId, bucket)
         onDrawerBarRemoveRequested: componentId => root.removeBarComponent(componentId)
         onDrawerBarDragMoved: (componentId, x, y) => root.barDragMoved(componentId, x, y)

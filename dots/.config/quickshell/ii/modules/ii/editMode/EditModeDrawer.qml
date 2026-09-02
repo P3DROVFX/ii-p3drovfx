@@ -38,7 +38,11 @@ Item {
     property Item ghostParent: null
 
     signal addRequested(string widgetId, real dropX, real dropY)
-    signal toggleRequested(string widgetId)
+    // A catalogue row's click: one more of this widget. Not a toggle - a
+    // widget can be placed more than once, so a row has no on/off state to
+    // flip; removal belongs to the copy, through its own menu or by dragging
+    // it back into the panel.
+    signal addInstanceRequested(string widgetId)
     signal barRemoveRequested(string componentId)
     // A component sent to a named list from its own page: unlike the add
     // above, it moves one that is already placed.
@@ -241,15 +245,20 @@ Item {
     }))
     readonly property var barRows: root.searching ? root.fuzzyPick(root.barCatalogue) : root.barCatalogue
 
-    function widgetOnDesktop(widgetId) {
-        return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId);
-    }
-
-    // On the Lockscreen tab a row is "checked" when the widget shows on the
-    // lock: any behaviour but hide.
-    function widgetOnLock(widgetId) {
-        return root.activeWidgets.some(entry => entry && entry.widgetId === widgetId
-            && (entry.lockBehavior || "hide") !== "hide");
+    // How many copies of a widget the desktop holds - and, on the Lockscreen
+    // tab, how many of them the lock actually shows (any behaviour but hide).
+    // A count rather than a boolean because a widget can be placed more than
+    // once, which is also why the rows carry a number instead of a checkmark.
+    function widgetCount(widgetId) {
+        let count = 0;
+        for (const entry of root.activeWidgets) {
+            if (!entry || entry.widgetId !== widgetId)
+                continue;
+            if (root.lockTab && (entry.lockBehavior || "hide") === "hide")
+                continue;
+            count++;
+        }
+        return count;
     }
 
     // The catalogue's categories, named and ordered as Settings names and
@@ -300,10 +309,13 @@ Item {
         return root.widgetGroups.find(group => group.key === key) ?? null;
     }
 
+    // How many KINDS in this category are placed, not how many copies: the
+    // header reads "3/20", which is about the catalogue, and a copy count
+    // there could exceed the number of rows below it.
     function widgetGroupAdded(group) {
         let count = 0;
         for (const widget of group.items)
-            if (root.lockTab ? root.widgetOnLock(widget.widgetId) : root.widgetOnDesktop(widget.widgetId))
+            if (root.widgetCount(widget.widgetId) > 0)
                 count++;
         return count;
     }
@@ -626,8 +638,8 @@ Item {
                 visible: root.atRoot && !root.searching
                 text: root.section === "widgets"
                     ? (root.lockTab
-                        ? Translation.tr("Drag a widget onto the lock screen to place it, or click to show or hide it.")
-                        : Translation.tr("Drag a widget onto the desktop to place it. Drag one back here to remove it."))
+                        ? Translation.tr("Drag a widget onto the lock screen to place it, or click to add one. Drag one back here to remove it.")
+                        : Translation.tr("Drag a widget onto the desktop to place it, or click to add one. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "bar"
@@ -832,8 +844,7 @@ Item {
                     id: widgetRow
                     required property var modelData
                     required property int index
-                    readonly property bool placed: root.lockTab
-                        ? root.widgetOnLock(modelData.widgetId) : root.widgetOnDesktop(modelData.widgetId)
+                    readonly property int placed: root.widgetCount(modelData.widgetId)
 
                     width: widgetList.width
                     first: index === 0
@@ -841,11 +852,15 @@ Item {
                     symbol: modelData.icon ?? "widgets"
                     title: modelData.name ?? modelData.widgetId
                     subtitle: modelData.description ?? ""
-                    trailingKind: widgetRow.placed ? "check" : "add"
+                    // The row always offers ANOTHER one, and says how many are
+                    // out there. A checkmark would be claiming the row is a
+                    // switch, and it is not one any more.
+                    valueText: widgetRow.placed > 0 ? `×${widgetRow.placed}` : ""
+                    trailingKind: "add"
                     draggable: true
                     dragOwner: widgetList
 
-                    onActivated: root.toggleRequested(modelData.widgetId)
+                    onActivated: root.addInstanceRequested(modelData.widgetId)
                     onDragBegan: root.dragMetadata = modelData
                     onDragMovedTo: (x, y) => root.moveGhost(x, y)
                     onDragFinished: (x, y) => {
