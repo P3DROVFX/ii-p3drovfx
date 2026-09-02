@@ -681,19 +681,19 @@ Singleton {
         root.editMode = false;
     }
 
-    // Hand-offs out of the mode. Settings is a window, and the wallpaper
-    // selector a strip across the top of the screen: the first would open on
+    // The hand-off out of the mode. Settings is a window: it would open on
     // the workspace the mode parked the desktop on, under the mode's chrome,
-    // and the second where the mode's toolbar sits. Both leave the mode first.
+    // so the mode closes first.
     function openSettingsFromEditMode(pageId, subPageId, sectionId) {
         if (root.editMode)
             root.closeEditMode();
         root.openSettingsPage(pageId, subPageId, sectionId);
     }
 
+    // The wallpaper selector is a layer surface like the mode's own chrome,
+    // so it opens over the mode and the mode stays: pick a wallpaper, keep
+    // editing. A click back on the chrome or the desktop dismisses it.
     function openWallpaperSelectorFromEditMode(target = "desktop") {
-        if (root.editMode)
-            root.closeEditMode();
         root.wallpaperSelectorTarget = target;
         root.wallpaperSelectorOpen = true;
     }

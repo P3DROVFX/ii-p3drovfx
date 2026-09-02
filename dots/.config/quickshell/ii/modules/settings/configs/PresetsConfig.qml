@@ -17,23 +17,16 @@ ContentPage {
     property alias currentTab: tabBar.currentIndex
 
     // A deep link may name a tab ("mine", "store", "published"): Edit Mode's
-    // Style catalogue hands off to the store this way.
-    function checkPendingTab() {
-        const wanted = GlobalStates.settingsPendingSubPage;
-        const index = wanted === "store" ? 1 : wanted === "published" ? 2 : wanted === "mine" ? 0 : -1;
+    // Style catalogue hands off to the store this way. The window routes the
+    // sub-page id here whether this page is already showing or is being built
+    // for the request - reading the pending state directly missed the second
+    // case, since the window consumes it before the page exists.
+    function restoreSubPage(name) {
+        const index = name === "store" ? 1 : name === "published" ? 2 : name === "mine" ? 0 : -1;
         if (index < 0)
-            return;
-        GlobalStates.settingsPendingSubPage = "";
+            return false;
         tabBar.currentIndex = index;
-    }
-
-    Component.onCompleted: page.checkPendingTab()
-
-    Connections {
-        target: GlobalStates
-        function onSettingsNavigationRequestChanged() {
-            page.checkPendingTab();
-        }
+        return true;
     }
 
     SecondaryTabBar {

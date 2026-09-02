@@ -206,15 +206,15 @@ StyledFlickable {
         }
 
         // The full selector - search, the online browser, sorting, folders -
-        // is a strip across the top of the screen, where the mode's own
-        // toolbar sits. Handing off means leaving the mode.
+        // is a strip across the top of the screen. It opens over the mode's
+        // toolbar and the mode stays on underneath it.
         EditPanelRow {
             Layout.fillWidth: true
             first: false
             last: true
             symbol: "open_in_full"
             title: Translation.tr("Browse all wallpapers")
-            subtitle: Translation.tr("Leaves Edit Mode")
+            subtitle: Translation.tr("Search, folders and the online browser")
             trailingKind: "chevron"
             onActivated: GlobalStates.openWallpaperSelectorFromEditMode(root.lockTarget ? "lockscreen"
                 : root.lightTarget ? "lightmode" : "desktop")
@@ -304,7 +304,7 @@ StyledFlickable {
             Layout.fillWidth: true
             Layout.topMargin: 10
             symbol: "settings"
-            title: Translation.tr("All colour settings")
+            title: Translation.tr("Colours & Themes settings")
             subtitle: Translation.tr("Leaves Edit Mode")
             trailingKind: "chevron"
             onActivated: GlobalStates.openSettingsFromEditMode("colors")
