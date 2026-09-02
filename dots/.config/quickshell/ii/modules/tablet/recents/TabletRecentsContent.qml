@@ -10,6 +10,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.tablet.menu
 
 /**
  * The recents carousel: every open window as a card, scrubbed sideways.
@@ -90,6 +91,53 @@ Item {
             toplevel?.close();
     }
 
+    /**
+     * What you can do to a window without going to it.
+     *
+     * Android puts these behind the app icon above the card; here the header strip is the
+     * same handle. Float and fullscreen are the dispatches the gesture registry already
+     * binds, so this is mostly wiring rather than new capability — the point is that a
+     * finger had no way to reach any of it.
+     *
+     * The window has to be named by address: dispatching without one acts on whatever is
+     * focused, which is never the card that was tapped.
+     */
+    function menuActionsFor(toplevel) {
+        const address = String(toplevel?.HyprlandToplevel?.address ?? "").trim();
+        const target = address.length === 0
+            ? "" : (address.startsWith("0x") ? address : `0x${address}`);
+
+        const actions = [];
+        if (target.length > 0) {
+            actions.push({
+                symbol: "picture_in_picture",
+                label: Translation.tr("Float"),
+                trigger: () => root.dispatchOn(target, `hl.dsp.window.float({ action = 'toggle', window = "address:${target}" })`)
+            });
+            actions.push({
+                symbol: "fullscreen",
+                label: Translation.tr("Fullscreen"),
+                trigger: () => root.dispatchOn(target, `hl.dsp.window.fullscreen({ mode = 'fullscreen', action = 'toggle', window = "address:${target}" })`)
+            });
+        }
+        actions.push({
+            symbol: "close",
+            label: Translation.tr("Close"),
+            destructive: true,
+            trigger: () => root.closeWindow(toplevel)
+        });
+        return actions;
+    }
+
+    /// Anything that moves or focuses a window has to wait for this surface to unmap; see
+    /// TabletRecentsWindow on why running it while recents is still up is undone silently.
+    function dispatchOn(address, command) {
+        root.deferredRequested(() => {
+            Hyprland.dispatch(command);
+            Hyprland.dispatch(`hl.dsp.focus({ window = "address:${address}" })`);
+        });
+    }
+
     function newWorkspace() {
         // The Lua dispatcher API, as everything else in the shell uses; the classic
         // "workspace empty" string is a Lua syntax error here rather than a no-op. The host
@@ -162,6 +210,14 @@ Item {
                             toplevel: modelData
                             onActivated: root.activate(modelData)
                             onClosed: root.closeWindow(modelData)
+                            onMenuRequested: (x, y) => {
+                                const point = root.mapFromItem(null, x, y);
+                                cardMenu.openAt(point.x, point.y,
+                                                root.menuActionsFor(modelData),
+                                                modelData?.title ?? modelData?.appId ?? "",
+                                                Quickshell.iconPath(TaskbarApps.getCachedIcon(modelData?.appId ?? ""), "image-missing"),
+                                                "");
+                            }
                         }
                     }
                 }
@@ -293,5 +349,19 @@ Item {
         }
     }
 
-    Keys.onEscapePressed: root.dismissRequested()
+    // Drawn inside this surface rather than as a popup window, for the same reason the
+    // drawer's menu is: recents holds exclusive keyboard focus, and a second surface would
+    // fight it for something Android draws in the launcher itself.
+    TabletInlineMenu {
+        id: cardMenu
+        anchors.fill: parent
+    }
+
+    Keys.onEscapePressed: {
+        if (cardMenu.opened) {
+            cardMenu.close();
+            return;
+        }
+        root.dismissRequested();
+    }
 }

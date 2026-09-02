@@ -26,6 +26,9 @@ Item {
 
     signal activated
     signal closed
+    /// The header strip was decoration. On Android it is the handle for everything you can
+    /// do to a window without opening it, so it raises this with its own position.
+    signal menuRequested(real x, real y)
 
     readonly property string appId: root.toplevel?.appId ?? ""
     readonly property string title: root.toplevel?.title ?? ""
@@ -48,22 +51,48 @@ Item {
         anchors.fill: parent
         spacing: 8
 
-        RowLayout {
+        // The header is its own hit target, above the card's drag area. Tapping the app's
+        // icon is how Android reaches split, floating and app info, and the card itself
+        // still means "go here" — two gestures, two targets, neither guessed from the other.
+        RippleButton {
+            id: header
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            spacing: 8
+            Layout.preferredHeight: Math.max(Appearance.sizes.minimumTouchTarget - 12, 32)
 
-            IconImage {
-                implicitSize: 22
-                source: Quickshell.iconPath(TaskbarApps.getCachedIcon(root.appId), "image-missing")
+            buttonRadius: Appearance.rounding.full
+            colBackground: "transparent"
+            colBackgroundHover: Appearance.colors.colLayer1Hover
+            colRipple: Appearance.colors.colLayer1Active
+
+            onClicked: {
+                const point = header.mapToItem(null, header.width / 2, header.height);
+                root.menuRequested(point.x, point.y);
             }
 
-            StyledText {
-                Layout.fillWidth: true
-                text: root.title.length > 0 ? root.title : root.appId
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.m3colors.m3onSurface
-                elide: Text.ElideRight
+            contentItem: RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 8
+
+                IconImage {
+                    implicitSize: 22
+                    source: Quickshell.iconPath(TaskbarApps.getCachedIcon(root.appId), "image-missing")
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.title.length > 0 ? root.title : root.appId
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.m3colors.m3onSurface
+                    elide: Text.ElideRight
+                }
+
+                MaterialSymbol {
+                    text: "more_horiz"
+                    iconSize: 18
+                    color: Appearance.colors.colSubtext
+                }
             }
         }
 
@@ -95,6 +124,9 @@ Item {
     MouseArea {
         id: dragArea
         anchors.fill: parent
+        // Stops short of the header. This is declared after the layout, so it sits on top and
+        // would otherwise swallow every press meant for the header's own button.
+        anchors.topMargin: header.height + 8
 
         // No `drag` block: the card itself must not move — only dragOffset does, so the
         // layout stays put — and a MouseArea with a drag target suppresses `clicked`, which

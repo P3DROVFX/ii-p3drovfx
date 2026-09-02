@@ -12,6 +12,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.tablet.appWindow
+import qs.modules.tablet.menu
 
 /**
  * The drawer's inside: a search field over a grid of every installed app.
