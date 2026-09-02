@@ -154,7 +154,13 @@ PanelWindow {
     // always reads "the screens whose drawer exists".
     readonly property rect drawerReveal: chrome.drawer
     onDrawerRevealChanged: root.publishDrawerReveal(root.drawerReveal)
-    Component.onCompleted: root.publishDrawerReveal(root.drawerReveal)
+    Component.onCompleted: {
+        root.publishDrawerReveal(root.drawerReveal);
+        // The mode has just opened over this screen: if the island owns the
+        // bar's centre, take whatever is stored there out before the user can
+        // see a catalogue that claims it is placed.
+        root.evictBarCentre();
+    }
     Component.onDestruction: {
         root.publishDrawerReveal(null);
         if (root.searchFocused)
@@ -252,20 +258,88 @@ PanelWindow {
             Config.addWidgetToDesktop(widgetId, undefined, undefined, root.screenName);
     }
 
+    // ── The bar's centre while the Dynamic Island owns it ────────────────────
+    // `bar.floatingNotch.centerInBar` makes BarLayout hand the centre section
+    // an empty list: the island is drawn over that stretch of bar and anything
+    // stored there renders nowhere. Nothing told Edit Mode, so the centre was
+    // still a drop target and still counted in the catalogue - a widget put
+    // there was written to the config, reported as placed, and invisible.
+    //
+    // Two halves. The controller refuses the centre as a target for as long as
+    // the flag is on (BarEditController.centreBlocked); this is the other one -
+    // whatever is ALREADY stored there is moved out, once, when the mode opens
+    // over a bar in that state, and again if the flag is turned on while the
+    // mode is up. They go to the FRONT of the right-hand list, which is the
+    // place closest to where they were drawn, in their own order, as one
+    // history entry - so Ctrl+Z puts the centre back exactly as it was for
+    // anyone who turns the island off again.
+    readonly property bool barCentreBlocked: ShellModePolicy.barCenterActive
+    onBarCentreBlockedChanged: root.evictBarCentre()
+
+    function evictBarCentre() {
+        if (!root.barCentreBlocked || !GlobalStates.editMode)
+            return;
+        const layouts = Config.options.bar.layouts;
+        if (!layouts)
+            return;
+        const centre = EditModeLogic.listCopy(layouts.center ?? []);
+        if (centre.length === 0)
+            return;
+        const right = EditModeLogic.listCopy(layouts.right ?? []);
+        const moved = centre
+            .filter(entry => entry && entry.id)
+            .map(entry => ({ "id": entry.id, "centered": false, "visible": entry.visible !== false }))
+            // A component belongs to one list at a time, so an id the right
+            // list somehow already holds is dropped rather than doubled.
+            .filter(entry => !right.some(e => e && e.id === entry.id));
+        const nextRight = moved.concat(right);
+        Config.options.bar.layouts.center = [];
+        Config.options.bar.layouts.right = nextRight;
+        GlobalStates.editHistoryPush({
+            "undo": () => {
+                Config.options.bar.layouts.center = centre;
+                Config.options.bar.layouts.right = right;
+            },
+            "redo": () => {
+                Config.options.bar.layouts.center = [];
+                Config.options.bar.layouts.right = nextRight;
+            }
+        });
+    }
+
+    // A component sent to a named list from its own page in the catalogue: the
+    // way to place one without carrying it across the screen, and the way to
+    // move a placed one between the three groups. One entry at a time and one
+    // history entry for the pair, because a move touches two lists.
+    //
     // The bar's layout is not history-aware on its own; the pair is recorded
-    // here around the one write.
-    function addBarComponent(componentId, bucket) {
+    // here, around the one write.
+    function placeBarComponent(componentId, bucket) {
         const layouts = Config.options.bar.layouts;
         if (!layouts || !(bucket in layouts))
             return;
-        const before = EditModeLogic.listCopy(layouts[bucket] ?? []);
-        if (before.some(e => e && e.id === componentId))
+        // While the island owns the centre that list is unreachable, so a
+        // request for it lands on the right instead of nowhere.
+        if (bucket === "center" && root.barCentreBlocked)
+            bucket = "right";
+        const buckets = ["left", "center", "right"];
+        const before = {};
+        const after = {};
+        for (const name of buckets) {
+            before[name] = EditModeLogic.listCopy(layouts[name] ?? []).map(e => Object.assign({}, e));
+            // A component belongs to one list at a time, so it comes out of
+            // wherever it was before it goes anywhere.
+            after[name] = before[name].filter(e => !(e && e.id === componentId));
+        }
+        after[bucket] = after[bucket].concat([{ "id": componentId, "centered": false, "visible": true }]);
+        // Nothing to record when it was already the last entry of that list.
+        if (JSON.stringify(before) === JSON.stringify(after))
             return;
-        const after = before.concat([{ "id": componentId, "centered": false, "visible": true }]);
-        layouts[bucket] = after;
+        for (const name of buckets)
+            layouts[name] = after[name];
         GlobalStates.editHistoryPush({
-            "undo": () => { Config.options.bar.layouts[bucket] = before; },
-            "redo": () => { Config.options.bar.layouts[bucket] = after; }
+            "undo": () => { for (const name of buckets) Config.options.bar.layouts[name] = before[name]; },
+            "redo": () => { for (const name of buckets) Config.options.bar.layouts[name] = after[name]; }
         });
     }
 
@@ -526,9 +600,14 @@ PanelWindow {
         }
         onDrawerLockLayoutResetRequested: Config.clearWidgetLockPositions(root.screenName)
         onDrawerToggleRequested: GlobalStates.editDrawerOpen = !GlobalStates.editDrawerOpen
+        onDrawerPageRequested: (section, page) => {
+            GlobalStates.editDrawerSection = section;
+            GlobalStates.editDrawerPage = page;
+            GlobalStates.editDrawerOpen = true;
+        }
         onDrawerAddRequested: (widgetId, dropX, dropY) => root.addWidgetAt(widgetId, dropX, dropY)
         onDrawerToggleWidgetRequested: widgetId => root.toggleWidget(widgetId)
-        onDrawerBarAddRequested: (componentId, bucket) => root.addBarComponent(componentId, bucket)
+        onDrawerBarPlaceRequested: (componentId, bucket) => root.placeBarComponent(componentId, bucket)
         onDrawerBarRemoveRequested: componentId => root.removeBarComponent(componentId)
         onDrawerBarDragMoved: (componentId, x, y) => root.barDragMoved(componentId, x, y)
         onDrawerBarDropRequested: (componentId, x, y) => root.barDrop(componentId, x, y)

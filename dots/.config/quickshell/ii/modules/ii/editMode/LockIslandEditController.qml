@@ -33,7 +33,13 @@ Item {
             const items = root.surface.islandItems[island];
             order.forEach((id, index) => {
                 if (LockIslands.reorderable(island, id) && items[id])
-                    out.push({ "island": island, "index": index, "item": items[id] });
+                    out.push({
+                        "island": island,
+                        "index": index,
+                        "item": items[id],
+                        "id": id,
+                        "hideable": LockIslands.hideable(island, id)
+                    });
             });
         }
         return out;
@@ -150,6 +156,8 @@ Item {
             island: modelData.island
             renderedIndex: modelData.index
             target: modelData.item
+            itemId: modelData.id
+            hideable: modelData.hideable
         }
     }
 

@@ -10,30 +10,39 @@ import qs.modules.common.functions
 import qs.modules.ii.background.widgets
 
 /**
- * Edit Mode's catalogue: the panel that slides in from the right of the card.
+ * Edit Mode's panel: the surface that slides in from the right of the card.
  *
- * Three sections. Widgets lists every desktop widget the registry knows - a
- * row is a click to add or remove, or a drag whose release places the widget
- * where the pointer is. Bar lists the bar components not already on the bar
- * and adds one to the picked bucket. Dock lists the apps the dock knows and
- * pins or unpins them.
+ * Four catalogues - the desktop's widgets, the bar, the dock and the lock
+ * screen's own switches - and each of them is a ROOT with sub-pages rather
+ * than a list of accordions. That is the change: sections that expanded in
+ * place put eighty rows in one scroll and left no room for anything a section
+ * might want to say about itself, which is why the bar's style variants and
+ * the dock's own appearance had nowhere to live and stayed in Settings. A page
+ * per destination gives each one the whole panel.
  *
- * The drawer reports gestures and writes nothing: the surface that owns the
- * geometry turns a release into a canvas point, and every store write is made
- * there so the drawer can be laid out and reasoned about without one.
+ * The address is `GlobalStates.editDrawerSection` plus `editDrawerPage`, held
+ * shell-wide because a right-click on the desktop or the bar asks for a
+ * catalogue before the panel that shows it exists, and the toolbar's Bar
+ * button asks for one page in particular.
+ *
+ * The panel reports gestures and writes only preferences: every LAYOUT write
+ * is made by the surface that owns the geometry, so a drop can be turned into
+ * a canvas point and a history entry recorded in one place.
  */
 Item {
     id: root
 
     property string screenName: ""
     // Where the drag ghost lives: an ancestor that is not clipped by the
-    // drawer's reveal, so the ghost can follow the pointer out over the card.
+    // panel's reveal, so the ghost can follow the pointer out over the card.
     property Item ghostParent: null
 
     signal addRequested(string widgetId, real dropX, real dropY)
     signal toggleRequested(string widgetId)
-    signal barAddRequested(string componentId, string bucket)
     signal barRemoveRequested(string componentId)
+    // A component sent to a named list from its own page: unlike the add
+    // above, it moves one that is already placed.
+    signal barPlaceRequested(string componentId, string bucket)
     // A bar component carried out of the catalogue: where the pointer is, in
     // the chrome's coordinates, for the surface to hand to that screen's bar.
     signal barDragMoved(string componentId, real x, real y)
@@ -42,16 +51,58 @@ Item {
     signal dockToggleRequested(string appId)
     signal lockLayoutResetRequested()
 
-    // Held shell-wide (GlobalStates), not here: a right-click on the desktop or
-    // the bar asks for a catalogue before the drawer that shows it exists, and
-    // every screen's drawer shows the same one.
     readonly property string section: GlobalStates.editDrawerSection
+    // The address, validated against the catalogue showing it: a page belongs
+    // to the section that minted it, and one left over from another section is
+    // simply that section's root. Checked here rather than cleared on every
+    // section change, so "open the bar's appearance page" is one intent
+    // instead of two assignments whose order decides the answer.
+    readonly property string page: root.pageValidFor(root.section, GlobalStates.editDrawerPage)
+        ? GlobalStates.editDrawerPage : ""
     property var dragMetadata: null
+
+    function pageValidFor(section, page) {
+        if (page === "")
+            return true;
+        if (section === "widgets")
+            return page.startsWith("category:");
+        if (section === "bar")
+            return page === "appearance" || page.startsWith("component:");
+        if (section === "dock")
+            return page === "appearance" || page === "widgets" || page.startsWith("apps:");
+        return false;
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────────
+    // Which way the next page arrives from: 1 going deeper, -1 coming back.
+    // The same two-value scalar ChatControlBar's canvas uses, for the same
+    // reason - one Loader swapping its content has no other way to say which
+    // direction the step was.
+    property int navDirection: 1
+    readonly property bool atRoot: root.page === "" || root.searching
+
+    function openPage(page) {
+        root.navDirection = 1;
+        GlobalStates.editDrawerPage = page;
+    }
+
+    function goBack() {
+        root.navDirection = -1;
+        GlobalStates.editDrawerPage = "";
+    }
+
+    function setSection(section) {
+        if (GlobalStates.editDrawerSection === section)
+            return;
+        root.navDirection = 1;
+        GlobalStates.editDrawerPage = "";
+        GlobalStates.editDrawerSection = section;
+    }
 
     // ── The query ────────────────────────────────────────────────────────────
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
-    // sections it filters: someone typing is after one row, not after where it
-    // lives. The lock screen's six switches are not worth a search box.
+    // catalogue it filters, pages and all: someone typing is after one row, not
+    // after where it lives. The lock screen's switches are not worth a box.
     readonly property bool searchable: root.section !== "lock"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
@@ -107,11 +158,10 @@ Item {
         return p.x >= 0 && p.y >= 0 && p.x <= searchRow.width && p.y <= searchRow.height;
     }
 
-
     onSectionChanged: root.clearSearch()
 
     // Ctrl+F, from the canvas. Only the screen being edited answers: every
-    // screen draws a drawer, and the keyboard is on one of them.
+    // screen draws a panel, and the keyboard is on one of them.
     function focusSearch() {
         if (!root.searchable || root.screenName !== GlobalStates.editModeMonitor)
             return;
@@ -122,8 +172,8 @@ Item {
 
     Connections {
         target: GlobalStates
-        // Leaving takes the query with it: a drawer reopened on last week's
-        // half-typed word is a drawer that looks broken.
+        // Leaving takes the query with it: a panel reopened on last week's
+        // half-typed word is a panel that looks broken.
         function onEditDrawerOpenChanged() {
             if (!GlobalStates.editDrawerOpen)
                 root.clearSearch();
@@ -140,10 +190,11 @@ Item {
         }
     }
 
-    // A desktop widget carried back over this drawer: the release removes it.
+    // A desktop widget carried back over this panel: the release removes it.
     readonly property bool dropWouldRemove: root.screenName !== ""
         && GlobalStates.editDrawerDropScreen === root.screenName
 
+    // ── Catalogues ───────────────────────────────────────────────────────────
     readonly property var activeWidgets: Config.options.background.activeWidgets ?? []
     readonly property var usedBarIds: {
         const layouts = Config.options.bar.layouts;
@@ -153,10 +204,9 @@ Item {
                 if (entry && entry.id) ids.push(entry.id);
         return ids;
     }
+    readonly property bool barCentreBlocked: ShellModePolicy.barCenterActive
     // Every bar component, not only the ones going spare: one already on the
-    // bar is shown checked and clicks off again. Hiding them made the panel
-    // silent about what the bar holds, and left the badge on the bar as the
-    // only way to take anything off it.
+    // bar is shown checked and its row still opens its page.
     readonly property var barCatalogue: {
         const used = root.usedBarIds;
         return (BarComponentRegistry.allComponents ?? []).map(component => ({
@@ -178,9 +228,9 @@ Item {
             && (entry.lockBehavior || "hide") !== "hide");
     }
 
-    // The catalogue's sections, named and ordered as Settings names and orders
-    // them. A category the registry hands out that is not listed here - an
-    // extension's own - gets a section of its own at the end, so a widget can
+    // The catalogue's categories, named and ordered as Settings names and
+    // orders them. A category the registry hands out that is not listed here -
+    // an extension's own - gets one of its own at the end, so a widget can
     // never be added to the registry and then be missing from this list.
     readonly property var widgetCategoryOrder: [
         { "key": "Clock", "title": Translation.tr("Clocks"), "icon": "schedule" },
@@ -222,25 +272,8 @@ Item {
         return groups.filter(group => group.items.length > 0);
     }
 
-    // Every section shut on arrival, the way Settings opens its own widget
-    // catalogue: the flat list runs to eighty-odd rows, and the point of a
-    // section is not having to scroll past the ones you are not after.
-    property var expandedWidgetGroups: []
-
-    function widgetGroupExpanded(key) {
-        return root.expandedWidgetGroups.indexOf(key) !== -1;
-    }
-
-    function toggleWidgetGroup(key) {
-        // Reassigned rather than mutated: a list changed in place notifies
-        // nobody, and the rows below are built from it.
-        const next = root.expandedWidgetGroups.slice();
-        const at = next.indexOf(key);
-        if (at === -1)
-            next.push(key);
-        else
-            next.splice(at, 1);
-        root.expandedWidgetGroups = next;
+    function widgetGroupByKey(key) {
+        return root.widgetGroups.find(group => group.key === key) ?? null;
     }
 
     function widgetGroupAdded(group) {
@@ -257,32 +290,21 @@ Item {
         const rows = [];
         for (const group of root.widgetGroups)
             for (const widget of group.items)
-                rows.push({
-                    "kind": "widget",
-                    "widget": widget,
-                    "hay": root.prepared(widget.name, widget.widgetId)
-                });
+                rows.push({ "widget": widget, "hay": root.prepared(widget.name, widget.widgetId) });
         return rows;
     }
 
-    // One flat list of section headers and, under each open one, its widgets:
-    // a list view can only be given rows, and collapsing by dropping the rows
-    // costs nothing - a shut section has no delegates at all.
-    readonly property var widgetRows: {
+    // What the widget list is showing: a query's answer, or the open category.
+    readonly property var widgetItems: {
         if (root.searching)
-            return root.fuzzyPick(root.widgetSearchRows);
-        const rows = [];
-        for (const group of root.widgetGroups) {
-            rows.push({ "kind": "header", "group": group });
-            if (!root.widgetGroupExpanded(group.key))
-                continue;
-            for (const widget of group.items)
-                rows.push({ "kind": "widget", "widget": widget });
-        }
-        return rows;
+            return root.fuzzyPick(root.widgetSearchRows).map(row => row.widget);
+        if (!root.page.startsWith("category:"))
+            return [];
+        const group = root.widgetGroupByKey(root.page.substring(9));
+        return group ? group.items : [];
     }
 
-    // The dock's catalogue, in three sections for the three answers to "why is
+    // The dock's catalogue, in three groups for the three answers to "why is
     // this app in the list": it is on the dock, it is open right now, or it is
     // merely installed. Without the last one an app that is neither pinned nor
     // running could not be pinned at all - it had to be launched first.
@@ -324,61 +346,32 @@ Item {
                 "icon": "apps",
                 "items": rest.map(entry => item(entry.id, false))
             }
-        ].filter(group => group.items.length > 0);
+        ];
     }
-
-    // What the showing list has in it, for the empty-result line.
-    readonly property int visibleRowCount: root.section === "widgets" ? root.widgetRows.length
-        : root.section === "bar" ? root.barRows.length
-        : root.section === "dock" ? root.dockRows.length
-        : root.lockSwitches.length
 
     function appName(appId) {
         return DesktopEntries.heuristicLookup(appId)?.name ?? appId;
     }
 
-    // The two short ones open, the long one shut: the point of a section is
-    // not having to scroll past the ones you are not after.
-    property var expandedDockGroups: ["pinned", "running"]
-
-    function dockGroupExpanded(key) {
-        return root.expandedDockGroups.indexOf(key) !== -1;
-    }
-
-    function toggleDockGroup(key) {
-        const next = root.expandedDockGroups.slice();
-        const at = next.indexOf(key);
-        if (at === -1)
-            next.push(key);
-        else
-            next.splice(at, 1);
-        root.expandedDockGroups = next;
+    function dockGroupByKey(key) {
+        return root.dockGroups.find(group => group.key === key) ?? null;
     }
 
     readonly property var dockSearchRows: {
         const rows = [];
         for (const group of root.dockGroups)
             for (const app of group.items)
-                rows.push({
-                    "kind": "app",
-                    "app": app,
-                    "hay": root.prepared(app.name, app.appId)
-                });
+                rows.push({ "app": app, "hay": root.prepared(app.name, app.appId) });
         return rows;
     }
 
-    readonly property var dockRows: {
+    readonly property var dockItems: {
         if (root.searching)
-            return root.fuzzyPick(root.dockSearchRows);
-        const rows = [];
-        for (const group of root.dockGroups) {
-            rows.push({ "kind": "header", "group": group });
-            if (!root.dockGroupExpanded(group.key))
-                continue;
-            for (const app of group.items)
-                rows.push({ "kind": "app", "app": app });
-        }
-        return rows;
+            return root.fuzzyPick(root.dockSearchRows).map(row => row.app);
+        if (!root.page.startsWith("apps:"))
+            return [];
+        const group = root.dockGroupByKey(root.page.substring(5));
+        return group ? group.items : [];
     }
 
     readonly property bool lockTab: GlobalStates.editLockPreview
@@ -401,6 +394,89 @@ Item {
     ]
     function lockSwitchTarget(entry) {
         return entry.group === "fingerprint" ? Config.options.lock.security.fingerprint : Config.options.lock;
+    }
+
+    // Everything the lock screen's toolbars can hide, so a remove badge there
+    // has a way back. LockIslands' vocabulary; the password field is not on it
+    // because a lock screen with no way to type into it is not a lock screen.
+    readonly property var lockIslandNames: ({
+        "battery": Translation.tr("Battery"),
+        "capsLock": Translation.tr("Caps Lock"),
+        "alarm": Translation.tr("Next alarm"),
+        "weather": Translation.tr("Weather"),
+        "keyboardLayout": Translation.tr("Keyboard layout"),
+        "keepAwake": Translation.tr("Keep awake"),
+        "mode": Translation.tr("Active mode"),
+        "sleep": Translation.tr("Sleep"),
+        "power": Translation.tr("Shut down"),
+        "reboot": Translation.tr("Restart")
+    })
+    readonly property var lockIslandSymbols: ({
+        "battery": "battery_full", "capsLock": "keyboard_capslock", "alarm": "alarm",
+        "weather": "partly_cloudy_day", "keyboardLayout": "keyboard", "keepAwake": "coffee",
+        "mode": "target", "sleep": "dark_mode", "power": "power_settings_new",
+        "reboot": "restart_alt"
+    })
+    readonly property var hiddenLockIslands: Array.from(Config.options.lock.islands.hidden ?? [])
+
+    function showLockIsland(id) {
+        Config.setLockIslandHidden(id, false);
+    }
+
+    // ── The page the panel is showing ────────────────────────────────────────
+    readonly property string contentKey: root.searching
+        ? ("search:" + root.section)
+        : (root.section + "/" + root.page)
+
+    readonly property string headerTitle: {
+        if (root.searching)
+            return Translation.tr("Results");
+        if (root.page === "") {
+            if (root.section === "bar")
+                return Translation.tr("Bar");
+            if (root.section === "dock")
+                return Translation.tr("Dock");
+            if (root.section === "lock")
+                return Translation.tr("Lock screen");
+            return Translation.tr("Widgets");
+        }
+        if (root.page.startsWith("category:"))
+            return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
+        if (root.page.startsWith("apps:"))
+            return root.dockGroupByKey(root.page.substring(5))?.title ?? Translation.tr("Apps");
+        if (root.page.startsWith("component:"))
+            return BarComponentRegistry.getComponent(root.page.substring(10))?.title ?? Translation.tr("Widget");
+        if (root.page === "appearance")
+            return root.section === "dock" ? Translation.tr("Dock appearance") : Translation.tr("Bar appearance");
+        if (root.page === "widgets")
+            return Translation.tr("Dock widgets");
+        return Translation.tr("Edit");
+    }
+
+    readonly property string headerSymbol: {
+        if (root.section === "bar")
+            return "dock_to_bottom";
+        if (root.section === "dock")
+            return "dock";
+        if (root.section === "lock")
+            return "lock";
+        return "widgets";
+    }
+
+    function toGhost(sceneX, sceneY) {
+        const host = root.ghostParent ?? root;
+        return host.mapFromItem(null, sceneX, sceneY);
+    }
+
+    function beginGhost(metadata, sceneX, sceneY) {
+        root.dragMetadata = metadata;
+        root.moveGhost(sceneX, sceneY);
+    }
+
+    function moveGhost(sceneX, sceneY) {
+        const p = root.toGhost(sceneX, sceneY);
+        ghost.x = p.x - ghost.width / 2;
+        ghost.y = p.y - ghost.height / 2;
     }
 
     Rectangle {
@@ -429,58 +505,93 @@ Item {
             id: column
             anchors.fill: parent
             anchors.margins: 14
-            spacing: 10
-            // The contents arrive after the panel: faded on the drawer's own scalar.
+            spacing: 8
+            // The contents arrive after the panel: faded on the panel's own scalar.
             opacity: Math.max(0, Math.min(1, (GlobalStates.editDrawerProgress - 0.4) / 0.6))
 
+            // ── Header ───────────────────────────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: 6
-                Layout.rightMargin: 6
+                Layout.leftMargin: 2
+                Layout.rightMargin: 4
                 spacing: 10
 
-                MaterialSymbol {
-                    text: "add_circle"
-                    iconSize: 22
-                    color: Appearance.colors.colOnSurfaceVariant
+                // One control does both jobs: an icon at a root, the way back
+                // on a page. Same circle either way, so the header does not
+                // change shape as the panel navigates.
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 38
+                    implicitHeight: 38
+                    radius: width / 2
+                    color: root.atRoot ? "transparent"
+                        : backMouse.containsPress ? Appearance.colors.colSurfaceContainerHighestActive
+                        : backMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighest
+                        : Appearance.colors.colSurfaceContainerHigh
+
+                    Behavior on color {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: root.atRoot ? root.headerSymbol : "arrow_back"
+                        iconSize: 22
+                        color: Appearance.colors.colOnSurface
+                    }
+
+                    MouseArea {
+                        id: backMouse
+                        anchors.fill: parent
+                        enabled: !root.atRoot
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.goBack()
+                    }
                 }
+
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Add")
+                    text: root.headerTitle
                     font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.DemiBold
                     color: Appearance.colors.colOnSurface
+                    elide: Text.ElideRight
                 }
             }
 
+            // ── Catalogue picker ─────────────────────────────────────────────
             ButtonGroup {
-                Layout.leftMargin: 6
-                Layout.rightMargin: 6
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                visible: root.atRoot
 
                 SelectionGroupButton {
                     leftmost: true
                     buttonText: Translation.tr("Widgets")
                     toggled: root.section === "widgets"
-                    onClicked: GlobalStates.editDrawerSection = "widgets"
+                    onClicked: root.setSection("widgets")
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
                     buttonText: Translation.tr("Bar")
                     toggled: root.section === "bar"
-                    onClicked: GlobalStates.editDrawerSection = "bar"
+                    onClicked: root.setSection("bar")
                 }
                 SelectionGroupButton {
                     visible: !root.lockTab
                     rightmost: true
                     buttonText: Translation.tr("Dock")
                     toggled: root.section === "dock"
-                    onClicked: GlobalStates.editDrawerSection = "dock"
+                    onClicked: root.setSection("dock")
                 }
                 SelectionGroupButton {
                     visible: root.lockTab
                     rightmost: true
                     buttonText: Translation.tr("Lock screen")
                     toggled: root.section === "lock"
-                    onClicked: GlobalStates.editDrawerSection = "lock"
+                    onClicked: root.setSection("lock")
                 }
             }
 
@@ -488,26 +599,32 @@ Item {
                 Layout.fillWidth: true
                 Layout.leftMargin: 6
                 Layout.rightMargin: 6
+                visible: root.atRoot && !root.searching
                 text: root.section === "widgets"
                     ? (root.lockTab
-                        ? Translation.tr("Drag a widget onto the lock screen to place it there, or click to show or hide it. A widget that is not on the desktop is added to the lock screen only.")
-                        : Translation.tr("Drag a widget onto the desktop to place it, or click to add or remove it. Drag a desktop widget here to remove it."))
+                        ? Translation.tr("Drag a widget onto the lock screen to place it, or click to show or hide it.")
+                        : Translation.tr("Drag a widget onto the desktop to place it. Drag one back here to remove it."))
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "bar"
-                        ? Translation.tr("Drag a widget onto the bar to drop it where you want it. Click one to add it at the end, or to take a placed one off.")
-                        : Translation.tr("Click an app to pin or unpin it. Drag the icons on the dock itself to reorder them.")
+                        ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
+                        : Translation.tr("Pin apps, and choose how the dock itself is drawn.")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
             }
 
-            // The one field for all three catalogues: it filters whichever is
+            // ── Search ───────────────────────────────────────────────────────
+            // One field for all three catalogues: it filters whichever is
             // showing, and the surface only takes the keyboard while it holds
             // focus.
             Item {
                 id: searchRow
-                visible: root.searchable
+                // A root-level affordance: a query flattens the catalogue, so
+                // it belongs to the catalogue rather than to a page inside it.
+                // Typing on a page still works - the results take the panel
+                // over and clearing the field puts the page back.
+                visible: root.searchable && root.atRoot
                 Layout.fillWidth: true
                 Layout.leftMargin: 6
                 Layout.rightMargin: 6
@@ -525,7 +642,7 @@ Item {
                         : Translation.tr("Search widgets")
                     onTextChanged: root.query = searchField.text
                     onPressed: root.searchWanted = true
-                    // Focus moved on inside the drawer - a row, a section
+                    // Focus moved on inside the panel - a row, a section
                     // button - so the keyboard goes back to the desktop.
                     onActiveFocusChanged: {
                         if (searchField.activeFocus) {
@@ -584,383 +701,511 @@ Item {
                 }
             }
 
-            // Nothing matched: said plainly, because an empty panel under a
-            // typed word reads as a broken list.
-            StyledText {
-                visible: root.searching && root.visibleRowCount === 0
-                Layout.fillWidth: true
-                Layout.topMargin: 20
-                horizontalAlignment: Text.AlignHCenter
-                text: Translation.tr("No matches")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            // ── Widgets ──────────────────────────────────────────────────────
-            StyledListView {
-                popin: false
-                animateAppearance: false
-                id: widgetList
-                visible: root.section === "widgets"
+            // ── The page ─────────────────────────────────────────────────────
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
-                spacing: 2
-                model: root.section === "widgets" ? root.widgetRows : []
 
-                delegate: Item {
-                    id: row
-                    required property var modelData
-                    readonly property bool isHeader: row.modelData.kind === "header"
-
-                    width: widgetList.width
-                    height: row.isHeader ? 42 : 60
-
-                    Loader {
-                        anchors.fill: parent
-                        active: row.isHeader
-                        sourceComponent: headerFace
+                Loader {
+                    id: pageLoader
+                    anchors.fill: parent
+                    // The page changes under one Loader, so the arrival is
+                    // animated here rather than by each page: they would all
+                    // have to carry the same block and could not agree on the
+                    // direction, which only the navigation knows.
+                    transform: Translate {
+                        id: pageTransform
                     }
 
-                    // Indented under its section.
-                    Loader {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        active: !row.isHeader
-                        sourceComponent: widgetFace
-                    }
-
-                    // A section: its name, how many of its widgets are already
-                    // placed, and the chevron that opens it.
-                    Component {
-                        id: headerFace
-
-                        CatalogueHeader {
-                            readonly property var group: row.modelData.group
-                            readonly property int added: root.widgetGroupAdded(group)
-                            symbol: group.icon
-                            title: group.title
-                            countText: added > 0 ? `${added}/${group.items.length}` : `${group.items.length}`
-                            countHighlighted: added > 0
-                            open: root.widgetGroupExpanded(group.key)
-                            onClicked: root.toggleWidgetGroup(group.key)
+                    Connections {
+                        target: root
+                        function onContentKeyChanged() {
+                            pageEnter.restart();
                         }
                     }
 
-                    // A widget inside an open section: a click adds or removes
-                    // it, a drag places it where the pointer is let go.
-                    Component {
-                        id: widgetFace
-
-                        MouseArea {
-                            id: entry
-                            readonly property var widget: row.modelData.widget
-                            readonly property bool onDesktop: root.widgetOnDesktop(entry.widget.widgetId)
-
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            acceptedButtons: Qt.LeftButton
-                            preventStealing: true
-
-                            property real pressX: 0
-                            property real pressY: 0
-                            property bool dragActive: false
-
-                            onPressed: mouse => {
-                                entry.pressX = mouse.x;
-                                entry.pressY = mouse.y;
-                                entry.dragActive = false;
-                            }
-                            onPositionChanged: mouse => {
-                                if (!entry.pressed)
-                                    return;
-                                if (!entry.dragActive
-                                        && Math.abs(mouse.x - entry.pressX) < 5
-                                        && Math.abs(mouse.y - entry.pressY) < 5)
-                                    return;
-                                if (!entry.dragActive)
-                                    widgetList.interactive = false;
-                                entry.dragActive = true;
-                                root.dragMetadata = entry.widget;
-                                const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
-                                ghost.x = point.x - ghost.width / 2;
-                                ghost.y = point.y - ghost.height / 2;
-                            }
-                            onReleased: mouse => {
-                                const wasDrag = entry.dragActive;
-                                entry.dragActive = false;
-                                widgetList.interactive = true;
-                                root.dragMetadata = null;
-                                if (wasDrag) {
-                                    const point = entry.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
-                                    root.addRequested(entry.widget.widgetId, point.x, point.y);
-                                } else {
-                                    root.toggleRequested(entry.widget.widgetId);
-                                }
-                            }
-                            onCanceled: {
-                                entry.dragActive = false;
-                                widgetList.interactive = true;
-                                root.dragMetadata = null;
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: Appearance.rounding.large
-                                color: entry.pressed ? Appearance.colors.colLayer1Active
-                                    : entry.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
-                                Behavior on color {
-                                    enabled: !Appearance.reducedMotion
-                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                                }
-                            }
-
-                            CatalogueRow {
-                                anchors.fill: parent
-                                symbol: entry.widget.icon ?? "widgets"
-                                title: entry.widget.name ?? entry.widget.widgetId
-                                subtitle: entry.widget.description ?? ""
-                                checked: root.lockTab ? root.widgetOnLock(entry.widget.widgetId) : entry.onDesktop
-                            }
+                    ParallelAnimation {
+                        id: pageEnter
+                        NumberAnimation {
+                            target: pageLoader
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
-                    }
-                }
-            }
-
-            // Lock screen section: the islands' switches, then the way back to
-            // the desktop's layout on this monitor.
-            StyledListView {
-                popin: false
-                animateAppearance: false
-                id: lockList
-                visible: root.section === "lock"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                spacing: 2
-                model: root.section === "lock" ? root.lockSwitches : []
-
-                delegate: CatalogueButton {
-                    id: lockRow
-                    required property var modelData
-                    readonly property var target: root.lockSwitchTarget(lockRow.modelData)
-                    width: lockList.width
-                    rowSymbol: lockRow.modelData.symbol
-                    rowTitle: lockRow.modelData.title
-                    rowChecked: lockRow.target[lockRow.modelData.key] ?? true
-                    onClicked: lockRow.target[lockRow.modelData.key] = !lockRow.rowChecked
-                }
-
-                footer: Item {
-                    width: lockList.width
-                    height: resetButton.implicitHeight + 12
-                    RippleButton {
-                        id: resetButton
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.bottom: parent.bottom
-                        enabled: root.anyLockFork
-                        implicitHeight: 40
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: Appearance.colors.colSecondaryContainer
-                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                        colRipple: Appearance.colors.colSecondaryContainerActive
-                        onClicked: root.lockLayoutResetRequested()
-                        contentItem: RowLayout {
-                            spacing: 6
-                            MaterialSymbol {
-                                Layout.leftMargin: 12
-                                text: "reset_wrench"
-                                iconSize: Appearance.font.pixelSize.larger
-                                color: resetButton.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOutline
-                            }
-                            StyledText {
-                                Layout.rightMargin: 12
-                                text: Translation.tr("Use desktop layout")
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: resetButton.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOutline
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Bar ──────────────────────────────────────────────────────────
-            // One list, dropped where you want it. The three buckets this
-            // replaced asked for the destination before the widget was even
-            // picked, and still only ever put it at the end of that list; the
-            // bar itself is the better target, and it previews the landing.
-            StyledListView {
-                popin: false
-                animateAppearance: false
-                id: barList
-                visible: root.section === "bar"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                spacing: 2
-                model: root.section === "bar" ? root.barRows : []
-
-                delegate: MouseArea {
-                    id: barRow
-                    required property var modelData
-                    readonly property var entry: barRow.modelData.component
-                    // Already on the bar: a click takes it off, and there is
-                    // nothing to carry - it has a place already.
-                    readonly property bool used: barRow.modelData.used === true
-
-                    width: barList.width
-                    height: 52
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    acceptedButtons: Qt.LeftButton
-                    preventStealing: true
-
-                    property real pressX: 0
-                    property real pressY: 0
-                    property bool dragActive: false
-
-                    function pointOf(mouse) {
-                        return barRow.mapToItem(root.ghostParent ?? root, mouse.x, mouse.y);
-                    }
-
-                    onPressed: mouse => {
-                        barRow.pressX = mouse.x;
-                        barRow.pressY = mouse.y;
-                        barRow.dragActive = false;
-                    }
-                    onPositionChanged: mouse => {
-                        if (!barRow.pressed || barRow.used)
-                            return;
-                        // Under the list's own threshold, and the list is shut
-                        // off the moment this wins: the bar is straight up from
-                        // here, and a drag that way is a flick to a ListView.
-                        if (!barRow.dragActive
-                                && Math.abs(mouse.x - barRow.pressX) < 5
-                                && Math.abs(mouse.y - barRow.pressY) < 5)
-                            return;
-                        if (!barRow.dragActive)
-                            barList.interactive = false;
-                        barRow.dragActive = true;
-                        root.dragMetadata = {
-                            "icon": barRow.entry.icon ?? "widgets",
-                            "name": barRow.entry.title ?? barRow.entry.id
-                        };
-                        const point = barRow.pointOf(mouse);
-                        ghost.x = point.x - ghost.width / 2;
-                        ghost.y = point.y - ghost.height / 2;
-                        root.barDragMoved(barRow.entry.id, point.x, point.y);
-                    }
-                    onReleased: mouse => {
-                        const wasDrag = barRow.dragActive;
-                        barRow.dragActive = false;
-                        barList.interactive = true;
-                        root.dragMetadata = null;
-                        // A click is still worth something: it puts the widget
-                        // at the end of the right-hand section, where the
-                        // picker this replaced started.
-                        if (!wasDrag) {
-                            if (barRow.used)
-                                root.barRemoveRequested(barRow.entry.id);
-                            else
-                                root.barAddRequested(barRow.entry.id, "right");
-                            return;
-                        }
-                        const point = barRow.pointOf(mouse);
-                        root.barDropRequested(barRow.entry.id, point.x, point.y);
-                    }
-                    onCanceled: {
-                        barRow.dragActive = false;
-                        barList.interactive = true;
-                        root.dragMetadata = null;
-                        root.barDragCancelled();
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: Appearance.rounding.large
-                        color: barRow.pressed ? Appearance.colors.colLayer1Active
-                            : barRow.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
-                        Behavior on color {
-                            enabled: !Appearance.reducedMotion
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                        NumberAnimation {
+                            target: pageTransform
+                            property: "x"
+                            from: 28 * root.navDirection
+                            to: 0
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
                     }
 
-                    CatalogueRow {
-                        anchors.fill: parent
-                        symbol: barRow.entry.icon ?? "widgets"
-                        title: barRow.entry.title ?? barRow.entry.id
-                        checked: barRow.used
-                    }
-                }
-            }
-
-            // ── Dock ─────────────────────────────────────────────────────────
-            StyledListView {
-                popin: false
-                animateAppearance: false
-                id: appList
-                visible: root.section === "dock"
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                spacing: 2
-                model: root.section === "dock" ? root.dockRows : []
-
-                delegate: Item {
-                    id: appRow
-                    required property var modelData
-                    readonly property bool isHeader: appRow.modelData.kind === "header"
-
-                    width: appList.width
-                    height: appRow.isHeader ? 42 : 52
-
-                    Loader {
-                        anchors.fill: parent
-                        active: appRow.isHeader
-                        sourceComponent: dockHeaderFace
-                    }
-
-                    // Indented under its section.
-                    Loader {
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        active: !appRow.isHeader
-                        sourceComponent: dockAppFace
-                    }
-
-                    Component {
-                        id: dockHeaderFace
-
-                        CatalogueHeader {
-                            readonly property var group: appRow.modelData.group
-                            symbol: group.icon
-                            title: group.title
-                            countText: `${group.items.length}`
-                            countHighlighted: group.key === "pinned"
-                            open: root.dockGroupExpanded(group.key)
-                            onClicked: root.toggleDockGroup(group.key)
+                    sourceComponent: {
+                        if (root.searching)
+                            return root.section === "bar" ? barListPage
+                                : root.section === "dock" ? dockAppListPage : widgetListPage;
+                        if (root.section === "widgets")
+                            return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
+                        if (root.section === "lock")
+                            return lockPage;
+                        if (root.section === "bar") {
+                            if (root.page === "appearance")
+                                return barAppearancePage;
+                            if (root.page.startsWith("component:"))
+                                return barComponentPage;
+                            return barRootPage;
                         }
-                    }
-
-                    Component {
-                        id: dockAppFace
-
-                        CatalogueButton {
-                            readonly property string appId: appRow.modelData.app.appId ?? ""
-                            rowIcon: Quickshell.iconPath(AppSearch.guessIcon(appId), "image-missing")
-                            rowTitle: appRow.modelData.app.name ?? appId
-                            rowChecked: appRow.modelData.app.pinned === true
-                            onClicked: root.dockToggleRequested(appId)
-                        }
+                        if (root.page === "appearance")
+                            return dockAppearancePage;
+                        if (root.page === "widgets")
+                            return dockWidgetsPage;
+                        if (root.page.startsWith("apps:"))
+                            return dockAppListPage;
+                        return dockRootPage;
                     }
                 }
             }
         }
     }
 
+    // ── Pages ────────────────────────────────────────────────────────────────
+
+    // The widget catalogue's root: one row per category, opening a page of its
+    // own. The count says how many of it are already placed.
+    Component {
+        id: widgetCategoriesPage
+
+        StyledListView {
+            id: categoryList
+            popin: false
+            animateAppearance: false
+            clip: true
+            spacing: 3
+            model: root.widgetGroups
+
+            delegate: EditPanelRow {
+                required property var modelData
+                required property int index
+                readonly property int added: root.widgetGroupAdded(modelData)
+                width: categoryList.width
+                first: index === 0
+                last: index === root.widgetGroups.length - 1
+                symbol: modelData.icon
+                title: modelData.title
+                valueText: added > 0 ? `${added}/${modelData.items.length}` : `${modelData.items.length}`
+                trailingKind: "chevron"
+                onActivated: root.openPage("category:" + modelData.key)
+            }
+        }
+    }
+
+    // A category's widgets, or a query's answer: a click adds or removes,
+    // a drag places the widget where the pointer is let go.
+    Component {
+        id: widgetListPage
+
+        // The empty line is a SIBLING of the list, never a child of it: a
+        // plain child of a ListView is parented into its content item, which
+        // scrolls and is zero-sized when the model is empty - exactly the case
+        // the line exists for.
+        Item {
+            StyledListView {
+                id: widgetList
+                anchors.fill: parent
+                popin: false
+                animateAppearance: false
+                clip: true
+                spacing: 3
+                model: root.widgetItems
+
+                delegate: EditPanelRow {
+                    id: widgetRow
+                    required property var modelData
+                    required property int index
+                    readonly property bool placed: root.lockTab
+                        ? root.widgetOnLock(modelData.widgetId) : root.widgetOnDesktop(modelData.widgetId)
+
+                    width: widgetList.width
+                    first: index === 0
+                    last: index === root.widgetItems.length - 1
+                    symbol: modelData.icon ?? "widgets"
+                    title: modelData.name ?? modelData.widgetId
+                    subtitle: modelData.description ?? ""
+                    trailingKind: widgetRow.placed ? "check" : "add"
+                    draggable: true
+                    dragOwner: widgetList
+
+                    onActivated: root.toggleRequested(modelData.widgetId)
+                    onDragBegan: root.dragMetadata = modelData
+                    onDragMovedTo: (x, y) => root.moveGhost(x, y)
+                    onDragFinished: (x, y) => {
+                        root.dragMetadata = null;
+                        const p = root.toGhost(x, y);
+                        root.addRequested(modelData.widgetId, p.x, p.y);
+                    }
+                    onDragCancelled: root.dragMetadata = null
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                visible: widgetList.count === 0
+                text: Translation.tr("No matches")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+        }
+    }
+
+    // The bar's root: what the bar looks like, then every component it can
+    // hold. One list, dropped where you want it - the three buckets this
+    // replaced asked for the destination before the widget was even picked.
+    Component {
+        id: barRootPage
+
+        ColumnLayout {
+            spacing: 3
+
+            EditPanelRow {
+                Layout.fillWidth: true
+                first: true
+                last: true
+                symbol: "palette"
+                title: Translation.tr("Bar appearance")
+                subtitle: Translation.tr("Position, size, corners and background")
+                onActivated: root.openPage("appearance")
+            }
+
+            EditPanelNotice {
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                visible: root.barCentreBlocked
+                text: Translation.tr("The bar's centre group is unavailable: the Dynamic Island is drawn over it. Widgets that were there have been moved to the right group.")
+            }
+
+            EditPanelSectionLabel {
+                text: Translation.tr("Widgets")
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                StyledListView {
+                    id: barList
+                    anchors.fill: parent
+                    popin: false
+                    animateAppearance: false
+                    clip: true
+                    spacing: 3
+                    model: root.barRows
+
+                    delegate: EditPanelRow {
+                        id: barRow
+                        required property var modelData
+                        required property int index
+                        readonly property var entry: modelData.component
+                        readonly property bool used: modelData.used === true
+
+                        width: barList.width
+                        first: index === 0
+                        last: index === root.barRows.length - 1
+                        symbol: entry.icon ?? "widgets"
+                        title: entry.title ?? entry.id
+                        subtitle: barRow.used ? Translation.tr("On the bar") : ""
+                        trailingKind: "chevron"
+                        draggable: !barRow.used
+                        dragOwner: barList
+
+                        // The row opens the widget's page, which is where its
+                        // looks and its group live. Adding is the drag - or
+                        // the page's own placement chips, which is the answer
+                        // for a pointer that would rather not carry anything
+                        // across the screen.
+                        onActivated: root.openPage("component:" + barRow.entry.id)
+                        onDragBegan: root.dragMetadata = {
+                            "icon": barRow.entry.icon ?? "widgets",
+                            "name": barRow.entry.title ?? barRow.entry.id
+                        }
+                        onDragMovedTo: (x, y) => {
+                            root.moveGhost(x, y);
+                            const p = root.toGhost(x, y);
+                            root.barDragMoved(barRow.entry.id, p.x, p.y);
+                        }
+                        onDragFinished: (x, y) => {
+                            root.dragMetadata = null;
+                            const p = root.toGhost(x, y);
+                            root.barDropRequested(barRow.entry.id, p.x, p.y);
+                        }
+                        onDragCancelled: {
+                            root.dragMetadata = null;
+                            root.barDragCancelled();
+                        }
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: barList.count === 0
+                    text: Translation.tr("No matches")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+            }
+        }
+    }
+
+    // The same list on its own, for a query: the appearance row above belongs
+    // to the root, not to a set of results.
+    Component {
+        id: barListPage
+
+        Item {
+            StyledListView {
+                id: barSearchList
+                anchors.fill: parent
+                popin: false
+                animateAppearance: false
+                clip: true
+                spacing: 3
+                model: root.barRows
+
+                delegate: EditPanelRow {
+                    id: barSearchRow
+                    required property var modelData
+                    required property int index
+                    readonly property var entry: modelData.component
+
+                    width: barSearchList.width
+                    first: index === 0
+                    last: index === root.barRows.length - 1
+                    symbol: entry.icon ?? "widgets"
+                    title: entry.title ?? entry.id
+                    subtitle: modelData.used === true ? Translation.tr("On the bar") : ""
+                    trailingKind: "chevron"
+                    onActivated: root.openPage("component:" + barSearchRow.entry.id)
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                visible: barSearchList.count === 0
+                text: Translation.tr("No matches")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+        }
+    }
+
+    Component {
+        id: barAppearancePage
+        EditBarAppearancePage {}
+    }
+
+    Component {
+        id: barComponentPage
+
+        EditBarComponentPage {
+            id: componentPage
+            componentId: root.page.startsWith("component:") ? root.page.substring(10) : ""
+            onPlaceRequested: bucket => root.barPlaceRequested(componentPage.componentId, bucket)
+            onRemoveRequested: root.barRemoveRequested(componentPage.componentId)
+        }
+    }
+
+    // The dock's root: how it is drawn, what it carries, and the three answers
+    // to "why is this app in the list".
+    Component {
+        id: dockRootPage
+
+        StyledFlickable {
+            id: dockRoot
+            contentHeight: dockColumn.implicitHeight
+            clip: true
+
+            ColumnLayout {
+                id: dockColumn
+                width: dockRoot.width
+                spacing: 3
+
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    first: true
+                    last: false
+                    symbol: "palette"
+                    title: Translation.tr("Dock appearance")
+                    subtitle: Translation.tr("Position, size, style and icons")
+                    onActivated: root.openPage("appearance")
+                }
+
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    first: false
+                    last: true
+                    symbol: "widgets"
+                    title: Translation.tr("Dock widgets")
+                    subtitle: Translation.tr("Media, weather, sports and the buttons")
+                    onActivated: root.openPage("widgets")
+                }
+
+                EditPanelSectionLabel {
+                    text: Translation.tr("Apps")
+                }
+
+                Repeater {
+                    model: root.dockGroups
+
+                    delegate: EditPanelRow {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        first: index === 0
+                        last: index === root.dockGroups.length - 1
+                        symbol: modelData.icon
+                        title: modelData.title
+                        valueText: `${modelData.items.length}`
+                        onActivated: root.openPage("apps:" + modelData.key)
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: 8
+                }
+            }
+        }
+    }
+
+    Component {
+        id: dockAppListPage
+
+        Item {
+            StyledListView {
+                id: appList
+                anchors.fill: parent
+                popin: false
+                animateAppearance: false
+                clip: true
+                spacing: 3
+                model: root.dockItems
+
+                delegate: EditPanelRow {
+                    required property var modelData
+                    required property int index
+                    width: appList.width
+                    first: index === 0
+                    last: index === root.dockItems.length - 1
+                    iconSource: Quickshell.iconPath(AppSearch.guessIcon(modelData.appId ?? ""), "image-missing")
+                    title: modelData.name ?? modelData.appId
+                    trailingKind: modelData.pinned === true ? "check" : "add"
+                    onActivated: root.dockToggleRequested(modelData.appId ?? "")
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                visible: appList.count === 0
+                text: Translation.tr("Nothing here")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
+            }
+        }
+    }
+
+    Component {
+        id: dockAppearancePage
+        EditDockAppearancePage {}
+    }
+
+    Component {
+        id: dockWidgetsPage
+        EditDockWidgetsPage {}
+    }
+
+    // The lock screen's own face: the switches, whatever its toolbars have
+    // been asked to hide, and the way back to the desktop's layout.
+    Component {
+        id: lockPage
+
+        StyledFlickable {
+            id: lockRoot
+            contentHeight: lockColumn.implicitHeight
+            clip: true
+
+            ColumnLayout {
+                id: lockColumn
+                width: lockRoot.width
+                spacing: 3
+
+                Repeater {
+                    model: root.lockSwitches
+
+                    delegate: EditPanelRow {
+                        required property var modelData
+                        required property int index
+                        readonly property var target: root.lockSwitchTarget(modelData)
+                        Layout.fillWidth: true
+                        first: index === 0
+                        last: index === root.lockSwitches.length - 1
+                        symbol: modelData.symbol
+                        title: modelData.title
+                        trailingKind: "switch"
+                        switchChecked: target[modelData.key] ?? true
+                        onActivated: target[modelData.key] = !(target[modelData.key] ?? true)
+                    }
+                }
+
+                EditPanelSectionLabel {
+                    visible: root.hiddenLockIslands.length > 0
+                    text: Translation.tr("Hidden from the toolbars")
+                }
+
+                Repeater {
+                    model: root.hiddenLockIslands
+
+                    delegate: EditPanelRow {
+                        required property string modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        first: index === 0
+                        last: index === root.hiddenLockIslands.length - 1
+                        symbol: root.lockIslandSymbols[modelData] ?? "widgets"
+                        title: root.lockIslandNames[modelData] ?? modelData
+                        trailingKind: "add"
+                        onActivated: root.showLockIsland(modelData)
+                    }
+                }
+
+                EditPanelRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    first: true
+                    last: true
+                    rowEnabled: root.anyLockFork
+                    symbol: "reset_wrench"
+                    title: Translation.tr("Use desktop layout")
+                    subtitle: Translation.tr("Drop the positions this screen's lock keeps of its own")
+                    trailingKind: "none"
+                    onActivated: root.lockLayoutResetRequested()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    implicitHeight: 8
+                }
+            }
+        }
+    }
+
     // The drag ghost: the row's name carried under the pointer, parented
-    // outside the reveal so it is not clipped at the drawer's edge.
+    // outside the reveal so it is not clipped at the panel's edge.
     Rectangle {
         id: ghost
         parent: root.ghostParent ?? root
@@ -987,151 +1232,6 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurface
             }
-        }
-    }
-
-    // A catalogue row's face: symbol or app icon, title, optional subtitle,
-    // and the trailing added/add mark.
-    component CatalogueRow: RowLayout {
-        id: face
-        property string symbol: ""
-        property string iconSource: ""
-        property string title: ""
-        property string subtitle: ""
-        property bool checked: false
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        spacing: 10
-
-        Loader {
-            Layout.alignment: Qt.AlignVCenter
-            sourceComponent: face.iconSource !== "" ? appIconFace : symbolFace
-        }
-        Component {
-            id: symbolFace
-            MaterialSymbol {
-                text: face.symbol
-                iconSize: 24
-                color: Appearance.colors.colOnSurface
-            }
-        }
-        Component {
-            id: appIconFace
-            IconImage {
-                implicitSize: 26
-                source: face.iconSource
-            }
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 1
-            StyledText {
-                Layout.fillWidth: true
-                text: face.title
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnSurface
-                elide: Text.ElideRight
-            }
-            StyledText {
-                Layout.fillWidth: true
-                visible: face.subtitle !== ""
-                text: face.subtitle
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-        }
-        MaterialSymbol {
-            Layout.alignment: Qt.AlignVCenter
-            text: face.checked ? "check_circle" : "add"
-            iconSize: 22
-            color: face.checked ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
-        }
-    }
-
-    // A section header: its name, how many rows are under it, and the chevron
-    // that opens it. Shared by the widget catalogue and the dock's.
-    component CatalogueHeader: MouseArea {
-        id: head
-        property string symbol: "widgets"
-        property string title: ""
-        property string countText: ""
-        property bool countHighlighted: false
-        property bool open: false
-
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Appearance.rounding.large
-            color: head.pressed ? Appearance.colors.colLayer1Active
-                : head.containsMouse ? Appearance.colors.colLayer1Hover : "transparent"
-            Behavior on color {
-                enabled: !Appearance.reducedMotion
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 10
-
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignVCenter
-                text: head.symbol
-                iconSize: 22
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-            StyledText {
-                Layout.fillWidth: true
-                text: head.title
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnSurface
-                elide: Text.ElideRight
-            }
-            StyledText {
-                Layout.alignment: Qt.AlignVCenter
-                text: head.countText
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: head.countHighlighted ? Appearance.colors.colPrimary
-                    : Appearance.colors.colOnSurfaceVariant
-            }
-            MaterialSymbol {
-                Layout.alignment: Qt.AlignVCenter
-                text: "keyboard_arrow_down"
-                iconSize: 20
-                color: Appearance.colors.colOnSurfaceVariant
-                rotation: head.open ? 0 : -90
-                Behavior on rotation {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-            }
-        }
-    }
-
-    // A click-only catalogue row (bar components, dock apps).
-    component CatalogueButton: RippleButton {
-        id: button
-        property string rowSymbol: ""
-        property string rowIcon: ""
-        property string rowTitle: ""
-        property bool rowChecked: false
-        implicitHeight: 52
-        buttonRadius: Appearance.rounding.large
-        colBackground: "transparent"
-        colBackgroundHover: Appearance.colors.colLayer1Hover
-        colRipple: Appearance.colors.colLayer1Active
-        contentItem: CatalogueRow {
-            anchors.fill: parent
-            symbol: button.rowSymbol
-            iconSource: button.rowIcon
-            title: button.rowTitle
-            checked: button.rowChecked
         }
     }
 }

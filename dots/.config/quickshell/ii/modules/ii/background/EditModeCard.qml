@@ -58,23 +58,15 @@ Item {
     // pixel over the desktop and one layer owns the boundary pixel.
     readonly property real maskBleed: -0.5
 
-    // The glass edge: ONE tone, one pixel wide, and mostly not there. A bright
-    // catch along the top and the corner arcs, almost nothing along the rest;
-    // what carries the card's presence is the shadow around it, not a drawn
-    // perimeter. A rim at one strength all the way round is a border however
-    // faint it is.
-    readonly property real edgeSpecularWidth: 1
-    readonly property color specularColor: "#ffffff"
-    // Where the light rolls off, as a fraction of the card's height: the
-    // corner arc is the piece of the outline whose normal turns from facing up
-    // to facing sideways, so it is exactly the run over which a lamp overhead
-    // stops reaching the edge.
-    readonly property real edgeRollOff: root.card.height > 0
-        ? Math.min(0.5, root.cardRadius / root.card.height) : 0
+    // The card's only edge treatment is the shadow below. There was a specular
+    // catch along the top and the corner arcs here - a one-pixel bright rim
+    // meant to read as glass - and however faint it was it read as a BORDER on
+    // the top edge, which is not what a wallpaper being edited should have. It
+    // is gone; what carries the card now is the pool of shade around it.
 
     // Everything that lives OUTSIDE the card, composited once and then cut to
     // shape. The mask is inverted, so what survives is the complement of the
-    // card: the backdrop, the outer half of the shadow, and the specular.
+    // card: the backdrop and the outer half of the shadow.
     Item {
         id: surround
         anchors.fill: parent
@@ -117,37 +109,24 @@ Item {
             visible: false
         }
 
-        // The shell's one shadow for a floating surface, at the magnitude the
-        // component defines. Most of a RectangularShadow sits UNDER its target,
-        // which the cut removes.
-        StyledRectangularShadow {
-            target: cardShape
-        }
-
-        // Drawn AFTER the shadow, because the shadow is at its darkest exactly
-        // where this is: a bright catch on the near edge of a pool of shade is
-        // the whole of what reads as glass. Grown from the card and cut back
-        // to it by the mask above, so its inner boundary IS the card's edge -
-        // to the same antialiased pixel as the corner. The bleed too, or the
-        // mask's edge moving out by it would take half of a one-pixel ring.
-        Rectangle {
-            id: edgeSpecular
-            x: root.card.x - root.edgeSpecularWidth - root.maskBleed
-            y: root.card.y - root.edgeSpecularWidth - root.maskBleed
-            width: root.card.width + 2 * (root.edgeSpecularWidth + root.maskBleed)
-            height: root.card.height + 2 * (root.edgeSpecularWidth + root.maskBleed)
-            radius: root.cardRadius > 0 ? root.cardRadius + root.edgeSpecularWidth : 0
-            antialiasing: true
-            // The roll-off happens over the CORNER, not over the flank: the
-            // top's value holds to the end of the arc and the flank's along the
-            // whole flank. The bottom is a bounce off whatever the card lies
-            // on, a hint above the flank rather than symmetric with the top.
-            gradient: Gradient {
-                GradientStop { position: 0; color: Qt.alpha(root.specularColor, 0.44) }
-                GradientStop { position: root.edgeRollOff; color: Qt.alpha(root.specularColor, 0.07) }
-                GradientStop { position: 1 - root.edgeRollOff; color: Qt.alpha(root.specularColor, 0.07) }
-                GradientStop { position: 1; color: Qt.alpha(root.specularColor, 0.13) }
-            }
+        // The card's shadow. NOT StyledRectangularShadow: that one stands down
+        // entirely when either transparency toggle is on, and on a machine with
+        // transparency the card was then left with no edge treatment at all -
+        // which is how the specular rim ended up being the only thing defining
+        // it. This one is unconditional, and it is a different shape besides:
+        // no offset (the card is lifted straight off the wallpaper, not lit
+        // from above), a blur several times the shell's own, and an alpha low
+        // enough that what the eye reads is a soft pool spreading out from
+        // under the middle rather than a drawn outline. Most of it sits UNDER
+        // the card, which the cut removes.
+        RectangularShadow {
+            anchors.fill: cardShape
+            radius: cardShape.radius
+            blur: Appearance.sizes.elevationMargin * 3.5
+            spread: Appearance.sizes.elevationMargin * 0.5
+            offset: Qt.vector2d(0, 0)
+            color: Qt.alpha(Appearance.m3colors.m3shadow, 0.5)
+            cached: true
         }
     }
 
@@ -155,8 +134,7 @@ Item {
     // `antialiasing` is what makes the corner smooth - the mask's own edge is
     // the card's edge. Nothing is drawn INSIDE the card on purpose: an outline
     // there is a border however it is coloured, and the job of defining the
-    // edge belongs to the shadow and the specular's catch, both of which vary
-    // round the perimeter the way a real edge does.
+    // edge belongs to the shadow alone.
     Item {
         id: cardShapeMask
         anchors.fill: parent

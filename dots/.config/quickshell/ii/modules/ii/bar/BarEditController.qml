@@ -101,8 +101,23 @@ Item {
         });
     }
 
+    // ── The centre, when there is no centre ──────────────────────────────────
+    // With the Dynamic Island centred in the bar, BarLayout hands the centre
+    // section an empty list whatever the store holds: the island is drawn over
+    // that stretch of bar and the widgets underneath it are not rendered at
+    // all. A drop into the centre list therefore LOOKED like the widget
+    // vanishing - it was still stored, still counted by the catalogue, and
+    // nowhere on screen. So while the island owns the centre, the centre is
+    // not a drop target at all: it is dropped from the anchors, its slots are
+    // dropped from the candidates, and a commit that somehow still names it is
+    // refused. EditModeChromeSurface's `evictBarCentre()` is the other half -
+    // it takes whatever is already stored there out, once, on the way in.
+    readonly property bool centreBlocked: ShellModePolicy.barCenterActive
+
     // ── The gesture ──────────────────────────────────────────────────────────
     function anchorFor(bucket) {
+        if (bucket === 1 && root.centreBlocked)
+            return null;
         const f = [0.1, 0.5, 0.9][bucket];
         return root.vertical
             ? root.mapToItem(null, root.width / 2, root.height * f)
@@ -134,13 +149,16 @@ Item {
     // The drawn widgets other than the one being carried, in the shape
     // barDropTarget wants them.
     function otherSlots() {
-        return root.slots.filter(s => s !== root.dragSlot).map(s => ({
-            "bucket": s.bucket, "index": s.storedIndex, "centre": s.sceneCentre()
-        }));
+        return root.slots
+            .filter(s => s !== root.dragSlot && !(root.centreBlocked && s.bucket === 1))
+            .map(s => ({
+                "bucket": s.bucket, "index": s.storedIndex, "centre": s.sceneCentre()
+            }));
     }
 
     function targetAt(scenePoint) {
-        return EditModeLogic.barDropTarget(root.otherSlots(), [0, 1, 2].map(root.anchorFor), scenePoint, root.axis);
+        const target = EditModeLogic.barDropTarget(root.otherSlots(), [0, 1, 2].map(root.anchorFor), scenePoint, root.axis);
+        return (target && target.bucket === 1 && root.centreBlocked) ? null : target;
     }
 
     function dragMoved(scenePoint) {
@@ -191,6 +209,8 @@ Item {
         const target = root.dropTarget;
         root.externalDragEnd();
         if (!GlobalStates.editMode || !target || !componentId)
+            return;
+        if (target.bucket === 1 && root.centreBlocked)
             return;
         const before = [root.snapshot(0), root.snapshot(1), root.snapshot(2)];
         const after = before.map(l => l.map(e => Object.assign({}, e)));
@@ -322,6 +342,8 @@ Item {
         root.endDrag();
         if (!GlobalStates.editMode || !slot || !target)
             return;
+        if (target.bucket === 1 && root.centreBlocked)
+            return;
         const from = slot.bucket;
         const fromIndex = slot.storedIndex;
         const before = [root.snapshot(0), root.snapshot(1), root.snapshot(2)];
@@ -364,7 +386,7 @@ Item {
     // "Center this": one centred entry at most, and the same row again
     // clears it.
     function toggleCenter(bucket, index) {
-        if (!GlobalStates.editMode || bucket !== 1)
+        if (!GlobalStates.editMode || bucket !== 1 || root.centreBlocked)
             return;
         const before = [root.snapshot(0), root.snapshot(1), root.snapshot(2)];
         const after = before.map(l => l.map(e => Object.assign({}, e)));

@@ -24,6 +24,16 @@ function reorderable(island, id) {
     return !(island === "main" && id === "password");
 }
 
+// Whether Edit Mode may take an item OFF the lock screen (Config's
+// `lock.islands.hidden`). The main island is the authentication control -
+// the fingerprint reader, the field and its confirm button - and a lock
+// screen you cannot answer is not a lock screen, so only the two side
+// islands are hideable. Everything in them is a readout or a session
+// action that the keyboard or another surface can still reach.
+function hideable(island, id) {
+    return island !== "main" && reorderable(island, id);
+}
+
 // The order the island DRAWS, resolved against its defaults:
 // - a known id missing from the stored list (written by an older version)
 //   renders at its default position rather than disappearing;

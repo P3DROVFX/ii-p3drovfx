@@ -387,6 +387,21 @@ Singleton {
     // itself because a right-click asks for one before the drawer that will
     // show it exists: the chrome is built on the way into the mode.
     property string editDrawerSection: "widgets"
+    // Which sub-page of that catalogue, "" for the section's own root. The
+    // panel navigates in place rather than expanding sections in a list, and
+    // the toolbar can send it straight to one (the bar's appearance page), so
+    // the address lives beside the section rather than inside the panel.
+    //
+    // Vocabulary, by section:
+    //   widgets  "category:<key>"
+    //   bar      "appearance" | "component:<id>"
+    //   dock     "appearance" | "widgets" | "apps:<key>"
+    //
+    // A page address belongs to the section that minted it, and the panel
+    // ignores one that does not - rather than this clearing it on every
+    // section change, which made "go to the bar's appearance page" depend on
+    // the order two assignments happen to be written in.
+    property string editDrawerPage: ""
     // Whether the catalogue's search field holds the keyboard. The chrome's
     // surface raises it while the field is focused; the desktop's canvas - the
     // mode's real key surface - reads it to know when to take the keyboard back
@@ -628,8 +643,9 @@ Singleton {
     // A right-click's way in: the mode, with the drawer already showing the
     // catalogue for what was clicked. Also the way to change catalogues when
     // the mode is already on, which is what a second right-click does.
-    function openEditCatalogue(section, screenName = "") {
+    function openEditCatalogue(section, screenName = "", page = "") {
         root.editDrawerSection = section;
+        root.editDrawerPage = page;
         root.openEditMode(screenName);
         if (!root.editMode)
             return;
@@ -674,6 +690,7 @@ Singleton {
         // greet the next entry mid-slide.
         root.editDrawerOpen = false;
         root.editDrawerSection = "widgets";
+        root.editDrawerPage = "";
         root.editDrawerDropScreen = "";
         // The lock now owns every monitor's workspace - it parks them itself
         // and restores its own record on unlock - so a restore fired here

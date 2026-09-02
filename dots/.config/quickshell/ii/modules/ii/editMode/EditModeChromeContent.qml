@@ -18,9 +18,10 @@ import qs.modules.common.functions
  * must not: a Behavior whose target moves every frame restarts every frame
  * and never ticks.
  *
- * The Lockscreen tab bar (stage 7b) will mirror the toolbar in the bottom
- * band; the widget drawer (stage 5) opens on the right. Both bands are already
- * reserved by the geometry so their arrival changes nothing about the desktop.
+ * The two tabs live on the toolbar itself, so the bottom band holds nothing
+ * and reserves only a margin (edit_mode.js's `bandBottom`); the catalogue
+ * opens on the right, into room the geometry has already taken out of the
+ * desktop's width.
  */
 Item {
     id: root
@@ -47,10 +48,13 @@ Item {
     signal tabRequested(string tab)
     signal snapToggleRequested()
     signal drawerToggleRequested()
+    // The toolbar's second way into the panel: the bar's own quick settings,
+    // which are a page of the catalogue rather than a panel of their own.
+    signal drawerPageRequested(string section, string page)
     // The drawer's gestures, relayed: the surface owns the geometry and every write.
     signal drawerAddRequested(string widgetId, real dropX, real dropY)
     signal drawerToggleWidgetRequested(string widgetId)
-    signal drawerBarAddRequested(string componentId, string bucket)
+    signal drawerBarPlaceRequested(string componentId, string bucket)
     signal drawerBarRemoveRequested(string componentId)
     signal drawerBarDragMoved(string componentId, real x, real y)
     signal drawerBarDropRequested(string componentId, real x, real y)
@@ -72,6 +76,24 @@ Item {
     // screen-sized layer surface that may take a click.
     readonly property alias toolbarItem: toolbar
 
+    // The toolbar's own body, claiming the cursor for the whole of it. Without
+    // it the gaps between the buttons - the toolbar's padding and the rules -
+    // set no cursor at all, so whatever the last surface asked for stays up
+    // and the hand the buttons DO ask for reads as intermittent rather than as
+    // the pointer answering the button. `Qt.NoButton` keeps it out of the way
+    // of every real click, and it sits under the toolbar so each button's own
+    // hand still wins over it.
+    MouseArea {
+        x: toolbar.x
+        y: toolbar.y
+        width: toolbar.width
+        height: toolbar.height
+        z: -1
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: true
+        cursorShape: Qt.ArrowCursor
+    }
+
     Toolbar {
         id: toolbar
         // Centred on the CARD rather than on the screen: the two are the same
@@ -80,19 +102,6 @@ Item {
         x: root.card.x + (root.card.width - width) / 2
         y: root.area.y + (root.card.y - root.area.y - height) * root.bandFraction
         spacing: 6
-
-        // The title, and every part of this is about it NOT reading as a
-        // control: no icon (an icon beside a word is the button shape here),
-        // the label tier in the variant role, and a rule between it and the
-        // buttons.
-        StyledText {
-            Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 10
-            text: Translation.tr("Edit layout")
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Medium
-            color: Appearance.colors.colOnSurfaceVariant
-        }
 
         // Desktop | Lockscreen. Indices are the tab list's own order; the
         // names come back through EditModeLogic so this bar and the state
@@ -117,30 +126,65 @@ Item {
             Layout.rightMargin: 4
             implicitWidth: 1
             // Short of the toolbar's height on purpose: a full-height rule
-            // reads as two containers rather than one with a title on it.
+            // reads as two containers rather than one.
             implicitHeight: Math.round(Appearance.sizes.toolbarHeight * 0.4)
             color: Appearance.colors.colOutlineVariant
         }
 
-        // The drawer's toggle. Inert until stage 5 brings the drawer; shown
-        // already so the toolbar's shape does not change under the user then.
+        // The panel's toggle, on the catalogue it opens on.
         IconAndTextToolbarButton {
             id: drawerButton
             Layout.alignment: Qt.AlignVCenter
             iconText: "widgets"
             text: Translation.tr("Add widgets")
-            toggled: GlobalStates.editDrawerOpen
-            onClicked: root.drawerToggleRequested()
+            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets"
+            onClicked: {
+                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "widgets") {
+                    root.drawerToggleRequested();
+                    return;
+                }
+                root.drawerPageRequested("widgets", "");
+            }
+        }
+
+        // The bar's own quick settings. The catalogue is where every layout
+        // edit already lives, so this is an address in it rather than a second
+        // panel: position, height, corner and background, the handful of keys
+        // that change what the bar LOOKS like, without a trip to Settings.
+        // Hidden on the Lockscreen tab, where there is no bar to edit.
+        IconAndTextToolbarButton {
+            id: barButton
+            Layout.alignment: Qt.AlignVCenter
+            visible: !GlobalStates.editLockPreview
+            iconText: "dock_to_bottom"
+            text: Translation.tr("Bar")
+            toggled: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar"
+            onClicked: {
+                if (GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === "bar") {
+                    root.drawerToggleRequested();
+                    return;
+                }
+                root.drawerPageRequested("bar", "appearance");
+            }
+
+            StyledToolTip {
+                requireOverlay: false
+                text: Translation.tr("Bar appearance and widgets")
+            }
         }
 
         // Edge snapping, drawn as state. It reads and toggles the key Settings
         // already offers rather than a switch of its own. Icon-only: the
-        // toolbar's width is the card's inset and the two labels beside it
-        // already spend the words.
+        // toolbar's width is the card's inset and the labels beside it already
+        // spend the words.
         IconToolbarButton {
             id: snapButton
             Layout.alignment: Qt.AlignVCenter
-            text: "align_horizontal_left"
+            // The guides ARE the feature - the dot lattice and the alignment
+            // lines a dragged widget latches onto. The alignment glyph this
+            // used to carry says "align these to the left", which is a
+            // different thing and the wrong promise.
+            text: Config.options.background.widgets.enableSnap ? "grid_guides" : "grid_off"
             toggled: Config.options.background.widgets.enableSnap
             onClicked: root.snapToggleRequested()
 
@@ -245,7 +289,7 @@ Item {
             onAddRequested: (widgetId, dropX, dropY) => root.drawerAddRequested(widgetId, dropX, dropY)
             onLockLayoutResetRequested: root.drawerLockLayoutResetRequested()
             onToggleRequested: widgetId => root.drawerToggleWidgetRequested(widgetId)
-            onBarAddRequested: (componentId, bucket) => root.drawerBarAddRequested(componentId, bucket)
+            onBarPlaceRequested: (componentId, bucket) => root.drawerBarPlaceRequested(componentId, bucket)
             onBarRemoveRequested: componentId => root.drawerBarRemoveRequested(componentId)
             onBarDragMoved: (componentId, x, y) => root.drawerBarDragMoved(componentId, x, y)
             onBarDropRequested: (componentId, x, y) => root.drawerBarDropRequested(componentId, x, y)

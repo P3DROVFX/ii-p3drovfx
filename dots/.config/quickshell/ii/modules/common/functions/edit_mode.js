@@ -247,26 +247,33 @@ function viewportGeometry(input) {
 
     const area = usableArea(input);
     // Two margins horizontally (outside the desktop, and between the desktop
-    // and the drawer). Vertically the desktop gives up a whole band on each
-    // side, and the band is ASYMMETRIC: an edge margin, the chrome, and a full
-    // margin - the tight gap on the outside where the toolbar floats against
-    // the screen, the generous one on the inside between it and the desktop.
+    // and the drawer). Vertically the desktop gives up a band on each side, and
+    // the two bands are NOT the same size, because only one of them holds
+    // anything: the toolbar.
     //
-    // Symmetric was the wrong shape. This axis is the one that binds on a wide
-    // screen, so both outer margins come straight off the desktop the mode
-    // exists to show: at 5120x1440 the symmetric band cost 24px of desktop
-    // height and 85px of width to put air above a toolbar that already floats
-    // over the wallpaper. With no chrome the band collapses back to one margin,
-    // which is what the geometry was before the chrome existed.
-    const band = chromeThickness > 0
+    // The top band is an edge margin, the chrome, and a full margin - the tight
+    // gap on the outside where the toolbar floats against the screen, the
+    // generous one on the inside between it and the desktop. The bottom band is
+    // a margin and nothing else. The tab bar the bottom band was reserved for
+    // never arrived (the two tabs live in the toolbar), so reserving the
+    // chrome's thickness down there spent a whole toolbar's height of desktop
+    // on air, and - because the card was then centred between two equal bands -
+    // pushed the desktop visibly UP the screen. On a 1080p screen with a
+    // vertical bar that was 68px of desktop given away and a card sitting a
+    // toolbar's height above where the eye expected it.
+    //
+    // With no chrome both bands collapse to one margin, which is what the
+    // geometry was before the chrome existed.
+    const bandTop = chromeThickness > 0
         ? edgeMargin + chromeThickness + margin : margin;
+    const bandBottom = margin;
     // Horizontally, left to right: a margin, the desktop, a margin, the
     // drawer, and the drawer's own edge gap. The last term is what stops the
     // open drawer sitting flush on the screen's edge - it was missing, so the
     // panel had a rounded right corner against nothing.
     const roomX = area.width - drawerWidth - margin * 2
         - (drawerWidth > 0 ? edgeMargin : 0);
-    const roomY = area.height - band * 2;
+    const roomY = area.height - bandTop - bandBottom;
     const scale = Math.max(MIN_SCALE,
         Math.min(MAX_SCALE, roomX / screenWidth, roomY / screenHeight));
     const width = screenWidth * scale;
@@ -274,17 +281,16 @@ function viewportGeometry(input) {
 
     return {
         scale: scale,
-        // Centred in the usable area on both axes. With no insets that is the
-        // screen's centre and `atProgress` is a concentric shrink: the offset
-        // is linear in the scale, so `x * t` is exactly the centring offset of
-        // the intermediate scale and the four margins stay equal in pairs on
-        // every frame. With insets the destination is off the screen's centre
-        // by half their difference, so what `atProgress` interpolates is a
-        // straight line from the whole screen to the card - every corner still
-        // travels straight, and the four margins are equal in pairs against the
-        // USABLE AREA at rest.
+        // Centred horizontally in the usable area, and centred vertically in
+        // what the two bands leave of it. With no insets and no chrome that is
+        // the screen's centre and `atProgress` is a concentric shrink: the
+        // offset is linear in the scale, so `x * t` is exactly the centring
+        // offset of the intermediate scale. With insets or with a chrome the
+        // destination is off the screen's centre, so what `atProgress`
+        // interpolates is a straight line from the whole screen to the card -
+        // every corner still travels straight, which is what the eye follows.
         x: area.x + (area.width - width) / 2,
-        y: area.y + (area.height - height) / 2,
+        y: area.y + bandTop + (roomY - height) / 2,
         width: width,
         height: height,
         area: area,

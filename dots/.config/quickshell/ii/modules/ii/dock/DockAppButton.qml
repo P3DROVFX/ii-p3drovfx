@@ -140,13 +140,51 @@ DockButton {
         }
     }
 
+    // ── Edit Mode: pinned, or merely here ────────────────────────────────────
+    // A dock in the mode holds two kinds of icon - the ones that are KEPT and
+    // the ones that are only open right now - and the only thing that told
+    // them apart was the colour of a 16px badge, with the pinned one's badge
+    // on the right and the unpinned one's on the left. Two neighbours put
+    // their badges in the same gap, which read as one icon wearing both.
+    //
+    // So: the badges share a corner (one icon, one badge, never a pair in the
+    // gap between two), a kept app gets a filled plate under it, and one that
+    // is only open gets a dashed outline and a dimmed icon - the shape the
+    // shell already uses for "a slot, not yet filled".
+    readonly property bool editPinned: root.appToplevel?.pinned ?? false
+
+    Loader {
+        anchors.centerIn: parent
+        z: -1
+        active: GlobalStates.editMode && (root.appToplevel?.appId ?? "") !== ""
+        width: root.buttonSize
+        height: root.buttonSize
+        sourceComponent: Item {
+            Rectangle {
+                anchors.fill: parent
+                radius: Appearance.rounding.normal
+                visible: root.editPinned
+                color: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.45)
+            }
+            DashedBorder {
+                anchors.fill: parent
+                visible: !root.editPinned
+                radius: Appearance.rounding.normal
+                borderWidth: 1
+                dashLength: 4
+                gapLength: 3
+                color: ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.6)
+            }
+        }
+    }
+
     // Edit Mode: the unpin badge, with both stores it touches in one history
     // entry.
     Loader {
         anchors.top: parent.top
         anchors.right: parent.right
         z: 11
-        active: GlobalStates.editMode && (root.appToplevel?.pinned ?? false)
+        active: GlobalStates.editMode && root.editPinned
         sourceComponent: EditRemoveBadge {
             onClicked: {
                 const appId = root.appToplevel?.appId ?? "";
@@ -169,10 +207,13 @@ DockButton {
     // from here, so the dock is arranged where it is drawn rather than only
     // from the catalogue.
     Loader {
+        // The SAME corner as the badge above, deliberately: on opposite
+        // corners two neighbouring icons put their badges together in the gap
+        // between them, and the pair read as belonging to one icon.
         anchors.top: parent.top
-        anchors.left: parent.left
+        anchors.right: parent.right
         z: 11
-        active: GlobalStates.editMode && !(root.appToplevel?.pinned ?? false)
+        active: GlobalStates.editMode && !root.editPinned
             && (root.appToplevel?.appId ?? "") !== ""
         sourceComponent: EditAddBadge {
             onClicked: {
@@ -327,6 +368,13 @@ DockButton {
     DockAppIcon {
         z: 0
         anchors.centerIn: parent
+        // Dimmed while the mode is on and the app is only open: the plate
+        // behind a kept app and the weight of its icon say the same thing
+        // twice, which is what makes the two groups readable at a glance.
+        opacity: (GlobalStates.editMode && !root.editPinned) ? 0.55 : 1
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
     }
 
     DockTooltip {

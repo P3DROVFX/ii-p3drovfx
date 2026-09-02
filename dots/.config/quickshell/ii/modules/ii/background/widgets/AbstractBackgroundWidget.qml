@@ -414,6 +414,11 @@ AbstractWidget {
     readonly property bool _positionsLocked: Config.options.background.widgets.lockWidgetPositions ?? false
     readonly property var _scaleSection: Config.options.background.widgets[configEntryName] ?? null
     readonly property bool _scaleHandleAvailable: !isPreview && draggable && !interactionLocked && widgetInstance !== null
+    // The menu is Edit Mode's, and it is offered for a PINNED widget too: the
+    // row that unpins it lives in there, so gating it on `interactionLocked`
+    // the way the resize grip is would make a pinned widget unpinnable from
+    // the desktop.
+    readonly property bool _menuHandleAvailable: !isPreview && widgetInstance !== null && editModeActive
     // The factor the widget is persisted at, whichever path stores it - what
     // the menu's Size row reads and steps from.
     readonly property real committedScaleFactor: _usesWidgetSizeKey
@@ -1469,5 +1474,70 @@ AbstractWidget {
         }
     }
 
+    // ── Menu grip ────────────────────────────────────────────────────────────
+    // The other half of the resize grip, at the opposite corner: the widget's
+    // own menu, which was reachable by right-click and by nothing else. A
+    // gesture with no drawn affordance is a gesture most people never find -
+    // the same argument the resize grip is shown throughout the mode for - so
+    // the menu gets a button of the same size, in the same family, on the same
+    // hover.
+    Item {
+        id: menuHandle
+        visible: opacity > 0.001
+        opacity: root._menuHandleAvailable
+            && !root.isDragging
+            && (root.containsMouse || menuDragArea.containsMouse || root.editModeActive) ? 1 : 0
+        scale: opacity > 0.5 ? 1 : 0.7
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(menuHandle)
+        }
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(menuHandle)
+        }
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: -6
+        anchors.topMargin: -6
+        width: 40
+        height: 40
+        z: 99
 
+        Rectangle {
+            id: menuGrip
+            anchors.centerIn: parent
+            anchors.horizontalCenterOffset: -3
+            anchors.verticalCenterOffset: 3
+            width: 22
+            height: 22
+            radius: 7
+            color: menuDragArea.containsMouse
+                ? Appearance.colors.colPrimary
+                : Appearance.colors.colSecondaryContainer
+
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(menuGrip)
+            }
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "more_horiz"
+                iconSize: 15
+                color: menuDragArea.containsMouse
+                    ? Appearance.colors.colOnPrimary
+                    : Appearance.colors.colOnSecondaryContainer
+            }
+        }
+
+        MouseArea {
+            id: menuDragArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            preventStealing: true
+            // Anchored to the grip rather than to the pointer, so the card
+            // lands in the same place however the button was clicked.
+            onClicked: mouse => root.requestContextMenu(menuGrip.x + menuGrip.width / 2 + menuHandle.x,
+                menuGrip.y + menuGrip.height + menuHandle.y)
+        }
+    }
 }

@@ -497,6 +497,22 @@ Singleton {
     // One lock island's stored order, written as one history entry. The
     // closures reach only this singleton, never the preview overlay that asked -
     // the Lockscreen tab tears that down and the stack outlives it.
+    // One lock island item hidden or shown again, as one history entry: the
+    // remove badge over the Lockscreen tab's preview, and the way back from
+    // the catalogue's own list of what is hidden.
+    function setLockIslandHidden(id, hidden) {
+        const current = EditModeLogic.listCopy(root.options.lock.islands.hidden ?? []);
+        const has = current.indexOf(id) !== -1;
+        if (has === hidden)
+            return;
+        const next = hidden ? current.concat([id]) : current.filter(entry => entry !== id);
+        root.options.lock.islands.hidden = next;
+        GlobalStates.editHistoryPush({
+            "undo": () => { root.options.lock.islands.hidden = current; },
+            "redo": () => { root.options.lock.islands.hidden = next; }
+        });
+    }
+
     function setLockIslandOrder(island, list) {
         const islands = root.options.lock.islands;
         const before = EditModeLogic.listCopy(island === "main" ? islands.main
@@ -3844,6 +3860,13 @@ Singleton {
                     property list<string> main: ["fingerprint", "password", "confirm"]
                     property list<string> left: ["battery", "capsLock", "alarm", "weather", "keyboardLayout", "keepAwake", "mode"]
                     property list<string> right: ["sleep", "power", "reboot"]
+                    // What the toolbars have been asked NOT to draw. A hide
+                    // list rather than a per-item switch: the islands' draw
+                    // order is already a list of the same ids, so one more
+                    // list is the whole of "take that one off" - which is
+                    // what Edit Mode's remove badge on the lock screen writes,
+                    // the same gesture the bar and the dock already had.
+                    property list<string> hidden: []
                 }
                 property bool showAlarm: true
                 property bool showWeather: true
