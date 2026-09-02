@@ -79,10 +79,30 @@ Item {
         }
     }
 
+    // Several island items are pills that ANIMATE their width from zero, so
+    // they carry `clip: true` to keep their content from spilling while that
+    // runs - and a clip cuts the badge in half, because the badge is the one
+    // thing here that is meant to sit on the item's own edge.
+    //
+    // Two answers, and both are wanted. The badge is drawn just INSIDE the
+    // bounds rather than hanging off the corner: these items are 44px tall and
+    // a 16px badge in the corner of one lands on the pill's own rounding,
+    // where there is nothing to cover. And the clip is lifted for as long as
+    // the badge is up, because the widths do not animate while the Lockscreen
+    // tab is being edited - the Binding restores whatever the item had the
+    // moment the mode tears this down.
+    Binding {
+        target: root.target
+        property: "clip"
+        value: false
+        when: root.hideable && root.target !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     EditRemoveBadge {
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.margins: -3
+        anchors.margins: 1
         visible: root.hideable && !root.dragging && root.itemId !== ""
         onClicked: Config.setLockIslandHidden(root.itemId, true)
     }

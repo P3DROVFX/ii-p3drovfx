@@ -155,6 +155,8 @@ Item {
         }
 
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             first: true
             last: false
@@ -167,6 +169,8 @@ Item {
         }
 
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             first: false
             last: false
@@ -182,6 +186,8 @@ Item {
         }
 
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             id: lockRow
             Layout.fillWidth: true
             first: false
@@ -198,6 +204,8 @@ Item {
         // On the Lockscreen tab a desktop widget is hidden from the lock, not
         // removed from the desktop; a lock-only one is removed outright.
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             first: false
             last: true
@@ -287,6 +295,8 @@ Item {
                     delegate: EditPanelRow {
                         required property var modelData
                         required property int index
+                        hostRadius: Appearance.rounding.windowRounding
+                        hostPadding: root.padding
                         Layout.fillWidth: true
                         first: index === 0
                         last: index === root.lockChoices.length - 1

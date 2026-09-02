@@ -51,6 +51,11 @@ MouseArea {
     // the gesture the moment it wins.
     property bool draggable: false
     property Flickable dragOwner: null
+    // Place in the fill, for the cascade a page arrives with. -1 arrives
+    // settled, which is what a row outside a run wants. ListView pages get
+    // this from the view's own `populate` transition instead; this is for the
+    // Repeater-built pages, which have no equivalent.
+    property int staggerIndex: -1
 
     signal activated()
     signal dragBegan()
@@ -69,7 +74,26 @@ MouseArea {
     // A static row must let the flick through, or a settings page cannot be
     // scrolled by dragging over the rows that fill it.
     preventStealing: root.draggable
-    opacity: root.rowEnabled ? 1 : 0.45
+    opacity: (root.rowEnabled ? 1 : 0.45) * revealProxy.opacity
+    scale: revealProxy.scale
+
+    // The cascade drives a PROXY rather than the row itself. StaggeredEntrance
+    // assigns `opacity` and `scale` on its target, and this row's opacity
+    // already carries its disabled state - an assignment would replace that
+    // rule rather than join it, so a row that is disabled later would stop
+    // dimming. Multiplying the proxy in keeps both.
+    Item {
+        id: revealProxy
+        visible: false
+        width: 0
+        height: 0
+
+        StaggeredEntrance {
+            target: revealProxy
+            index: root.staggerIndex
+            active: root.staggerIndex >= 0 && !Appearance.reducedMotion
+        }
+    }
 
     readonly property color colOn: root.selected
         ? Appearance.colors.colOnPrimary
@@ -126,8 +150,23 @@ MouseArea {
         root.dragCancelled();
     }
 
-    readonly property real rEnd: Appearance.rounding.large
-    readonly property real rSeam: Appearance.rounding.verysmall
+    // The corner of the surface this row sits on, and how far in from it the
+    // row starts. The end of a run is drawn CONCENTRIC with that surface -
+    // `hostRadius - hostPadding` - rather than at a token of its own, which is
+    // the rule the shell's other inset lists follow (EditMenuRow does the same
+    // arithmetic). Picking `rounding.large` here instead was visibly wrong on
+    // the two menu cards: their corner is `windowRounding` (18 at the default
+    // scale) and the rows were rounder than the card holding them.
+    //
+    // The defaults are the catalogue panel's own numbers, so the pages inside
+    // it need say nothing; the menus hand in theirs.
+    property real hostRadius: Appearance.rounding.verylarge
+    property real hostPadding: 14
+    readonly property real rEnd: Math.max(Appearance.rounding.verysmall, root.hostRadius - root.hostPadding)
+    // The seam between neighbours, as a fraction of the end rather than a
+    // token: at a small end radius a fixed `verysmall` seam is nearly the same
+    // corner and the run stops reading as a run.
+    readonly property real rSeam: Math.max(Appearance.rounding.unsharpen, Math.round(root.rEnd * 0.34))
     readonly property real rPressed: Math.min(root.height / 2, Appearance.rounding.large * 2)
 
     Rectangle {

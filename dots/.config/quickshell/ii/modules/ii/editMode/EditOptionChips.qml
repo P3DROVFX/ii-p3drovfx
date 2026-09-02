@@ -10,6 +10,12 @@ import qs.modules.common.widgets
  * options out as a fixed row of cards; the panel is 380px wide and four of
  * those do not fit. These wrap, and carry the icon Settings already picked for
  * each option so the two read as the same choice.
+ *
+ * Only the CHOSEN chip spends the words. Five labelled chips wrapped onto
+ * three lines is most of a page spent saying what the options are called, and
+ * the answer - which one is on - is the thing the eye is actually looking for.
+ * The rest collapse to their icon and name themselves on hover, the same trade
+ * ToolbarTabButton's `collapseInactiveLabel` makes in a narrow toolbar.
  */
 ColumnLayout {
     id: root
@@ -18,6 +24,8 @@ ColumnLayout {
     property var options: []
     property var currentValue: null
     property string lockedNote: ""
+    // Off for a choice whose icons cannot carry it on their own.
+    property bool compact: true
 
     signal selected(var value)
 
@@ -46,8 +54,12 @@ ColumnLayout {
                 required property var modelData
                 readonly property bool current: String(chip.modelData.value) === String(root.currentValue)
                 readonly property bool available: chip.modelData.enabled !== false
+                readonly property string optionLabel: chip.modelData.displayName ?? String(chip.modelData.value)
+                readonly property string optionIcon: chip.modelData.icon ?? ""
+                // An option with no icon has nothing to collapse to.
+                readonly property bool labelShown: !root.compact || chip.current || chip.optionIcon === ""
 
-                implicitWidth: chipRow.implicitWidth + 24
+                implicitWidth: chipRow.width + 24
                 implicitHeight: 38
                 radius: Appearance.rounding.full
                 opacity: chip.available ? 1 : 0.4
@@ -66,24 +78,63 @@ ColumnLayout {
                     enabled: !Appearance.reducedMotion
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(chip)
                 }
+                Behavior on implicitWidth {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(chip)
+                }
 
-                RowLayout {
+                // A Row rather than a RowLayout: the label's width is what
+                // animates, and a layout would keep its spacing around a
+                // zero-width child, leaving a gap where the word used to be.
+                Row {
                     id: chipRow
                     anchors.centerIn: parent
-                    spacing: 6
+                    spacing: chip.labelShown ? 6 : 0
+
+                    Behavior on spacing {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(chipRow)
+                    }
 
                     MaterialSymbol {
-                        visible: (chip.modelData.icon ?? "") !== ""
-                        text: chip.modelData.icon ?? ""
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: chip.optionIcon !== ""
+                        text: chip.optionIcon
                         iconSize: 18
                         fill: chip.current ? 1 : 0
                         color: chip.colOn
                     }
                     StyledText {
-                        text: chip.modelData.displayName ?? String(chip.modelData.value)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: chip.optionLabel
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: chip.colOn
+                        clip: true
+                        width: chip.labelShown ? implicitWidth : 0
+                        opacity: chip.labelShown ? 1 : 0
+
+                        Behavior on width {
+                            enabled: !Appearance.reducedMotion
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        Behavior on opacity {
+                            enabled: !Appearance.reducedMotion
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
                     }
+                }
+
+                // Below the chip, not above it: the panel's pages are clipped
+                // flickables, and a tip drawn upward from the first run of
+                // chips is cut off by the page's own top edge.
+                StyledToolTipContent {
+                    anchors.top: parent.bottom
+                    anchors.topMargin: 4
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    z: 100
+                    visible: !chip.labelShown
+                    text: chip.optionLabel
+                    shown: chipMouse.containsMouse
                 }
 
                 MouseArea {

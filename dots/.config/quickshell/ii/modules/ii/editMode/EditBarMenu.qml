@@ -79,6 +79,8 @@ Rectangle {
         // The way to this widget's looks and its group, which is a page of the
         // catalogue rather than anything this card could hold.
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             first: true
             last: false
@@ -94,6 +96,8 @@ Rectangle {
         }
 
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             visible: root.bucket === 1 && !ShellModePolicy.barCenterActive
             first: false
@@ -109,6 +113,8 @@ Rectangle {
         }
 
         EditPanelRow {
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
             Layout.fillWidth: true
             first: false
             last: true

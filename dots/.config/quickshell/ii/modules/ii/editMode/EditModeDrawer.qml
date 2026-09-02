@@ -81,6 +81,11 @@ Item {
     property int navDirection: 1
     readonly property bool atRoot: root.page === "" || root.searching
 
+    // Milliseconds between one row of a page entering and the next. The panel
+    // is 380px wide and a page is a short run of rows, so this is smaller than
+    // the transcript's: enough to read as filling, not as a queue.
+    readonly property int staggerStep: 22
+
     // 0 while a page is arriving, 1 once it has. The Behavior would animate
     // the way BACK to 0 as well, which would fade the outgoing page out before
     // fading the incoming one in - two half-second beats for one step - so the
@@ -223,15 +228,17 @@ Item {
     }
     readonly property bool barCentreBlocked: ShellModePolicy.barCenterActive
     // Every bar component, not only the ones going spare: one already on the
-    // bar is shown checked and its row still opens its page.
-    readonly property var barCatalogue: {
-        const used = root.usedBarIds;
-        return (BarComponentRegistry.allComponents ?? []).map(component => ({
-            "component": component,
-            "used": used.indexOf(component.id) !== -1,
-            "hay": root.prepared(component.title, component.id)
-        }));
-    }
+    // bar is named as such and its row still opens its page.
+    //
+    // Whether a component is PLACED is deliberately not in here. Folding it in
+    // made the model a function of `bar.layouts`, so adding or removing one
+    // component built a fresh array, reset the view, and replayed the whole
+    // list's entrance - a cascade every time you placed a widget. The rows ask
+    // `usedBarIds` for themselves instead, which re-evaluates one binding.
+    readonly property var barCatalogue: (BarComponentRegistry.allComponents ?? []).map(component => ({
+        "component": component,
+        "hay": root.prepared(component.title, component.id)
+    }))
     readonly property var barRows: root.searching ? root.fuzzyPick(root.barCatalogue) : root.barCatalogue
 
     function widgetOnDesktop(widgetId) {
@@ -779,8 +786,10 @@ Item {
 
         StyledListView {
             id: categoryList
-            popin: false
-            animateAppearance: false
+            // The page fills top-down. Only the views whose MODEL is stable
+            // get this: a view whose array is rebuilt on every placement
+            // change would replay the whole cascade each time.
+            staggerStep: root.staggerStep
             clip: true
             spacing: 3
             model: root.widgetGroups
@@ -814,8 +823,7 @@ Item {
             StyledListView {
                 id: widgetList
                 anchors.fill: parent
-                popin: false
-                animateAppearance: false
+                staggerStep: root.staggerStep
                 clip: true
                 spacing: 3
                 model: root.widgetItems
@@ -896,8 +904,7 @@ Item {
                 StyledListView {
                     id: barList
                     anchors.fill: parent
-                    popin: false
-                    animateAppearance: false
+                    staggerStep: root.staggerStep
                     clip: true
                     spacing: 3
                     model: root.barRows
@@ -907,7 +914,7 @@ Item {
                         required property var modelData
                         required property int index
                         readonly property var entry: modelData.component
-                        readonly property bool used: modelData.used === true
+                        readonly property bool used: root.usedBarIds.indexOf(barRow.entry.id) !== -1
 
                         width: barList.width
                         first: index === 0
@@ -966,8 +973,7 @@ Item {
             StyledListView {
                 id: barSearchList
                 anchors.fill: parent
-                popin: false
-                animateAppearance: false
+                staggerStep: root.staggerStep
                 clip: true
                 spacing: 3
                 model: root.barRows
@@ -983,7 +989,8 @@ Item {
                     last: index === root.barRows.length - 1
                     symbol: entry.icon ?? "widgets"
                     title: entry.title ?? entry.id
-                    subtitle: modelData.used === true ? Translation.tr("On the bar") : ""
+                    subtitle: root.usedBarIds.indexOf(barSearchRow.entry.id) !== -1
+                        ? Translation.tr("On the bar") : ""
                     trailingKind: "chevron"
                     onActivated: root.openPage("component:" + barSearchRow.entry.id)
                 }
@@ -1060,6 +1067,7 @@ Item {
                     delegate: EditPanelRow {
                         required property var modelData
                         required property int index
+                        staggerIndex: index
                         Layout.fillWidth: true
                         first: index === 0
                         last: index === root.dockGroups.length - 1
@@ -1085,6 +1093,10 @@ Item {
             StyledListView {
                 id: appList
                 anchors.fill: parent
+                // No cascade here, and no row transitions either: pinning an
+                // app genuinely moves it between groups, so this model IS a
+                // function of `dock.pinnedApps` and is rebuilt on every click.
+                // Animated, the whole list would replay its entrance each time.
                 popin: false
                 animateAppearance: false
                 clip: true
@@ -1146,6 +1158,7 @@ Item {
                         required property var modelData
                         required property int index
                         readonly property var target: root.lockSwitchTarget(modelData)
+                        staggerIndex: index
                         Layout.fillWidth: true
                         first: index === 0
                         last: index === root.lockSwitches.length - 1
@@ -1168,6 +1181,7 @@ Item {
                     delegate: EditPanelRow {
                         required property string modelData
                         required property int index
+                        staggerIndex: index
                         Layout.fillWidth: true
                         first: index === 0
                         last: index === root.hiddenLockIslands.length - 1

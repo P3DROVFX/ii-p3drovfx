@@ -95,6 +95,7 @@ StyledFlickable {
             delegate: EditPanelRow {
                 required property var modelData
                 required property int index
+                staggerIndex: index
                 Layout.fillWidth: true
                 first: index === 0
                 last: index === root.styleOptions.length - 1

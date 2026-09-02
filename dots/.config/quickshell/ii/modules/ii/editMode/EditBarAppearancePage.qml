@@ -31,10 +31,9 @@ StyledFlickable {
         width: root.width
         spacing: 4
 
-        EditPanelSectionLabel {
-            text: Translation.tr("Placement")
-        }
-
+        // No standalone section heading above a group that already names
+        // itself: "Placement" over "Position" was two labels two pixels apart
+        // saying the same thing, and it read as one line drawn twice.
         EditOptionChips {
             label: Translation.tr("Position")
             currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
@@ -92,11 +91,8 @@ StyledFlickable {
             onActivated: Config.options.bar.autoHide.enable = !Config.options.bar.autoHide.enable
         }
 
-        EditPanelSectionLabel {
-            text: Translation.tr("Style")
-        }
-
         EditOptionChips {
+            Layout.topMargin: 10
             label: Translation.tr("Corner style")
             currentValue: Config.options.bar.cornerStyle
             options: {
@@ -115,8 +111,21 @@ StyledFlickable {
             }
         }
 
-        EditOptionChips {
+        EditPanelRow {
+            Layout.fillWidth: true
             Layout.topMargin: 6
+            visible: Config.options.bar.cornerStyle === 1
+            first: true
+            last: true
+            symbol: "shadow"
+            title: Translation.tr("Shadow in Float style")
+            trailingKind: "switch"
+            switchChecked: Config.options.bar.floatStyleShadow ?? true
+            onActivated: Config.options.bar.floatStyleShadow = !(Config.options.bar.floatStyleShadow ?? true)
+        }
+
+        EditOptionChips {
+            Layout.topMargin: 10
             label: Translation.tr("Background")
             currentValue: Config.options.bar.barBackgroundStyle
             lockedNote: root.locked
@@ -146,7 +155,7 @@ StyledFlickable {
         }
 
         EditOptionChips {
-            Layout.topMargin: 6
+            Layout.topMargin: 10
             label: Translation.tr("Widget groups")
             currentValue: Config.options.bar.barGroupStyle
             options: [
@@ -157,9 +166,12 @@ StyledFlickable {
             onSelected: value => Config.options.bar.barGroupStyle = value
         }
 
+        EditPanelSectionLabel {
+            text: Translation.tr("Effects")
+        }
+
         EditPanelRow {
             Layout.fillWidth: true
-            Layout.topMargin: 6
             visible: Config.options.bar.barGroupStyle !== 2
             first: true
             last: false
@@ -172,7 +184,6 @@ StyledFlickable {
 
         EditPanelRow {
             Layout.fillWidth: true
-            Layout.topMargin: Config.options.bar.barGroupStyle !== 2 ? 0 : 6
             first: Config.options.bar.barGroupStyle === 2
             last: Config.options.bar.barBackgroundStyle !== 0
             symbol: "format_color_fill"
@@ -205,6 +216,86 @@ StyledFlickable {
             trailingKind: "switch"
             switchChecked: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
             onActivated: Config.options.bar.dropShadow = !Config.options.bar.dropShadow
+        }
+
+        // The shell's fake screen corners. It is an `appearance` key rather
+        // than a `bar` one, and it belongs on this page anyway: what it draws
+        // is a frame around the bar, and choosing it anywhere else means
+        // leaving the mode to see the two together.
+        EditOptionChips {
+            Layout.topMargin: 10
+            label: Translation.tr("Fake screen rounding")
+            currentValue: Config.options.appearance.fakeScreenRounding
+            lockedNote: root.locked
+                ? Translation.tr("Wrapped and Edge would be drawn over the Dynamic Island, so they are unavailable while it sits in the bar's centre.")
+                : ""
+            options: [
+                { "displayName": Translation.tr("No"), "icon": "close", "value": 0 },
+                { "displayName": Translation.tr("Yes"), "icon": "check", "value": 1 },
+                { "displayName": Translation.tr("Not fullscreen"), "icon": "fullscreen_exit", "value": 2 },
+                { "displayName": Translation.tr("Wrapped"), "icon": "capture", "value": 3, "enabled": !root.locked },
+                { "displayName": Translation.tr("Edge"), "icon": "border_bottom", "value": 4, "enabled": !root.locked }
+            ]
+            onSelected: value => Config.options.appearance.fakeScreenRounding = value
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            visible: Config.options.appearance.fakeScreenRounding === 3
+            first: true
+            last: true
+            symbol: "line_weight"
+            title: Translation.tr("Wrapped frame thickness")
+            trailingKind: "stepper"
+            valueText: Config.options.appearance.wrappedFrameThickness + " px"
+            stepDownEnabled: Config.options.appearance.wrappedFrameThickness > 5
+            stepUpEnabled: Config.options.appearance.wrappedFrameThickness < 25
+            onStepDown: Config.options.appearance.wrappedFrameThickness =
+                Math.max(5, Config.options.appearance.wrappedFrameThickness - 1)
+            onStepUp: Config.options.appearance.wrappedFrameThickness =
+                Math.min(25, Config.options.appearance.wrappedFrameThickness + 1)
+        }
+
+        // The shell's own corner radius, which every surface - the bar, its
+        // widget groups, this panel - is a multiple of. It is the other half
+        // of "how round is the bar", and changing it here shows the answer on
+        // the bar being edited instead of behind a Settings page.
+        //
+        // `sharpMode` is written alongside it, the way Settings' own slider
+        // does: several surfaces read that flag rather than the number.
+        EditPanelRow {
+            readonly property int radiusValue: Config.options.appearance.roundingValue >= 0
+                ? Config.options.appearance.roundingValue : 24
+            function setRadius(value) {
+                const next = Math.max(0, Math.min(48, value));
+                Config.options.appearance.roundingValue = next;
+                Config.options.appearance.sharpMode = (next === 0);
+            }
+
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            symbol: "rounded_corner"
+            title: Translation.tr("Shell corner radius")
+            subtitle: Translation.tr("Every surface, this panel included")
+            trailingKind: "stepper"
+            valueText: radiusValue === 0 ? Translation.tr("Sharp") : radiusValue + " px"
+            stepDownEnabled: radiusValue > 0
+            stepUpEnabled: radiusValue < 48
+            onStepDown: setRadius(radiusValue - 2)
+            onStepUp: setRadius(radiusValue + 2)
+        }
+
+        // The rest - the expressive colour theme, the top-left brand icon -
+        // is a page of forms rather than a handful of switches, and this page
+        // is not the place to mirror it.
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            symbol: "settings"
+            title: Translation.tr("All bar settings")
+            trailingKind: "chevron"
+            onActivated: GlobalStates.openSettingsPage("bar")
         }
 
         Item {

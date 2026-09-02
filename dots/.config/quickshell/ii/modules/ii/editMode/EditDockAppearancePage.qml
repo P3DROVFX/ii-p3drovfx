@@ -34,10 +34,7 @@ StyledFlickable {
         width: root.width
         spacing: 4
 
-        EditPanelSectionLabel {
-            text: Translation.tr("Placement")
-        }
-
+        // No standalone heading above a group that already names itself.
         EditOptionChips {
             label: Translation.tr("Position")
             currentValue: Config.options.dock.position
@@ -66,11 +63,8 @@ StyledFlickable {
             onStepUp: Config.options.dock.height = Math.min(200, Config.options.dock.height + 2)
         }
 
-        EditPanelSectionLabel {
-            text: Translation.tr("Shape")
-        }
-
         EditOptionChips {
+            Layout.topMargin: 10
             label: Translation.tr("Dock style")
             currentValue: root.dockStyle
             options: [
