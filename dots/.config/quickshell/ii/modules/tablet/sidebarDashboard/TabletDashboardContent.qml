@@ -69,6 +69,14 @@ Item {
 
     property bool editMode: false
 
+    // Back closes the innermost thing first. A quick toggle's dialog sits on top of this
+    // sheet, so it has to come off before the sheet does; the twelve booleans above are
+    // local state with nothing global to inspect, hence a registered closer.
+    onAnyDialogVisibleChanged: TransientLayerRegistry.set("tabletShadeDialog",
+                                                          root.anyDialogVisible,
+                                                          () => root.closeAllDialogs())
+    Component.onDestruction: TransientLayerRegistry.remove("tabletShadeDialog")
+
     // Content reveal rides the drag instead of the ii sidebar's entrance animations, which
     // only started once the finger was released. Sections slide down from the top edge and
     // grow a touch as the sheet comes out; it finishes before the sheet does so the shade is

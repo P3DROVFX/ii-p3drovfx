@@ -33,6 +33,21 @@ Singleton {
      * back is once there is nothing left to pop.
      */
     function back() {
+        // Innermost first, and a dialog or a menu is innermost. Closing the shade out from
+        // under an open quick-toggle dialog is not going back — it is going two steps back
+        // and losing the first one.
+        if (TransientLayerRegistry.closeTop())
+            return true;
+        // The keyboard is over everything else it did not open, so it comes off before any
+        // of it. Only when the user did not pin it: a pinned keyboard is furniture.
+        if (GlobalStates.oskOpen && !(Config.options?.osk?.pinnedOnStartup ?? false)) {
+            GlobalStates.oskOpen = false;
+            return true;
+        }
+        if (GlobalStates.shellSwitcherOpen) {
+            GlobalStates.shellSwitcherOpen = false;
+            return true;
+        }
         if (GlobalStates.tabletAppId.length > 0) {
             GlobalStates.closeTabletApp();
             return true;

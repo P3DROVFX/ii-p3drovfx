@@ -57,11 +57,16 @@ Item {
         root.originX = x;
         root.originY = y;
         root.opened = true;
+        // Back dismisses the menu before it dismisses the drawer it is drawn inside.
+        TransientLayerRegistry.push("tabletDrawerMenu", () => root.close());
     }
 
     function close() {
         root.opened = false;
+        TransientLayerRegistry.remove("tabletDrawerMenu");
     }
+
+    Component.onDestruction: TransientLayerRegistry.remove("tabletDrawerMenu")
 
     // Dismissal is a tap anywhere else, which is the only gesture available without a
     // second surface to grab focus with.

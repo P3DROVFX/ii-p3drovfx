@@ -32,6 +32,7 @@ Loader {
             return;
         closing = false;
         active = true;
+        TransientLayerRegistry.push("tabletDockOverflow", () => root.close());
         if (item)
             item.startOpenAnimation();
     }
@@ -40,9 +41,12 @@ Loader {
         if (!active || closing)
             return;
         closing = true;
+        TransientLayerRegistry.remove("tabletDockOverflow");
         if (item)
             item.startCloseAnimation();
     }
+
+    Component.onDestruction: TransientLayerRegistry.remove("tabletDockOverflow")
 
     function raiseApp(appId) {
         const normalized = TaskbarApps.normalizeAppId(appId);

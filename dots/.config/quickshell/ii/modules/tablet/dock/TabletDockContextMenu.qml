@@ -26,6 +26,8 @@ Loader {
             return;
         closing = false;
         active = true;
+        // Back dismisses the menu rather than the surface under it.
+        TransientLayerRegistry.push("tabletDockContextMenu", () => root.close());
         if (item)
             item.startOpenAnimation();
     }
@@ -34,9 +36,12 @@ Loader {
         if (!active || closing)
             return;
         closing = true;
+        TransientLayerRegistry.remove("tabletDockContextMenu");
         if (item)
             item.startCloseAnimation();
     }
+
+    Component.onDestruction: TransientLayerRegistry.remove("tabletDockContextMenu")
 
     active: false
     visible: active
