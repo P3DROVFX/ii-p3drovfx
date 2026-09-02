@@ -432,7 +432,26 @@ Item {
             NoticeBox {
                 Layout.fillWidth: true
                 materialIcon: "swipe"
-                text: Translation.tr("The top edge pulls down the shade, the bottom edge opens the app drawer, and swiping across the wallpaper moves between home screens. Those three are owned by this family and are not rebindable.")
+                text: Translation.tr("The top edge pulls down the shade and swiping across the wallpaper moves between home screens. Those two are owned by this family and are not rebindable.")
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "swipe_up"
+                title: Translation.tr("Bottom edge")
+                tooltip: Translation.tr("Android's layout: up is Home, up from the home screen opens the app drawer, and up-and-hold opens Recents. App drawer only keeps the older behaviour, where this edge does one thing — at the cost of Home and Recents having no gesture.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.gestures.bottomEdge
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.gestures.bottomEdge = newValue;
+                    }
+                    options: [
+                        { value: "android", icon: "home", displayName: Translation.tr("Home, drawer, recents") },
+                        { value: "drawer", icon: "apps", displayName: Translation.tr("App drawer only") }
+                    ]
+                }
             }
 
             ContentSubsection {

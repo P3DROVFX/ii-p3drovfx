@@ -46,5 +46,8 @@ Scope {
         }
     }
 
-    TabletAppDrawerDragHandler {}
+    // The bottom edge is navigation now, not a drawer accessory: it decides between Home,
+    // the drawer and Recents. TabletBottomEdgeHandler owns it and drives this drawer's
+    // controller when the drag is one the drawer should follow. Instantiated by the family
+    // rather than here, so one edge has one owner.
 }

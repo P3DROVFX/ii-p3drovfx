@@ -1146,6 +1146,7 @@ Singleton {
             "lock.centerAlignment": ["vertical", "horizontal"],
             "lock.touchKeyboard.show": ["auto", "always", "never"],
             "tablet.gestures.sideEdges": ["back", "policies", "none"],
+            "tablet.gestures.bottomEdge": ["android", "drawer"],
             "lock.touchKeyboard.mode": ["text", "pin"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
@@ -1532,6 +1533,17 @@ Singleton {
                      *              is bound under Edge and corner bindings.
                      */
                     property string sideEdges: "back"
+
+                    /**
+                     * What swiping up from the bottom edge does.
+                     *
+                     * "android" — up is Home; up from the home screen opens the app drawer,
+                     *             following the finger; up and hold opens Recents.
+                     * "drawer"  — the edge only ever opens the drawer, as it did before.
+                     *             Keeps the old muscle memory, at the cost of Home and
+                     *             Recents having no gesture at all.
+                     */
+                    property string bottomEdge: "android"
                 }
 
                 property JsonObject appDrawer: JsonObject {

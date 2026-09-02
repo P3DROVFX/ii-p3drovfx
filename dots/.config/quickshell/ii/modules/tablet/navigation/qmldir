@@ -1,3 +1,4 @@
 singleton TabletNavigation 1.0 TabletNavigation.qml
 TabletSideEdgeDragHandler 1.0 TabletSideEdgeDragHandler.qml
 TabletSystemKeybinds 1.0 TabletSystemKeybinds.qml
+TabletBottomEdgeHandler 1.0 TabletBottomEdgeHandler.qml

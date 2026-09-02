@@ -279,6 +279,9 @@ Scope {
         component: TouchGestures {}
     }
 
+    // The bottom edge: Home, or the drawer from the home screen, or Recents on a hold.
+    TabletBottomEdgeHandler {}
+
     // Claims the top edge for the shade pull-down. Registering here rather than from
     // inside the service keeps qs.services free of any panel-family dependency; the
     // handler unregisters itself when the family unloads.
