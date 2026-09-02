@@ -73,6 +73,17 @@ Item {
                         text: Translation.tr("Open or close the virtual keyboard on screen")
                     }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "splitscreen"
+                    text: Translation.tr("Split the keyboard for thumb typing")
+                    checked: Config.options.osk.split
+                    onCheckedChanged: Config.options.osk.split = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Pushes the two halves apart with an empty middle. On a tablet held in two hands the middle columns of a full-width keyboard are out of reach of either thumb.")
+                    }
+                }
             }
         }
 

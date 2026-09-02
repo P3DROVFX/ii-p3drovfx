@@ -31,17 +31,52 @@ Item {
     }
     readonly property var deck: Layouts.deckFor(root.layoutCode)
 
+    /**
+     * Thumb typing: the two halves pushed apart, with the middle left empty.
+     *
+     * A full-width keyboard on an 11" tablet held in two hands puts the middle columns out
+     * of reach of either thumb — you have to let go of the device to type. Android and One UI
+     * both offer a split for exactly this, and this family is landscape-only, which is the
+     * posture that needs it.
+     *
+     * Implemented as an offset rather than as a second layout. Every key already knows its
+     * own column on a unit grid, so "which half" is a question about that column and the
+     * split is one term added to x. A separate split layout per language would be a second
+     * copy of layouts.js to keep in step with the first.
+     */
+    property bool split: false
+    /// Width of the empty middle, in grid units. Wide enough to be a gap rather than a seam.
+    readonly property real splitUnits: root.split ? root.deck.units * 0.16 : 0
+    /// Keys whose centre falls past this column belong to the right hand.
+    readonly property real splitColumn: root.deck.units / 2
+
     readonly property real rowUnits: root.deck.rows.length - 1 + root.deck.fnRowScale
-    readonly property real unitWidth: root.width / root.deck.units
+    // The gap is part of the width the keys have to share, or splitting would push the right
+    // half off the end of the dock.
+    readonly property real unitWidth: root.width / (root.deck.units + root.splitUnits)
     readonly property real unitHeight: root.height / root.rowUnits
+    readonly property real splitGap: root.splitUnits * root.unitWidth
+
+    /// How far right a key sits because of the split. Measured from the key's centre, so a
+    /// wide key straddling the middle stays with the hand that most of it is under — the
+    /// space bar therefore bridges the gap rather than being cut in two. Splitting it would
+    /// mean editing every layout in layouts.js, which is the second copy this whole approach
+    /// exists to avoid.
+    function splitOffsetFor(key) {
+        if (!root.split)
+            return 0;
+        return (key.at + key.u / 2) >= root.splitColumn ? root.splitGap : 0;
+    }
 
     // Glyphs scale with the smaller side, or a wide dock would print letters too tall for their key.
     readonly property real glyphUnit: Math.min(root.unitWidth, root.unitHeight)
 
     readonly property real fnRowHeight: root.unitHeight * root.deck.fnRowScale
+    // The cluster lives on the right, so it travels with the right hand.
     readonly property real clusterLeft: (root.deck.units - root.deck.clusterUnits) * root.unitWidth
+        + root.splitGap
 
-    implicitWidth: root.deck.units * root.preferredUnit
+    implicitWidth: (root.deck.units + root.splitUnits) * root.preferredUnit
     implicitHeight: root.rowUnits * root.preferredUnit
 
     // The F-row is the only short one, so every row below it starts a whole unit further down.
@@ -62,7 +97,7 @@ Item {
 
         required property var modelData
 
-        x: cell.modelData.at * root.unitWidth
+        x: cell.modelData.at * root.unitWidth + root.splitOffsetFor(cell.modelData)
         width: cell.modelData.u * root.unitWidth
         height: parent ? parent.height : 0
 

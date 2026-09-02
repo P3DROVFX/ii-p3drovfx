@@ -114,6 +114,7 @@ PanelWindow {
             anchors.rightMargin: root.padding
             anchors.topMargin: root.padding
             pinned: root.pinned
+            split: Config.options?.osk?.split ?? false
 
             onActionTriggered: action => {
                 if (action === "pin")

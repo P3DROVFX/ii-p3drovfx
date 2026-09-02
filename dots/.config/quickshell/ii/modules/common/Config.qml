@@ -3967,6 +3967,12 @@ Singleton {
                 // The small shift and AltGr glyphs in the corners of a deck key.
                 property bool secondaryGlyphs: true
                 property bool pinnedOnStartup: false
+                /**
+                 * Pushes the two halves apart with an empty middle, for typing with thumbs
+                 * while holding the device. On a tablet held in two hands the middle columns
+                 * of a full-width keyboard are out of reach of either thumb.
+                 */
+                property bool split: false
 
                 // Raises the keyboard when a text field is focused by finger or pen.
                 // Requires the osk_autoshow helper (see scripts/osk/README.md).
