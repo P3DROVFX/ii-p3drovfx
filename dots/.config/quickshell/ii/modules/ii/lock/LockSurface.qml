@@ -21,6 +21,16 @@ MouseArea {
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
 
+    // ── Touch keyboard ──────────────────────────────────────────────────────
+    // A layer-shell keyboard cannot appear over a session lock, so a family with no physical
+    // keyboard has no way in unless the lock surface draws one itself. "auto" means the
+    // touch-first families get it without having to know it exists.
+    readonly property string touchKeyboardShowMode: Config.options.lock.touchKeyboard?.show ?? "auto"
+    readonly property bool touchKeyboardAvailable: root.touchKeyboardShowMode === "always"
+        || (root.touchKeyboardShowMode === "auto" && PanelFamily.touchFirst)
+    property bool touchKeyboardOpen: true
+    readonly property bool touchKeyboardShown: root.touchKeyboardAvailable && root.touchKeyboardOpen
+
     // Force focus on entry
     function forceFieldFocus() {
         passwordBox.forceActiveFocus();
@@ -471,12 +481,45 @@ MouseArea {
 
 
     // Main toolbar: password box
+    // The keyboard the lock surface draws for itself. It sits at the bottom and the three
+    // islands ride up above it — the same thing Android does when a field is focused, and the
+    // reason mainIsland's bottomMargin already had a Behavior on it.
+    Loader {
+        id: touchKeyboardLoader
+        active: root.touchKeyboardAvailable
+        visible: root.touchKeyboardShown || opacity > 0.01
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            bottomMargin: 12
+        }
+        // Explicit, not implicit: a Loader anchored on three sides has a width but no height,
+        // and mainIsland's margin reads this back to know how far to lift.
+        height: touchKeyboardLoader.item?.implicitHeight ?? 0
+        opacity: root.touchKeyboardShown ? 1 : 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        sourceComponent: LockTouchKeyboard {
+            context: root.context
+            shown: root.touchKeyboardShown
+            mode: Config.options.lock.touchKeyboard?.mode ?? "text"
+            onSubmitRequested: root.context.tryUnlock()
+        }
+    }
+
     Toolbar {
         id: mainIsland
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom
-            bottomMargin: 20
+            // Cleared by the keyboard when it is up, so the field being typed into is never
+            // the thing the keyboard covers.
+            bottomMargin: root.touchKeyboardShown
+                ? (touchKeyboardLoader.height + touchKeyboardLoader.anchors.bottomMargin + 20)
+                : 20
         }
         Behavior on anchors.bottomMargin {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -702,7 +745,7 @@ MouseArea {
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || keepAwakeButton.visible || modeButton.visible
+        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || touchKeyboardButton.visible || keepAwakeButton.visible || modeButton.visible
 
         ToolbarButton {
             id: batteryButton
@@ -1032,6 +1075,34 @@ MouseArea {
             
             onClicked: {
                 layoutDialog.toggle();
+            }
+        }
+
+        ToolbarButton {
+            // Only ever offered when a keyboard is actually being drawn. Someone using a
+            // physical keyboard never sees a control for one they do not have.
+            id: touchKeyboardButton
+            Layout.fillHeight: true
+            implicitWidth: height
+            visible: root.touchKeyboardAvailable
+            pointingHandCursor: false
+            toggled: root.touchKeyboardShown
+
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            colBackgroundToggled: Appearance.colors.colPrimary
+
+            onClicked: root.touchKeyboardOpen = !root.touchKeyboardOpen
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: root.touchKeyboardShown ? "keyboard_hide" : "keyboard"
+                iconSize: 20
+                fill: 1
+                color: root.touchKeyboardShown
+                    ? Appearance.colors.colOnPrimary
+                    : Appearance.colors.colOnSecondaryContainer
             }
         }
 

@@ -1144,6 +1144,8 @@ Singleton {
             "cheatsheet.aminoAcidScheme": ["five", "seven", "four"],
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
             "lock.centerAlignment": ["vertical", "horizontal"],
+            "lock.touchKeyboard.show": ["auto", "always", "never"],
+            "lock.touchKeyboard.mode": ["text", "pin"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
             "lock.notifications.defaultPolicy": ["show", "hide"],
@@ -3817,6 +3819,21 @@ Singleton {
                         // [{ finger: "right-index-finger", label: "Trigger finger" }]
                         property list<var> labels: []
                     }
+                }
+                /**
+                 * A keyboard drawn inside the lock surface itself.
+                 *
+                 * The regular on-screen keyboard is a layer-shell surface and the session
+                 * lock protocol covers every layer, so it cannot appear here. Without this,
+                 * a device with no physical keyboard cannot be unlocked at all — which is
+                 * why "auto" turns it on for touch-first families rather than leaving it to
+                 * be discovered.
+                 */
+                property JsonObject touchKeyboard: JsonObject {
+                    // "auto" | "always" | "never". Auto = on in a touch-first family.
+                    property string show: "auto"
+                    // "text" (qwerty) or "pin" (numeric pad), for a numeric password.
+                    property string mode: "text"
                 }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
