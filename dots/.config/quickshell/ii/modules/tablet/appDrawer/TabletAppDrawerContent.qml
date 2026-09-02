@@ -204,6 +204,20 @@ Item {
     /// Tall enough for the tile's own contents and no taller. The grid's cell height leaves
     /// deliberate air around each tile so rows breathe; a single row of six inherits that as
     /// a band of dead space under the labels instead.
+    /**
+     * How tall the predicted band is, worked out from numbers that are known immediately.
+     *
+     * This matters more than it looks. The band lives in the grid's top margin, and a margin
+     * that arrives a frame late leaves the view resting somewhere that is no longer the top —
+     * which is exactly how three earlier attempts ended up opening the drawer halfway down
+     * the app list. Measuring a child's implicit height is what made it late; a sum of
+     * constants is correct on the first frame and needs no correction afterwards.
+     */
+    readonly property real suggestionsBandHeight: root.suggestedApps.length > 0
+        ? Math.round(Appearance.font.pixelSize.smaller * 1.7 + 6
+                     + root.suggestionTileHeight + root.outerMargin * 0.9)
+        : 0
+
     readonly property real suggestionTileHeight: Math.round(
         root.appIconSize + 6 + Appearance.font.pixelSize.smaller * 2.4 + 18)
 
@@ -742,60 +756,6 @@ Item {
             }
         }
 
-        // A predicted row, above the alphabet. See root.suggestedApps for when it appears.
-        ColumnLayout {
-            id: suggestions
-            Layout.fillWidth: true
-            visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
-            // A predicted row and the alphabet below it are two different lists. Without a
-            // gap wider than the column's own spacing they read as one grid whose first row
-            // happens to be out of order.
-            Layout.bottomMargin: suggestions.visible ? Math.round(root.outerMargin * 0.9) : 0
-            spacing: 2
-
-            StyledText {
-                Layout.leftMargin: 4
-                text: Translation.tr("Most used")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                Repeater {
-                    model: root.suggestedApps
-
-                    delegate: TabletAppTile {
-                        id: suggestionTile
-                        required property var modelData
-
-                        Layout.preferredWidth: root.tileWidth
-                        Layout.preferredHeight: root.suggestionTileHeight
-                        entry: suggestionTile.modelData
-                        iconSize: root.appIconSize
-
-                        onActivated: {
-                            suggestionTile.modelData.execute();
-                            root.dismissRequested();
-                        }
-                        onHeld: {
-                            if (root.drawerConfig?.longPressMenu ?? true)
-                                root.openAppMenu(suggestionTile, suggestionTile.modelData);
-                            else
-                                root.appHeld(suggestionTile.modelData.id);
-                        }
-                        onContextRequested: root.openAppMenu(suggestionTile, suggestionTile.modelData)
-                    }
-                }
-
-                // Left-aligned: the row is short and centring it would leave the grid below
-                // starting in a different column, which reads as two unrelated lists.
-                Item { Layout.fillWidth: true }
-            }
-        }
-
         // The body is either the app grid or, once a tool is chosen, that tool's panel.
         Item {
             id: body
@@ -854,7 +814,8 @@ Item {
                 // the wash. What shows through here is the backdrop, which is the point.
                 /// How much of the top fade is in. Zero at rest, so the first row is not
                 /// dimmed until there is something above it to have scrolled past.
-                property real topFade: Math.max(0, Math.min(1, (appGrid.contentY - appGrid.originY) / 48))
+                property real topFade: Math.max(0, Math.min(1,
+                    (appGrid.contentY - appGrid.originY + appGrid.topMargin) / 48))
 
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -889,6 +850,9 @@ Item {
                     : (letterRail.width > 0 ? letterRail.width + 8 : 0)
                 visible: root.activeToolId.length === 0
                 enabled: visible
+
+                /// Room for the predicted band, which is parented into contentItem below.
+                topMargin: root.activeToolId.length === 0 ? root.suggestionsBandHeight : 0
 
                 cellWidth: root.tileWidth
                 cellHeight: root.tileHeight
@@ -1001,6 +965,71 @@ Item {
                             // the legacy direct add-to-home shortcut.
                             if (!appCell.isSystemApp)
                                 root.openAppMenu(appTile, appCell.modelData.entry);
+                        }
+                    }
+                }
+            }
+
+
+            /**
+             * The predicted row, scrolling with the apps rather than pinned above them.
+             *
+             * Parented into the grid's own contentItem: that is the item scrolling moves, so
+             * the band travels with the list without anything computing an offset from
+             * contentY. Every previous attempt did compute one, and every one of them drifted
+             * — the view's idea of the top and the band's position were two separate things
+             * that had to be kept in step across the model filling, the strip measuring and
+             * the reveal animating.
+             *
+             * It sits at -height, i.e. in the top margin the grid reserves for it, which is
+             * why that margin has to be a number known from the first frame.
+             */
+            Item {
+                id: suggestionsBand
+                parent: appGrid.contentItem
+                y: -height
+                width: appGrid.width
+                height: root.suggestionsBandHeight
+                visible: root.suggestedApps.length > 0 && root.activeToolId.length === 0
+
+                StyledText {
+                    id: suggestionsLabel
+                    x: 4
+                    y: 0
+                    text: Translation.tr("Most used")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                }
+
+                Row {
+                    anchors.left: parent.left
+                    anchors.top: suggestionsLabel.bottom
+                    anchors.topMargin: 6
+                    spacing: 0
+
+                    Repeater {
+                        model: root.suggestedApps
+
+                        delegate: TabletAppTile {
+                            id: suggestionTile
+                            required property var modelData
+
+                            width: root.tileWidth
+                            height: root.suggestionTileHeight
+                            entry: suggestionTile.modelData
+                            iconSize: root.appIconSize
+
+                            onActivated: {
+                                suggestionTile.modelData.execute();
+                                root.dismissRequested();
+                            }
+                            onHeld: {
+                                if (root.drawerConfig?.longPressMenu ?? true)
+                                    root.openAppMenu(suggestionTile, suggestionTile.modelData);
+                                else
+                                    root.appHeld(suggestionTile.modelData.id);
+                            }
+                            onContextRequested: root.openAppMenu(suggestionTile, suggestionTile.modelData)
                         }
                     }
                 }
