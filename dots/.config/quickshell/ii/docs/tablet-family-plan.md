@@ -664,10 +664,14 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 - [x] **A coluna inteira de quick toggles rola como uma superfície só.** A rolagem vertical
       cobre páginas configuradas, editor e gaveta de toggles; a gaveta não captura um segundo
       gesto vertical nem fica comprimida numa subviewport curta.
-- [x] **Cinco widgets funcionais como quick toggles fixos:** calendário, tarefas,
-      cronômetro, countdown e pomodoro aparecem na gaveta apenas na família tablet. Todos
-      usam footprint quadrado fixo `1x2`; toque executa a ação imediata e toque longo/clique
-      direito abre a ferramenta completa correspondente.
+- [x] **Os cinco widgets reais do BottomWidgetGroup como quick toggles fixos:** calendário,
+      tarefas, cronômetro, countdown e pomodoro aparecem na gaveta apenas na família tablet.
+      As implementações originais foram promovidas para `modules/common/dashboardWidgets/`:
+      o `BottomWidgetGroup` da ii e os cards da Tablet instanciam literalmente os mesmos
+      componentes, com métricas compactas reativas ao host — não versões-resumo. Todos usam
+      footprint quadrado fixo `1x2` e preservam as interações completas, inclusive navegação
+      do calendário, adição/conclusão/remoção de tarefas, voltas do cronômetro, múltiplos
+      countdowns e edição do ciclo do pomodoro.
 - [x] **Barra de busca na dock**: pílula ou círculo compacto, com os dois botões das pontas
       escolhidos pelo usuário — inclusive os painéis de busca da shell, então "clipboard na
       dock" é ajuste e não pedido de recurso. A pílula sabe desenhar uma ação e nada sobre o

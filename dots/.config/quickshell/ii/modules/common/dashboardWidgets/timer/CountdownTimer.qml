@@ -4,7 +4,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -20,6 +19,7 @@ Item {
     property int entranceTrigger: -1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
     readonly property bool compact: root.height > 0 && root.height < 250
+    readonly property bool dense: root.width > 0 && root.width < 260
 
     readonly property var countdowns: Array.from(TimerService.countdowns ?? [])
     readonly property var draft: Persistent.states.timer.countdownDraft
@@ -28,6 +28,8 @@ Item {
     property int displayTick: 0
 
     function setDraft(hours, minutes, seconds) {
+        if (!root.draft)
+            return;
         root.draft.hours = hours;
         root.draft.minutes = minutes;
         root.draft.seconds = seconds;
@@ -90,9 +92,9 @@ Item {
     ColumnLayout {
         anchors {
             fill: parent
-            topMargin: 2
-            leftMargin: 16
-            rightMargin: 16
+            topMargin: root.dense ? 4 : 2
+            leftMargin: root.dense ? 6 : 16
+            rightMargin: root.dense ? 6 : 16
             bottomMargin: 6
         }
         spacing: root.compact ? 6 : 10
@@ -104,11 +106,16 @@ Item {
 
             DurationDial {
                 unitLabel: Translation.tr("hours")
-                value: root.draft.hours
+                value: root.draft && root.draft.hours !== undefined && root.draft.hours !== null
+                    ? root.draft.hours : 0
                 maxValue: 23
-                implicitHeight: root.compact ? 54 : 66
-                numberSize: root.compact ? 26 : 32
-                onValueRequested: newValue => root.draft.hours = newValue
+                implicitWidth: root.dense ? 48 : 62
+                implicitHeight: root.compact ? 50 : 66
+                numberSize: root.dense ? 22 : (root.compact ? 26 : 32)
+                onValueRequested: newValue => {
+                    if (root.draft)
+                        root.draft.hours = newValue;
+                }
             }
             StyledText {
                 text: ":"
@@ -117,10 +124,15 @@ Item {
             }
             DurationDial {
                 unitLabel: Translation.tr("min")
-                value: root.draft.minutes
-                implicitHeight: root.compact ? 54 : 66
-                numberSize: root.compact ? 26 : 32
-                onValueRequested: newValue => root.draft.minutes = newValue
+                value: root.draft && root.draft.minutes !== undefined && root.draft.minutes !== null
+                    ? root.draft.minutes : 0
+                implicitWidth: root.dense ? 48 : 62
+                implicitHeight: root.compact ? 50 : 66
+                numberSize: root.dense ? 22 : (root.compact ? 26 : 32)
+                onValueRequested: newValue => {
+                    if (root.draft)
+                        root.draft.minutes = newValue;
+                }
             }
             StyledText {
                 text: ":"
@@ -129,10 +141,15 @@ Item {
             }
             DurationDial {
                 unitLabel: Translation.tr("sec")
-                value: root.draft.seconds
-                implicitHeight: root.compact ? 54 : 66
-                numberSize: root.compact ? 26 : 32
-                onValueRequested: newValue => root.draft.seconds = newValue
+                value: root.draft && root.draft.seconds !== undefined && root.draft.seconds !== null
+                    ? root.draft.seconds : 0
+                implicitWidth: root.dense ? 48 : 62
+                implicitHeight: root.compact ? 50 : 66
+                numberSize: root.dense ? 22 : (root.compact ? 26 : 32)
+                onValueRequested: newValue => {
+                    if (root.draft)
+                        root.draft.seconds = newValue;
+                }
             }
         }
 
@@ -170,7 +187,7 @@ Item {
 
         RippleButton { // Start
             Layout.fillWidth: true
-            implicitHeight: 35
+            implicitHeight: root.dense ? 40 : 35
             enabled: root.draftSeconds > 0
             font.pixelSize: Appearance.font.pixelSize.larger
             onClicked: root.startDraft()
@@ -218,7 +235,7 @@ Item {
                     }
 
                     width: countdownList.width
-                    implicitHeight: 38
+                    implicitHeight: root.dense ? 44 : 38
                     radius: Appearance.rounding.small
                     color: countdownItem.done ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
 
@@ -288,7 +305,10 @@ Item {
 
             ColumnLayout {
                 anchors.centerIn: parent
-                visible: root.countdowns.length === 0
+                // The dials and presets already explain the empty state in a
+                // square host; this desktop placeholder otherwise collides
+                // with the full-width Start button.
+                visible: root.countdowns.length === 0 && !root.dense
                 spacing: 0
 
                 MaterialSymbol {
@@ -314,8 +334,8 @@ Item {
         property color iconColour: Appearance.colors.colOnLayer2
         property color hoverIconColour: actionButton.iconColour
 
-        implicitHeight: 30
-        implicitWidth: 30
+        implicitHeight: root.dense ? 36 : 30
+        implicitWidth: implicitHeight
         buttonRadius: Appearance.rounding.full
         colBackground: "transparent"
         colBackgroundHover: Appearance.colors.colLayer2Hover

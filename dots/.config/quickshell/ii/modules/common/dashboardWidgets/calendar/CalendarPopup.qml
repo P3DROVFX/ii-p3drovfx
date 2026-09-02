@@ -14,8 +14,6 @@ Rectangle {
     height: Math.min(columnLayout.implicitHeight + 2 * taskMargin, 1000)
     color: Appearance.m3colors.m3surfaceContainer
     radius: Appearance.rounding.normal + 4
-    border.width: 2
-    border.color: Appearance.colors.colLayer3
 
     StyledFlickable {
         id: styledFlicker

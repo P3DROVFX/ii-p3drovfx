@@ -47,10 +47,9 @@ Item {
     /// were still drawn at the size the desktop's 460px sidebar needs.
     readonly property real notificationZoom: 1.35
 
-    // The calendar / to-do / timer group is deliberately absent. It used to be wired up
-    // behind a `false` switch, which cost the tablet an import of ii's sidebar module for
-    // code that never ran. Those widgets return as tiles in the quick-toggles grid (Fase 3),
-    // which is a different construction, not this Loader revived. Notifications take the space.
+    // The desktop BottomWidgetGroup container is deliberately absent. Its actual calendar,
+    // to-do, stopwatch, countdown and pomodoro contents live in common/dashboardWidgets and
+    // are hosted individually by fixed quick-toggle cards. Notifications keep this column.
 
     // ── Dialog state ────────────────────────────────────────────────────────
     property bool showAudioOutputDialog: false
@@ -98,6 +97,7 @@ Item {
         root.showIdleInhibitorDialog = false;
         root.showScreenShaderDialog = false;
         root.showTrayDialog = false;
+        pomodoroTimePicker.close();
     }
 
     Connections {
@@ -397,6 +397,25 @@ Item {
     ToggleDialog {
         shownPropertyString: "showScreenShaderDialog"
         dialog: ScreenShaderDialog {}
+    }
+
+    // The promoted Pomodoro widget emits the same shared request in both
+    // families. The tablet owns its picker locally so editing the real widget
+    // never re-opens the desktop sidebar implementation.
+    TimePickerPopup {
+        id: pomodoroTimePicker
+        anchors.fill: parent
+        z: 999
+        onAccepted: (pickedHour, pickedMinute) => {
+            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        }
+    }
+
+    Connections {
+        target: TimerService
+        function onCustomTimeRequested(currentHour, currentMinute, title) {
+            pomodoroTimePicker.open(currentHour, currentMinute, title);
+        }
     }
 
     component ToggleDialog: Loader {

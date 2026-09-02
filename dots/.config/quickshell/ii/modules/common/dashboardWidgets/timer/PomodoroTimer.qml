@@ -3,7 +3,6 @@ import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.modules.common.functions
-import qs.modules.ii.sidebarDashboard
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -12,17 +11,22 @@ import Quickshell
 Item {
     id: root
 
+    readonly property bool dense: root.width > 0 && root.width < 260
+
     implicitHeight: contentColumn.implicitHeight
     implicitWidth: contentColumn.implicitWidth
 
     // A 200px dial plus a 35px button row does not fit the 260px bottom group
     // the sidebar banner leaves room for, and the overflow is clipped rather
     // than scrolled - the buttons simply vanish. The dial is the elastic part.
-    readonly property real ringGap: 10
+    readonly property real ringGap: root.dense ? 6 : 10
+    readonly property real ringInset: root.dense ? 8 : 0
     readonly property real ringSize: {
         if (root.height <= 0)
             return 200;
-        return Math.max(110, Math.min(200, root.height - buttonsRow.implicitHeight - root.ringGap));
+        return Math.max(root.dense ? 82 : 110,
+            Math.min(200, root.height - buttonsRow.implicitHeight - root.ringGap - root.ringInset,
+                root.width - (root.dense ? 20 : 0)));
     }
 
     readonly property real _realRingValue: TimerService.pomodoroLapDuration > 0 ? (TimerService.pomodoroSecondsLeft / TimerService.pomodoroLapDuration) : 0
@@ -211,7 +215,7 @@ Item {
         RowLayout {
             id: buttonsRow
             Layout.alignment: Qt.AlignHCenter
-            spacing: 8
+            spacing: root.dense ? 4 : 8
 
             RippleButton {
                 contentItem: StyledText {
@@ -220,9 +224,11 @@ Item {
                     text: TimerService.pomodoroRunning ? Translation.tr("Pause") : (TimerService.pomodoroSecondsLeft === TimerService.pomodoroLapDuration) ? Translation.tr("Start") : Translation.tr("Resume")
                     color: TimerService.pomodoroRunning ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary
                 }
-                implicitHeight: 35
-                implicitWidth: 84
-                font.pixelSize: Appearance.font.pixelSize.larger
+                implicitHeight: root.dense ? 38 : 35
+                implicitWidth: root.dense ? 68 : 84
+                font.pixelSize: root.dense
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
                 onClicked: TimerService.togglePomodoro()
                 colBackground: TimerService.pomodoroRunning ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimary
                 colBackgroundHover: TimerService.pomodoroRunning ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryHover
@@ -230,13 +236,15 @@ Item {
             }
 
             RippleButton {
-                implicitHeight: 35
-                implicitWidth: 84
+                implicitHeight: root.dense ? 38 : 35
+                implicitWidth: root.dense ? 68 : 84
 
                 onClicked: TimerService.resetPomodoro()
                 enabled: (TimerService.pomodoroSecondsLeft < TimerService.pomodoroLapDuration) || TimerService.pomodoroCycle > 0 || TimerService.pomodoroBreak
 
-                font.pixelSize: Appearance.font.pixelSize.larger
+                font.pixelSize: root.dense
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
                 colBackground: Appearance.colors.colErrorContainer
                 colBackgroundHover: Appearance.colors.colErrorContainerHover
                 colRipple: Appearance.colors.colErrorContainerActive
@@ -251,8 +259,8 @@ Item {
 
             RippleButton {
                 id: editTimeButton
-                implicitHeight: 35
-                implicitWidth: 35
+                implicitHeight: root.dense ? 38 : 35
+                implicitWidth: root.dense ? 34 : 35
                 buttonRadius: Appearance.rounding.full
                 colBackground: Appearance.colors.colSecondaryContainer
                 colBackgroundHover: Appearance.colors.colSecondaryContainerHover

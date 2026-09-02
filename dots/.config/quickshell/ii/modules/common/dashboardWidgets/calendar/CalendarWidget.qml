@@ -9,6 +9,10 @@ import qs.services
 
 Item {
     id: root
+    // The same calendar is hosted by the 350px desktop bottom group and by a
+    // near-square tablet tile. Only metrics adapt; navigation, event indexing
+    // and the day delegates remain one implementation.
+    readonly property bool compact: root.width > 0 && root.width < 300
     property int monthShift: 0
     property int _entranceKey: 0
     property int entranceTrigger: -1
@@ -59,7 +63,7 @@ Item {
         }
     }
 
-    width: Math.max(calendarHeader.implicitWidth, calendarGridColumn.implicitWidth)
+    implicitWidth: Math.max(calendarHeader.implicitWidth, calendarGridColumn.implicitWidth)
     implicitHeight: root.headerHeight
         + root.calendarSpacing
         + calendarGridColumn.implicitHeight
@@ -68,8 +72,8 @@ Item {
     // A month is a fixed 6 week rows plus the weekday header, so the only way to
     // fit a shorter box is a smaller cell. Whoever hosts the widget sizes it;
     // this reads that size back and never grows past the natural 38px.
-    readonly property real headerHeight: 30
-    readonly property real calendarSpacing: 5
+    readonly property real headerHeight: root.compact ? 24 : 30
+    readonly property real calendarSpacing: root.compact ? 1 : 5
     readonly property real cellSize: {
         if (root.height <= 0)
             return 38;
@@ -77,7 +81,9 @@ Item {
             - root.headerHeight
             - root.calendarSpacing * 2;
         const forRows = gridViewportHeight - calendarGridColumn.spacing * 6;
-        return Math.max(26, Math.min(38, forRows / 7));
+        const heightBound = forRows / 7;
+        const widthBound = (root.width - root.calendarSpacing * 6) / 7;
+        return Math.max(root.compact ? 18 : 16, Math.min(38, heightBound, widthBound));
     }
     Keys.onPressed: (event) => {
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.NoModifier) {
@@ -130,6 +136,7 @@ Item {
 
         CalendarHeaderButton {
             clip: true
+            implicitHeight: root.headerHeight
             buttonText: `${monthShift != 0 ? "• " : ""}${viewingDate.toLocaleDateString(Qt.locale(), "MMMM yyyy")}`
             tooltipText: (monthShift === 0) ? "" : Translation.tr("Jump to current month")
             downAction: () => {
@@ -138,7 +145,9 @@ Item {
             contentItem: StyledText {
                 text: parent.buttonText
                 horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: Appearance.font.pixelSize.larger
+                font.pixelSize: root.compact
+                    ? Appearance.font.pixelSize.small
+                    : Appearance.font.pixelSize.larger
                 color: Appearance.colors.colOnLayer1
                 opacity: root._monthTextOpacity
                 transform: Translate {
@@ -154,13 +163,16 @@ Item {
 
         CalendarHeaderButton {
             forceCircle: true
+            implicitHeight: root.headerHeight
             downAction: () => {
                 root.changeMonth(-1);
             }
 
             contentItem: MaterialSymbol {
                 text: "chevron_left"
-                iconSize: Appearance.font.pixelSize.larger
+                iconSize: root.compact
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
                 horizontalAlignment: Text.AlignHCenter
                 color: Appearance.colors.colOnLayer1
             }
@@ -168,13 +180,16 @@ Item {
 
         CalendarHeaderButton {
             forceCircle: true
+            implicitHeight: root.headerHeight
             downAction: () => {
                 root.changeMonth(1);
             }
 
             contentItem: MaterialSymbol {
                 text: "chevron_right"
-                iconSize: Appearance.font.pixelSize.larger
+                iconSize: root.compact
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
                 horizontalAlignment: Text.AlignHCenter
                 color: Appearance.colors.colOnLayer1
             }

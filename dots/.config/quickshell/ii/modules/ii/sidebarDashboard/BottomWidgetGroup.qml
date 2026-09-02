@@ -4,9 +4,9 @@ import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.services
-import qs.modules.ii.sidebarDashboard.calendar
-import qs.modules.ii.sidebarDashboard.todo
-import qs.modules.ii.sidebarDashboard.pomodoro
+import qs.modules.common.dashboardWidgets.calendar
+import qs.modules.common.dashboardWidgets.todo
+import qs.modules.common.dashboardWidgets.timer
 import QtQuick
 import QtQuick.Layouts
 import "SidebarPerformancePolicy.js" as PerformancePolicy
@@ -38,21 +38,34 @@ Rectangle {
             "type": "calendar",
             "name": Translation.tr("Calendar"),
             "icon": "calendar_month",
-            "widget": "calendar/CalendarWidget.qml"
+            "widget": calendarWidgetComponent
         },
         {
             "type": "todo",
             "name": Translation.tr("To Do"),
             "icon": "check_circle",
-            "widget": "todo/TodoWidget.qml"
+            "widget": todoWidgetComponent
         },
         {
             "type": "timer",
             "name": Translation.tr("Timer"),
             "icon": "schedule",
-            "widget": "pomodoro/PomodoroWidget.qml"
+            "widget": timerWidgetComponent
         },
     ]
+
+    Component {
+        id: calendarWidgetComponent
+        CalendarWidget {}
+    }
+    Component {
+        id: todoWidgetComponent
+        TodoWidget {}
+    }
+    Component {
+        id: timerWidgetComponent
+        PomodoroWidget {}
+    }
 
     // The optimized default loads the selected widget after the outer slide.
     // The explicit entrance-animation opt-in loads it with the open request;
@@ -369,7 +382,7 @@ Rectangle {
                 asynchronous: true
 
                 Component.onCompleted: {
-                    tabStack.source = root.tabs[root.selectedTab].widget;
+                    tabStack.sourceComponent = root.tabs[root.selectedTab].widget;
                     root.previousIndex = root.selectedTab;
                 }
 
@@ -386,7 +399,7 @@ Rectangle {
                     }
                     function onSelectedTabChanged() {
                         if (!root.contentActivated || !tabStack.item) {
-                            tabStack.source = root.tabs[root.selectedTab].widget;
+                            tabStack.sourceComponent = root.tabs[root.selectedTab].widget;
                             root.previousIndex = root.selectedTab;
                             return;
                         }
@@ -429,7 +442,7 @@ Rectangle {
         }
         PropertyAction {
             target: tabStack
-            property: "source"
+            property: "sourceComponent"
             value: root.tabs[root.selectedTab].widget
         } // The source change happens here
         ParallelAnimation {

@@ -6,7 +6,6 @@ import qs
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 
 RippleButton {
     id: button
@@ -16,6 +15,8 @@ RippleButton {
     property var taskList
     readonly property int taskMargin: 5
     property bool showPopup: false
+    property bool popupPinned: false
+    readonly property bool compactCell: button.cellSize < 28
     property int gridRow: -1
     property int gridCol: -1
     property int entranceKey: 0
@@ -102,16 +103,18 @@ RippleButton {
     
     Rectangle {
         id: taskDot
-        width: 8
-        height: 8
+        width: button.compactCell ? 4 : 8
+        height: width
         radius: Appearance.rounding.full
         scale: button._taskDotScale
-        color: (taskList.length > 0 && isToday !== -1 && !bold) ? 
-               toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary : "transparent"
+        visible: taskList.length > 0 && isToday !== -1 && !bold
+        color: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
         anchors {
-            top: parent.top
-            left: parent.left
-            margins: 4
+            top: button.compactCell ? undefined : parent.top
+            left: button.compactCell ? undefined : parent.left
+            bottom: button.compactCell ? parent.bottom : undefined
+            horizontalCenter: button.compactCell ? parent.horizontalCenter : undefined
+            margins: button.compactCell ? 1 : 4
         }
     }
 
@@ -146,7 +149,11 @@ RippleButton {
             y: {
                 if (!button.QsWindow) return 0;
                 const buttonPos = button.QsWindow.contentItem.mapFromItem(button, 0, 0);
-                return buttonPos.y - popup.height - 4; 
+                const gap = 4;
+                const above = buttonPos.y - popup.height - gap;
+                const below = buttonPos.y + button.height + gap;
+                const preferred = above >= 0 ? above : below;
+                return Math.max(0, Math.min(preferred, parent.height - popup.height));
             }
         }
         
@@ -155,18 +162,42 @@ RippleButton {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: PanelFamily.touchFirst ? Qt.LeftButton : Qt.NoButton
         onEntered: {
             if (button.taskList.length > 0 && button.isToday !== -1 && !button.bold) {
                 button.showPopup = true
             }
         }
-        onExited: button.showPopup = false
+        onExited: {
+            if (!button.popupPinned)
+                button.showPopup = false;
+        }
+        onClicked: {
+            if (button.taskList.length === 0 || button.isToday === -1 || button.bold)
+                return;
+            button.popupPinned = !button.popupPinned;
+            button.showPopup = button.popupPinned;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSidebarRightOpenChanged() {
+            if (!GlobalStates.sidebarRightOpen) {
+                button.popupPinned = false;
+                button.showPopup = false;
+            }
+        }
     }
     
     StyledText {
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: button.compactCell ? -2 : 0
         text: day
         horizontalAlignment: Text.AlignHCenter
+        font.pixelSize: button.compactCell
+            ? Appearance.font.pixelSize.smallie
+            : Appearance.font.pixelSize.normal
         font.weight: bold ? Font.DemiBold : Font.Normal
         color: (isToday == 1) ? Appearance.m3colors.m3onPrimary : (isToday == 0) ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutlineVariant
     }

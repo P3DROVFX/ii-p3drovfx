@@ -13,6 +13,7 @@ Item {
     // Defensive fallback for alternate hosts smaller than the dashboard's
     // fixed 350px bottom group.
     readonly property bool compact: root.height > 0 && root.height < 300
+    readonly property bool dense: root.width > 0 && root.width < 260
 
     property var tabButtonList: [
         {
@@ -27,13 +28,13 @@ Item {
     property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1,
         Persistent.states.sidebar.bottomGroup.todoTab))
     property bool showAddDialog: false
-    property int dialogMargins: 20
+    property int dialogMargins: root.dense ? 8 : 20
     // 56 is FloatingActionButton's own baseSize; fabSize was never handed to it,
     // so the button was 56 while the list reserved room for 48. Compact scales
     // both buttons by the same 260/350 the bottom group itself lost.
-    property int fabSize: root.compact ? 42 : 56
-    property int fabMargins: root.compact ? 10 : 14
-    property int syncButtonSize: root.compact ? 27 : 36
+    property int fabSize: root.dense ? 40 : (root.compact ? 42 : 56)
+    property int fabMargins: root.dense ? 6 : (root.compact ? 10 : 14)
+    property int syncButtonSize: root.dense ? 36 : (root.compact ? 27 : 36)
 
     function selectTab(index) {
         if (index < 0 || index >= root.tabButtonList.length || root.selectedTab === index)
@@ -74,6 +75,7 @@ Item {
             ToolbarTabBar {
                 id: tabBar
                 tabButtonList: root.tabButtonList
+                collapseInactiveLabels: root.dense
                 requestOnly: true
                 currentIndex: root.selectedTab
                 onIndexSelected: root.selectTab(index)
@@ -101,6 +103,7 @@ Item {
                 active: root.selectedTab === 0
                 asynchronous: true
                 sourceComponent: TaskList {
+                    dense: root.dense
                     listBottomPadding: root.fabSize + root.fabMargins * 2
                     emptyPlaceholderIcon: "check_circle"
                     emptyPlaceholderText: Translation.tr("Nothing here!")
@@ -127,6 +130,7 @@ Item {
                 active: root.selectedTab === 1
                 asynchronous: true
                 sourceComponent: TaskList {
+                    dense: root.dense
                     listBottomPadding: root.fabSize + root.fabMargins * 2
                     emptyPlaceholderIcon: "checklist"
                     emptyPlaceholderText: Translation.tr("Finished tasks will go here")
@@ -182,7 +186,9 @@ Item {
                 }
                 return Todo.syncing ? "sync" : "cloud_done";
             }
-            font.pixelSize: root.compact ? 13 : 18
+            font.pixelSize: root.dense
+                ? Appearance.font.pixelSize.normal
+                : (root.compact ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.larger)
             color: {
                 if (!Todo.remoteEnabled) {
                     return Appearance.colors.colOnSurfaceVariant;
@@ -322,9 +328,9 @@ Item {
                     background: Rectangle {
                         anchors.fill: parent
                         radius: Appearance.rounding.verysmall
-                        border.width: 2
-                        border.color: todoInput.activeFocus ? Appearance.colors.colPrimary : Appearance.m3colors.m3outline
-                        color: "transparent"
+                        color: todoInput.activeFocus
+                            ? Appearance.colors.colPrimaryContainer
+                            : Appearance.m3colors.m3surfaceContainerHighest
                     }
 
                     cursorDelegate: Rectangle {

@@ -2,7 +2,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -10,6 +9,7 @@ import Quickshell
 
 Item {
     id: stopwatchTab
+    readonly property bool dense: stopwatchTab.width > 0 && stopwatchTab.width < 260
     Layout.fillWidth: true
     Layout.fillHeight: true
     property int entranceTrigger: -1
@@ -60,8 +60,8 @@ Item {
         anchors {
             fill: parent
             topMargin: 8
-            leftMargin: 16
-            rightMargin: 16
+            leftMargin: stopwatchTab.dense ? 8 : 16
+            rightMargin: stopwatchTab.dense ? 8 : 16
         }
 
         RowLayout { // Elapsed
@@ -100,7 +100,9 @@ Item {
 
             spacing: 0
             StyledText {
-                font.pixelSize: 40
+                font.pixelSize: stopwatchTab.dense
+                    ? Math.round(Appearance.font.pixelSize.huge * 1.18)
+                    : 40
                 color: Appearance.m3colors.m3onSurface
                 text: {
                     let totalSeconds = Math.floor(TimerService.stopwatchTime) / 100
@@ -111,7 +113,9 @@ Item {
             }
             StyledText {
                 Layout.fillWidth: true
-                font.pixelSize: 40
+                font.pixelSize: stopwatchTab.dense
+                    ? Math.round(Appearance.font.pixelSize.huge * 1.18)
+                    : 40
                 color: Appearance.colors.colSubtext
                 text: `:<sub>${(Math.floor(TimerService.stopwatchTime) % 100).toString().padStart(2, '0')}</sub>`
             }
@@ -263,9 +267,11 @@ Item {
             spacing: 4
 
             RippleButton {
-                Layout.preferredHeight: 35
-                Layout.preferredWidth: 90
-                font.pixelSize: Appearance.font.pixelSize.larger
+                Layout.preferredHeight: stopwatchTab.dense ? 40 : 35
+                Layout.preferredWidth: stopwatchTab.dense ? 76 : 90
+                font.pixelSize: stopwatchTab.dense
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
 
                 onClicked: {
                     TimerService.toggleStopwatch()
@@ -283,9 +289,11 @@ Item {
             }
 
             RippleButton {
-                implicitHeight: 35
-                implicitWidth: 90
-                font.pixelSize: Appearance.font.pixelSize.larger
+                implicitHeight: stopwatchTab.dense ? 40 : 35
+                implicitWidth: stopwatchTab.dense ? 76 : 90
+                font.pixelSize: stopwatchTab.dense
+                    ? Appearance.font.pixelSize.normal
+                    : Appearance.font.pixelSize.larger
 
                 onClicked: {
                     if (TimerService.stopwatchRunning) 

@@ -54,7 +54,15 @@ var TOGGLE_TYPES = {
     tasksWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
     timerWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
     countdownWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    pomodoroWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] }
+    pomodoroWidget: { kind: "dashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+
+    // Complete ports coexist with the summary cards above. They deliberately
+    // use distinct stable types so existing pages never change appearance.
+    fullCalendarWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] }
 };
 
 function allTypes() {

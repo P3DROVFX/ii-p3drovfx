@@ -1,7 +1,6 @@
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
-import qs.modules.ii.sidebarDashboard
 import qs.services
 import QtQuick
 import QtQuick.Controls
@@ -17,6 +16,7 @@ Item {
     property int todoListItemPadding: 8
     property int listBottomPadding: 80
     property int entranceTrigger: -1
+    property bool dense: false
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     StyledListView {
@@ -120,7 +120,8 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                implicitHeight: Math.max(48, todoContentRowLayout.implicitHeight + 16)
+                implicitHeight: Math.max(taskListRoot.dense ? 44 : 48,
+                    todoContentRowLayout.implicitHeight + (taskListRoot.dense ? 8 : 16))
                 
                 HoverHandler {
                     id: cellHover
@@ -136,14 +137,14 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 12
+                    anchors.leftMargin: taskListRoot.dense ? 4 : 8
+                    anchors.rightMargin: taskListRoot.dense ? 4 : 8
+                    spacing: taskListRoot.dense ? 5 : 12
 
                     TodoItemActionButton {
                         Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: 32
-                        implicitHeight: 32
+                        implicitWidth: taskListRoot.dense ? 34 : 32
+                        implicitHeight: implicitWidth
                         onClicked: {
                             todoItem._optimisticDone = !todoItem._optimisticDone;
                             checkIconScaleAnim.restart();
@@ -180,7 +181,9 @@ Item {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
                         text: todoItem.modelData.content
-                        wrapMode: Text.Wrap
+                        wrapMode: taskListRoot.dense ? Text.NoWrap : Text.Wrap
+                        elide: taskListRoot.dense ? Text.ElideRight : Text.ElideNone
+                        maximumLineCount: taskListRoot.dense ? 1 : 3
                         color: todoItem._optimisticDone ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface
                         font.strikeout: todoItem._optimisticDone
                     }
@@ -206,9 +209,11 @@ Item {
 
                     TodoItemActionButton {
                         Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: 32
-                        implicitHeight: 32
-                        opacity: cellHover.hovered ? 1 : 0
+                        implicitWidth: taskListRoot.dense ? 34 : 32
+                        implicitHeight: implicitWidth
+                        // A touchscreen has no hover phase: keep destructive
+                        // task management reachable in the compact tablet host.
+                        opacity: taskListRoot.dense || cellHover.hovered ? 1 : 0
                         
                         Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                         

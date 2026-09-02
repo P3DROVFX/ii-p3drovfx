@@ -160,20 +160,51 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("interactive: !root.externalVerticalScroll && contentHeight > height", panel)
         self.assertIn("wheelEvent.accepted = false", panel)
 
-    def test_five_dashboard_widgets_are_tablet_quick_toggles(self):
+    def test_compact_and_full_dashboard_widgets_coexist_as_tablet_quick_toggles(self):
         catalog = read("modules/common/quickToggles/androidStyle/QuickToggleCatalog.js")
         chooser = read("modules/common/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml")
-        widget = read("modules/common/quickToggles/androidStyle/AndroidDashboardWidgetToggle.qml")
+        compact_widget = read("modules/common/quickToggles/androidStyle/AndroidDashboardWidgetToggle.qml")
+        full_widget = read("modules/common/quickToggles/androidStyle/AndroidFullDashboardWidgetToggle.qml")
+        bottom_group = read("modules/ii/sidebarDashboard/BottomWidgetGroup.qml")
+        tablet_content = read("modules/tablet/sidebarDashboard/TabletDashboardContent.qml")
+        calendar_day = read("modules/common/dashboardWidgets/calendar/CalendarDayButton.qml")
+        countdown = read("modules/common/dashboardWidgets/timer/CountdownTimer.qml")
+        task_list = read("modules/common/dashboardWidgets/todo/TaskList.qml")
 
         for toggle_type in ("calendarWidget", "tasksWidget", "timerWidget",
                             "countdownWidget", "pomodoroWidget"):
             self.assertIn(f'{toggle_type}: {{ kind: "dashboardWidget"', catalog)
             self.assertIn(f'roleValue: "{toggle_type}"', chooser)
+        for toggle_type in ("fullCalendarWidget", "fullTasksWidget", "fullTimerWidget",
+                            "fullCountdownWidget", "fullPomodoroWidget"):
+            self.assertIn(f'{toggle_type}: {{ kind: "fullDashboardWidget"', catalog)
+            self.assertIn(f'roleValue: "{toggle_type}"', chooser)
         self.assertIn('allowedSizes: [[1, 2]], families: ["tablet"]', catalog)
-        self.assertIn("TimerService.toggleStopwatch()", widget)
-        self.assertIn("TimerService.toggleCountdown", widget)
-        self.assertIn("TimerService.togglePomodoro()", widget)
-        self.assertIn('GlobalStates.openAppDrawerTool("", panelId)', widget)
+        # The original summary cards keep their own visual implementation and stable IDs.
+        self.assertIn("primaryValue", compact_widget)
+        self.assertIn("id: widgetLayout", compact_widget)
+        self.assertNotIn("dashboardWidgets.calendar", compact_widget)
+        # Full ports are five additional types. The desktop bottom group consumes the
+        # exact same common components, rather than a second implementation.
+        for component in ("CalendarWidget", "TodoWidget", "Stopwatch",
+                          "CountdownTimer", "PomodoroTimer"):
+            self.assertIn(component, full_widget)
+        for namespace in ("calendar", "todo", "timer"):
+            common_import = f"qs.modules.common.dashboardWidgets.{namespace}"
+            self.assertIn(common_import, full_widget)
+            self.assertIn(common_import, bottom_group)
+        self.assertIn("anchors.margins: root.scaled(6)", full_widget)
+        self.assertIn("sourceComponent", bottom_group)
+        self.assertIn("TimePickerPopup {", tablet_content)
+        self.assertIn("function onCustomTimeRequested", tablet_content)
+        self.assertIn("TimerService.setPomodoroTime", tablet_content)
+        self.assertIn("PanelFamily.touchFirst ? Qt.LeftButton : Qt.NoButton", calendar_day)
+        self.assertIn("button.compactCell ? 4 : 8", calendar_day)
+        self.assertIn("root.countdowns.length === 0 && !root.dense", countdown)
+        self.assertIn("taskListRoot.dense || cellHover.hovered", task_list)
+        self.assertFalse((ROOT / "modules/ii/sidebarDashboard/calendar/CalendarWidget.qml").exists())
+        self.assertFalse((ROOT / "modules/ii/sidebarDashboard/todo/TodoWidget.qml").exists())
+        self.assertFalse((ROOT / "modules/ii/sidebarDashboard/pomodoro/PomodoroWidget.qml").exists())
 
     def test_dock_search_pill_is_configurable_and_delegates_what_its_buttons_do(self):
         bar = read("modules/tablet/dock/TabletDockSearchBar.qml")

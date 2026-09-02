@@ -740,6 +740,111 @@ DelegateChooser {
     }
 
     DelegateChoice {
+        roleValue: "fullCalendarWidget"
+        AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "fullTasksWidget"
+        AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "fullTimerWidget"
+        AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "fullCountdownWidget"
+        AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "fullPomodoroWidget"
+        AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
         roleValue: "volumeSlider"
         AndroidVolumeSliderToggle {
             required property int index
