@@ -50,6 +50,7 @@ Item {
             return;
         }
 
+        root.pendingTransition = false;
         if (fadeAnim.running) {
             fadeAnim.stop();
             var oldBack = root.imgAIsBack ? imgA : imgB;
@@ -71,6 +72,40 @@ Item {
         front.z = 1;
         back.z = 0;
 
+        if (!root.animated) {
+            front.opacity = 1;
+            var oldBackDirect = imgAIsBack ? imgA : imgB;
+            oldBackDirect.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            return;
+        }
+
+        // A full-size wallpaper decodes off-thread, often for longer than the
+        // transition lasts. Started now, the animation would play against a
+        // blank target and the picture would pop in after it: no change
+        // animation at all. Wait for the decode; a cached image is ready now.
+        front.opacity = 0;
+        if (front.status === Image.Ready || front.status === Image.Error) {
+            root.startTransition();
+        } else {
+            root.pendingTransition = true;
+        }
+    }
+
+    property bool pendingTransition: false
+
+    function onFrontStatusChanged(image) {
+        if (!root.pendingTransition || image !== root.toImage)
+            return;
+        if (image.status !== Image.Ready && image.status !== Image.Error)
+            return;
+        root.pendingTransition = false;
+        root.startTransition();
+    }
+
+    function startTransition() {
+        var front = root.toImage;
+        var back = root.fromImage;
         if (root.animated) {
             if (root.transitionShader !== "") {
                 if (root.transitionShader === "random") {
@@ -89,11 +124,6 @@ Item {
                 fadeAnim.target = front;
                 fadeAnim.restart();
             }
-        } else {
-            front.opacity = 1;
-            var oldBack = imgAIsBack ? imgA : imgB;
-            oldBack.source = "";
-            root.imgAIsBack = !root.imgAIsBack;
         }
     }
 
@@ -191,6 +221,7 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        onStatusChanged: root.onFrontStatusChanged(imgA)
     }
 
     Image {
@@ -204,5 +235,6 @@ Item {
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        onStatusChanged: root.onFrontStatusChanged(imgB)
     }
 }
