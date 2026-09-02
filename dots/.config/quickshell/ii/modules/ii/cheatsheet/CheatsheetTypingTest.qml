@@ -63,7 +63,9 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             visible: surface.statusText.length > 0
-                || (Config.options.search.appearance.showKeyHintBar
+                // Same reasoning as SearchPanelScaffold.showKeyHintFooter: a shortcut strip
+                // is instructions for hardware a touch-first family does not assume exists.
+                || (Config.options.search.appearance.showKeyHintBar && !PanelFamily.touchFirst
                     && (surface.hints.length > 0 || Object.keys(surface.primaryHint).length > 0))
 
             StyledText {
@@ -81,7 +83,7 @@ Item {
             }
 
             KeyHintBar {
-                visible: Config.options.search.appearance.showKeyHintBar
+                visible: Config.options.search.appearance.showKeyHintBar && !PanelFamily.touchFirst
                 hints: surface.primaryHint.label
                     ? [surface.primaryHint].concat(surface.hints) : surface.hints
                 showKeys: Config.options.search.appearance.showKeyHints

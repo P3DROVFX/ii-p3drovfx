@@ -108,6 +108,33 @@ Item {
             ? "" : (address.startsWith("0x") ? address : `0x${address}`);
 
         const actions = [];
+
+        /**
+         * "Split with the app you were in."
+         *
+         * Hyprland already tiles two windows that share a workspace, so a split is not a
+         * layout this shell has to compute — it is a window that has to be somewhere else.
+         * All this dispatches is a move; the compositor does the splitting, which is why the
+         * shell does not grow a layout manager to offer the feature.
+         *
+         * Only offered when it would do something: the window has to be somewhere other than
+         * the workspace you are returning to, and that workspace has to have something on it
+         * to split *with* — otherwise this is a plain move wearing the wrong label.
+         */
+        const activeWorkspace = Number(HyprlandData.activeWorkspace?.id ?? -1);
+        const onActiveWorkspace = root.workspaceOf(target) === activeWorkspace;
+        const activeHasWindows = activeWorkspace !== -1
+            && HyprlandData.hyprlandClientsForWorkspace(activeWorkspace).length > 0;
+
+        if (target.length > 0 && activeWorkspace !== -1 && !onActiveWorkspace && activeHasWindows) {
+            actions.push({
+                symbol: "splitscreen",
+                label: Translation.tr("Split with current app"),
+                trigger: () => root.dispatchOn(target,
+                    `hl.dsp.window.move({ workspace = ${activeWorkspace}, follow = false, window = "address:${target}" })`)
+            });
+        }
+
         if (target.length > 0) {
             actions.push({
                 symbol: "picture_in_picture",
@@ -127,6 +154,22 @@ Item {
             trigger: () => root.closeWindow(toplevel)
         });
         return actions;
+    }
+
+    /// Which workspace a window is on, or -1. The toplevel does not carry it; Hyprland's
+    /// client list does, and the two are joined on the address as everywhere else here.
+    function workspaceOf(address) {
+        if (!address || address.length === 0)
+            return -1;
+        for (const client of (HyprlandData.windowList ?? [])) {
+            const raw = String(client?.address ?? "").trim();
+            if (raw.length === 0)
+                continue;
+            const normalized = raw.startsWith("0x") ? raw : `0x${raw}`;
+            if (normalized === address)
+                return Number(client?.workspace?.id ?? -1);
+        }
+        return -1;
     }
 
     /// Anything that moves or focuses a window has to wait for this surface to unmap; see
