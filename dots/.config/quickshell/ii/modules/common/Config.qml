@@ -3107,6 +3107,7 @@ Singleton {
                     property string aiPlanUsage: "expressive"
                     property string search: "default"
                     property string date: "default"
+                    property string timer: "expressive"
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -3377,6 +3378,7 @@ Singleton {
                 property JsonObject timers: JsonObject {
                     property bool showPomodoro: true
                     property bool showStopwatch: true
+                    property bool showCountdowns: true
                 }
                 property JsonObject utilButtons: JsonObject {
                     property bool showScreenSnip: false

@@ -567,6 +567,8 @@ Item {
             return true;
         if (modelData.id === "date" && (Config.options.bar.styles.date === "expressive" || Config.options.bar.styles.date === "neural"))
             return true;
+        if (modelData.id === "timer" && Config.options.bar.styles.timer === "expressive")
+            return true;
         if (modelData.id === "clock" && (Config.options.bar.styles.clock === "neural" || Config.options.bar.styles.clock === "relief"))
             return true;
         // Bare indicator: no group chip, no padding around it.
@@ -787,6 +789,8 @@ Item {
                 return dateCompNeural;
             return dateComp;
         case "timer":
+            if (isExp)
+                return timerCompExpressive;
             return isVert ? timerCompVert : timerComp;
         case "record_indicator":
             return recordIndicatorComp;
@@ -936,6 +940,12 @@ Item {
     Component {
         id: timerComp
         TimerWidget {}
+    }
+    Component {
+        id: timerCompExpressive
+        ExpressiveTimerWidget {
+            vertical: rootItem.vertical
+        }
     }
     Component {
         id: timerCompVert

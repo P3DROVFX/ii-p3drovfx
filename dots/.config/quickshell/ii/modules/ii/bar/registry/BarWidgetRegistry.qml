@@ -31,6 +31,7 @@ QtObject {
             case "ai_plan_usage":          return s.aiPlanUsage  ?? "default";
             case "search":                 return s.search       ?? "default";
             case "date":                   return s.date         ?? "default";
+            case "timer":                  return s.timer        ?? "expressive";
             // Always expressive — no user config toggle
             case "record_indicator":
             case "phone_scrcpy_indicator":

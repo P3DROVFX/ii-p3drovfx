@@ -46,6 +46,19 @@ ContentPage {
         icon: "timer"
         title: Translation.tr("Indicators & Timers")
 
+        ContentSubsection {
+            title: Translation.tr("Timer widget style")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.timer
+                onSelected: newValue => Config.options.bar.styles.timer = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                ]
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "timer"
             text: Translation.tr("Show stopwatch")
@@ -60,6 +73,14 @@ ContentPage {
             checked: Config.options.bar.timers.showPomodoro
             onCheckedChanged: {
                 Config.options.bar.timers.showPomodoro = checked;
+            }
+        }
+        ConfigSwitch {
+            buttonIcon: "hourglass_top"
+            text: Translation.tr("Show countdown timers")
+            checked: Config.options.bar.timers.showCountdowns
+            onCheckedChanged: {
+                Config.options.bar.timers.showCountdowns = checked;
             }
         }
         ConfigSwitch {
