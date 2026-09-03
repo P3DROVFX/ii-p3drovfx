@@ -61,7 +61,7 @@ PanelWindow {
         id: pill
 
         anchors.verticalCenter: parent.verticalCenter
-        implicitWidth: pillContent.implicitWidth + Appearance.rounding.normal * 2
+        implicitWidth: pillContent.implicitWidth + Appearance.rounding.large * 2
         // The toolbar's own published height, so the two read as one row
         // rather than as a pill floating next to a bar.
         implicitHeight: root.besideToolbar ? root.toolbar.height : Appearance.sizes.toolbarHeight
@@ -105,43 +105,49 @@ PanelWindow {
             animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(pill)
         }
 
-        contentItem: RowLayout {
-            id: pillContent
+        // A Control lays its own contentItem out across the padded rect, so a
+        // RowLayout put there directly is stretched and packs its children
+        // against the left edge. The wrapper takes that geometry and the row
+        // centres inside it.
+        contentItem: Item {
+            RowLayout {
+                id: pillContent
 
-            anchors.centerIn: parent
-            spacing: Appearance.rounding.verysmall
+                anchors.centerIn: parent
+                spacing: Appearance.rounding.small
 
-            StyledText {
-                Layout.alignment: Qt.AlignVCenter
-                text: Translation.tr("Continue")
-                color: Appearance.colors.colOnPrimary
-                font.family: Appearance.font.family.title
-                font.variableAxes: Appearance.font.variableAxes.titleRounded
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.Bold
-            }
-
-            // An outline circle rather than a filled one: the pill itself is
-            // already the filled surface, and a second fill inside it reads as
-            // a button on a button.
-            Item {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: Appearance.font.pixelSize.hugeass
-                implicitHeight: Appearance.font.pixelSize.hugeass
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: width / 2
-                    color: "transparent"
-                    border.width: Math.max(1, Math.round(Appearance.font.pixelSize.smallest / 6))
-                    border.color: Appearance.colors.colOnPrimary
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Translation.tr("Continue")
+                    color: Appearance.colors.colOnPrimary
+                    font.family: Appearance.font.family.title
+                    font.variableAxes: Appearance.font.variableAxes.titleRounded
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
                 }
 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "arrow_outward"
-                    iconSize: Appearance.font.pixelSize.normal
-                    color: Appearance.colors.colOnPrimary
+                // An outline circle rather than a filled one: the pill itself is
+                // already the filled surface, and a second fill inside it reads as
+                // a button on a button.
+                Item {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: Appearance.font.pixelSize.hugeass + Appearance.rounding.verysmall
+                    implicitHeight: Appearance.font.pixelSize.hugeass + Appearance.rounding.verysmall
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: "transparent"
+                        border.width: Math.max(1, Math.round(Appearance.font.pixelSize.smallest / 5))
+                        border.color: Appearance.colors.colOnPrimary
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "arrow_outward"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnPrimary
+                    }
                 }
             }
         }

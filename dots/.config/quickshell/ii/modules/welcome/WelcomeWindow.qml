@@ -520,5 +520,24 @@ FloatingWindow {
             if (!GlobalStates.editMode)
                 root.expand();
         }
+
+        /**
+         * The pill is a window of its own and can only flip the shared flag —
+         * it cannot run this window's animation. Without this the window came
+         * back with `collapseProgress` still at 1, which is a fully
+         * transparent surface at two thirds scale: an empty frame that reads
+         * as a Welcome that failed to load.
+         */
+        function onWelcomeCollapsedChanged() {
+            if (GlobalStates.welcomeCollapsed) {
+                if (!collapseAnimation.running)
+                    root.collapseProgress = 1;
+                return;
+            }
+            // Not on the way out: closing the Welcome clears the flag too, and
+            // starting an animation on a window being torn down helps nobody.
+            if (root.collapseProgress > 0 && GlobalStates.welcomeOpen)
+                root.expand();
+        }
     }
 }
