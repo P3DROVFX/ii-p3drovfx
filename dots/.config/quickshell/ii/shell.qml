@@ -224,7 +224,10 @@ ShellRoot {
     FileView {
         id: welcomeRequest
         path: Directories.welcomeRequestPath
-        // No file is the normal state; onLoadFailed needs no handler.
+        // No file is the normal state - every start without a pending request
+        // would otherwise log a read failure - so the miss is silent and
+        // onLoadFailed needs no handler.
+        printErrors: false
         onLoaded: root.welcomeRequested = true
         Component.onCompleted: welcomeRequest.reload()
     }

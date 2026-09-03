@@ -257,6 +257,23 @@ Singleton {
                 property list<var> activity: []
             }
 
+            // A zip of everything the shell knows about this user, kept
+            // wherever they point it. Machine-local like googleDrive below:
+            // a backup folder is a fact about this computer, and a preset
+            // carrying someone else's path would be nonsense.
+            property JsonObject shellBackup: JsonObject {
+                property bool enabled: false
+                property string folder: ""
+                // Hand the folder to the Google Drive sync that already runs,
+                // rather than uploading anything from here.
+                property bool autoDrive: false
+                property int keepCount: 5
+                property int intervalDays: 7
+                property string lastBackupTime: ""
+                property string lastBackupPath: ""
+                property real lastBackupSizeBytes: 0
+            }
+
             property JsonObject googleDrive: JsonObject {
                 property bool enabled: false
                 property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"

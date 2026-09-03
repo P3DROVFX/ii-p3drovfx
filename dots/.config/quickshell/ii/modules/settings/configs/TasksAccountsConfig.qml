@@ -982,6 +982,31 @@ Item {
         text: Translation.tr("Google credentials (for Gmail, Google Tasks, and Google Drive) are set in ii/.env (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET). Sports (ESPN) options live in the Sports bar widget page.")
     }
 
+    // The shell's own settings, as one zip. Separate from the Drive section
+    // below because it answers a different question: Drive is about WHERE
+    // folders go, this is about WHAT the shell itself is worth keeping.
+    ContentSection {
+        Layout.fillWidth: true
+        visible: !root.driveSubPageMode
+        icon: "backup"
+        title: Translation.tr("Settings Backup")
+
+        ConfigSwitch {
+            buttonIcon: "backup"
+            text: Translation.tr("Back up my settings")
+            description: ShellBackup.lastBackupTime !== ""
+                ? Translation.tr("Last backup: %1").arg(
+                    new Date(ShellBackup.lastBackupTime).toLocaleString(Qt.locale()))
+                : Translation.tr("Settings, presets, notes, keybinds and usage, in one zip")
+            checked: ShellBackup.enabled
+            configPage: Qt.resolvedUrl("widgets/ShellBackupConfig.qml")
+            onCheckedChanged: {
+                if (checked !== ShellBackup.enabled)
+                    Persistent.states.shellBackup.enabled = checked;
+            }
+        }
+    }
+
     ContentSection {
         Layout.fillWidth: true
         visible: !root.driveSubPageMode

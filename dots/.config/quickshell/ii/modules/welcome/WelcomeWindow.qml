@@ -122,9 +122,11 @@ FloatingWindow {
             nextIcon: flow.currentNextIcon
             skipVisible: flow.currentPageId === "keyboard"
             skipLabel: Translation.tr("Skip")
+            restoreVisible: flow.currentPageId === "hello"
             onPreviousRequested: flow.goPrevious()
             onNextRequested: flow.goNext()
             onSkipRequested: flow.skipCurrentPage()
+            onRestoreRequested: root.showRestoreDialog = true
             onFinishRequested: GlobalStates.closeWelcome()
         }
         Keys.priority: Keys.BeforeItem
@@ -149,6 +151,7 @@ FloatingWindow {
     property bool showWifiDialog: false
     property bool showBluetoothDialog: false
     property bool showAudioOutputDialog: false
+    property bool showRestoreDialog: false
     property bool previewSidebarWasOpen: false
     property bool previewSearchWasOpen: false
     property bool previewSidebarOwned: false
@@ -167,9 +170,11 @@ FloatingWindow {
     readonly property bool welcomeDialogOpen: showWifiDialog
         || showBluetoothDialog
         || showAudioOutputDialog
+        || showRestoreDialog
         || wifiDialogHost.closing
         || bluetoothDialogHost.closing
         || audioDialogHost.closing
+        || restoreDialogHost.closing
 
     function openCheatsheetGuide(sectionId: string): void {
         const icons = [];
@@ -238,6 +243,17 @@ FloatingWindow {
 
     function restoreFocus(): void {
         surface.forceActiveFocus();
+    }
+
+    DialogHostLoader {
+        id: restoreDialogHost
+        owner: root
+        shownPropertyString: "showRestoreDialog"
+        focusTarget: surface
+        z: 10
+        dialog: WelcomeRestoreDialog {
+            preferredDialogWidth: Math.min(560, root.width - 120)
+        }
     }
 
     DialogHostLoader {

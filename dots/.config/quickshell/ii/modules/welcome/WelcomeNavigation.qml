@@ -17,11 +17,16 @@ Item {
     property string nextIcon: "arrow_forward"
     property bool skipVisible: false
     property string skipLabel: ""
+    // The bottom-left slot, free on the first page because there is nothing to
+    // go back to there. A phone asks "restore from a backup?" before it asks
+    // anything else, and this is the same offer in the same place.
+    property bool restoreVisible: false
     readonly property bool nextButtonHovered: primaryButton.hovered
     signal previousRequested()
     signal nextRequested()
     signal skipRequested()
     signal finishRequested()
+    signal restoreRequested()
 
     implicitHeight: Math.max(previousButtonWrapper.implicitHeight,
         Math.max(skipButtonWrapper.implicitHeight, nextButtonWrapper.implicitHeight))
@@ -82,6 +87,60 @@ Item {
                 colRipple: Appearance.colors.colSecondaryContainerActive
                 Accessible.name: Translation.tr("Previous")
                 onClicked: if (!root.transitionRunning) root.previousRequested()
+            }
+        }
+
+        Item {
+            id: restoreButtonWrapper
+            property real targetWidth: root.restoreVisible ? restoreButton.implicitWidth : 0
+            property real animatedWidth: targetWidth
+            visible: animatedWidth > 0.5 || opacity > 0.01
+            opacity: root.restoreVisible ? 1 : 0
+            clip: true
+
+            Layout.preferredWidth: animatedWidth
+            Layout.preferredHeight: 56
+            implicitWidth: animatedWidth
+            implicitHeight: 56
+
+            Behavior on animatedWidth {
+                enabled: WelcomeMotion.motionEnabled
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
+            Behavior on opacity {
+                enabled: WelcomeMotion.motionEnabled
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
+
+            RippleButtonWithIcon {
+                id: restoreButton
+                anchors.fill: parent
+                implicitWidth: contentImplicitWidth + 34
+                implicitHeight: 56
+                centerContent: true
+                materialIcon: "settings_backup_restore"
+                mainText: Translation.tr("Restore a backup")
+                mainTextWeight: Font.Bold
+                mainTextFontFamily: Appearance.font.family.title
+                mainTextVariableAxes: Appearance.font.variableAxes.titleRounded
+                textPixelSize: Appearance.font.pixelSize.normal
+                buttonRadius: Appearance.rounding.full
+                colText: Appearance.colors.colOnSecondaryContainer
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                colRipple: Appearance.colors.colSecondaryContainerActive
+                Accessible.name: mainText
+                onClicked: if (!root.transitionRunning) root.restoreRequested()
             }
         }
 

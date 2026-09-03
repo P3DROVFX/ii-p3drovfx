@@ -25,6 +25,7 @@ WelcomeLearnPage 1.0 WelcomeLearnPage.qml
 WelcomeNavigation 1.0 WelcomeNavigation.qml
 WelcomePersonalizePage 1.0 WelcomePersonalizePage.qml
 WelcomePresetStorePane 1.0 WelcomePresetStorePane.qml
+WelcomeRestoreDialog 1.0 WelcomeRestoreDialog.qml
 WelcomeColorPreviewGrid 1.0 WelcomeColorPreviewGrid.qml
 WelcomeLightDarkToggle 1.0 WelcomeLightDarkToggle.qml
 WelcomeProgress 1.0 WelcomeProgress.qml
