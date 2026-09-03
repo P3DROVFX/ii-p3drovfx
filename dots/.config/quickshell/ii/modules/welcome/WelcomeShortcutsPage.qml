@@ -28,6 +28,11 @@ Item {
     readonly property bool compactWidth: root.width < Appearance.rounding.verylarge * 22
     readonly property var cheatsheetKeys: WelcomeKeybindRegistry.keysFor("cheatsheet")
     /**
+     * How many of the four the reader has actually pressed. Shown, never
+     * required: the step advances the same whether this is four or zero.
+     */
+    readonly property int triedCount: WelcomeKeybindRegistry.performedEverydayCount
+    /**
      * Three, on one row. The page is not a reference — the card at the bottom
      * is, and every card added above it pushes that card under the navigation
      * on a short window.
@@ -36,6 +41,22 @@ Item {
 
     function openCheatsheet(): void {
         root.openSettingsTarget("cheatSheet", "", "keyboard");
+    }
+
+    /**
+     * A click on a card does what the card says, not what the page is about.
+     * Unbound actions have nothing to run, and those fall back to the place
+     * that can tell the reader why — the cheatsheet.
+     */
+    function runShortcut(actionId: string): void {
+        if (WelcomeKeybindRegistry.trigger(actionId)) {
+            // Ticked here as well as by the watcher: a few of these open
+            // something the shell publishes no flag for, and having run it
+            // from the card is exactly as true as having pressed the key.
+            WelcomeKeybindRegistry.markPerformed(actionId);
+            return;
+        }
+        root.openCheatsheet();
     }
 
     ColumnLayout {
@@ -64,7 +85,8 @@ Item {
                     title: Translation.tr(modelData.labelKey)
                     keys: WelcomeKeybindRegistry.keysFor(modelData.id)
                     unassignedText: Translation.tr("Not assigned")
-                    onActivated: root.openCheatsheet()
+                    performed: WelcomeKeybindRegistry.hasPerformed(modelData.id)
+                    onActivated: root.runShortcut(modelData.id)
                 }
             }
         }
@@ -87,7 +109,8 @@ Item {
                     title: Translation.tr(modelData.labelKey)
                     keys: WelcomeKeybindRegistry.keysFor(modelData.id)
                     unassignedText: Translation.tr("Not assigned")
-                    onActivated: root.openCheatsheet()
+                    performed: WelcomeKeybindRegistry.hasPerformed(modelData.id)
+                    onActivated: root.runShortcut(modelData.id)
                 }
             }
         }
@@ -128,7 +151,9 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("You don't have to remember any of these")
+                        text: root.triedCount > 0
+                            ? Translation.tr("Nice — you don't have to remember the rest either")
+                            : Translation.tr("Try one now, or don't — they're all in the cheatsheet")
                         color: Appearance.colors.colOnTertiaryContainer
                         font.family: Appearance.font.family.title
                         font.variableAxes: Appearance.font.variableAxes.titleRounded
@@ -139,7 +164,12 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: WelcomeKeybindRegistry.describedKeybindCount > 0
+                        text: root.triedCount > 0
+                            ? Translation.tr("%1 of %2 tried — the cheatsheet has the other %3.")
+                                .arg(String(root.triedCount))
+                                .arg(String(WelcomeKeybindRegistry.everydayActions.length))
+                                .arg(String(Math.max(0, WelcomeKeybindRegistry.describedKeybindCount - root.triedCount)))
+                            : WelcomeKeybindRegistry.describedKeybindCount > 0
                             ? Translation.tr("The cheatsheet lists all %1 shortcuts, and stays in sync with your config.")
                                 .arg(String(WelcomeKeybindRegistry.describedKeybindCount))
                             : Translation.tr("The cheatsheet lists every shortcut, and stays in sync with your config.")

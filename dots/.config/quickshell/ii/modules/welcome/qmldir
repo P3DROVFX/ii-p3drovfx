@@ -10,6 +10,7 @@ singleton WelcomeMotion 1.0 WelcomeMotion.qml
 WelcomeActionCard 1.0 WelcomeActionCard.qml
 WelcomeChoiceList 1.0 WelcomeChoiceList.qml
 WelcomeCollapsedPill 1.0 WelcomeCollapsedPill.qml
+WelcomeDisplayIdentifier 1.0 WelcomeDisplayIdentifier.qml
 WelcomeProfilePage 1.0 WelcomeProfilePage.qml
 WelcomeBarPage 1.0 WelcomeBarPage.qml
 WelcomeShortcutsPage 1.0 WelcomeShortcutsPage.qml

@@ -12,6 +12,8 @@ RippleButton {
     property string materialIcon: "keyboard"
     property string unassignedText: Translation.tr("No shortcut")
     property bool hero: false
+    /** Ticked once the reader has actually opened this. Never a requirement. */
+    property bool performed: false
 
     signal activated()
 
@@ -99,6 +101,30 @@ RippleButton {
             color: Appearance.colors.colOnLayer2
             opacity: 0.75
             font.pixelSize: Appearance.font.pixelSize.smaller
+        }
+
+        // Arrives when the reader tries the shortcut, and takes no space
+        // before that: a row of empty circles waiting to be filled is a
+        // checklist, and a checklist is a demand.
+        MaterialSymbol {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: root.performed ? implicitWidth : 0
+            text: "check_circle"
+            fill: 1
+            iconSize: root.hero ? Appearance.font.pixelSize.huge : Appearance.font.pixelSize.larger
+            color: Appearance.colors.colPrimary
+            opacity: root.performed ? 1 : 0
+            scale: root.performed ? 1 : 0.6
+
+            Behavior on Layout.preferredWidth {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on scale {
+                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+            }
         }
     }
 

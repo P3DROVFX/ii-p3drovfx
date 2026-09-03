@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import qs
 import qs.modules.common
 import qs.services
 
@@ -87,6 +88,73 @@ QtObject {
 
     readonly property var actions: [...everydayActions, ...exploreActions]
 
+    // ── What the reader has actually tried ────────────────────────────────
+    //
+    // The shortcuts step lists four keys, and a list is something you read
+    // rather than something you learn. Every one of them opens a surface the
+    // shell already publishes a flag for, so pressing the key is observable
+    // without asking the reader to prove anything: the card just ticks.
+    //
+    // Nothing gates on this. It is a record of what happened, not a gate — a
+    // step that refuses to advance until you perform is a step that traps
+    // someone whose keyboard has a different layout than the one assumed.
+    //
+    // Lives on the singleton rather than on the page so walking back and
+    // forth through the flow does not erase it; cleared when the Welcome
+    // closes, because it is about this sitting.
+    property var performedActions: ({})
+
+    function markPerformed(actionId: string): void {
+        if (root.performedActions[actionId])
+            return;
+        const next = Object.assign({}, root.performedActions);
+        next[actionId] = true;
+        root.performedActions = next;
+    }
+
+    function hasPerformed(actionId: string): bool {
+        return root.performedActions[actionId] === true;
+    }
+
+    function resetPerformed(): void {
+        root.performedActions = ({});
+    }
+
+    readonly property int performedEverydayCount: root.everydayActions
+        .filter(action => root.hasPerformed(action.id)).length
+
+    // Search and Overview are the same surface told apart by one flag, which
+    // is why they are read here rather than each card watching its own.
+    readonly property Connections watcher: Connections {
+        target: GlobalStates
+
+        function onOverviewOpenChanged() {
+            if (!GlobalStates.overviewOpen)
+                return;
+            root.markPerformed(GlobalStates.searchOnlyMode ? "launcher" : "overview");
+        }
+
+        function onDashboardPanelOpenChanged() {
+            if (GlobalStates.dashboardPanelOpen)
+                root.markPerformed("dashboard");
+        }
+
+        function onCheatsheetOpenChanged() {
+            if (GlobalStates.cheatsheetOpen)
+                root.markPerformed("cheatsheet");
+        }
+
+        function onSettingsOpenChanged() {
+            if (GlobalStates.settingsOpen)
+                root.markPerformed("settings");
+        }
+
+        function onWelcomeOpenChanged() {
+            if (!GlobalStates.welcomeOpen)
+                root.resetPerformed();
+        }
+    }
+
     function flatten(nodes, output): void {
         for (const node of nodes ?? []) {
             output.push(...(node.keybinds ?? []));
@@ -164,6 +232,28 @@ QtObject {
             "Period": "."
         };
         return map[key] ?? key;
+    }
+
+    /**
+     * Run the action a card stands for, by dispatching the binding the card is
+     * already showing.
+     *
+     * Every card used to open the cheatsheet, which made the four keycaps
+     * decorative: the one thing a card could not do was the thing it was
+     * about. Going through the parsed binding rather than through a lookup of
+     * our own means a rebound key does here exactly what it does on the
+     * keyboard, and the checkmark lights up the same way for a click as for a
+     * press — the flags it watches do not care which one arrived.
+     *
+     * Returns false when the action resolves to nothing, so the caller can
+     * fall back rather than swallow the click.
+     */
+    function trigger(actionId: string): bool {
+        const action = root.actions.find(item => item.id === actionId);
+        const binding = action ? root.rawKeybindFor(action) : null;
+        if (!binding)
+            return false;
+        return HyprlandKeybinds.dispatchBinding(binding);
     }
 
     function keysFor(actionId: string): list<string> {

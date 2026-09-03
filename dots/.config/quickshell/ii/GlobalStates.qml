@@ -1274,6 +1274,53 @@ Singleton {
         return pending;
     }
 
+    /**
+     * Move the focused monitor to the nearest empty workspace.
+     *
+     * The Welcome opens moments after an install that ran in a terminal
+     * filling the screen, and a first-run guide underneath the terminal that
+     * installed it is a guide nobody sees.
+     *
+     * Unlike Edit Mode's version of this, nothing is saved and nothing is put
+     * back: the user is meant to stay on the clean workspace. Skipped when the
+     * current one is already empty, so a login that lands on a bare desktop
+     * does not jump for no reason.
+     */
+    function focusNearestEmptyWorkspace(): void {
+        const mon = Hyprland.focusedMonitor?.name ?? "";
+        if (mon === "")
+            return;
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const ws = mData?.activeWorkspace?.id;
+        // Already parked on a temp workspace (the lock's, or Edit Mode's).
+        if (ws === undefined || ws === null || ws > 1000000)
+            return;
+        const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
+        if (!hasWindows)
+            return;
+
+        const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+            monitors: [{
+                name: mon,
+                activeWorkspaceId: ws,
+                index: Quickshell.screens.findIndex(screen => screen.name === mon)
+            }],
+            windowList: HyprlandData.windowList || [],
+            allMonitors: HyprlandData.monitors || [],
+            useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+            workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+            workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+        });
+        const target = emptyMap[mon] || (ws + 1);
+        Quickshell.execDetached(["hyprctl", "--batch",
+            `dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${target}}`]);
+    }
+
+    // ── The displays step's "which screen is which" ───────────────────────
+    // A number on every physical panel, the way macOS does it. Read by the
+    // per-screen overlay the shell loads for it.
+    property bool displayIdentifyActive: false
+
     function toggleWelcome() {
         if (root.welcomeOpen) {
             root.closeWelcome();

@@ -208,6 +208,15 @@ ShellRoot {
     // The Welcome's stand-in while it is stepped aside for Edit Mode. A layer
     // surface rather than a smaller window: a Wayland toplevel cannot place
     // itself beside the toolbar, and this has to.
+    // A number on each physical panel while the displays step asks which is
+    // which. One surface per screen, so the answer is on the screen itself.
+    LazyLoader {
+        id: displayIdentifyLoader
+        readonly property bool wanted: Config.ready && GlobalStates.displayIdentifyActive
+        source: wanted ? "modules/welcome/WelcomeDisplayIdentifier.qml" : ""
+        active: wanted && source !== ""
+    }
+
     LazyLoader {
         id: welcomeCollapsedLoader
         readonly property bool wanted: Config.ready
@@ -253,6 +262,10 @@ ShellRoot {
         onTriggered: {
             root.welcomeRequested = false;
             Quickshell.execDetached(["rm", "-f", welcomeRequest.path]);
+            // The install ran in a terminal, and that terminal is still on
+            // screen covering the desktop the Welcome is about to describe.
+            // A clean workspace first, then the guide on top of it.
+            GlobalStates.focusNearestEmptyWorkspace();
             GlobalStates.openWelcome();
         }
     }
