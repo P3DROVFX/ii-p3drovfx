@@ -709,6 +709,20 @@ Singleton {
         GlobalStates.editHistoryEndBatch();
     }
 
+    // The catalogue's minus, beside its plus: one copy off rather than the
+    // whole kind. The LAST one placed, which is the copy the plus next to it
+    // just made - a row that adds at one end and removes at the other would
+    // be two different widgets to anyone watching the desktop.
+    function removeLastWidgetInstance(widgetId) {
+        const list = root.options.background.activeWidgets || [];
+        for (let i = list.length - 1; i >= 0; i--) {
+            if (list[i].widgetId === widgetId) {
+                root.removeWidgetInstance(list[i].id);
+                return;
+            }
+        }
+    }
+
     // With a monitor name the write lands in that monitor's fork, created from
     // the values it currently shows; without one it lands in the legacy x/y
     // that every monitor without a fork follows (see WidgetPlacement).
@@ -3633,7 +3647,7 @@ Singleton {
                 // The typing test also lives in the Overview search. Off by
                 // default so the cheatsheet does not gain a tab nobody asked
                 // for; the two hosts share one surface either way.
-                property bool enableTypingTest: false
+                property bool enableTypingTest: true
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller

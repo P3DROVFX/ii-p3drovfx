@@ -19,6 +19,7 @@ Item {
 
     Rectangle {
         id: tabBarHighlight
+        visible: root.currentIndex >= 0
         property real itemHeight: tabBarColumn.children[0]?.baseSize ?? 56
         property real baseHighlightHeight: tabBarColumn.children[0]?.baseHighlightHeight ?? 56
         anchors {

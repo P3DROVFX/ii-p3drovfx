@@ -21,11 +21,6 @@ AnimatedIcon {
 
     property bool active: false
     property bool busy: false
-    // `visible` is recursive in Qt Quick: it reads false whenever an ancestor is
-    // hidden, so this also covers the whole dashboard widget being switched off in
-    // the bar layout. Without it activeLoop kept running - and repainting the bar
-    // every frame - for a widget that was not on screen at all.
-    readonly property bool activityVisible: root.visible && (!root.presenceController || root.presenceController.reveal)
 
     readonly property real dimmed: 0.35
     readonly property var columns: [3.7, 7.85, 12, 16.15, 20.3]
@@ -40,8 +35,7 @@ AnimatedIcon {
         anchors.fill: parent
         // Deliberately the default GeometryRenderer. Each bar is one straight,
         // round-capped line, and at this icon's size the CurveRenderer draws it
-        // pixel-for-pixel identically while costing noticeably more CPU for every
-        // frame activeLoop animates.
+        // pixel-for-pixel identically while costing more during each state cue.
         ShapePath {
             strokeColor: root.color
             fillColor: "transparent"
@@ -67,36 +61,29 @@ AnimatedIcon {
         }
     }
 
-    function applyRest(): void {
+    function applyState(isActive: bool): void {
         for (let i = 0; i < 5; i++) {
             const bar = root.barAt(i);
             if (!bar)
                 continue;
-            bar.half = root.active ? root.restHalf[i] : root.quiet;
+            bar.half = isActive ? root.restHalf[i] : root.quiet;
             bar.offset = 0;
-            bar.opacity = root.active ? 1 : root.dimmed;
+            bar.opacity = isActive ? 1 : root.dimmed;
         }
+    }
+
+    function applyRest(): void {
+        root.applyState(root.active);
+    }
+
+    function settle(isActive: bool): void {
+        root.busy = false;
+        root.applyState(isActive);
     }
 
     function stopAll(): void {
-        activeLoop.stop();
         onAnim.stop();
         offAnim.stop();
-    }
-
-    function syncActivityLoop(resetRest: bool): void {
-        if (!root.active || !root.activityVisible) {
-            activeLoop.stop();
-            if (resetRest && !root.busy)
-                root.applyRest();
-            return;
-        }
-        if (root.busy)
-            return;
-        if (resetRest)
-            root.applyRest();
-        if (!activeLoop.running)
-            activeLoop.restart();
     }
 
     function play(cue: string): void {
@@ -111,16 +98,18 @@ AnimatedIcon {
             break;
         default:
             root.busy = false;
-            root.syncActivityLoop(false);
+            root.applyRest();
             break;
         }
     }
 
-    onActiveChanged: root.syncActivityLoop(true)
-    onActivityVisibleChanged: root.syncActivityLoop(true)
+    onActiveChanged: Qt.callLater(() => {
+        if (!root.busy)
+            root.applyRest();
+    })
 
     Component.onCompleted: Qt.callLater(() => {
-        root.syncActivityLoop(true);
+        root.applyRest();
     })
 
     // Stable ids are intentional. A NumberAnimation target evaluated through
@@ -139,11 +128,7 @@ AnimatedIcon {
     ParallelAnimation {
         id: onAnim
         onStopped: root.busy = false
-        onFinished: {
-            root.busy = false;
-            if (root.active && root.activityVisible)
-                activeLoop.restart();
-        }
+        onFinished: root.settle(true)
 
         SequentialAnimation {
             PauseAnimation { duration: 160 }
@@ -271,49 +256,11 @@ AnimatedIcon {
         }
     }
 
-    // ── Active: a calm, continuously changing equalizer profile ────────────
-    // This is service activity, not a decorative pulse. The centres stay at
-    // y=12 while both endpoints of every bar expand/contract symmetrically.
-    SequentialAnimation {
-        id: activeLoop
-        loops: Animation.Infinite
-
-        ParallelAnimation {
-            NumberAnimation { target: bar0; property: "half"; to: root.restHalf[0] + 1.1; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar1; property: "half"; to: root.restHalf[1] - 1.2; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar2; property: "half"; to: root.restHalf[2] - 1.8; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar3; property: "half"; to: root.restHalf[3] + 1.0; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar4; property: "half"; to: root.restHalf[4] - 0.7; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-        }
-
-        ParallelAnimation {
-            NumberAnimation { target: bar0; property: "half"; to: root.restHalf[0] - 0.7; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar1; property: "half"; to: root.restHalf[1] + 1.0; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar2; property: "half"; to: root.restHalf[2] - 0.5; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar3; property: "half"; to: root.restHalf[3] - 1.1; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar4; property: "half"; to: root.restHalf[4] + 1.1; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-        }
-
-        ParallelAnimation {
-            NumberAnimation { target: bar0; property: "half"; to: root.restHalf[0]; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar1; property: "half"; to: root.restHalf[1]; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar2; property: "half"; to: root.restHalf[2]; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar3; property: "half"; to: root.restHalf[3]; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-            NumberAnimation { target: bar4; property: "half"; to: root.restHalf[4]; duration: Appearance.animation.dashboardEqualizerActivity.duration; easing.type: Appearance.animation.dashboardEqualizerActivity.type }
-        }
-    }
-
     // ── Off: they fall, outermost first ─────────────────────────────────────
     ParallelAnimation {
         id: offAnim
         onStopped: root.busy = false
-        onFinished: {
-            root.busy = false;
-            if (root.active && root.activityVisible) {
-                root.applyRest();
-                activeLoop.restart();
-            }
-        }
+        onFinished: root.settle(false)
 
         SequentialAnimation {
             PauseAnimation { duration: 0 }

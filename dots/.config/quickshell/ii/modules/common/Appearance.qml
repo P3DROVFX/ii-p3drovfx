@@ -694,11 +694,6 @@ Singleton {
             property list<real> exitCurve: animationCurves.emphasizedAccel
         }
 
-        property QtObject dashboardEqualizerActivity: QtObject {
-            property int duration: Math.round(440 * root.animMultiplier)
-            property int type: Easing.InOutSine
-        }
-
         // The bar and the wrapped frame leaving the screen together: a
         // fullscreen window taking over, media mode, or a placement swap. The
         // exit accelerates away and the entrance decelerates in, so a swap does

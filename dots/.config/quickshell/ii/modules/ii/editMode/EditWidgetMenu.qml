@@ -72,6 +72,10 @@ Item {
     readonly property var currentLockChoice: root.lockChoices.find(choice => choice.value === root.lockBehavior)
         ?? root.lockChoices[0]
 
+    // Whether the widget names a Settings page of its own. Most do; the
+    // handful that do not simply have no options row.
+    readonly property bool hasConfigPage: String(root.metadata?.configPage ?? "") !== ""
+
     readonly property real scaleFactor: widget ? widget.committedScaleFactor : 1
     readonly property real scaleStep: EditModeLogic.nearestSizeStep(root.scaleFactor)
     readonly property bool canGrow: root.widget !== null && EditModeLogic.steppedScale(root.scaleFactor, 1) !== null
@@ -83,16 +87,38 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    // Whether the lock chooser is showing, and which side of the card it opens
-    // on: the card is placed at a pointer that can be anywhere, so the chooser
-    // flips rather than running off the screen.
+    // Whether a side panel is showing, and which side of the card it opens on:
+    // the card is placed at a pointer that can be anywhere, so a panel flips
+    // rather than running off the screen. The two are exclusive - one card
+    // beside the menu at a time, or the second would land on the first.
     property bool lockChooserOpen: false
+    property bool configOpen: false
     readonly property real chooserWidth: 274
     readonly property real chooserGap: 8
-    readonly property bool chooserOnLeft: root.parent !== null
-        && (root.x + root.width + root.chooserGap + root.chooserWidth) > root.parent.width
+    readonly property real configWidth: Math.min(440, Math.max(300,
+        (root.parent ? root.parent.width : 900) - root.width - root.chooserGap * 4))
+    readonly property real configMaxHeight: Math.max(240,
+        (root.parent ? root.parent.height : 720) - 32)
 
-    onInstanceIdChanged: root.lockChooserOpen = false
+    function opensOnLeft(panelWidth) {
+        return root.parent !== null
+            && (root.x + root.width + root.chooserGap + panelWidth) > root.parent.width;
+    }
+    readonly property bool chooserOnLeft: root.opensOnLeft(root.chooserWidth)
+    readonly property bool configOnLeft: root.opensOnLeft(root.configWidth)
+
+    // Six of the widgets' Settings pages carry a text field, and under
+    // layer-shell no item in a surface at keyboardFocus None can hold active
+    // focus at all: the caret would never appear and the keys would go
+    // wherever the keyboard already was. So the open panel asks the chrome to
+    // hold the keyboard the same way the catalogue's search field does - as
+    // intent, published upward, never read back off activeFocus.
+    readonly property bool wantsKeyboard: root.configOpen && root.instance !== null && root.hasConfigPage
+
+    onInstanceIdChanged: {
+        root.lockChooserOpen = false;
+        root.configOpen = false;
+    }
 
     function stepSize(direction) {
         if (!root.widget || !root.widget.commitResizeScale)
@@ -203,6 +229,29 @@ Item {
             }
         }
 
+        // Everything the widget itself can be told to do. Not a copy of its
+        // Settings page - the page itself, loaded beside the menu - so the
+        // options here are whatever Settings has, without a second list of
+        // them to keep in step.
+        EditPanelRow {
+            id: configRow
+            hostRadius: Appearance.rounding.windowRounding
+            hostPadding: root.padding
+            Layout.fillWidth: true
+            first: false
+            last: false
+            visible: root.hasConfigPage
+            rowEnabled: root.instance !== null
+            symbol: "tune"
+            title: Translation.tr("Widget options")
+            trailingKind: "chevron"
+            selected: root.configOpen
+            onActivated: {
+                root.lockChooserOpen = false;
+                root.configOpen = !root.configOpen;
+            }
+        }
+
         // One more of this one, a step down and to the right. A widget can
         // be placed more than once, and the catalogue's row gives a fresh
         // copy at a default spot; this gives one that keeps its settings.
@@ -237,7 +286,10 @@ Item {
             subtitle: root.currentLockChoice.title
             trailingKind: "chevron"
             selected: root.lockChooserOpen
-            onActivated: root.lockChooserOpen = !root.lockChooserOpen
+            onActivated: {
+                root.configOpen = false;
+                root.lockChooserOpen = !root.lockChooserOpen;
+            }
         }
 
         // On the Lockscreen tab a desktop widget is hidden from the lock, not
@@ -354,6 +406,50 @@ Item {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── The widget's own settings ────────────────────────────────────────────
+    // The same side-panel gesture as the chooser above, carrying the widget's
+    // real Settings page instead of a hand-written copy of it.
+    Loader {
+        id: configLoader
+        active: root.configOpen && root.instance !== null && root.hasConfigPage
+        // Beside the menu and inside the screen: a page of forms is taller
+        // than the menu that opened it, so the card slides up as far as it
+        // must rather than hanging off the bottom.
+        y: {
+            const h = configLoader.item ? configLoader.item.height : 0;
+            const parentHeight = root.parent ? root.parent.height : root.height;
+            return Math.max(16 - root.y, Math.min(0, parentHeight - 16 - root.y - h));
+        }
+        x: root.configOnLeft
+            ? -root.chooserGap - root.configWidth
+            : root.width + root.chooserGap
+        z: 5
+
+        sourceComponent: EditWidgetConfigPanel {
+            id: configPanel
+            widgetId: root.instance ? root.instance.widgetId : ""
+            maxWidth: root.configWidth
+            maxHeight: root.configMaxHeight
+            onDismissRequested: root.configOpen = false
+
+            transformOrigin: root.configOnLeft ? Item.TopRight : Item.TopLeft
+            scale: 0.9
+            opacity: 0
+            Component.onCompleted: {
+                configPanel.scale = 1;
+                configPanel.opacity = 1;
+            }
+            Behavior on scale {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(configPanel)
+            }
+            Behavior on opacity {
+                enabled: !Appearance.reducedMotion
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(configPanel)
             }
         }
     }

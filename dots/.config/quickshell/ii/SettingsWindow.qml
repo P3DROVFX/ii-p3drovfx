@@ -416,6 +416,10 @@ FloatingWindow {
         function onSettingsOpenChanged() {
             root.visible = GlobalStates.settingsOpen;
             if (GlobalStates.settingsOpen) {
+                if (GlobalStates.settingsSuspendedForScreenshot) {
+                    GlobalStates.settingsSuspendedForScreenshot = false;
+                    return;
+                }
                 root.navigationHistoryActive = false;
                 SearchRegistry.setSettingsActive(true);
                 settingsSearchBar.forceFocus();
@@ -424,7 +428,8 @@ FloatingWindow {
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
-                root.endNavigationSession();
+                if (!GlobalStates.settingsSuspendedForScreenshot)
+                    root.endNavigationSession();
             }
         }
     }
@@ -454,12 +459,14 @@ FloatingWindow {
         if (!visible) {
             root.pendingSearchText = "";
             SearchRegistry.setSettingsActive(false);
-            root.endNavigationSession();
-            if (GlobalStates.settingsOpen)
+            if (!GlobalStates.settingsSuspendedForScreenshot)
+                root.endNavigationSession();
+            if (GlobalStates.settingsOpen && !GlobalStates.settingsSuspendedForScreenshot)
                 GlobalStates.settingsOpen = false;
         } else if (GlobalStates.settingsOpen) {
             SearchRegistry.setSettingsActive(true);
-            Qt.callLater(() => root.ensurePageReady());
+            if (!GlobalStates.settingsSuspendedForScreenshot)
+                Qt.callLater(() => root.ensurePageReady());
         }
     }
 

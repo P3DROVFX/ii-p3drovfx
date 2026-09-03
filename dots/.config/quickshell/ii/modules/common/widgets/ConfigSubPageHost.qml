@@ -16,6 +16,8 @@ Item {
     // call site (Qt.resolvedUrl) so they stay relative to the caller's file.
     property url activeSubPage: ""
     readonly property bool isOpen: activeSubPage.toString() !== ""
+    readonly property alias subPageItem: subPageLoader.item
+    signal subPageLoaded(var item)
     signal navigationChanged()
     // The Settings window uses this path to keep nested configuration pages
     // in the local mouse-back history (for example Drive -> Advanced Drive).
@@ -138,7 +140,10 @@ Item {
                 if (item.hasOwnProperty("showBackButton"))
                     item.showBackButton = true;
 
-                item.goBack.connect(host.requestBack);
+                if (item.goBack !== undefined)
+                    item.goBack.connect(host.requestBack);
+
+                host.subPageLoaded(item);
             }
         }
 

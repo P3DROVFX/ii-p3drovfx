@@ -50,6 +50,8 @@ StyledFlickable {
             : root.lightTarget ? root.background.lightModeWallpaperPath
             : root.background.wallpaperPath) ?? ""))
     readonly property string targetName: root.fileName(root.targetPath)
+    readonly property string targetDisplayName: root.wallpaperEngine
+        ? Translation.tr("Wallpaper Engine scene") : root.targetName
     readonly property bool separateLock: root.background.useSeparateLockscreenWallpaper ?? false
     readonly property bool separateLight: root.background.useSeparateLightModeWallpaper ?? false
 
@@ -120,13 +122,10 @@ StyledFlickable {
             implicitHeight: Math.round(width * 10 / 16)
             radius: Appearance.rounding.normal
             color: Appearance.colors.colLayer1
-            border.width: 1
-            border.color: Appearance.colors.colLayer0Border
 
             ClippingRectangle {
                 anchors.fill: parent
-                anchors.margins: 1
-                radius: preview.radius - 1
+                radius: preview.radius
                 color: "transparent"
 
                 Loader {
@@ -138,31 +137,6 @@ StyledFlickable {
                         fillMode: Image.PreserveAspectCrop
                         cache: false
                     }
-                }
-            }
-
-            // The name, on a scrim along the bottom edge so it reads over
-            // any picture.
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 1
-                height: nameLabel.implicitHeight + 14
-                bottomLeftRadius: preview.radius - 1
-                bottomRightRadius: preview.radius - 1
-                color: ColorUtils.transparentize(Appearance.m3colors.m3surfaceContainer, 0.2)
-
-                StyledText {
-                    id: nameLabel
-                    anchors.fill: parent
-                    anchors.leftMargin: 12
-                    anchors.rightMargin: 12
-                    verticalAlignment: Text.AlignVCenter
-                    text: root.wallpaperEngine ? Translation.tr("Wallpaper Engine scene") : root.targetName
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colOnSurface
-                    elide: Text.ElideMiddle
                 }
             }
 
@@ -179,6 +153,48 @@ StyledFlickable {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.openPageRequested("wallpapers")
+            }
+        }
+
+        // Keep the wallpaper name in the same separate surface used by the
+        // preset cards instead of laying text over the image.
+        Rectangle {
+            id: wallpaperNameCard
+            Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            Layout.topMargin: 6
+            implicitHeight: Math.max(52, wallpaperNameRow.implicitHeight + 20)
+            radius: Appearance.rounding.normal
+            color: Appearance.colors.colSurfaceContainerLow
+
+            RowLayout {
+                id: wallpaperNameRow
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+
+                Rectangle {
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colSecondaryContainer
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: root.wallpaperEngine ? "animation" : "wallpaper"
+                        iconSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.targetDisplayName
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideMiddle
+                }
             }
         }
 

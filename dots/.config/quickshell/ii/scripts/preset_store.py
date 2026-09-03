@@ -529,18 +529,28 @@ def cmd_auth_login():
 # discover / fetch-manifest
 # ---------------------------------------------------------------------------
 
-def probe_repo_index(repo, token=None):
+def probe_repo_meta(repo, token=None):
     slug = repo.get('full_name', '')
     branch = repo.get('default_branch', 'main')
-    raw_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, INDEX_NAME)
+    raw_index = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, INDEX_NAME)
     try:
-        text = http_text(raw_url, timeout=HTTP_TIMEOUT)
+        text = http_text(raw_index, timeout=HTTP_TIMEOUT)
         data = json.loads(text)
         if isinstance(data, dict) and isinstance(data.get('presets'), list):
-            return slug, branch, data
+            return slug, branch, 'index', data
     except Exception:
         pass
-    return slug, branch, None
+
+    raw_preset = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, MANIFEST_NAME)
+    try:
+        text = http_text(raw_preset, timeout=HTTP_TIMEOUT)
+        data = json.loads(text)
+        if isinstance(data, dict) and isinstance(data.get('name'), str):
+            return slug, branch, 'preset', data
+    except Exception:
+        pass
+
+    return slug, branch, None, None
 
 
 def cmd_discover(limit=30, query=''):
@@ -564,48 +574,103 @@ def cmd_discover(limit=30, query=''):
     installed = {link.get('repo'): name for name, link in load_links().items()}
     items = data.get('items', [])
 
-    # Probe for index.json in parallel across repositories
-    indexes = {}
+    # Probe for index.json or preset.json in parallel across repositories
+    metas = {}
     if items:
         token = gh_token()
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(items))) as executor:
-            futures = [executor.submit(probe_repo_index, repo, token) for repo in items]
+            futures = [executor.submit(probe_repo_meta, repo, token) for repo in items]
             for future in concurrent.futures.as_completed(futures):
-                slug, branch, idx_data = future.result()
-                if idx_data:
-                    indexes[slug] = idx_data
+                slug, branch, kind, meta_data = future.result()
+                if kind:
+                    metas[slug] = (kind, meta_data)
 
     results = []
     for repo in items:
         slug = repo.get('full_name', '')
         branch = repo.get('default_branch', 'main')
-        if slug in indexes:
+        kind, meta_data = metas.get(slug, (None, None))
+        if kind == 'index':
             # Mono-repo collection: expose each individual preset
-            idx = indexes[slug]
+            idx = meta_data
             for p in idx.get('presets', []):
                 p_id = p.get('id') or repo_name_from_preset(p.get('name', ''))
                 full_slug = '%s:%s' % (slug, p_id)
-                p_path = p.get('path', 'presets/%s' % p_id)
+                p_path = p.get('path', 'presets/%s' % p_id).strip('/')
+                p_wallpaper = p.get('wallpaper')
+                p_banner = p.get('banner')
+                p_shots = p.get('screenshots') or []
+                if p_banner:
+                    image_rel = p_banner.lstrip('/')
+                elif p_shots:
+                    image_rel = p_shots[0].lstrip('/')
+                elif p_wallpaper:
+                    image_rel = p_wallpaper.lstrip('/')
+                else:
+                    image_rel = '%s/wallpaper.png' % p_path
+                image_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, image_rel)
+                wallpaper_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (
+                    slug, branch, p_wallpaper.lstrip('/') if p_wallpaper else ('%s/wallpaper.png' % p_path)
+                )
+
                 results.append({
                     'repo': full_slug,
                     'name': p.get('name', '') or p_id,
                     'description': p.get('description') or repo.get('description') or '',
                     'author': p.get('author') or (repo.get('owner') or {}).get('login', ''),
                     'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
+                    'imageUrl': image_url,
+                    'wallpaperUrl': wallpaper_url,
                     'stars': repo.get('stargazers_count', 0),
                     'repoUrl': '%s/tree/%s/%s' % (repo.get('html_url', ''), branch, p_path),
                     'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
                     'defaultBranch': branch,
                     'installedAs': installed.get(full_slug, ''),
                 })
+        elif kind == 'preset':
+            # Legacy single-preset repository with manifest
+            manifest = meta_data
+            p_wallpaper = manifest.get('wallpaper')
+            p_banner = manifest.get('banner')
+            p_shots = manifest.get('screenshots') or []
+            if p_banner:
+                image_rel = p_banner.lstrip('/')
+            elif p_shots:
+                image_rel = p_shots[0].lstrip('/')
+            elif p_wallpaper:
+                image_rel = p_wallpaper.lstrip('/')
+            else:
+                image_rel = 'wallpaper.png'
+            image_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, image_rel)
+            wallpaper_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (
+                slug, branch, p_wallpaper.lstrip('/') if p_wallpaper else 'wallpaper.png'
+            )
+
+            results.append({
+                'repo': slug,
+                'name': manifest.get('name') or repo.get('name', ''),
+                'description': manifest.get('description') or repo.get('description') or '',
+                'author': manifest.get('author') or (repo.get('owner') or {}).get('login', ''),
+                'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
+                'imageUrl': image_url,
+                'wallpaperUrl': wallpaper_url,
+                'stars': repo.get('stargazers_count', 0),
+                'repoUrl': repo.get('html_url', ''),
+                'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
+                'defaultBranch': branch,
+                'installedAs': installed.get(slug, ''),
+            })
         else:
-            # Legacy single-preset repository
+            # Fallback for repos without readable manifest
+            image_url = 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch)
             results.append({
                 'repo': slug,
                 'name': repo.get('name', ''),
                 'description': repo.get('description') or '',
                 'author': (repo.get('owner') or {}).get('login', ''),
                 'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
+                'imageUrl': image_url,
+                'wallpaperUrl': image_url,
                 'stars': repo.get('stargazers_count', 0),
                 'repoUrl': repo.get('html_url', ''),
                 'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',

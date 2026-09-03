@@ -202,6 +202,14 @@ ColumnLayout {
                         font.variableAxes: Appearance.font.variableAxes.titleRounded
                         color: headerMouseArea.containsMouse && root.pageId ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                         Layout.fillWidth: true
+                        // A Text narrower than its own line PAINTS past its
+                        // width rather than being cut at it, so a long section
+                        // title spilled out of the card whenever the page was
+                        // narrower than Settings' own column - which is every
+                        // time Edit Mode shows one of these pages beside a
+                        // widget. Wrapping keeps the whole title and grows the
+                        // header by a line; at Settings' width nothing wraps.
+                        wrapMode: Text.Wrap
 
                         Behavior on color {
                             ColorAnimation { duration: 150 }

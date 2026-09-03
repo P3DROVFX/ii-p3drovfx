@@ -611,24 +611,22 @@ class IndicatorRevealTests(unittest.TestCase):
 
 
 class LiveActivityTests(unittest.TestCase):
-    def test_easyeffects_bars_keep_moving_while_active(self):
+    def test_easyeffects_only_moves_during_state_cues(self):
         body = EQUALIZER.read_text()
-        loop = body.split("id: activeLoop")[1].split("// ── Off")[0]
-        self.assertIn("loops: Animation.Infinite", loop)
-        self.assertIn("activeLoop.stop()", body.split("function stopAll")[1].split("}")[0])
+        self.assertNotIn("Animation.Infinite", body)
+        self.assertNotIn("activeLoop", body)
+        self.assertNotIn("dashboardEqualizerActivity", APPEARANCE.read_text())
+        stop_all = body.split("function stopAll")[1].split("}")[0]
+        self.assertIn("onAnim.stop()", stop_all)
+        self.assertIn("offAnim.stop()", stop_all)
         self.assertRegex(
             body,
-            re.compile(r"id: onAnim.*?onFinished:.*?root\.active.*?activeLoop\.restart\(\)", re.S),
+            re.compile(r"id: onAnim.*?onFinished:\s*root\.settle\(true\)", re.S),
         )
         self.assertRegex(
             body,
-            re.compile(r"id: offAnim.*?onFinished:.*?root\.active.*?activeLoop\.restart\(\)", re.S),
+            re.compile(r"id: offAnim.*?onFinished:\s*root\.settle\(false\)", re.S),
         )
-        self.assertIn("readonly property bool activityVisible", body)
-        self.assertIn("onActivityVisibleChanged: root.syncActivityLoop(true)", body)
-        for bar in range(5):
-            self.assertIn(f'target: bar{bar}; property: "half"', loop)
-        self.assertNotIn('property: "offset"', loop)
         self.assertIn("startY: 12 + bar.offset - bar.half", body)
         self.assertIn("y: 12 + bar.offset + bar.half", body)
 

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
@@ -23,9 +24,8 @@ import qs.modules.common.functions
  * Applying replaces the whole config, which is more than the mode's history
  * can walk back one step at a time: the stack is cleared and "Undo preset"
  * - the snapshot the script takes before it merges - stands in for it. The
- * review Settings shows before an apply is kept, in a shorter form: what the
- * preset was made for, what in it reads like a command, and the note that
- * shared presets are used at your own discretion.
+ * card applies directly, keeping this compact catalogue focused on choosing
+ * a look rather than opening another set of controls.
  *
  * The store itself stays in Settings. It needs a sign-in, publishing, diffs
  * and a review dialog, which is a window's worth of surface; the row here
@@ -44,15 +44,6 @@ ColumnLayout {
     // [{name, wallpaper, configVersion}], as the script lists them.
     property var presets: []
     property bool saving: false
-    // The preset a click picked, awaiting the review below the strip.
-    property string pendingName: ""
-    property var pendingScan: null
-    readonly property bool confirming: root.pendingName !== ""
-    readonly property bool scanUsable: root.pendingScan !== null && root.pendingScan.ok === true
-    readonly property var scanGroups: root.scanUsable ? (root.pendingScan.groups ?? []) : []
-    readonly property var scanCompat: (root.scanUsable && root.pendingScan.compatibility) ? root.pendingScan.compatibility : null
-    readonly property bool compatBlocked: root.scanCompat !== null && root.scanCompat.ok === false
-    readonly property bool compatMigrates: root.scanCompat !== null && root.scanCompat.status === "migrate"
     readonly property string activePreset: PresetStore.activePreset
     readonly property string presetsScript: `${Directories.scriptPath}/presets.sh`
 
@@ -76,38 +67,10 @@ ColumnLayout {
         refreshTimer.restart();
     }
 
-    function pick(name) {
+    function applyPreset(name) {
         if (root.activePreset === name || PresetStore.busy)
             return;
-        root.pendingName = name;
-        root.pendingScan = null;
-        scanProc.running = false;
-        scanProc.command = [root.presetsScript, "scan", name];
-        scanProc.running = true;
-    }
-
-    function cancelPick() {
-        root.pendingName = "";
-        root.pendingScan = null;
-        scanProc.running = false;
-    }
-
-    function applyPending() {
-        const name = root.pendingName;
-        root.cancelPick();
-        if (name === "" || root.compatBlocked)
-            return;
         PresetStore.applyPreset(name);
-    }
-
-    function riskLabel(group) {
-        if (group.id === "shell")
-            return Translation.tr("Commands it can run on your system: %1").arg(group.count);
-        if (group.id === "ai")
-            return Translation.tr("Assistant permissions it widens: %1").arg(group.count);
-        if (group.id === "network")
-            return Translation.tr("Servers and search engines it redirects: %1").arg(group.count);
-        return Translation.tr("Other settings that read like commands: %1").arg(group.count);
     }
 
     Component.onCompleted: {
@@ -160,22 +123,6 @@ ColumnLayout {
             }
         }
         onExited: root.presets = listProc.collected
-    }
-
-    Process {
-        id: scanProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let result = null;
-                try {
-                    result = JSON.parse(text.trim());
-                } catch (e) {
-                    result = null;
-                }
-                if (root.pendingName !== "")
-                    root.pendingScan = result;
-            }
-        }
     }
 
     EditPanelSectionLabel {
@@ -264,263 +211,156 @@ ColumnLayout {
         color: Appearance.colors.colOnSurfaceVariant
     }
 
-    ListView {
-        id: strip
+    Item {
+        id: stripContainer
         Layout.fillWidth: true
         Layout.topMargin: 6
+        implicitHeight: strip.implicitHeight
         visible: root.presets.length > 0
-        implicitHeight: 104
-        orientation: ListView.Horizontal
-        spacing: 6
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        model: root.presets
 
-        delegate: Item {
-            id: card
-            required property var modelData
-            readonly property string name: String(card.modelData.name ?? "")
-            readonly property string wallpaper: String(card.modelData.wallpaper ?? "")
-            readonly property bool active: root.activePreset === card.name
-            readonly property bool pending: root.pendingName === card.name
-            readonly property bool busy: PresetStore.busyFor(card.name)
-            width: 136
-            height: strip.implicitHeight
+        ListView {
+            id: strip
+            anchors.fill: parent
+            orientation: ListView.Horizontal
+            spacing: 10
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: root.presets
 
-            Rectangle {
-                id: tile
-                anchors.fill: parent
-                radius: Appearance.rounding.small
-                color: card.pending ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer1
-                border.width: card.active ? 2 : 1
-                border.color: card.active ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
-                opacity: card.busy ? 0.5 : 1
-                scale: cardMouse.containsPress ? 0.96 : 1
-                Behavior on scale {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tile)
-                }
+            readonly property real cardWidth: Math.min(160, Math.max(132, Math.floor((width - spacing) / 2)))
+            readonly property real cardHeight: cardWidth * 0.8
+            implicitHeight: cardHeight
 
-                ClippingRectangle {
-                    id: picture
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: tile.border.width
-                    height: 70
-                    topLeftRadius: tile.radius - tile.border.width
-                    topRightRadius: tile.radius - tile.border.width
-                    color: Appearance.colors.colLayer2
+            delegate: Rectangle {
+                    id: presetItem
+                    required property var modelData
+                    width: strip.cardWidth
+                    height: strip.cardHeight
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colSurfaceContainerLow
+                    opacity: presetBusy ? 0.5 : 1
+                    scale: presetButton.down ? 0.96 : 1
 
-                    Loader {
+                    readonly property string presetName: String(modelData.name ?? "")
+                    readonly property string wallpaper: String(modelData.wallpaper ?? "")
+                    readonly property bool active: root.activePreset === presetItem.presetName
+                    readonly property bool presetBusy: PresetStore.busyFor(presetItem.presetName)
+                    readonly property bool tooNew: Number(modelData.configVersion ?? 0) > 0
+                        && Number(modelData.configVersion) > Config.currentConfigVersion
+
+                    Behavior on scale {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(presetItem)
+                    }
+
+                    // The whole card is the single apply action. Keeping the
+                    // real RippleButton above the image gives the pointer a
+                    // hand cursor on every hover, including over the artwork.
+                    RippleButton {
+                        id: presetButton
                         anchors.fill: parent
-                        active: card.wallpaper !== ""
-                        sourceComponent: ThumbnailImage {
-                            sourcePath: card.wallpaper
-                            fillMode: Image.PreserveAspectCrop
-                            cache: false
+                        enabled: !presetItem.active && !presetItem.presetBusy && !PresetStore.busy
+                        hoverEnabled: true
+                        pointingHandCursor: true
+                        buttonRadius: Appearance.rounding.normal
+                        colBackground: "transparent"
+                        colBackgroundHover: "transparent"
+                        colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
+                        onClicked: root.applyPreset(presetItem.presetName)
+
+                        StyledToolTip {
+                            text: presetItem.active
+                                ? Translation.tr("Active preset") : Translation.tr("Apply preset")
                         }
                     }
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        visible: card.wallpaper === ""
-                        text: "style"
-                        iconSize: 26
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 10
 
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.margins: 5
-                        visible: card.active
-                        width: 20
-                        height: 20
-                        radius: width / 2
-                        color: Appearance.colors.colPrimary
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        StyledImage {
+                            id: previewImage
+                            anchors.fill: parent
+                            sourceSize: Qt.size(400, 400)
+                            source: presetItem.wallpaper !== ""
+                                ? presetItem.wallpaper
+                                : `${Directories.assetsPath}/images/default_wallpaper.png`
+                            fillMode: Image.PreserveAspectCrop
+                            layer.enabled: true
+                            layer.effect: OpacityMask {
+                                maskSource: Rectangle {
+                                    width: previewImage.width
+                                    height: previewImage.height
+                                    radius: Appearance.rounding.small
+                                }
+                            }
+                        }
 
                         MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "check"
-                            iconSize: 14
-                            color: Appearance.colors.colOnPrimary
+                            visible: presetItem.wallpaper === ""
+                            text: "style"
+                            iconSize: Appearance.font.pixelSize.huge
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.margins: 6
+                            visible: presetItem.tooNew
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colErrorContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "system_update_alt"
+                                iconSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnErrorContainer
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.margins: 6
+                            visible: presetItem.active
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colPrimary
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "check"
+                                iconSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnPrimary
+                            }
                         }
                     }
-                }
 
-                StyledText {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: picture.bottom
-                    anchors.bottom: parent.bottom
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: card.name
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: card.active ? Font.DemiBold : Font.Normal
-                    color: card.pending ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
-                    elide: Text.ElideRight
-                }
-
-                MouseArea {
-                    id: cardMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: card.active ? Qt.ArrowCursor : Qt.PointingHandCursor
-                    onClicked: {
-                        if (card.pending)
-                            root.cancelPick();
-                        else
-                            root.pick(card.name);
-                    }
-                }
-            }
-        }
-    }
-
-    // ── The review ───────────────────────────────────────────────────────────
-    // What Settings shows in a dialog, as a card under the strip: the reasons
-    // to think twice, then Apply and Cancel as rows.
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.topMargin: 6
-        visible: root.confirming
-        implicitHeight: reviewColumn.implicitHeight + 20
-        radius: Appearance.rounding.normal
-        color: Appearance.colors.colLayer1
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
-
-        ColumnLayout {
-            id: reviewColumn
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 6
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Apply %1?").arg(root.pendingName)
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colOnSurface
-                elide: Text.ElideRight
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.pendingScan === null && scanProc.running
-                text: Translation.tr("Looking through it…")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.compatBlocked
-                text: Translation.tr("Made for a newer version of the shell. Update the shell first.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colError
-                wrapMode: Text.Wrap
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.compatMigrates
-                text: Translation.tr("Made for an older version of the shell; its settings are brought up to date as it is applied.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-                wrapMode: Text.Wrap
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.pendingScan !== null && !root.scanUsable
-                text: Translation.tr("It could not be inspected, so there is no telling what it changes. Apply it only if you trust where it came from.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colError
-                wrapMode: Text.Wrap
-            }
-
-            Repeater {
-                model: root.scanGroups
-
-                delegate: RowLayout {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    MaterialSymbol {
-                        text: modelData.id === "shell" ? "terminal"
-                            : modelData.id === "ai" ? "smart_toy"
-                            : modelData.id === "network" ? "public" : "warning"
-                        iconSize: 18
-                        color: Appearance.colors.colError
-                    }
-                    StyledText {
+                    Item {
                         Layout.fillWidth: true
-                        text: root.riskLabel(modelData)
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnSurface
-                        wrapMode: Text.Wrap
+                        implicitHeight: 30
+
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: presetItem.presetName
+                            color: Appearance.colors.colOnLayer1
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: presetItem.active ? Font.DemiBold : Font.Normal
+                            elide: Text.ElideRight
+                        }
                     }
-                }
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: root.scanUsable && root.scanGroups.length === 0
-                text: Translation.tr("Nothing in it runs commands or sends your data anywhere new.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-                wrapMode: Text.Wrap
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                visible: PresetStore.isFromStore(root.pendingName)
-                text: Translation.tr("Presets shared by other people are used at your own discretion; this project does not review them.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-                wrapMode: Text.Wrap
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: Translation.tr("Your current settings are saved first. Undo preset brings them back; the mode's own undo history is cleared.")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-                wrapMode: Text.Wrap
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                spacing: 3
-
-                EditPanelRow {
-                    Layout.fillWidth: true
-                    hostRadius: Appearance.rounding.normal
-                    hostPadding: 10
-                    first: true
-                    last: false
-                    rowEnabled: root.pendingScan !== null && !root.compatBlocked
-                    symbol: "check"
-                    title: Translation.tr("Apply")
-                    trailingKind: "none"
-                    onActivated: root.applyPending()
-                }
-                EditPanelRow {
-                    Layout.fillWidth: true
-                    hostRadius: Appearance.rounding.normal
-                    hostPadding: 10
-                    first: false
-                    last: true
-                    symbol: "close"
-                    title: Translation.tr("Cancel")
-                    trailingKind: "none"
-                    onActivated: root.cancelPick()
                 }
             }
         }
@@ -550,7 +390,7 @@ ColumnLayout {
         title: Translation.tr("Browse the store")
         subtitle: Translation.tr("Leaves Edit Mode")
         valueText: PresetStore.updateCount > 0
-            ? Translation.tr("%1 updates").arg(PresetStore.updateCount) : ""
+            ? Translation.tr("%1 updates").arg(String(PresetStore.updateCount)) : ""
         trailingKind: "chevron"
         onActivated: GlobalStates.openSettingsFromEditMode("presets", "store")
     }

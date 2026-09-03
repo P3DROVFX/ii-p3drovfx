@@ -330,6 +330,7 @@ Singleton {
     property real screenshotOverlayRegionW: 0
     property real screenshotOverlayRegionH: 0
     property bool settingsOpen: false
+    property bool settingsSuspendedForScreenshot: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""

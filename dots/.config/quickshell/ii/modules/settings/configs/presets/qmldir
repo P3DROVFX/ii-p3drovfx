@@ -9,3 +9,7 @@ PublishPreviewDialog 1.0 PublishPreviewDialog.qml
 PublishedPresetsTab 1.0 PublishedPresetsTab.qml
 PushUpdateDialog 1.0 PushUpdateDialog.qml
 StoreResultCard 1.0 StoreResultCard.qml
+PublishSubPage 1.0 PublishSubPage.qml
+PresetDetailSubPage 1.0 PresetDetailSubPage.qml
+PushUpdateSubPage 1.0 PushUpdateSubPage.qml
+PresetDiffSubPage 1.0 PresetDiffSubPage.qml

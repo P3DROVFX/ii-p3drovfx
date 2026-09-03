@@ -943,8 +943,19 @@ Item {
                     // The row always offers ANOTHER one, and says how many are
                     // out there. A checkmark would be claiming the row is a
                     // switch, and it is not one any more.
+                    //
+                    // Once one is placed the count becomes a stepper: the plus
+                    // it already had, and the minus it never did. Taking a
+                    // widget back off meant hunting the copy down on the
+                    // desktop and using its own menu - fine for one, absurd for
+                    // the five a stray click leaves behind, and impossible for
+                    // a copy that landed under another window's worth of
+                    // widgets. The minus takes the last one placed.
                     valueText: widgetRow.placed > 0 ? `×${widgetRow.placed}` : ""
-                    trailingKind: "add"
+                    trailingKind: widgetRow.placed > 0 ? "stepper" : "add"
+                    stepDownEnabled: widgetRow.placed > 0
+                    onStepDown: Config.removeLastWidgetInstance(modelData.widgetId)
+                    onStepUp: root.addInstanceRequested(modelData.widgetId)
                     draggable: true
                     dragOwner: widgetList
 

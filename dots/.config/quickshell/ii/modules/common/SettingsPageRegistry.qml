@@ -70,7 +70,12 @@ Singleton {
             "name": "Presets",
             "icon": "auto_awesome",
             "component": "modules/settings/configs/PresetsConfig.qml",
-            "subPages": [],
+            "subPages": [
+                "presets/PublishSubPage.qml",
+                "presets/PresetDetailSubPage.qml",
+                "presets/PushUpdateSubPage.qml",
+                "presets/PresetDiffSubPage.qml"
+            ],
             "aliases": []
         },
         {
