@@ -36,9 +36,17 @@ AbstractBackgroundWidget {
     readonly property bool hasTrack: (player?.trackTitle ?? "").length > 0
 
     readonly property bool hasActiveWindows: {
-        var activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
-        if (activeWsId > 1000000)
-            activeWsId = 2147483647 - activeWsId;
+        const monName = Hyprland.focusedMonitor?.name ?? "";
+        var activeWsId = 0;
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeWsId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeWsId = GlobalStates._editSavedWorkspace;
+        else {
+            activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
+            if (activeWsId > 1000000)
+                activeWsId = 2147483647 - activeWsId;
+        }
         if (!HyprlandData || !HyprlandData.windowList)
             return false;
         return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);

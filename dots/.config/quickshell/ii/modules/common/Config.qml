@@ -4583,10 +4583,10 @@ Singleton {
                     }
                 }
                 property JsonObject nowPlaying: JsonObject {
-                    property bool enable: true          // hoje é `showNowPlayingBubble`
+                    property bool enable: false          
                     property bool showInlineControls: true
                     property bool tintFromArtwork: false
-                    property bool showPlayerName: true  // só quando há mais de um player
+                    property bool showPlayerName: true  
                 }
                 property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode

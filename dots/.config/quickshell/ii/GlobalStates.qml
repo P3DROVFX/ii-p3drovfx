@@ -771,6 +771,8 @@ Singleton {
     // replaces (2147483647 - id), which the parallax and the workspace
     // indicator already map back to the real one, so nothing visibly jumps.
     // Pinned windows are ignored: they follow to the temp workspace anyway.
+    property var lockSavedWorkspaces: ({})
+    property var lockTempWorkspaces: ({})
     property int _editSavedWorkspace: 0
     property int _editTempWorkspace: 0
 
@@ -799,7 +801,19 @@ Singleton {
         if (ws <= 1000000) {
             const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
             if (hasWindows) {
-                const temp = 2147483647 - ws;
+                const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+                    monitors: [{
+                        name: mon,
+                        activeWorkspaceId: ws,
+                        index: Quickshell.screens.findIndex(s => s.name === mon)
+                    }],
+                    windowList: HyprlandData.windowList || [],
+                    allMonitors: HyprlandData.monitors || [],
+                    useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+                    workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+                    workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+                });
+                const temp = emptyMap[mon] || (ws + 1);
                 batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${temp}}`;
                 root._editSavedWorkspace = ws;
                 root._editTempWorkspace = temp;
