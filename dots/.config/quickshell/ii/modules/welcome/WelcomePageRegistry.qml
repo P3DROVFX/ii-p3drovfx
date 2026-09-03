@@ -67,7 +67,7 @@ QtObject {
     }, {
         "id": "personalize",
         "titleKey": "Make it yours",
-        "subtitleKey": "Choose a wallpaper and a color scheme.",
+        "subtitleKey": "Choose a wallpaper and a color scheme, or start from a ready-made look.",
         "icon": "palette",
         "headerShape": MaterialShape.Shape.SoftBurst,
         "accentRole": "secondary",

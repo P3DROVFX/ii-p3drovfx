@@ -205,6 +205,43 @@ ShellRoot {
         source: "modules/welcome/WelcomeWindow.qml"
     }
 
+    // ── The Welcome, when the setup script asked for one ─────────────────────
+    //
+    // A marker written by the SHELL would mean "I have greeted this user", and
+    // that is a one-way door: after the first install it would never open
+    // again - not on a reinstall, not after `./setup resetfirstrun`. Deciding
+    // is the setup's job, and it already knows the difference between a first
+    // install and an update (`INSTALL_FIRSTRUN`).
+    //
+    // So the setup asks in whichever way can work. If a shell is already
+    // running it calls `qs -c ii ipc call welcome open` and this is not
+    // involved at all. A real first install is run from a TTY with no shell to
+    // answer - and `hyprctl reload` does not re-run exec-once, so it will not
+    // start one - and there the setup leaves this file behind instead. Read
+    // once, opened once, deleted.
+    property bool welcomeRequested: false
+
+    FileView {
+        id: welcomeRequest
+        path: Directories.welcomeRequestPath
+        // No file is the normal state; onLoadFailed needs no handler.
+        onLoaded: root.welcomeRequested = true
+        Component.onCompleted: welcomeRequest.reload()
+    }
+
+    // Let the session draw itself before a window lands on top of it: on a
+    // first login this runs while the bar and the wallpaper are still arriving.
+    Timer {
+        interval: 2500
+        repeat: false
+        running: root.welcomeRequested && Config.ready
+        onTriggered: {
+            root.welcomeRequested = false;
+            Quickshell.execDetached(["rm", "-f", welcomeRequest.path]);
+            GlobalStates.openWelcome();
+        }
+    }
+
     // Shortcuts
     IpcHandler {
         target: "panelFamily"

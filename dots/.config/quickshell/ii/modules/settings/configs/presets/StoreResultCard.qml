@@ -9,13 +9,22 @@ import qs.modules.common.functions
 
 /**
  * One repository/preset card in the Store, styled consistently with My Presets.
+ *
+ * `applyMode` is the Welcome flow's reading of the same card. There a click
+ * WEARS the look rather than opening a detail page - the download is a step on
+ * the way, not a decision - so the badge answers "is this the look I have on"
+ * instead of "is this downloaded", and the button offers to put it on.
  */
 Rectangle {
     id: card
     required property var entry
 
+    property bool applyMode: false
+
     readonly property string installedAs: card.entry.installedAs ?? ""
     readonly property bool installed: card.installedAs.length > 0
+    readonly property bool applied: card.installed
+        && PresetStore.activePreset === card.installedAs
     readonly property bool hasUpdate: card.installed && PresetStore.updateFor(card.installedAs) !== null
     readonly property bool working: card.installed
         ? PresetStore.busyFor(card.installedAs) : PresetStore.busyFor(card.entry.repo)
@@ -148,13 +157,16 @@ Rectangle {
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.margins: 6
-                visible: card.installed || card.working
+                // In apply mode "on disk" is not news - the only state worth a
+                // badge is the look the shell is actually wearing.
+                visible: card.working || (card.applyMode ? card.applied : card.installed)
                 implicitHeight: 22
                 implicitWidth: statusRow.implicitWidth + 12
                 radius: Appearance.rounding.full
                 color: card.working
                     ? Appearance.colors.colSecondaryContainer
-                    : (card.hasUpdate ? Appearance.colors.colTertiaryContainer : Appearance.colors.colPrimaryContainer)
+                    : (!card.applyMode && card.hasUpdate
+                        ? Appearance.colors.colTertiaryContainer : Appearance.colors.colPrimaryContainer)
 
                 RowLayout {
                     id: statusRow
@@ -162,22 +174,28 @@ Rectangle {
                     spacing: 4
 
                     MaterialSymbol {
-                        text: card.working ? "sync" : (card.hasUpdate ? "arrow_circle_up" : "check")
+                        text: card.working ? "sync"
+                            : card.applyMode ? "check_circle"
+                            : (card.hasUpdate ? "arrow_circle_up" : "check")
                         iconSize: 12
                         color: card.working
                             ? Appearance.colors.colOnSecondaryContainer
-                            : (card.hasUpdate ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
+                            : (!card.applyMode && card.hasUpdate
+                                ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
                     }
 
                     StyledText {
                         text: card.working
                             ? Translation.tr("Working…")
-                            : (card.hasUpdate ? Translation.tr("Update") : Translation.tr("Installed"))
+                            : card.applyMode
+                                ? Translation.tr("In use")
+                                : (card.hasUpdate ? Translation.tr("Update") : Translation.tr("Installed"))
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.DemiBold
                         color: card.working
                             ? Appearance.colors.colOnSecondaryContainer
-                            : (card.hasUpdate ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
+                            : (!card.applyMode && card.hasUpdate
+                                ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
                     }
                 }
             }
@@ -249,16 +267,19 @@ Rectangle {
                 implicitWidth: 30
                 implicitHeight: 30
                 buttonRadius: Appearance.rounding.full
-                colBackground: card.installed ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
-                colBackgroundHover: card.installed ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryContainerHover
-                colRipple: card.installed ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colPrimaryContainerActive
+                readonly property bool quiet: card.applyMode ? card.applied : card.installed
+                colBackground: quiet ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
+                colBackgroundHover: quiet ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryContainerHover
+                colRipple: quiet ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colPrimaryContainerActive
                 onClicked: card.activated()
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: card.hasUpdate ? "download" : (card.installed ? "visibility" : "arrow_forward")
+                    text: card.applyMode
+                        ? (card.applied ? "check" : "auto_awesome")
+                        : (card.hasUpdate ? "download" : (card.installed ? "visibility" : "arrow_forward"))
                     iconSize: Appearance.font.pixelSize.smaller
-                    color: card.installed ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimaryContainer
+                    color: actionButton.quiet ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimaryContainer
                 }
             }
         }
