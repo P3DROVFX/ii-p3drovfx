@@ -39,16 +39,6 @@ Singleton {
 
     readonly property var pages: [
         {
-            // First on purpose: every other page configures surfaces that only some families
-            // draw, so this is the setting that decides what the rest of Settings is about.
-            "id": "shell",
-            "name": "Shell",
-            "icon": "swap_horiz",
-            "component": "modules/settings/configs/ShellConfig.qml",
-            "subPages": [],
-            "aliases": ["Panel family", "Interface", "Tablet mode", "Desktop mode", "Switch shell", "Waffle"]
-        },
-        {
             "id": "colors",
             "name": "Colors & Themes",
             "icon": "palette",
@@ -453,7 +443,7 @@ Singleton {
         {
             "id": "lookAndFeel",
             "name": "Look & Feel",
-            "pageIds": ["shell", "colors", "bar", "interfaceFonts", "presets"]
+            "pageIds": ["colors", "bar", "interfaceFonts", "presets"]
         },
         {
             "id": "modules",

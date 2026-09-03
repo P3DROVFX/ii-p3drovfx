@@ -774,6 +774,191 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 
 ---
 
+## 7.1 Rodada de correções e novas features (2026-09-02)
+
+Dez itens levantados pelo mantenedor depois da auditoria. O que era defeito está corrigido;
+o que era feature nova entrou com toggle no Settings › Tablet, como manda a preferência
+registrada no §3.
+
+### Correções
+
+| # | Sintoma | Causa real |
+|---|---|---|
+| 1 | A dock **saltava** ao sair de um workspace ocupado para um vazio | O indicador de páginas era *descarregado* do `ColumnLayout`. A altura da coluna caía num único frame, e como a fileira de apps não tinha `Layout.minimumHeight`, o layout a espremia junto — os ícones, ancorados pelo centro vertical, escorregavam. Agora o contador tem um **slot que anima** (`pageCounterSlot`), a fileira tem piso de altura, e a linha de indicadores é recortada pelo slot em vez de achatada por ele. |
+| 2 | Vários apps **sumiam da gaveta** ao reabri-la depois de uma busca | O guarda que decide entre reconciliar e reconstruir media a sobrevivência contra a **menor** das duas listas. Voltar de 6 resultados para a biblioteca inteira dava 6/6 de sobrevivência e caía no caminho incremental: centenas de `insert`, cada um deslocando todos os tiles seguintes, com as transições cortadas pela próxima. É exatamente a forma de bug que o guarda existia para evitar. Passou a medir contra a **maior** das duas, mais um teto de churn (48 operações). |
+| 3 | A dock **relançava** o app em vez de ir para a janela aberta | `onActivated` chamava sempre o `.desktop`. O ponto embaixo do ícone prometia uma coisa e o toque fazia outra. `TabletDockButton` agora resolve as janelas do app pela ordem de foco do Hyprland (`focusHistoryID`, o mesmo join que Recentes usa) e vai para a mais recente — ou para a seguinte, se você já estiver nela. **Toque duplo** abre mais uma janela. Ambos configuráveis. |
+| 4 | Popups da bar **não abriam no toque** | `clickToShow` nunca foi *click*: abria a partir de `containsMouse`, que um clique de mouse acende de passagem no press. Um dedo não acende nada, e os widgets ainda desligam `hoverEnabled` justamente quando `clickToShow` está ligado — ou seja, na única família onde ele é **forçado**, nada abria os popups. Agora o gatilho é o sinal de press do alvo (`pressed` do MouseArea, `down` do RippleButton), o caminho por hover foi removido do modo clique, e um segundo toque fecha. `touchToggle: false` desliga isso nos dois popups do OSD que já mexem em `_clickActive` por conta própria. |
+| 5 | Ícone inexistente no Settings | `pagination` não existe no Material Symbols — o glifo simplesmente não desenhava. Trocado por `linear_scale` (aqui e na página de edit-mode da dock); `width` → `width_normal` em dois outros lugares, achados pela mesma varredura contra `assets/data/material_symbols.json`. |
+
+### Features novas
+
+- **Recentes em grade 2×2** (`tablet.recents.layout`, padrão `grid`). Uma `ListView`
+  horizontal com `SnapOneItem` paginando cartões grandes, pontinhos de página embaixo, e o
+  cabeçalho de cada cartão escalando com ele. O carrossel de uma fileira continua disponível.
+- **Fundo sólido para a dock** (`tablet.dock.backgroundStyle`: `none` / `translucent` /
+  `solid`, mais `backgroundFloating` e `backgroundOpacity`). A barra é **reta**: ela atravessa
+  a tela e termina onde a tela termina, que é a forma de uma taskbar; só a variante flutuante
+  é arredondada, porque nenhuma das bordas dela é a da tela. E o **indicador de páginas fica
+  de fora** da superfície — ele diz em qual home screen você está, não é controle da dock, e
+  no Android flutua acima da taskbar sobre o wallpaper. A altura do fundo é medida a partir da
+  posição da própria fileira de controles, não de `dockSurfaceHeight`: é isso que mantém a
+  borda de cima parada enquanto o slot animado do contador abre e fecha, e a superfície para
+  metade do espaçamento antes do contador em vez de correr por baixo dele.
+
+  Isso obrigou a redefinir `tablet.dock.height`, que **não fazia nada**: era um *piso* debaixo
+  da superfície inteira, e o conteúdo já dava por volta de cem pixels, então todo valor abaixo
+  disso não mudava número nenhum — com o slot do contador ainda movendo o limiar por baixo.
+  Agora é a altura da **faixa de controles**, que é o que a shelf é; o contador fica acima e
+  não conta. E a folga da variante flutuante passou a valer para o conteúdo em todos os lados
+  em que vale para a placa, senão as setas de workspace ficavam exatamente sobre os cantos
+  arredondados e liam como meias-luas vazando no wallpaper. O contorno dos glifos sai junto
+  com o fundo — sobre uma cor nossa ele vira halo — e a cor do que a dock desenha por cima
+  é **medida**, não assumida: `ColorUtils.mostReadable()` (novo, com `contrastRatio()` e
+  `relativeLuminance()`) mantém a on-color do tema enquanto ela passar no WCAG AA e só sai
+  da paleta quando nada nela passa.
+- **Janelas flutuantes por padrão** (`tablet.windows.floatMode`: `off` / `all` /
+  `keepDialogs`). `modules/tablet/windows/TabletWindowFloating.qml` escuta `openwindow` e
+  flutua + posiciona a janela dentro da área útil do monitor, em cascata. Feito por evento e
+  não por window rule de propósito: uma rule mora no config do Hyprland (que este shell não
+  pode reescrever por uma preferência), `hyprctl keyword` é descartado no próximo reload, e
+  uma rule não tem memória da última janela para cascatear.
+- **Alças de toque para mover e redimensionar** (`TabletFloatingWindowControls.qml`). O
+  Hyprland move e redimensiona bem, mas toda afordância que ele oferece para isso é um
+  *arrasto de ponteiro*. A faixa de título fica acima da janela focada e flutuante, com
+  centralizar / voltar a ladrilhar / tela cheia / fechar, e a alça de canto redimensiona.
+  **Isto destrava o item 24 da auditoria:** a assinatura desconhecida era
+  `hl.dsp.window.resize({ x = <largura>, y = <altura> })` — tamanho **absoluto**, em torno do
+  centro, recusando negativos; `hl.dsp.window.move({ x, y })` é posição absoluta. Por isso
+  todo redimensionamento aqui é seguido de um move que repõe o canto superior esquerdo.
+- **Floating bubble** (`modules/tablet/floatingBubble/`). Um círculo arrastável que fica na
+  camada Overlay — sobrevive a tela cheia, que é exatamente quando os gestos de borda ficam
+  mais difíceis de alcançar. Tocar abre uma folha de ações grandes do **lado com espaço**. As
+  ações vêm do `ShellActionRegistry`, o mesmo catálogo dos gestos, então isto é um caminho
+  novo para as ações do shell e não uma segunda lista para manter em dia. Posição guardada
+  como **fração** do curso, não em pixels: a superfície informa o tamanho mais de uma vez
+  enquanto sobe, e uma posição em pixels fixada num desses tamanhos parqueava a bolha no
+  canto de uma tela que não existia.
+- **Voltar de verdade** (`tablet.navigation.backKey`). Esgotadas as superfícies do shell,
+  `TabletNavigation.back()` passa a mandar a tecla que os aplicativos entendem como voltar,
+  via `hl.dsp.send_shortcut({ mods, key, window = "address:…" })` — sem uinput, sem daemon,
+  sem permissão nova. Só para uma janela **no workspace da frente**: o foco global pode estar
+  duas telas atrás, e mandar tecla para uma janela que o usuário não vê não é voltar.
+
+### Recentes, segunda passada
+
+A grade paginada da primeira rodada estava errada em três coisas, e o mantenedor apontou as
+três. Reescrita:
+
+- **O snapshot *é* o cartão.** A placa com faixa de título empilhada acima da captura saiu.
+  Cada cartão agora é a própria janela, com cantos arredondados, e o nome do app é uma
+  pílula **sobre** ele — como no Pixel Tablet. Uma superfície desenhada atrás do snapshot só
+  aparece onde o snapshot não chega, e depois de dimensionar o cartão pela **proporção da
+  janela** ela não chega a lugar nenhum. Por isso a largura de cada cartão passou a vir de
+  `client.size`: uma janela retrato vira um cartão retrato em vez de ser esticada.
+- **Lista, não páginas.** Página é uma unidade que o usuário tem de raciocinar, e Recentes
+  não tem unidades — tem uma *ordem*, e você anda para trás nela. Uma `ListView` horizontal
+  com `SnapToItem`, e a grade fica como preferência (`tablet.recents.layout`) para quem
+  quiser quatro janelas de uma vez numa tela muito grande.
+- **Captura de tela por janela.** `grim` fotografa um *output*, então só alcança o que está
+  na tela; a `ScreencopyView` do cartão segura o buffer do próprio toplevel. `grabToImage()`
+  com `targetSize` no tamanho real da janela salva a janela em resolução plena mesmo que ela
+  esteja em outro workspace. O arquivo é escrito primeiro no diretório temporário do shell —
+  esse existe desde o boot — e o `mv` para `Pictures/Screenshots` é o que cria a pasta;
+  salvar direto numa pasta que talvez não exista falha em silêncio.
+- **Ações onde o Android as põe:** *Screenshot* e *Split* embaixo do cartão que está no meio
+  da viewport, não embaixo de todos. Qual é o do meio sai de `indexAt()` contra o centro —
+  um `currentIndex` com faixa de destaque daria o mesmo, mas só restringindo onde a lista
+  pode parar, e uma lista que só pode parar em certos lugares é uma lista paginada.
+- **Entrada com blur, como a da gaveta.** A janela de Recentes não tinha blur nenhum: o
+  fundo simplesmente aparecia. Agora congela um screencopy e o borra com `MultiEffect`
+  seguindo o mesmo `openProgress` do lavado e do slide, então a transição não se parte em
+  animações independentes. O lavado vai a 88% por padrão (`recents.backdropOpacity`) — mais
+  opaco que a gaveta, porque Recentes é um lugar onde se *está*, mas nunca sólido, senão as
+  janelas que você está escolhendo deixam de fazer parte da transição.
+
+Terceira passada, depois dos prints do mantenedor:
+
+- **A pílula do nome do app tem de ser opaca.** Ela usava os tokens de camada, que carregam a
+  transparência de conteúdo do usuário — e a barra de título do próprio app lia através dela.
+  Um rótulo sobre uma fotografia precisa de fundo opaco, mesma regra que o contorno dos
+  glifos da dock segue sobre o wallpaper. Agora usa as cores cruas da paleta M3.
+- **Fade nas laterais da lista**, como a gaveta tem no rodapé da grade e pela mesma razão: um
+  cartão cortado no bisel parece falha de renderização, um que dissolve diz "tem mais para
+  cá". Máscara de alfa, não faixa de cor — uma faixa só encerra conteúdo quando o que está
+  atrás é daquela cor, e atrás disto tem uma fotografia borrada. Cada lado só aparece quando
+  há algo além dele, e isso tem de ser medido contra os limites reais do `Flickable`: com
+  margens laterais a posição de repouso não é zero, é `originX - leftMargin`, e medir contra
+  zero deixava o primeiro cartão sob um terço de fade sem nada à esquerda dele. Pelo mesmo
+  motivo o reset usa `contentX = startX` e não `positionViewAtBeginning()`, que para em
+  `originX` — uma margem depois do próprio começo.
+- **Cartão nunca mais alto que metade da tela.** Um cartão da altura da viewport é um cartão
+  da largura da tela, e uma fileira em que só cabe um não é uma fileira.
+- **O lavado usa a base opaca**, não `colLayer0`. `colLayer0` já carrega a transparência de
+  fundo do usuário, então um "lavado de 88%" feito com ela chegava perto de 55% e o desktop
+  lia através da superfície inteira. Força pertence a um número só, e esse número é a
+  preferência.
+
+**O bug do screencopy duplicado — e o que ele revelou.** O mantenedor viu "duas bars e dois
+wallpapers", e que a gaveta passou a exibir *o Recentes* no fundo em vez do aplicativo.
+Reproduzido: abrir a gaveta com o Recentes aberto fazia a gaveta fotografar o Recentes. Duas
+correções, e as duas são certas por si:
+
+1. **Uma superfície de tela cheia por vez.** `openAppDrawer` fecha Recentes e `openRecents`
+   fecha a gaveta. O Android também nunca empilha o launcher sobre o Overview — mas aqui é
+   também questão de correção, porque cada uma dessas superfícies fotografa a tela para o
+   próprio fundo borrado.
+2. **A captura espera a outra superfície sair da tela.** Fechar é uma *transição*: a flag já
+   é falsa enquanto a superfície ainda pinta. Então as superfícies se registram em
+   `GlobalStates.tabletOverlaysOnScreen` enquanto estão na tela — não enquanto estão
+   "abertas" — e a captura só é criada quando nenhuma outra está pintando. É um binding
+   simples, não um timer: ela nasce no instante em que a outra desmapeia.
+
+**E a causa mais funda, medida:** `ScreencopyView.captureFrame()` numa view que já capturou
+**não troca o quadro**. Ela guarda o primeiro para sempre. Foi por isso que a gaveta abria
+com o Recentes ao fundo mesmo sem o Recentes ter sido aberto naquela sessão, e com janelas
+fechadas havia minutos: era a *primeira* foto que ela tirou na vida, servida de novo toda vez.
+Confirmado por medição — abrindo a gaveta de um workspace com wallpaper claro e de outro com
+um terminal escuro, o fundo tinha a mesma cor média nos dois (Δ ≈ 2/255); depois da correção,
+(68, 86, 121) contra (17, 36, 69).
+
+A correção é não reutilizar a view: um `Loader` a **recria a cada abertura** e ela captura no
+próprio `Component.onCompleted`. Uma view recém-criada não tem quadro velho para servir, e
+`hasContent` volta a significar o que diz — "chegou uma foto *desta* abertura". Isso também
+apagou o latch `_backdropArmed` e o timer de retentativa, que eram estado que podia travar
+(um arrasto cancelado na borda deixava o latch armado e a gaveta sem captura para sempre).
+Aplicado nas três superfícies que fotografam a tela: gaveta, Recentes e shade.
+
+E uma terceira coisa que isso revelou: **Recentes não estava borrando nada.** A gaveta fica
+mapeada em repouso, então o `captureFrame()` dela sempre acha um scene graph pronto; Recentes
+é desmapeado quando fechado, e o primeiro pedido caía numa janela que ainda não existia e
+simplesmente não produzia quadro nenhum — com o mesmo código. O timer agora repete até
+`hasContent` e para no primeiro quadro que chega, o que custa alguns frames e nada mais.
+
+Duas armadilhas nessa reescrita:
+
+- **Uma `ListView` sem `clip` pinta os delegates que ela mantém aquecidos fora da viewport
+  por cima do resto da tela.** Com `clip`, porém, o gesto de arremessar o cartão para cima
+  era cortado no primeiro pixel. A solução é folga: `dragHeadroom` reserva espaço vazio acima
+  de cada cartão, dentro do recorte, para o arremesso ter para onde ir.
+- **Ler `implicitWidth` do cartão para calcular sua altura é um laço.** A proporção tem de
+  vir de `aspect`, que depende só da janela.
+
+### Armadilhas que isto revelou
+
+- **`hyprctl monitors` não é reativo a zonas exclusivas.** `HyprlandData` só reatualiza
+  monitores em evento de workspace ou de monitor, e uma layer surface mudando `exclusiveZone`
+  não emite nenhum dos dois — então `reserved` fica com o valor do boot, que é *antes* de a
+  bar e a dock reservarem qualquer coisa. As primeiras janelas flutuadas saíram
+  dimensionadas contra a tela inteira. `TabletWindowFloating` pede `updateMonitors()` ao
+  enfileirar, com folga até a colocação.
+- **`ListModel` reconciliado tem dois limites, não um.** Sobrevivência alta não basta: o
+  volume de operações também precisa de teto, ou a animação de cada uma é interrompida pela
+  seguinte.
+- **Um `Loader` dimensiona o item para si mesmo.** Animar a altura do Loader achata o
+  conteúdo; quem anima é um slot com `clip`, e o item dentro mantém a altura natural.
+
+---
+
 ## 8. Arquivos-chave
 
 | Arquivo | Papel |
@@ -791,5 +976,10 @@ travel para um arrasto 2D livre é um contrato, e projetá-lo sem o consumidor q
 | `modules/common/quickToggles/QuickToggleMetrics.qml` | Escala do chrome do grid — **exemplo de referência de parametrização** |
 | `modules/common/quickToggleDialogs/` | Os 11 diálogos dos toggles |
 | `modules/common/notifications/` | Lista de notificações compartilhada |
+| `modules/tablet/windows/TabletWindowActions.qml` | Aritmética de janela: as duas assinaturas do Hyprland e a área útil do monitor |
+| `modules/tablet/windows/TabletWindowFloating.qml` | Política de abrir flutuando, por evento `openwindow` |
+| `modules/tablet/windows/TabletFloatingWindowControls.qml` | Faixa de título e alça de canto para o dedo |
+| `modules/tablet/floatingBubble/` | A bolha persistente e sua folha de ações |
+| `modules/common/functions/ColorUtils.qml` | `contrastRatio` / `mostReadable` — contraste medido, não assumido |
 | `scripts/dev/check-panel-family-layering.sh` | Cobrança das regras |
 | `scripts/dev/panel-family-layering-baseline.txt` | Dívida registrada |

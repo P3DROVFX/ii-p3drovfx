@@ -68,7 +68,81 @@ Singleton {
             GlobalStates.sidebarLeftOpen = false;
             return true;
         }
-        return false;
+        // Nothing of the shell's own is left, so Back means what it means on Android: the
+        // application decides. See sendBackKeyToApp.
+        return root.sendBackKeyToApp();
+    }
+
+    // ── Back inside the focused application ─────────────────────────────────
+    /**
+     * What Back sends once the shell has nothing left to close.
+     *
+     * Android's Back is a hardware key the focused app interprets; Wayland has no such key
+     * and no protocol for "go back". The closest real equivalent is the shortcut toolkits
+     * already bind to their own back action — Alt+Left in every browser, every file manager
+     * and every GTK/Qt navigation stack — so that is what gets sent, to the focused window
+     * by address rather than to whatever happens to hold the seat.
+     *
+     * `hl.dsp.send_shortcut` delivers it through the compositor, so this needs no uinput
+     * node, no ydotool daemon and no permissions beyond the ones the shell already has to
+     * talk to Hyprland.
+     */
+    readonly property var backKeyPresets: ({
+        "alt_left": { mods: "ALT", key: "left" },
+        "escape": { mods: "", key: "Escape" },
+        "backspace": { mods: "", key: "BackSpace" },
+        "browser_back": { mods: "", key: "XF86Back" }
+    })
+
+    /**
+     * The focused window, but only if it is on the workspace in front of you.
+     *
+     * `focusHistoryID === 0` is the last window focused anywhere, which on a bare home
+     * screen is something on another workspace. Sending it a keystroke because the user
+     * pressed Back on an empty screen would be acting on a window they cannot see.
+     */
+    function focusedWindowAddress() {
+        const activeWorkspace = Number(HyprlandData.activeWorkspace?.id ?? -1);
+        if (activeWorkspace === -1)
+            return "";
+        for (const client of (HyprlandData.windowList ?? [])) {
+            if (Number(client?.focusHistoryID ?? -1) !== 0)
+                continue;
+            if (Number(client?.workspace?.id ?? -2) !== activeWorkspace)
+                return "";
+            const raw = String(client?.address ?? "").trim();
+            if (raw.length === 0)
+                return "";
+            return raw.startsWith("0x") ? raw : `0x${raw}`;
+        }
+        return "";
+    }
+
+    function sendBackKeyToApp() {
+        const settings = Config.options?.tablet?.navigation;
+        if (!(settings?.sendBackKeyToApps ?? true))
+            return false;
+
+        const address = root.focusedWindowAddress();
+        if (address.length === 0)
+            return false;
+
+        const choice = String(settings?.backKey ?? "alt_left");
+        let mods = "";
+        let key = "";
+        if (choice === "custom") {
+            key = String(settings?.customBackKey ?? "").trim();
+            mods = String(settings?.customBackMods ?? "").trim();
+        } else {
+            const preset = root.backKeyPresets[choice] ?? root.backKeyPresets["alt_left"];
+            mods = preset.mods;
+            key = preset.key;
+        }
+        if (key.length === 0)
+            return false;
+
+        Hyprland.dispatch(`hl.dsp.send_shortcut({ mods = "${mods}", key = "${key}", window = "address:${address}" })`);
+        return true;
     }
 
     /**

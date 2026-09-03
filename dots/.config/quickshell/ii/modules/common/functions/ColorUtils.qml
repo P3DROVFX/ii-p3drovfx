@@ -161,6 +161,65 @@ Singleton {
     }
 
     /**
+     * Relative luminance of a colour, per WCAG 2.x.
+     *
+     * @param {string} color - Any Qt.color-compatible value.
+     * @returns {number} Luminance in [0, 1].
+     */
+    function relativeLuminance(color) {
+        const c = Qt.color(color);
+        const channel = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+    }
+
+    /**
+     * WCAG contrast ratio between two colours, from 1 (identical) to 21 (black on white).
+     *
+     * Alpha is not modelled: composite the foreground over its real backdrop first if it
+     * is translucent, or this reports the contrast of a colour that is never painted.
+     *
+     * @returns {number} The ratio, always >= 1.
+     */
+    function contrastRatio(foreground, background) {
+        const a = relativeLuminance(foreground);
+        const b = relativeLuminance(background);
+        const lighter = Math.max(a, b);
+        const darker = Math.min(a, b);
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    /**
+     * Pick the candidate that reads best on `background`.
+     *
+     * Used where a surface's colour is a user preference rather than a theme token, so the
+     * palette's own on-colour pairing cannot be assumed to hold. Falls back to plain black
+     * or white only when no candidate clears `minimumRatio` — a legible colour outside the
+     * palette beats an unreadable one inside it.
+     *
+     * @param {string} background - The colour that will be behind the content.
+     * @param {Array} candidates - Preferred foregrounds, best-looking first.
+     * @param {number} minimumRatio - WCAG threshold; 4.5 is AA for body text.
+     * @returns {string} The chosen foreground.
+     */
+    function mostReadable(background, candidates, minimumRatio = 4.5) {
+        let best = null;
+        let bestRatio = -1;
+        for (const candidate of (candidates ?? [])) {
+            const ratio = contrastRatio(candidate, background);
+            if (ratio >= minimumRatio)
+                return candidate;
+            if (ratio > bestRatio) {
+                bestRatio = ratio;
+                best = candidate;
+            }
+        }
+        const fallback = getContrastingTextColor(background);
+        if (best === null)
+            return fallback;
+        return contrastRatio(fallback, background) > bestRatio ? fallback : best;
+    }
+
+    /**
      * Returns true if the color is considered "dark" (hslLightness < 0.5).
      *
      * @param {string} color - The color to check (any Qt.color-compatible string).

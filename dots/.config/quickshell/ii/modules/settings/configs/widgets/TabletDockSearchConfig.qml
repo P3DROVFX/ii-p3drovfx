@@ -83,7 +83,7 @@ Item {
             }
 
             ConfigSpinBox {
-                icon: "width"
+                icon: "width_normal"
                 text: Translation.tr("Pill width (px)")
                 visible: Config.options.tablet.dock.showSearchBar
                     && Config.options.tablet.dock.searchBarStyle === "extended"

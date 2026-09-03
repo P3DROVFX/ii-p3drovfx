@@ -10,11 +10,13 @@ import qs.modules.common.panels.shellSwitcher
 import qs.modules.tablet.appDrawer
 import qs.modules.tablet.appWindow
 import qs.modules.tablet.dock
+import qs.modules.tablet.floatingBubble
 import qs.modules.tablet.homeScreen
 import qs.modules.tablet.hubMode
 import qs.modules.tablet.navigation
 import qs.modules.tablet.recents
 import qs.modules.tablet.sidebarDashboard
+import qs.modules.tablet.windows
 
 // ── Borrowed from ii, pending a tablet replacement ──────────────────────────
 // This import block is the family's debt list. Every entry is a surface the tablet
@@ -247,6 +249,16 @@ Scope {
                 TabletHomeIcons.add(workspace, appId, slot.x, slot.y);
             }
         };
+        GlobalStates.addAppPairToHomeScreenHandler = (app1, app2, name) => {
+            const ws = TabletHomeIcons.currentWorkspace;
+            const slot = TabletHomeIcons.nextFreeSlot(ws, 8);
+            TabletHomeIcons.addPair(ws, app1, app2, name, slot.x, slot.y);
+        };
+        GlobalStates.addFolderToHomeScreenHandler = (name, appsList) => {
+            const ws = TabletHomeIcons.currentWorkspace;
+            const slot = TabletHomeIcons.nextFreeSlot(ws, 8);
+            TabletHomeIcons.addFolder(ws, name, appsList, slot.x, slot.y);
+        };
         GlobalStates.removeAppFromHomeScreenHandler = (appId) => {
             TabletHomeIcons.remove(TabletHomeIcons.currentWorkspace, appId);
         };
@@ -263,6 +275,8 @@ Scope {
 
     Component.onDestruction: {
         GlobalStates.addAppToHomeScreenHandler = null;
+        GlobalStates.addAppPairToHomeScreenHandler = null;
+        GlobalStates.addFolderToHomeScreenHandler = null;
         GlobalStates.removeAppFromHomeScreenHandler = null;
         GlobalStates.isAppOnHomeScreenHandler = null;
         GlobalStates.clearHomeScreenAppsHandler = null;
@@ -284,6 +298,19 @@ Scope {
     PanelLoader { component: TabletDock {} }
 
     PanelLoader { component: TabletSidebarDashboard {} }
+
+    // ── Windows ─────────────────────────────────────────────────────────────
+    // A tablet expects a window, not a workspace: opening something puts it *over* what was
+    // there, at a size, and a finger pushes it around. Hyprland tiles by default and every
+    // affordance it has for moving a floating window follows a pointer, so the family has to
+    // supply both halves — the policy that floats new windows, and the touch handles that
+    // make a floating window arrangeable at all. Both are off unless the user asks.
+    TabletWindowFloating {}
+    PanelLoader { component: TabletFloatingWindowControls {} }
+
+    // One control that is always where the user left it, including over a fullscreen app —
+    // which is exactly when the edge gestures are least reachable. See the component.
+    PanelLoader { component: TabletFloatingBubble {} }
 
 
 

@@ -670,14 +670,19 @@ do mantenedor, não trabalho de código.
 
 ### Itens bloqueados, com a evidência
 
-**24 — alça no divisor de janelas.** O dispatcher existe: `hl.dsp.window.resize` resolve o
-nome (o erro é sobre o argumento, não sobre o dispatcher). Mas nenhuma forma de argumento
-testada é aceita — `{x=,y=}` devolve *"Invalid size"*, e `{size=…}`, `{w=,h=}`, `{dx=,dy=}`
-caem em *"hl.focus: unrecognized arguments"*. Nada no repositório usa esse dispatcher, então
-não há um exemplo de onde copiar a forma. Uma alça cujo despacho erra em silêncio é pior que
-nenhuma alça, então isto fica parado até alguém confirmar a assinatura na doc da API Lua
-desta versão do Hyprland. Feito isso, é ~100 linhas: só as duas janelas tiled do workspace
-ativo, uma alça na fronteira que elas compartilham.
+**24 — alça no divisor de janelas.** ✅ **Destravado em 2026-09-02.** A assinatura é
+`hl.dsp.window.resize({ x = <largura>, y = <altura>, window = "address:…" })`: `x` e `y` são o
+**tamanho absoluto**, não um delta — a leitura anterior ("posições") era o que fazia
+`{x=,y=}` devolver *"Invalid size"*, porque os valores testados eram negativos e um tamanho
+negativo não existe. O redimensionamento é feito **em torno do centro**, então toda chamada
+tem de ser seguida de `hl.dsp.window.move({ x, y })` — posição absoluta — para repor o canto
+superior esquerdo. Verificado em runtime contra uma janela de teste num workspace especial.
+
+Isso foi usado para entregar as alças de toque das janelas flutuantes
+(`modules/tablet/windows/TabletFloatingWindowControls.qml`). A alça **no divisor entre duas
+janelas ladrilhadas** continua não feita, mas agora por escolha e não por bloqueio: o
+despacho é conhecido, falta só decidir se vale ter uma segunda superfície de alças ao lado da
+que já existe.
 
 **30 — haptics.** Esta máquina não tem atuador nenhum: sem `fbcli`, sem `org.sigxcpu.Feedback`
 no barramento, sem `*vibrator*` em `/sys/class/leds`. Escrever um cliente D-Bus contra uma

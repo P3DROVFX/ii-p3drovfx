@@ -44,6 +44,29 @@ Singleton {
         return occupied ? TabletNavigation.homeWorkspaceId("") : current;
     }
 
+    property string pendingSecondAppId: ""
+    Timer {
+        id: pairSecondLaunchTimer
+        interval: 350
+        repeat: false
+        onTriggered: {
+            if (root.pendingSecondAppId) {
+                TaskbarApps.getCachedDesktopEntry(root.pendingSecondAppId)?.execute();
+                root.pendingSecondAppId = "";
+            }
+        }
+    }
+
+    function launchPair(firstAppId, secondAppId) {
+        if (!firstAppId)
+            return;
+        TaskbarApps.getCachedDesktopEntry(firstAppId)?.execute();
+        if (secondAppId) {
+            root.pendingSecondAppId = secondAppId;
+            pairSecondLaunchTimer.restart();
+        }
+    }
+
     function _all() {
         try {
             return JSON.parse(Persistent.states.tablet.homeIconsJson || "{}") ?? {};
@@ -58,7 +81,7 @@ Singleton {
         root.revision++;
     }
 
-    /// Icons on one workspace, as [{ id, x, y }].
+    /// Icons on one workspace, as [{ id, x, y, type?, apps?, name? }].
     function iconsFor(workspaceId) {
         const all = root._all();
         const list = all[String(workspaceId)];
@@ -66,7 +89,14 @@ Singleton {
     }
 
     function has(workspaceId, appId) {
-        return root.iconsFor(workspaceId).some(icon => icon.id === appId);
+        const list = root.iconsFor(workspaceId);
+        return list.some(icon => {
+            if (icon.id === appId)
+                return true;
+            if (Array.isArray(icon.apps) && icon.apps.indexOf(appId) !== -1)
+                return true;
+            return false;
+        });
     }
 
     function add(workspaceId, appId, x, y) {
@@ -80,23 +110,178 @@ Singleton {
         root._save(all);
     }
 
-    function move(workspaceId, appId, x, y) {
+    function addPair(workspaceId, firstAppId, secondAppId, name, x, y) {
+        if (!firstAppId || !secondAppId)
+            return;
         const all = root._all();
         const key = String(workspaceId);
-        const list = Array.isArray(all[key]) ? all[key] : [];
-        const index = list.findIndex(icon => icon.id === appId);
-        if (index === -1)
-            return;
-        list[index] = { id: appId, x: Math.round(x), y: Math.round(y) };
+        const list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const id = `pair:${firstAppId}+${secondAppId}_${Date.now()}`;
+        list.push({
+            id: id,
+            type: "pair",
+            apps: [firstAppId, secondAppId],
+            name: name || "",
+            x: Math.round(x),
+            y: Math.round(y)
+        });
         all[key] = list;
         root._save(all);
     }
 
-    function remove(workspaceId, appId) {
+    function addFolder(workspaceId, name, appsList, x, y) {
+        const all = root._all();
+        const key = String(workspaceId);
+        const list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const id = `folder:${Date.now()}`;
+        list.push({
+            id: id,
+            type: "folder",
+            name: name || Translation.tr("Folder"),
+            apps: Array.isArray(appsList) ? appsList.slice() : [],
+            x: Math.round(x),
+            y: Math.round(y)
+        });
+        all[key] = list;
+        root._save(all);
+    }
+
+    function combineIntoFolder(workspaceId, targetItemId, draggedItemId, x, y) {
+        if (!targetItemId || !draggedItemId || targetItemId === draggedItemId)
+            return;
+        const all = root._all();
+        const key = String(workspaceId);
+        let list = Array.isArray(all[key]) ? all[key].slice() : [];
+
+        const targetIndex = list.findIndex(icon => icon.id === targetItemId);
+        const draggedIndex = list.findIndex(icon => icon.id === draggedItemId);
+        if (targetIndex === -1 || draggedIndex === -1)
+            return;
+
+        const target = Object.assign({}, list[targetIndex]);
+        const dragged = list[draggedIndex];
+
+        // Gather app IDs from dragged item
+        const appsToAdd = (dragged.type === "folder" || dragged.type === "pair") && Array.isArray(dragged.apps)
+            ? dragged.apps : [dragged.id];
+
+        if (target.type === "folder") {
+            const currentApps = Array.isArray(target.apps) ? target.apps.slice() : [];
+            for (const appId of appsToAdd) {
+                if (currentApps.indexOf(appId) === -1)
+                    currentApps.push(appId);
+            }
+            target.apps = currentApps;
+            list[targetIndex] = target;
+            list.splice(draggedIndex, 1);
+        } else {
+            // Target is a single app or pair -> create a new folder
+            const initialApps = (target.type === "pair" && Array.isArray(target.apps))
+                ? target.apps.slice() : [target.id];
+            for (const appId of appsToAdd) {
+                if (initialApps.indexOf(appId) === -1)
+                    initialApps.push(appId);
+            }
+            const folder = {
+                id: `folder:${Date.now()}`,
+                type: "folder",
+                name: Translation.tr("Folder"),
+                apps: initialApps,
+                x: target.x !== undefined ? target.x : Math.round(x),
+                y: target.y !== undefined ? target.y : Math.round(y)
+            };
+            // Remove both and insert folder
+            list = list.filter(icon => icon.id !== targetItemId && icon.id !== draggedItemId);
+            list.push(folder);
+        }
+
+        all[key] = list;
+        root._save(all);
+    }
+
+    function addAppToFolder(workspaceId, folderId, appId) {
+        if (!folderId || !appId)
+            return;
+        const all = root._all();
+        const key = String(workspaceId);
+        const list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const index = list.findIndex(icon => icon.id === folderId && icon.type === "folder");
+        if (index === -1)
+            return;
+        const folder = Object.assign({}, list[index]);
+        const apps = Array.isArray(folder.apps) ? folder.apps.slice() : [];
+        if (apps.indexOf(appId) === -1) {
+            apps.push(appId);
+            folder.apps = apps;
+            list[index] = folder;
+            all[key] = list;
+            root._save(all);
+        }
+    }
+
+    function removeAppFromFolder(workspaceId, folderId, appId) {
+        if (!folderId || !appId)
+            return;
+        const all = root._all();
+        const key = String(workspaceId);
+        let list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const index = list.findIndex(icon => icon.id === folderId && icon.type === "folder");
+        if (index === -1)
+            return;
+        const folder = Object.assign({}, list[index]);
+        const apps = (folder.apps || []).filter(id => id !== appId);
+
+        if (apps.length === 0) {
+            // Remove empty folder
+            list.splice(index, 1);
+        } else if (apps.length === 1) {
+            // Dissolve folder into single app
+            list[index] = { id: apps[0], x: folder.x, y: folder.y };
+        } else {
+            folder.apps = apps;
+            list[index] = folder;
+        }
+
+        all[key] = list;
+        root._save(all);
+    }
+
+    function renameFolder(workspaceId, folderId, newName) {
+        if (!folderId)
+            return;
+        const all = root._all();
+        const key = String(workspaceId);
+        const list = Array.isArray(all[key]) ? all[key].slice() : [];
+        const index = list.findIndex(icon => icon.id === folderId);
+        if (index === -1)
+            return;
+        const folder = Object.assign({}, list[index]);
+        folder.name = newName || "";
+        list[index] = folder;
+        all[key] = list;
+        root._save(all);
+    }
+
+    function move(workspaceId, itemId, x, y) {
         const all = root._all();
         const key = String(workspaceId);
         const list = Array.isArray(all[key]) ? all[key] : [];
-        const next = list.filter(icon => icon.id !== appId);
+        const index = list.findIndex(icon => icon.id === itemId);
+        if (index === -1)
+            return;
+        const current = Object.assign({}, list[index]);
+        current.x = Math.round(x);
+        current.y = Math.round(y);
+        list[index] = current;
+        all[key] = list;
+        root._save(all);
+    }
+
+    function remove(workspaceId, itemId) {
+        const all = root._all();
+        const key = String(workspaceId);
+        const list = Array.isArray(all[key]) ? all[key] : [];
+        const next = list.filter(icon => icon.id !== itemId);
         if (next.length === list.length)
             return;
         all[key] = next;
@@ -105,40 +290,26 @@ Singleton {
 
     /**
      * Send an icon to another home page.
-     *
-     * The obvious gesture is dragging it to the screen edge until the page turns, and that
-     * is a much harder thing than it looks: the icon would have to survive a workspace
-     * switch mid-drag, on a surface that is rebuilt per workspace. This keeps the same
-     * store operation and lets the caller offer it as a target instead of a journey.
-     *
-     * The position is carried across rather than recomputed, so an icon lands where its
-     * owner had it — and a collision on the destination is left alone, because two icons
-     * overlapping is visible and fixable, while silently relocating one is neither.
      */
-    function moveToWorkspace(fromWorkspaceId, toWorkspaceId, appId) {
-        if (fromWorkspaceId === toWorkspaceId || !appId)
+    function moveToWorkspace(fromWorkspaceId, toWorkspaceId, itemId) {
+        if (fromWorkspaceId === toWorkspaceId || !itemId)
             return false;
-        const icon = root.iconsFor(fromWorkspaceId).find(entry => entry.id === appId);
-        if (!icon || root.has(toWorkspaceId, appId))
+        const item = root.iconsFor(fromWorkspaceId).find(entry => entry.id === itemId);
+        if (!item || root.has(toWorkspaceId, itemId))
             return false;
 
         const all = root._all();
         const fromKey = String(fromWorkspaceId);
         const toKey = String(toWorkspaceId);
         all[fromKey] = (Array.isArray(all[fromKey]) ? all[fromKey] : [])
-            .filter(entry => entry.id !== appId);
+            .filter(entry => entry.id !== itemId);
         all[toKey] = (Array.isArray(all[toKey]) ? all[toKey].slice() : [])
-            .concat([{ id: appId, x: icon.x, y: icon.y }]);
+            .concat([Object.assign({}, item)]);
         root._save(all);
         return true;
     }
 
-    /// Somewhere free-ish on the current home screen, for an icon added from the drawer
-    /// rather than dropped at a point. Fills left to right, then wraps.
-    ///
-    /// Starts below the bar. The icons surface spans the whole screen — it has to, since
-    /// the user may drag an icon anywhere — so an icon placed at the top corner would be
-    /// born underneath the status bar with no way to see or grab it.
+    /// Somewhere free-ish on the current home screen.
     function nextFreeSlot(workspaceId, columnsPerRow) {
         const step = Math.max(1, Appearance.sizes.widgetGridStep);
         const cell = step * 3;

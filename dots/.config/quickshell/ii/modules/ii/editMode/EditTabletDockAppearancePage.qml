@@ -233,7 +233,7 @@ StyledFlickable {
             Layout.fillWidth: true
             first: false
             last: true
-            symbol: "pagination"
+            symbol: "linear_scale"
             title: Translation.tr("Show home-screen page counter")
             trailingKind: "switch"
             switchChecked: Config.options.tablet.dock.showPageCounter ?? true

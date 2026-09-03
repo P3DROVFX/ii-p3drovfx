@@ -13,13 +13,8 @@ import qs.modules.common.widgets
 /**
  * App icons laid out on the wallpaper, one screen's worth.
  *
- * Not a surface of its own. It is injected into the desktop widget canvas
- * (BackgroundWidgetsWindow.canvasOverlay) because that surface already owns the whole
- * screen's input region on the Bottom layer — a second desktop surface underneath it
- * renders fine and can never be touched, which is exactly what happened when this was its
- * own PanelWindow. Sharing the canvas also means the icons inherit its coordinate space,
- * parallax and lock choreography, and sit on the same grid as the widgets, which is what
- * "icons and widgets coexist on one grid" was supposed to mean.
+ * Supports regular apps, App Pairs (split-screen shortcuts), and App Folders.
+ * Dropping an icon onto another automatically creates or merges into a Folder.
  */
 Item {
     id: root
@@ -36,9 +31,8 @@ Item {
     readonly property real cellSize: Math.round(root.iconSize * 1.75)
     readonly property real gridStep: Appearance.sizes.widgetGridStep
 
-    // No mask and no input region of its own: the canvas above decides what is touchable,
-    // and an Item only receives what lands on its children. That is why the icons no longer
-    // need the region bookkeeping the standalone window required.
+    // Currently hovered target during a drag gesture
+    property string dropTargetId: ""
 
     Repeater {
         id: iconRepeater
@@ -48,8 +42,13 @@ Item {
             id: iconItem
             required property var modelData
 
-            readonly property string appId: iconItem.modelData.id
-            readonly property var entry: TaskbarApps.getCachedDesktopEntry(iconItem.appId)
+            readonly property string itemId: iconItem.modelData.id
+            readonly property string itemType: iconItem.modelData.type ?? "app"
+            readonly property var itemApps: iconItem.modelData.apps ?? []
+            readonly property string itemName: iconItem.modelData.name ?? ""
+            readonly property var entry: iconItem.itemType === "app" ? TaskbarApps.getCachedDesktopEntry(iconItem.itemId) : null
+
+            readonly property bool isDropTarget: root.dropTargetId === iconItem.itemId && !iconItem.dragging
 
             x: iconItem.modelData.x
             y: iconItem.modelData.y
@@ -67,11 +66,23 @@ Item {
                 height: parent.height
                 x: iconItem.dragging ? iconItem.dragX - iconItem.x : 0
                 y: iconItem.dragging ? iconItem.dragY - iconItem.y : 0
-                scale: iconItem.dragging ? 1.1 : (tapArea.pressed ? 0.92 : 1)
+                scale: iconItem.dragging ? 1.1 : (iconItem.isDropTarget ? 1.15 : (tapArea.pressed ? 0.92 : 1))
                 z: iconItem.dragging ? 10 : 0
 
                 Behavior on scale {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visual)
+                }
+
+                // Drop target highlight ring
+                Rectangle {
+                    visible: iconItem.isDropTarget
+                    anchors.centerIn: parent
+                    width: root.iconSize + 16
+                    height: root.iconSize + 16
+                    radius: width / 2
+                    color: Qt.rgba(Appearance.colors.colPrimary.r, Appearance.colors.colPrimary.g, Appearance.colors.colPrimary.b, 0.2)
+                    border.width: 2
+                    border.color: Appearance.colors.colPrimary
                 }
 
                 ColumnLayout {
@@ -79,22 +90,110 @@ Item {
                     anchors.margins: 4
                     spacing: 4
 
+                    // Visual type 1: Standard single App
                     IconImage {
+                        visible: iconItem.itemType === "app"
                         Layout.alignment: Qt.AlignHCenter
                         implicitSize: root.iconSize
-                        source: Quickshell.iconPath(TaskbarApps.getCachedIcon(iconItem.appId), "image-missing")
+                        source: Quickshell.iconPath(TaskbarApps.getCachedIcon(iconItem.itemId), "image-missing")
                     }
 
+                    // Visual type 2: App Pair (Split badge: solid circle)
+                    Rectangle {
+                        visible: iconItem.itemType === "pair"
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitWidth: root.iconSize
+                        implicitHeight: root.iconSize
+                        radius: root.iconSize / 2
+                        color: Appearance.colors.colLayer1
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+                        clip: true
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 2
+
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                IconImage {
+                                    anchors.centerIn: parent
+                                    implicitSize: Math.round(root.iconSize * 0.46)
+                                    source: Quickshell.iconPath(TaskbarApps.getCachedIcon(iconItem.itemApps[0] ?? ""), "image-missing")
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillHeight: true
+                                Layout.preferredWidth: 1
+                                color: Appearance.colors.colOutlineVariant
+                                opacity: 0.5
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                IconImage {
+                                    anchors.centerIn: parent
+                                    implicitSize: Math.round(root.iconSize * 0.46)
+                                    source: Quickshell.iconPath(TaskbarApps.getCachedIcon(iconItem.itemApps[1] ?? ""), "image-missing")
+                                }
+                            }
+                        }
+                    }
+
+                    // Visual type 3: App Folder (2x2 preview: squircle)
+                    Rectangle {
+                        visible: iconItem.itemType === "folder"
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitWidth: root.iconSize
+                        implicitHeight: root.iconSize
+                        radius: Math.round(root.iconSize * 0.28)
+                        color: Appearance.m3colors.m3surfaceContainer
+                        border.width: 1
+                        border.color: Appearance.colors.colLayer0Border
+
+                        Grid {
+                            anchors.centerIn: parent
+                            columns: 2
+                            spacing: 3
+
+                            Repeater {
+                                model: iconItem.itemApps.slice(0, 4)
+
+                                delegate: IconImage {
+                                    required property string modelData
+                                    implicitSize: Math.round((root.iconSize - 16) / 2)
+                                    source: Quickshell.iconPath(TaskbarApps.getCachedIcon(modelData), "image-missing")
+                                }
+                            }
+                        }
+                    }
+
+                    // Label below icon
                     StyledText {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
-                        text: iconItem.entry?.name ?? iconItem.appId
+                        text: {
+                            if (iconItem.itemType === "folder")
+                                return iconItem.itemName || Translation.tr("Folder");
+                            if (iconItem.itemType === "pair") {
+                                if (iconItem.itemName)
+                                    return iconItem.itemName;
+                                const e1 = TaskbarApps.getCachedDesktopEntry(iconItem.itemApps[0]);
+                                const e2 = TaskbarApps.getCachedDesktopEntry(iconItem.itemApps[1]);
+                                return (e1?.name ?? iconItem.itemApps[0] ?? "") + " & " + (e2?.name ?? iconItem.itemApps[1] ?? "");
+                            }
+                            return iconItem.entry?.name ?? iconItem.itemId;
+                        }
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: "white"
                         elide: Text.ElideRight
                         maximumLineCount: 1
-                        // The wallpaper underneath is arbitrary, so the label carries its
-                        // own contrast rather than trusting the theme's surface colours.
                         style: Text.Outline
                         styleColor: Qt.rgba(0, 0, 0, 0.55)
                     }
@@ -104,11 +203,6 @@ Item {
             MouseArea {
                 id: tapArea
                 anchors.fill: parent
-
-                // The widget canvas this layer sits on is itself a MouseArea, and a parent
-                // MouseArea steals the grab from a child as soon as the pointer moves. Without
-                // this the press and the long-press worked but every drag was lost on the
-                // first pixel of motion.
                 preventStealing: true
 
                 property real grabX: 0
@@ -130,11 +224,24 @@ Item {
                         return;
                     longPressTimer.stop();
                     iconItem.dragging = true;
-                    // Snap while dragging rather than on drop, so the icon visibly lands on
-                    // the grid and the user can see where it will end up.
                     const step = Math.max(1, root.gridStep);
                     iconItem.dragX = Math.round((iconItem.x + dx) / step) * step;
                     iconItem.dragY = Math.round((iconItem.y + dy) / step) * step;
+
+                    // Proximity check for grouping into a folder
+                    let foundTarget = "";
+                    const threshold = root.cellSize * 0.65;
+                    for (let i = 0; i < root.icons.length; i++) {
+                        const other = root.icons[i];
+                        if (other.id !== iconItem.itemId) {
+                            const dist = Math.hypot(iconItem.dragX - other.x, iconItem.dragY - other.y);
+                            if (dist < threshold) {
+                                foundTarget = other.id;
+                                break;
+                            }
+                        }
+                    }
+                    root.dropTargetId = foundTarget;
                 }
 
                 onReleased: {
@@ -142,24 +249,34 @@ Item {
                     if (!iconItem.dragging)
                         return;
                     iconItem.dragging = false;
-                    TabletHomeIcons.move(root.workspaceId, iconItem.appId,
-                                         Math.max(0, Math.min(root.width - root.cellSize, iconItem.dragX)),
-                                         Math.max(0, Math.min(root.height - root.cellSize, iconItem.dragY)));
+                    if (root.dropTargetId) {
+                        const targetId = root.dropTargetId;
+                        root.dropTargetId = "";
+                        TabletHomeIcons.combineIntoFolder(root.workspaceId, targetId, iconItem.itemId, iconItem.dragX, iconItem.dragY);
+                    } else {
+                        TabletHomeIcons.move(root.workspaceId, iconItem.itemId,
+                                             Math.max(0, Math.min(root.width - root.cellSize, iconItem.dragX)),
+                                             Math.max(0, Math.min(root.height - root.cellSize, iconItem.dragY)));
+                    }
                 }
 
                 onClicked: {
                     if (iconItem.dragging)
                         return;
-                    // A long press always ends with a click. Without this the same gesture
-                    // that armed the remove badge immediately disarmed it again, so the
-                    // badge could never be tapped.
                     if (longPressTimer.fired)
                         return;
                     if (iconItem.editing) {
                         iconItem.editing = false;
                         return;
                     }
-                    iconItem.entry?.execute();
+
+                    if (iconItem.itemType === "folder") {
+                        folderDialog.folderData = iconItem.modelData;
+                    } else if (iconItem.itemType === "pair") {
+                        TabletHomeIcons.launchPair(iconItem.itemApps[0], iconItem.itemApps[1]);
+                    } else {
+                        iconItem.entry?.execute();
+                    }
                 }
 
                 Timer {
@@ -173,10 +290,7 @@ Item {
                 }
             }
 
-            // Long-press arms a remove badge rather than deleting outright. A finger has no
-            // right-click, and a press held a moment too long must not silently lose an
-            // icon — so removal always takes a second, deliberate tap. The badge disarms
-            // itself so the home screen does not sit in a half-edit state forever.
+            // Remove badge when long-pressed
             property bool editing: false
 
             Timer {
@@ -214,24 +328,13 @@ Item {
                     anchors.margins: -6
                     onClicked: {
                         iconItem.editing = false;
-                        TabletHomeIcons.remove(root.workspaceId, iconItem.appId);
+                        TabletHomeIcons.remove(root.workspaceId, iconItem.itemId);
                     }
                 }
             }
 
-            /**
-             * Send the icon to the page either side, while the badge state is armed.
-             *
-             * Dragging it to the screen edge until the page turns is the gesture Android
-             * uses, and it is a much harder thing than it looks here: the icon would have to
-             * survive a workspace switch mid-drag, on a surface that is rebuilt per
-             * workspace. These reuse the state a long press already arms, so moving an icon
-             * costs one more tap and no new gesture — and no risk to the drag path, which
-             * has already cost this file three separate input bugs.
-             */
             component PageMoveBadge: Rectangle {
                 id: badge
-
                 required property int delta
                 required property string symbol
 
@@ -261,8 +364,7 @@ Item {
                     anchors.margins: -6
                     onClicked: {
                         iconItem.editing = false;
-                        TabletHomeIcons.moveToWorkspace(root.workspaceId, badge.targetWorkspace,
-                                                        iconItem.appId);
+                        TabletHomeIcons.moveToWorkspace(root.workspaceId, badge.targetWorkspace, iconItem.itemId);
                     }
                 }
             }
@@ -285,5 +387,10 @@ Item {
                 symbol: "chevron_right"
             }
         }
+    }
+
+    TabletFolderDialog {
+        id: folderDialog
+        workspaceId: root.workspaceId
     }
 }

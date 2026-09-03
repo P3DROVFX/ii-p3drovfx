@@ -146,7 +146,7 @@ Item {
             }
 
             ConfigSpinBox {
-                icon: "width"
+                icon: "width_normal"
                 text: Translation.tr("Tile width (px, 0 fits the screen)")
                 value: Config.options.tablet.appDrawer.tileWidth
                 from: 0

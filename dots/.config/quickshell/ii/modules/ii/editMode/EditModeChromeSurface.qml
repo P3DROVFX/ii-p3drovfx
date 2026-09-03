@@ -274,6 +274,16 @@ PanelWindow {
             GlobalStates.clearHomeScreenAppsHandler();
     }
 
+    function addAppPair(firstAppId, secondAppId, name) {
+        if (GlobalStates.addAppPairToHomeScreenHandler)
+            GlobalStates.addAppPairToHomeScreenHandler(firstAppId, secondAppId, name);
+    }
+
+    function addFolder(name, appsList) {
+        if (GlobalStates.addFolderToHomeScreenHandler)
+            GlobalStates.addFolderToHomeScreenHandler(name, appsList);
+    }
+
     // ── The bar's centre while the Dynamic Island owns it ────────────────────
     // `bar.floatingNotch.centerInBar` makes BarLayout hand the centre section
     // an empty list: the island is drawn over that stretch of bar and anything
@@ -908,6 +918,8 @@ PanelWindow {
         onDrawerDockToggleRequested: appId => root.toggleDockPin(appId)
         onDrawerAddAppRequested: (appId, dropX, dropY) => root.addAppAt(appId, dropX, dropY)
         onDrawerToggleAppRequested: appId => root.toggleAppOnHomeScreen(appId)
+        onDrawerAddAppPairRequested: (firstAppId, secondAppId, name) => root.addAppPair(firstAppId, secondAppId, name)
+        onDrawerAddFolderRequested: (folderName, appsList) => root.addFolder(folderName, appsList)
         onDrawerClearHomeScreenAppsRequested: root.clearHomeScreenApps()
         onDrawerResetRequested: what => root.resetSurface(what)
         // A preference, not a layout edit: no history entry, same as the

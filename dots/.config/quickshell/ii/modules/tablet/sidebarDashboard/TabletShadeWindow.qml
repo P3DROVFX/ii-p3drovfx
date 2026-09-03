@@ -48,24 +48,37 @@ PanelWindow {
     // Always mapped so the top edge is ready to be pulled down at any time
     visible: !GlobalStates.screenLocked
 
-    // The snapshot has to be taken while this surface is still painting nothing, otherwise the
-    // capture contains the shade itself. Grabbing it on press buys the whole press-to-move
-    // latency; the progress hook covers hotkey/IPC opens, which have no press.
+    /**
+     * The backdrop is rebuilt for every pull, not refreshed.
+     *
+     * A ScreencopyView keeps the last frame it captured, and asking an existing one for
+     * another does not reliably replace it — measured on the drawer, which opened onto the
+     * same picture whichever workspace it was opened from, including windows that had been
+     * closed for minutes. A view created when the pull starts has nothing to keep, so
+     * `hasContent` means "a picture of *this* pull has arrived".
+     *
+     * Kept as a function because two callers want it: the press on the top edge, which buys
+     * the whole press-to-move latency, and the progress hook, which covers hotkey and IPC
+     * opens that have no press.
+     */
+    readonly property string overlayName: "shade"
+
+    property bool wantsBackdrop: false
+
     function refreshBackdrop() {
         if (root.useBlur)
-            backdropCapture.captureFrame();
+            root.wantsBackdrop = true;
     }
 
     onProgressChanged: {
-        if (root.progress > 0.001 && !root._backdropArmed) {
-            root._backdropArmed = true;
+        if (root.progress > 0.001)
             root.refreshBackdrop();
-        } else if (root.progress <= 0.001) {
-            root._backdropArmed = false;
-        }
+        else if (root.progress <= 0.001)
+            root.wantsBackdrop = false;
+        GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.progress > 0.001);
     }
 
-    property bool _backdropArmed: false
+    Component.onCompleted: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.progress > 0.001)
 
     Connections {
         target: TabletDashboardGestureController
@@ -104,7 +117,7 @@ PanelWindow {
         Item {
             id: backdrop
             anchors.fill: parent
-            visible: root.useBlur && root.progress > 0.001 && backdropCapture.hasContent
+            visible: root.useBlur && root.progress > 0.001 && (backdropLoader.item?.hasContent ?? false)
             layer.enabled: backdrop.visible
             layer.effect: MultiEffect {
                 // Auto padding grows the effect item past the source and shifts the whole
@@ -116,13 +129,20 @@ PanelWindow {
                 blur: Math.min(1.0, root.progress * 1.15)
             }
 
-            ScreencopyView {
-                id: backdropCapture
+            Loader {
+                id: backdropLoader
                 anchors.fill: parent
-                captureSource: root.useBlur ? root.screen : null
-                // Live re-capture also sees the shade's own blurred output, so it smears —
-                // opt-in only, from Settings › Sidebars.
-                live: Config.options?.sidebar?.tabletShade?.liveBackdrop ?? false
+                active: root.wantsBackdrop
+                    && !GlobalStates.otherTabletOverlayOnScreen(root.overlayName)
+
+                sourceComponent: ScreencopyView {
+                    anchors.fill: parent
+                    captureSource: root.screen
+                    // Live re-capture also sees the shade's own blurred output, so it
+                    // smears — opt-in only, from Settings › Sidebars.
+                    live: Config.options?.sidebar?.tabletShade?.liveBackdrop ?? false
+                    Component.onCompleted: captureFrame()
+                }
             }
         }
 

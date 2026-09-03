@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -13,12 +14,18 @@ import qs.modules.common.widgets
 import qs.modules.tablet.menu
 
 /**
- * The recents carousel: every open window as a card, scrubbed sideways.
+ * Recents: every open window as a card, scrubbed sideways.
  *
  * Deliberately not the ii overview. That is a grid of workspaces with their windows laid
  * out inside, which answers "where is everything"; this answers "what was I just doing",
  * which is a flat, most-recent-first list. Android keeps the two apart and so does this
  * family — the home screens are the workspaces, recents is this.
+ *
+ * A **list**, not pages. Paging was tried and is the wrong model: a page is a unit the user
+ * has to reason about, and Recents has no units — it has an order, and you go further back
+ * along it. Android scrolls continuously for the same reason. The grid remains available as
+ * a preference for anyone who wants four windows at once on a very large screen, but it is
+ * no longer what this surface is.
  */
 Item {
     id: root
@@ -30,9 +37,30 @@ Item {
     /// anything that changes focus cannot happen while this surface is still mapped.
     signal deferredRequested(var action)
 
-    readonly property real cardWidth: Math.max(240, Math.min(460, Math.round(root.width * 0.26)))
-    readonly property real cardHeight: Math.round(root.cardWidth * 0.68)
-    readonly property real cardSpacing: Math.max(16, Math.round(root.cardWidth * 0.06))
+    readonly property var recentsConfig: Config.options?.tablet?.recents
+
+    /// "list" or "grid".
+    readonly property bool gridLayout: (root.recentsConfig?.layout ?? "list") === "grid"
+
+    readonly property int gridColumns: Math.max(1, Math.min(4, root.recentsConfig?.gridColumns ?? 2))
+    readonly property int gridRows: Math.max(1, Math.min(3, root.recentsConfig?.gridRows ?? 2))
+    readonly property int cardsPerPage: root.gridColumns * root.gridRows
+
+    readonly property real cardSpacing: Math.max(16, Math.round(root.width * 0.014))
+    /// Room under every card, whether or not that card is showing its actions, so the row
+    /// appearing never moves the cards.
+    readonly property real actionRowHeight: (root.recentsConfig?.showCardActions ?? true) ? 56 : 0
+
+    /// The windows split into pages of `cardsPerPage`, newest page first.
+    readonly property var windowPages: {
+        if (!root.gridLayout)
+            return [];
+        const pages = [];
+        const all = root.windows;
+        for (let i = 0; i < all.length; i += root.cardsPerPage)
+            pages.push(all.slice(i, i + root.cardsPerPage));
+        return pages;
+    }
 
     /**
      * Every open window, most recently *used* first.
@@ -75,6 +103,30 @@ Item {
         return entries.map(entry => entry.toplevel);
     }
 
+    /// Hyprland's rows keyed by address, so a card can find its own real size without
+    /// walking the whole client list once per delegate.
+    readonly property var clientByAddress: {
+        const map = {};
+        for (const client of (HyprlandData.windowList ?? [])) {
+            const raw = String(client?.address ?? "").trim();
+            if (raw.length === 0)
+                continue;
+            map[raw.startsWith("0x") ? raw : `0x${raw}`] = client;
+        }
+        return map;
+    }
+
+    function addressOf(toplevel) {
+        const raw = String(toplevel?.HyprlandToplevel?.address ?? "").trim();
+        if (raw.length === 0)
+            return "";
+        return raw.startsWith("0x") ? raw : `0x${raw}`;
+    }
+
+    function clientFor(toplevel) {
+        return root.clientByAddress[root.addressOf(toplevel)] ?? null;
+    }
+
     function activate(toplevel) {
         root.deferredRequested(() => toplevel?.activate());
     }
@@ -94,7 +146,7 @@ Item {
     /**
      * What you can do to a window without going to it.
      *
-     * Android puts these behind the app icon above the card; here the header strip is the
+     * Android puts these behind the app icon above the card; here the header pill is the
      * same handle. Float and fullscreen are the dispatches the gesture registry already
      * binds, so this is mostly wiring rather than new capability — the point is that a
      * finger had no way to reach any of it.
@@ -103,39 +155,23 @@ Item {
      * focused, which is never the card that was tapped.
      */
     function menuActionsFor(toplevel) {
-        const address = String(toplevel?.HyprlandToplevel?.address ?? "").trim();
-        const target = address.length === 0
-            ? "" : (address.startsWith("0x") ? address : `0x${address}`);
-
+        const target = root.addressOf(toplevel);
         const actions = [];
 
-        /**
-         * "Split with the app you were in."
-         *
-         * Hyprland already tiles two windows that share a workspace, so a split is not a
-         * layout this shell has to compute — it is a window that has to be somewhere else.
-         * All this dispatches is a move; the compositor does the splitting, which is why the
-         * shell does not grow a layout manager to offer the feature.
-         *
-         * Only offered when it would do something: the window has to be somewhere other than
-         * the workspace you are returning to, and that workspace has to have something on it
-         * to split *with* — otherwise this is a plain move wearing the wrong label.
-         */
-        const activeWorkspace = Number(HyprlandData.activeWorkspace?.id ?? -1);
-        const onActiveWorkspace = root.workspaceOf(target) === activeWorkspace;
-        const activeHasWindows = activeWorkspace !== -1
-            && HyprlandData.hyprlandClientsForWorkspace(activeWorkspace).length > 0;
-
-        if (target.length > 0 && activeWorkspace !== -1 && !onActiveWorkspace && activeHasWindows) {
+        if (root.canSplit(toplevel)) {
             actions.push({
                 symbol: "splitscreen",
                 label: Translation.tr("Split with current app"),
-                trigger: () => root.dispatchOn(target,
-                    `hl.dsp.window.move({ workspace = ${activeWorkspace}, follow = false, window = "address:${target}" })`)
+                trigger: () => root.splitWithCurrent(toplevel)
             });
         }
 
         if (target.length > 0) {
+            actions.push({
+                symbol: "screenshot_region",
+                label: Translation.tr("Screenshot this window"),
+                trigger: () => root.screenshotRequested(target)
+            });
             actions.push({
                 symbol: "picture_in_picture",
                 label: Translation.tr("Float"),
@@ -156,20 +192,46 @@ Item {
         return actions;
     }
 
+    /**
+     * "Split with the app you were in."
+     *
+     * Hyprland already tiles two windows that share a workspace, so a split is not a layout
+     * this shell has to compute — it is a window that has to be somewhere else. All this
+     * dispatches is a move; the compositor does the splitting, which is why the shell does
+     * not grow a layout manager to offer the feature.
+     *
+     * Only offered when it would do something: the window has to be somewhere other than the
+     * workspace you are returning to, and that workspace has to have something on it to
+     * split *with* — otherwise this is a plain move wearing the wrong label.
+     */
+    function canSplit(toplevel) {
+        const target = root.addressOf(toplevel);
+        if (target.length === 0)
+            return false;
+        const activeWorkspace = Number(HyprlandData.activeWorkspace?.id ?? -1);
+        if (activeWorkspace === -1 || root.workspaceOf(target) === activeWorkspace)
+            return false;
+        return HyprlandData.hyprlandClientsForWorkspace(activeWorkspace).length > 0;
+    }
+
+    function splitWithCurrent(toplevel) {
+        const target = root.addressOf(toplevel);
+        const activeWorkspace = Number(HyprlandData.activeWorkspace?.id ?? -1);
+        if (target.length === 0 || activeWorkspace === -1)
+            return;
+        root.dispatchOn(target,
+            `hl.dsp.window.move({ workspace = ${activeWorkspace}, follow = false, window = "address:${target}" })`);
+    }
+
+    /// Raised so the delegate that owns the capture can do the grab; only it has one.
+    signal screenshotRequested(string address)
+
     /// Which workspace a window is on, or -1. The toplevel does not carry it; Hyprland's
     /// client list does, and the two are joined on the address as everywhere else here.
     function workspaceOf(address) {
         if (!address || address.length === 0)
             return -1;
-        for (const client of (HyprlandData.windowList ?? [])) {
-            const raw = String(client?.address ?? "").trim();
-            if (raw.length === 0)
-                continue;
-            const normalized = raw.startsWith("0x") ? raw : `0x${raw}`;
-            if (normalized === address)
-                return Number(client?.workspace?.id ?? -1);
-        }
-        return -1;
+        return Number(root.clientByAddress[address]?.workspace?.id ?? -1);
     }
 
     /// Anything that moves or focuses a window has to wait for this surface to unmap; see
@@ -181,6 +243,16 @@ Item {
         });
     }
 
+    /// Both layouts raise the same menu from the same handle; only where they sit differs.
+    function openCardMenu(toplevel, x, y) {
+        const point = root.mapFromItem(null, x, y);
+        cardMenu.openAt(point.x, point.y,
+                        root.menuActionsFor(toplevel),
+                        toplevel?.title ?? toplevel?.appId ?? "",
+                        Quickshell.iconPath(TaskbarApps.getCachedIcon(toplevel?.appId ?? ""), "image-missing"),
+                        "");
+    }
+
     function newWorkspace() {
         // The Lua dispatcher API, as everything else in the shell uses; the classic
         // "workspace empty" string is a Lua syntax error here rather than a no-op. The host
@@ -190,79 +262,266 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: Math.round(root.height * 0.06)
-        spacing: 20
+        anchors.leftMargin: Math.round(root.width * 0.02)
+        anchors.rightMargin: Math.round(root.width * 0.02)
+        anchors.topMargin: Math.round(root.height * 0.06)
+        anchors.bottomMargin: Math.round(root.height * 0.04)
+        spacing: 18
 
         opacity: root.revealProgress
-        transform: Translate {
-            y: (1 - root.revealProgress) * 40
-        }
 
         // Takes the leftover height so the cards sit in the middle of the screen, with the
-        // new-workspace pill pinned below them. The row itself stays card-height and is
-        // centred inside, rather than stretching the cards to fill.
+        // pills pinned below them.
         Item {
+            id: cardArea
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            Flickable {
-                id: carousel
+            /**
+             * Empty space above every card, so a card being flung upwards has somewhere to
+             * go inside a clipped list.
+             *
+             * The list has to clip — without it, the delegates the view keeps warm off both
+             * sides paint over the whole screen — and clipping at the card's own top edge
+             * would slice the dismiss gesture in half the moment it started.
+             */
+            readonly property real dragHeadroom: 56
+
+            /**
+             * One height for every card, so the row reads as a row. The width is each
+             * window's own, which is what makes a portrait window a portrait card.
+             *
+             * Capped well below the space available. A card as tall as the viewport is a
+             * card as wide as the screen, and a row you can only ever see one of is not a
+             * row — Android's cards are around half the screen's height for exactly this
+             * reason, so two or three are in view and the order is legible at a glance.
+             */
+            readonly property real cardHeight: Math.max(180, Math.min(
+                cardArea.height - root.actionRowHeight - cardArea.dragHeadroom,
+                Math.round(root.height * 0.5)))
+
+            /**
+             * The list. Continuous, snapping to a card on release rather than to a page.
+             *
+             * `indexAt` against the middle of the viewport is what decides which card owns
+             * the action row. A `currentIndex` with a highlight range would do the same, but
+             * only by also constraining where the view may rest — and the whole point of a
+             * list here is that it may rest anywhere.
+             */
+            ListView {
+                id: cardList
                 anchors.left: parent.left
                 anchors.right: parent.right
+                // Centred rather than filling: the row is only as tall as a card plus its
+                // action strip, and a list stretched to the viewport would pin the cards to
+                // the top with the leftover space dumped underneath them.
                 anchors.verticalCenter: parent.verticalCenter
-                height: Math.min(parent.height, root.cardHeight + 48)
-
-                contentWidth: cardRow.implicitWidth
-                contentHeight: height
-                flickableDirection: Flickable.HorizontalFlick
+                height: cardArea.dragHeadroom + cardArea.cardHeight + root.actionRowHeight
+                visible: !root.gridLayout
+                enabled: visible
+                model: root.gridLayout ? [] : root.windows
+                orientation: ListView.Horizontal
+                spacing: root.cardSpacing
+                snapMode: ListView.SnapToItem
                 boundsBehavior: Flickable.DragOverBounds
                 clip: true
-
-                // Inset so the first and last card are not welded to the bezel. Without it the
-                // leftmost card — which is now the app you were just in — reads as clipped
-                // rather than as the start of a row.
                 leftMargin: root.cardSpacing
                 rightMargin: root.cardSpacing
+                cacheBuffer: Math.round(root.width * 2)
 
-                // The most recent card is at index 0, so the useful position is the start.
-                // A Flickable keeps its contentX, and this surface is rebuilt per open only as
-                // long as nothing keeps it mapped — resetting on the way out costs nothing and
-                // does not depend on that.
-                Component.onCompleted: carousel.contentX = -carousel.leftMargin
+                /**
+                 * The row ends in a fade, not in a cut.
+                 *
+                 * The drawer's grid does the same thing vertically and for the same reason:
+                 * a card sliced off at the bezel reads as a rendering fault, while one that
+                 * dissolves reads as "there is more this way". It masks the list's own alpha
+                 * rather than painting a band of colour over it — a band only ends content
+                 * when the surface behind it is that colour, and behind this is a blurred
+                 * photograph, so any colour the band could paint would itself show through.
+                 *
+                 * Each side fades only once there is something past it. A fade at the start
+                 * of the row is the view telling you there is more to the left when there is
+                 * not — and against a card whose own edge is already there, it just reads as
+                 * the card being dimmed for no reason.
+                 *
+                 * The two ends have to be worked out from the Flickable's real limits, not
+                 * from contentX alone. With side margins the resting position is not zero:
+                 * it is `originX - leftMargin`, and measuring against zero left the first
+                 * card sitting under a third of a fade at rest.
+                 */
+                readonly property real fadeWidth: Math.min(160, Math.round(cardList.width * 0.1))
+                readonly property real startX: cardList.originX - cardList.leftMargin
+                readonly property real endX: cardList.originX + cardList.contentWidth
+                    + cardList.rightMargin - cardList.width
+                readonly property real leadFade: Math.max(0, Math.min(1,
+                    (cardList.contentX - cardList.startX) / 48))
+                readonly property real trailFade: Math.max(0, Math.min(1,
+                    (cardList.endX - cardList.contentX) / 48))
+
+                layer.enabled: cardList.visible
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: Math.max(1, cardList.width)
+                        height: Math.max(1, cardList.height)
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop {
+                                position: 0.0
+                                color: Qt.rgba(1, 1, 1, 1 - cardList.leadFade)
+                            }
+                            GradientStop {
+                                position: cardList.width > 0
+                                    ? Math.min(0.45, cardList.fadeWidth / cardList.width) : 0
+                                color: "white"
+                            }
+                            GradientStop {
+                                position: cardList.width > 0
+                                    ? Math.max(0.55, 1 - cardList.fadeWidth / cardList.width) : 1
+                                color: "white"
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: Qt.rgba(1, 1, 1, 1 - cardList.trailFade)
+                            }
+                        }
+                    }
+                }
+
+                /// Which card is in the middle of the viewport. Kept rather than recomputed
+                /// on demand: `indexAt` returns -1 in the gaps between delegates, and an
+                /// action row that blinks out every time a gap crosses the centre is worse
+                /// than one that lags by a few pixels.
+                property int activeIndex: 0
+
+                function refreshActiveIndex() {
+                    const found = cardList.indexAt(cardList.contentX + cardList.width / 2,
+                                                   cardList.height / 2);
+                    if (found >= 0)
+                        cardList.activeIndex = found;
+                }
+
+                onContentXChanged: cardList.refreshActiveIndex()
+                onCountChanged: cardList.refreshActiveIndex()
+
+                // The most recent window is at index 0, so the useful position is the start.
+                // A ListView keeps its contentX, and resetting on the way out costs nothing.
+                //
+                // Set explicitly rather than through positionViewAtBeginning(), which lands
+                // on `originX` and leaves the view a margin's width past its own start — far
+                // enough for the leading fade to read as scrolled when nothing has been.
+                function goToStart() {
+                    cardList.contentX = cardList.startX;
+                    cardList.activeIndex = 0;
+                }
+
+                Component.onCompleted: cardList.goToStart()
                 Connections {
                     target: root
                     function onRevealProgressChanged() {
                         if (root.revealProgress < 0.02)
-                            carousel.contentX = -carousel.leftMargin;
+                            cardList.goToStart();
                     }
                 }
 
-                RowLayout {
-                    id: cardRow
-                    height: carousel.height
-                    spacing: root.cardSpacing
+                delegate: TabletRecentCard {
+                    id: listCard
+                    required property var modelData
+                    required property int index
 
-                    Repeater {
-                        model: root.windows
+                    toplevel: modelData
+                    client: root.clientFor(modelData)
+                    cardHeight: cardArea.cardHeight
+                    topInset: cardArea.dragHeadroom
+                    actionRowHeight: root.actionRowHeight
+                    showActions: root.actionRowHeight > 0 && listCard.index === cardList.activeIndex
+                    // MRU order puts the window you came from first.
+                    isCurrent: listCard.index === 0
 
-                        delegate: TabletRecentCard {
-                            required property var modelData
-                            required property int index
-                            Layout.preferredWidth: root.cardWidth
-                            Layout.preferredHeight: root.cardHeight
-                            Layout.alignment: Qt.AlignVCenter
-                            toplevel: modelData
-                            // MRU order puts it first, so index 0 is where you came from.
-                            isCurrent: index === 0
-                            onActivated: root.activate(modelData)
-                            onClosed: root.closeWindow(modelData)
-                            onMenuRequested: (x, y) => {
-                                const point = root.mapFromItem(null, x, y);
-                                cardMenu.openAt(point.x, point.y,
-                                                root.menuActionsFor(modelData),
-                                                modelData?.title ?? modelData?.appId ?? "",
-                                                Quickshell.iconPath(TaskbarApps.getCachedIcon(modelData?.appId ?? ""), "image-missing"),
-                                                "");
+                    onActivated: root.activate(listCard.modelData)
+                    onClosed: root.closeWindow(listCard.modelData)
+                    onSplitRequested: root.splitWithCurrent(listCard.modelData)
+                    onMenuRequested: (x, y) => root.openCardMenu(listCard.modelData, x, y)
+
+                    Connections {
+                        target: root
+                        function onScreenshotRequested(address) {
+                            if (address === root.addressOf(listCard.modelData))
+                                listCard.takeScreenshot();
+                        }
+                    }
+                }
+            }
+
+            /**
+             * The grid, kept as a preference rather than as the default.
+             *
+             * Four windows at once is a genuinely better answer on a very large screen, and
+             * the code for it already exists; it is only the wrong *default*, because a page
+             * is a unit and Recents has no units.
+             */
+            ListView {
+                id: pager
+                anchors.fill: parent
+                visible: root.gridLayout
+                enabled: visible
+                model: root.gridLayout ? root.windowPages : []
+                orientation: ListView.Horizontal
+                snapMode: ListView.SnapOneItem
+                highlightRangeMode: ListView.StrictlyEnforceRange
+                boundsBehavior: Flickable.DragOverBounds
+                clip: true
+                cacheBuffer: Math.round(root.width * 2)
+
+                Connections {
+                    target: root
+                    function onRevealProgressChanged() {
+                        if (root.revealProgress < 0.02)
+                            pager.positionViewAtBeginning();
+                    }
+                }
+
+                delegate: Item {
+                    id: page
+                    required property var modelData
+                    width: pager.width
+                    height: pager.height
+
+                    readonly property real cellWidth: (page.width - root.cardSpacing * (root.gridColumns - 1))
+                        / root.gridColumns
+                    readonly property real cellHeight: (page.height - root.cardSpacing * (root.gridRows - 1))
+                        / root.gridRows
+
+                    Grid {
+                        anchors.centerIn: parent
+                        columns: root.gridColumns
+                        rows: root.gridRows
+                        spacing: root.cardSpacing
+
+                        Repeater {
+                            model: page.modelData
+
+                            delegate: Item {
+                                id: gridCell
+                                required property var modelData
+                                required property int index
+                                width: page.cellWidth
+                                height: page.cellHeight
+
+                                TabletRecentCard {
+                                    id: gridCard
+                                    anchors.centerIn: parent
+                                    toplevel: gridCell.modelData
+                                    client: root.clientFor(gridCell.modelData)
+                                    // Bounded by the cell in both directions. `aspect` is
+                                    // derived from the window alone, so reading it here is
+                                    // not the loop that reading implicitWidth would be.
+                                    cardHeight: Math.min(gridCell.height, gridCell.width / gridCard.aspect)
+                                    isCurrent: gridCell.index === 0 && page.modelData === root.windowPages[0]
+                                    onActivated: root.activate(gridCell.modelData)
+                                    onClosed: root.closeWindow(gridCell.modelData)
+                                    onSplitRequested: root.splitWithCurrent(gridCell.modelData)
+                                    onMenuRequested: (x, y) => root.openCardMenu(gridCell.modelData, x, y)
+                                }
                             }
                         }
                     }
@@ -280,14 +539,41 @@ Item {
             }
         }
 
+        // Which page of cards you are on. Only the grid has pages; the list has an order.
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 8
+            visible: root.gridLayout && root.windowPages.length > 1
+
+            Repeater {
+                model: root.windowPages.length
+
+                delegate: Rectangle {
+                    required property int index
+                    readonly property bool current: index === pager.currentIndex
+
+                    implicitWidth: current ? 22 : 8
+                    implicitHeight: 8
+                    radius: height / 2
+                    color: Appearance.colors.colOnLayer0
+                    opacity: current ? 0.95 : 0.4
+
+                    Behavior on implicitWidth {
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    }
+                }
+            }
+        }
+
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
 
             // A workspace with nothing on it is Android's "new window" — the way out of
             // recents that is not going back to something you already had.
-            RecentsPill {
+            TabletRecentsActionPill {
                 symbol: "add"
+                pillHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
                 label: Translation.tr("New workspace")
                 onTriggered: root.newWorkspace()
             }
@@ -301,9 +587,10 @@ Item {
              * would be a lie. So the pill arms instead — the same second-deliberate-tap the
              * home screen's remove badge uses — and disarms itself if the tap does not come.
              */
-            RecentsPill {
+            TabletRecentsActionPill {
                 id: clearAllPill
                 visible: root.windows.length > 0
+                pillHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
                 symbol: clearAllPill.armed ? "warning" : "delete_sweep"
                 accent: clearAllPill.armed
                 label: clearAllPill.armed
@@ -344,62 +631,7 @@ Item {
         // for why it is drawn here instead of letting the real dock show through.
         TabletRecentsDockRow {
             Layout.fillWidth: true
-            Layout.topMargin: 4
             onLaunchRequested: action => root.deferredRequested(action)
-        }
-    }
-
-    component RecentsPill: Rectangle {
-        id: pill
-
-        property string symbol: ""
-        property string label: ""
-        property bool accent: false
-
-        signal triggered
-
-        implicitWidth: pillRow.implicitWidth + 44
-        implicitHeight: Math.max(Appearance.sizes.minimumTouchTarget, 52)
-        radius: height / 2
-        color: {
-            if (pill.accent)
-                return pillArea.pressed ? Appearance.colors.colErrorContainerActive : Appearance.colors.colErrorContainer;
-            return pillArea.pressed ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1;
-        }
-
-        readonly property color contentColor: pill.accent
-            ? Appearance.colors.colOnErrorContainer
-            : Appearance.colors.colOnLayer1
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
-        Behavior on implicitWidth {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-
-        RowLayout {
-            id: pillRow
-            anchors.centerIn: parent
-            spacing: 10
-
-            MaterialSymbol {
-                text: pill.symbol
-                iconSize: 22
-                color: pill.contentColor
-            }
-
-            StyledText {
-                text: pill.label
-                font.pixelSize: Appearance.font.pixelSize.normal
-                color: pill.contentColor
-            }
-        }
-
-        MouseArea {
-            id: pillArea
-            anchors.fill: parent
-            onClicked: pill.triggered()
         }
     }
 

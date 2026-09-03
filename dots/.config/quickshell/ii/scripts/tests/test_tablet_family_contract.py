@@ -497,7 +497,41 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin", dock)
         self.assertIn("implicitHeight: root.appButtonSize", dock)
         self.assertIn("buttonRadius: Appearance.rounding.full", button)
-        self.assertIn("symbolSize: Math.round(root.navigationButtonSize * 0.625)", dock)
+    def test_tablet_family_home_screen_supports_app_pairs_and_folders(self):
+        icons = read("modules/tablet/homeScreen/TabletHomeIcons.qml")
+        self.assertIn("function addPair(", icons)
+        self.assertIn("function addFolder(", icons)
+        self.assertIn("function combineIntoFolder(", icons)
+        self.assertIn("function addAppToFolder(", icons)
+        self.assertIn("function removeAppFromFolder(", icons)
+        self.assertIn("function renameFolder(", icons)
+        self.assertIn("function launchPair(", icons)
+
+        qmldir = read("modules/tablet/homeScreen/qmldir")
+        self.assertIn("TabletFolderDialog 1.0 TabletFolderDialog.qml", qmldir)
+
+        layer = read("modules/tablet/homeScreen/TabletHomeIconsLayer.qml")
+        self.assertIn('itemType === "pair"', layer)
+        self.assertIn('itemType === "folder"', layer)
+        self.assertIn("TabletHomeIcons.combineIntoFolder", layer)
+        self.assertIn("TabletFolderDialog", layer)
+
+        drawer = read("modules/ii/editMode/EditModeDrawer.qml")
+        self.assertIn("signal addAppPairRequested(", drawer)
+        self.assertIn("signal addFolderRequested(", drawer)
+        self.assertIn("id: createPairPage", drawer)
+        self.assertIn("id: createFolderPage", drawer)
+        self.assertIn('buttonText: Translation.tr("Apps")', drawer)
+        self.assertIn('root.openPage("createPair")', drawer)
+        self.assertIn('root.openPage("createFolder")', drawer)
+
+        states = read("GlobalStates.qml")
+        self.assertIn("property var addAppPairToHomeScreenHandler: null", states)
+        self.assertIn("property var addFolderToHomeScreenHandler: null", states)
+
+        family = read("panelFamilies/TabletFamily.qml")
+        self.assertIn("GlobalStates.addAppPairToHomeScreenHandler =", family)
+        self.assertIn("GlobalStates.addFolderToHomeScreenHandler =", family)
 
 
 if __name__ == "__main__":

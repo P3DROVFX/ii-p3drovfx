@@ -165,7 +165,7 @@ Item {
             }
 
             ConfigSwitch {
-                buttonIcon: "pagination"
+                buttonIcon: "linear_scale"
                 text: Translation.tr("Show home-screen page counter")
                 checked: Config.options.tablet.dock.showPageCounter
                 onCheckedChanged: {
@@ -238,6 +238,9 @@ Item {
                     if (Config.ready && value !== Config.options.tablet.dock.height)
                         Config.options.tablet.dock.height = value;
                 }
+                StyledToolTip {
+                    text: Translation.tr("The height of the band the controls sit in — the shelf itself. The page counter floats above it and is not counted, so raising this raises the dock and nothing else.")
+                }
             }
 
             ConfigSpinBox {
@@ -253,6 +256,89 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("The navigation buttons share this touch target, keeping them aligned with the app icons on the right side of the dock.")
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "format_color_fill"
+                title: Translation.tr("Dock background")
+                tooltip: Translation.tr("None is Android's home screen — icons straight on the wallpaper, outlined so they read against whatever is behind them. The other two give the dock a shelf of its own, like a Chrome OS or Windows taskbar, and drop the outlines because there is now a colour behind the glyphs. Contrast is checked against that colour, so the marks stay legible at any opacity.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.dock.backgroundStyle
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.dock.backgroundStyle = newValue;
+                    }
+                    options: [
+                        { value: "none", icon: "wallpaper", displayName: Translation.tr("None") },
+                        { value: "translucent", icon: "opacity", displayName: Translation.tr("Translucent") },
+                        { value: "solid", icon: "rectangle", displayName: Translation.tr("Solid") }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "crop_free"
+                text: Translation.tr("Floating slab instead of a full-width bar")
+                visible: Config.options.tablet.dock.backgroundStyle !== "none"
+                checked: Config.options.tablet.dock.backgroundFloating
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.dock.backgroundFloating)
+                        Config.options.tablet.dock.backgroundFloating = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Insets the surface from the screen edges and rounds all four corners, the way a floating taskbar looks. Off, it reaches the edges and is rounded only at the top.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "opacity"
+                text: Translation.tr("Background opacity (%)")
+                visible: Config.options.tablet.dock.backgroundStyle === "translucent"
+                value: Config.options.tablet.dock.backgroundOpacity
+                from: 20
+                to: 100
+                stepSize: 5
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.dock.backgroundOpacity)
+                        Config.options.tablet.dock.backgroundOpacity = value;
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "touch_app"
+                title: Translation.tr("Tapping an app that is open")
+                tooltip: Translation.tr("Go to it is what a taskbar does everywhere, and what the running dot under the icon promises. Start another copy is what this dock used to do for every tap. Either way a double tap always opens one more window.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.dock.appTapAction
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.dock.appTapAction = newValue;
+                    }
+                    options: [
+                        { value: "focus", icon: "open_in_new", displayName: Translation.tr("Go to it") },
+                        { value: "launch", icon: "add", displayName: Translation.tr("Start another copy") }
+                    ]
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "ads_click"
+                text: Translation.tr("Double-tap window (ms, 0 disables)")
+                value: Config.options.tablet.dock.doubleTapLaunchMs
+                from: 0
+                to: 800
+                stepSize: 20
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.dock.doubleTapLaunchMs)
+                        Config.options.tablet.dock.doubleTapLaunchMs = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("How long after a tap a second one still counts as \"one more window\" rather than as another tap.")
                 }
             }
 
@@ -348,6 +434,167 @@ Item {
                     if (Config.ready && checked !== Config.options.background.widgets.enableGrid)
                         Config.options.background.widgets.enableGrid = checked;
                 }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Recent apps")
+            icon: "overview"
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "grid_view"
+                title: Translation.tr("Layout")
+                tooltip: Translation.tr("A list is what Android does: one continuous row of cards you scrub sideways, going further back as you go. Grid pages show four windows at once, which is a better answer on a very large screen but makes you reason about pages that Recents does not really have.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.recents.layout
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.recents.layout = newValue;
+                    }
+                    options: [
+                        { value: "list", icon: "view_carousel", displayName: Translation.tr("List") },
+                        { value: "grid", icon: "grid_view", displayName: Translation.tr("Grid pages") }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "screenshot_region"
+                text: Translation.tr("Actions under the centred card")
+                checked: Config.options.tablet.recents.showCardActions
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.recents.showCardActions)
+                        Config.options.tablet.recents.showCardActions = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Screenshot and Split, under whichever card is in the middle of the view — where Android puts them. The same actions stay in each card's own menu either way.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "opacity"
+                text: Translation.tr("Backdrop opacity (%)")
+                value: Config.options.tablet.recents.backdropOpacity
+                from: 40
+                to: 100
+                stepSize: 2
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.recents.backdropOpacity)
+                        Config.options.tablet.recents.backdropOpacity = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("How much of the desktop behind Recents is washed out. It is never fully opaque by default, so what you were doing stays part of the transition instead of being replaced by a flat colour.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "view_column"
+                text: Translation.tr("Cards across")
+                visible: Config.options.tablet.recents.layout === "grid"
+                value: Config.options.tablet.recents.gridColumns
+                from: 1
+                to: 4
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.recents.gridColumns)
+                        Config.options.tablet.recents.gridColumns = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "table_rows"
+                text: Translation.tr("Cards down")
+                visible: Config.options.tablet.recents.layout === "grid"
+                value: Config.options.tablet.recents.gridRows
+                from: 1
+                to: 3
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.recents.gridRows)
+                        Config.options.tablet.recents.gridRows = value;
+                }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Windows")
+            icon: "picture_in_picture"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Hyprland tiles by default, so every application takes a whole workspace. Floating them gives a tablet the behaviour it expects — a window over what was already there — and the touch handles below are what make one arrangeable, since Hyprland's own move and resize both follow a pointer.")
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "picture_in_picture"
+                title: Translation.tr("Open new windows floating")
+                tooltip: Translation.tr("Keep dialogs leaves anything the compositor already floated exactly where it put itself — an application's own dialog knows its size and position better than a placement rule does.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.windows.floatMode
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.windows.floatMode = newValue;
+                    }
+                    options: [
+                        { value: "off", icon: "grid_view", displayName: Translation.tr("Tile, as usual") },
+                        { value: "all", icon: "picture_in_picture", displayName: Translation.tr("Everything") },
+                        { value: "keepDialogs", icon: "web_asset", displayName: Translation.tr("Keep dialogs") }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "drag_pan"
+                text: Translation.tr("Touch handles on the focused window")
+                checked: Config.options.tablet.windows.touchControls
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.windows.touchControls)
+                        Config.options.tablet.windows.touchControls = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("A title strip above the window to drag it by, with centre, tile, fullscreen and close, and a corner handle to resize it. Shown only for a floating window, so it costs nothing while everything is tiled.")
+                }
+            }
+
+            ConfigSubpageRow {
+                buttonIcon: "tune"
+                title: Translation.tr("Placement and handles")
+                description: Translation.tr("How large a floated window opens, whether they cascade, and the size of the touch handles")
+                configPage: Qt.resolvedUrl("widgets/TabletWindowsConfig.qml")
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Floating bubble")
+            icon: "bubble_chart"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "touch_app"
+                text: Translation.tr("A small circle you can drag anywhere, which stays put even over a fullscreen application — exactly when the edge gestures are hardest to reach. Tapping it opens a sheet of large actions beside it.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "bubble_chart"
+                text: Translation.tr("Show the floating bubble")
+                checked: Config.options.tablet.bubble.enable
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.bubble.enable)
+                        Config.options.tablet.bubble.enable = checked;
+                }
+            }
+
+            ConfigSubpageRow {
+                buttonIcon: "bolt"
+                title: Translation.tr("Bubble actions and appearance")
+                description: Translation.tr("Which eight actions the sheet offers, the bubble's size, and how far it fades when idle")
+                visible: Config.options.tablet.bubble.enable
+                configPage: Qt.resolvedUrl("widgets/TabletBubbleConfig.qml")
             }
         }
 
@@ -531,6 +778,40 @@ Item {
                         { value: "policies", icon: "neurology", displayName: Translation.tr("Policies on the left") },
                         { value: "none", icon: "block", displayName: Translation.tr("Unclaimed") }
                     ]
+                }
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "arrow_back"
+                title: Translation.tr("What Back sends to the app")
+                tooltip: Translation.tr("Back closes whatever the shell has open first — a dialog, a menu, the keyboard, the drawer. Once there is nothing of the shell's left, it becomes Android's Back: a key the focused application interprets. Alt+Left is what browsers, file managers and most toolkits bind their own back action to.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.tablet.navigation.backKey
+                    onSelected: newValue => {
+                        if (Config.ready)
+                            Config.options.tablet.navigation.backKey = newValue;
+                    }
+                    options: [
+                        { value: "alt_left", icon: "arrow_back", displayName: Translation.tr("Alt + Left") },
+                        { value: "browser_back", icon: "public", displayName: Translation.tr("Browser Back key") },
+                        { value: "escape", icon: "keyboard_return", displayName: Translation.tr("Escape") },
+                        { value: "backspace", icon: "backspace", displayName: Translation.tr("Backspace") }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "keyboard_alt"
+                text: Translation.tr("Let Back reach the focused app")
+                checked: Config.options.tablet.navigation.sendBackKeyToApps
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.navigation.sendBackKeyToApps)
+                        Config.options.tablet.navigation.sendBackKeyToApps = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Off keeps Back to the shell's own surfaces, so it does nothing once they are all closed — which is how this family behaved before. The key is only ever sent to a window on the workspace in front of you.")
                 }
             }
 

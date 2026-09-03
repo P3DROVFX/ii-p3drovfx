@@ -114,25 +114,43 @@ PanelWindow {
         }
     }
 
-    Component.onDestruction: GlobalFocusGrab.removeDismissable(root)
+    Component.onDestruction: {
+        GlobalFocusGrab.removeDismissable(root);
+        GlobalStates.setTabletOverlayOnScreen(root.overlayName, false);
+    }
 
     /// GlobalFocusGrab dismisses by calling this on the registered window.
     function dismiss() {
         GlobalStates.appDrawerOpen = false;
     }
 
-    // The snapshot has to be taken while this surface is still painting nothing, or the
-    // capture contains the drawer's own backdrop and the blur compounds every frame.
-    property bool _backdropArmed: false
+    /**
+     * The backdrop is rebuilt for every open, not refreshed.
+     *
+     * A ScreencopyView keeps the last frame it captured, and asking an existing one for
+     * another frame does not reliably replace it: the drawer was opening onto a photograph
+     * of a window that had been closed for minutes, and — before the two surfaces were made
+     * mutually exclusive — onto a photograph of Recents. Chasing that with a latch and a
+     * retry timer only added state that could itself get stuck. A view created when the
+     * surface starts opening has nothing to keep, so there is no stale frame to serve, and
+     * `hasContent` says exactly what it means: a picture of *this* open has arrived.
+     *
+     * The Loader also waits for any other full-screen tablet overlay to leave the screen —
+     * a plain binding, so it activates the moment the other one unmaps. Closing is a
+     * transition, so "the other one is closed" and "the other one is gone" are not the same
+     * instant, and capturing between them is what froze Recents into the drawer.
+     */
+    readonly property string overlayName: "appDrawer"
+
+    readonly property bool wantsBackdrop: root.useBlur
+        && (root.wantOpen || TabletAppDrawerGestureController.tracking || root.openProgress > 0.001)
+
+    // This surface stays mapped while idle, so "on screen" is about painting, not mapping.
+    readonly property bool paintsBackdrop: root.openProgress > 0.001
+    onPaintsBackdropChanged: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
+    Component.onCompleted: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
 
     onOpenProgressChanged: {
-        if (root.openProgress > 0.001 && !root._backdropArmed) {
-            root._backdropArmed = true;
-            if (root.useBlur)
-                backdropCapture.captureFrame();
-        } else if (root.openProgress <= 0.001) {
-            root._backdropArmed = false;
-        }
         // The field is focused only once the drawer has settled, for the same reason the
         // surface takes keyboard focus only then.
         if (root.openProgress > 0.99)
@@ -142,7 +160,7 @@ PanelWindow {
     Item {
         id: backdrop
         anchors.fill: parent
-        visible: root.useBlur && root.openProgress > 0.001 && backdropCapture.hasContent
+        visible: root.useBlur && root.openProgress > 0.001 && (backdropLoader.item?.hasContent ?? false)
         layer.enabled: backdrop.visible
         layer.effect: MultiEffect {
             // Auto padding grows the effect item past its source and shifts the whole
@@ -156,12 +174,20 @@ PanelWindow {
             blur: Math.min(1.0, root.openProgress * 1.15)
         }
 
-        ScreencopyView {
-            id: backdropCapture
+        Loader {
+            id: backdropLoader
             anchors.fill: parent
-            captureSource: root.useBlur ? root.screen : null
-            // A live capture would see this surface's own blurred output and smear.
-            live: false
+            active: root.wantsBackdrop && !GlobalStates.otherTabletOverlayOnScreen(root.overlayName)
+
+            sourceComponent: ScreencopyView {
+                anchors.fill: parent
+                captureSource: root.screen
+                // A live capture would see this surface's own blurred output and smear.
+                live: false
+                // Taken the moment the view exists, which is the moment the drawer starts
+                // opening — before it has painted anything of its own.
+                Component.onCompleted: captureFrame()
+            }
         }
     }
 
@@ -226,9 +252,6 @@ PanelWindow {
             onPressed: mouse => {
                 if (TabletAppDrawerGestureController.isSettledOpen)
                     return;
-                // Before the surface paints anything, or the capture contains the drawer.
-                if (root.useBlur)
-                    backdropCapture.captureFrame();
                 bottomMouseDragArea.startY = mouse.y;
                 bottomMouseDragArea.lastY = mouse.y;
                 bottomMouseDragArea.lastTime = Date.now();

@@ -340,12 +340,23 @@ Item {
          * whose transitions run over each other, and a delegate whose move is interrupted
          * is left wherever it was: stacked on a neighbour, or nowhere at all. Below half
          * survival there is no rearrangement to show anyway.
+         *
+         * The survival ratio is measured against the LONGER of the two lists, not the
+         * shorter one. Against the shorter one, going from a six-result query back to the
+         * whole library scored 6/6 survival and took the incremental path — several hundred
+         * inserts, each one displacing every tile after it, with the transitions cut short
+         * by the next insert. That is exactly the shape of the bug this guard exists to
+         * prevent, and it is what left the reopened drawer with tiles stacked on their
+         * neighbours and cells empty. `churn` catches the same case from the other side:
+         * even a high survival ratio is not worth animating past a few dozen operations.
          */
         let retained = 0;
         for (const key of currentKeys)
             if (wanted.has(key))
                 retained++;
-        if (currentKeys.length > 0 && retained < Math.min(currentKeys.length, rows.length) * 0.5) {
+        const churn = (currentKeys.length - retained) + (rows.length - retained);
+        if (currentKeys.length > 0
+                && (retained < Math.max(currentKeys.length, rows.length) * 0.5 || churn > 48)) {
             gridModel.clear();
             for (const row of rows)
                 gridModel.append({
@@ -542,7 +553,10 @@ Item {
         root.categoryFilter = "";
         inlineMenu.close();
         searchField.text = "";
-        appGrid.contentY = 0;
+        // The top of a Flickable with a top margin is -topMargin, not 0. Zero was one whole
+        // band below it, so the drawer opened with the predicted row already scrolled off
+        // and the top fade fully in — the grid looked like it had been left mid-scroll.
+        appGrid.contentY = -appGrid.topMargin;
     }
 
     /// Opened from the host when a dock button asks for a specific panel.

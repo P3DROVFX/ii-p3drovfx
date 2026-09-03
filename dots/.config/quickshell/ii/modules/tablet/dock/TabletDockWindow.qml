@@ -10,6 +10,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.tablet.appDrawer
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.tablet.navigation
 
@@ -176,6 +177,10 @@ PanelWindow {
         TaskbarApps.getCachedDesktopEntry(appId)?.execute();
     }
 
+    /// A tap on a running app goes to its window unless the user asked otherwise.
+    readonly property bool dockPrefersFocus: (root.tabletDock?.appTapAction ?? "focus") !== "launch"
+    readonly property int dockDoubleTapMs: root.tabletDock?.doubleTapLaunchMs ?? 320
+
     readonly property var navigationOrder: {
         const configured = root.tabletDock?.navigationOrder ?? ["back", "home", "recents"];
         const accepted = ["back", "home", "recents"];
@@ -222,15 +227,99 @@ PanelWindow {
         const monitor = Hyprland.monitors.values.find(m => m.name === root.screenName);
         return monitor?.activeWorkspace?.id ?? -1;
     }
-    readonly property bool pageCounterVisible: (root.tabletDock?.showPageCounter ?? true)
+    // ── Background ──────────────────────────────────────────────────────────
+    /**
+     * The dock's own surface: "none", "translucent" or "solid".
+     *
+     * "none" is the Android home-screen look this family shipped with — glyphs straight on
+     * the wallpaper, outlined so they survive whatever is behind them. It is still the
+     * default, because it is the look the rest of the home screen was drawn against.
+     *
+     * The other two give the dock a real surface, the way a Chrome OS shelf or a Windows
+     * taskbar has one. That is worth an option rather than a rewrite: with something behind
+     * the icons the outlines become the thing that looks wrong, so the two treatments are
+     * chosen together and never mixed.
+     */
+    readonly property string dockBackgroundStyle: root.tabletDock?.backgroundStyle ?? "none"
+    readonly property bool dockHasBackground: root.dockBackgroundStyle !== "none"
+    /// Inset rounded slab instead of a full-width bar. Only meaningful with a background.
+    readonly property bool dockBackgroundFloating: root.tabletDock?.backgroundFloating ?? false
+    readonly property real dockBackgroundOpacity: root.dockBackgroundStyle === "translucent"
+        ? Math.max(0.2, Math.min(1, (root.tabletDock?.backgroundOpacity ?? 75) / 100))
+        : 1
+
+    /// Opaque even when the theme's own layer 0 is not: "solid" is the whole point of the
+    /// option, and colLayer0 carries the user's background transparency.
+    readonly property color dockBackgroundColor: ColorUtils.applyAlpha(
+        Appearance.colors.colLayer0Base, root.dockBackgroundOpacity)
+
+    /**
+     * What the dock paints its own marks with: the page dots, the dividers, the drawer glyph.
+     *
+     * With no background these sit on an arbitrary wallpaper and are outlined for contrast.
+     * With one they sit on a colour we chose, so the outline goes and the fill has to be
+     * legible against that colour — which the palette's own pairing usually gives, but not
+     * at every transparency the user can dial in. So it is measured rather than assumed:
+     * `mostReadable` keeps the theme's on-colour whenever it clears WCAG AA and only leaves
+     * the palette when nothing in it does.
+     */
+    readonly property color dockOnSurfaceColor: {
+        if (!root.dockHasBackground)
+            return Appearance.colors.colOnLayer0;
+        // What the translucent surface actually composites to, so the ratio is measured
+        // against the pixels the user sees rather than against a colour behind an alpha.
+        const painted = ColorUtils.mix(Appearance.colors.colLayer0Base,
+                                       Appearance.m3colors.m3background,
+                                       root.dockBackgroundOpacity);
+        return ColorUtils.mostReadable(painted, [
+            Appearance.colors.colOnLayer0,
+            Appearance.m3colors.m3onSurface,
+            Appearance.m3colors.m3onSurfaceVariant
+        ]);
+    }
+    /// Transparent once there is a surface behind the glyph — see dockOnSurfaceColor.
+    readonly property color dockGlyphOutlineColor: root.dockHasBackground
+        ? "transparent" : Appearance.colors.colLayer0
+
+    /// Whether the page counter is configured at all, as opposed to hidden right now.
+    ///
+    /// Kept apart from `pageCounterVisible` so the row can be *loaded* while it is not
+    /// showing. Unloading it is what made the dock jump: the row leaving the layout in one
+    /// frame took the column's height with it, and everything that measures the dock — the
+    /// surface, the exclusive zone, the app row's own slot — stepped to the new number at
+    /// once. See `pageCounterSlot`.
+    readonly property bool pageCounterConfigured: (root.tabletDock?.showPageCounter ?? true)
         && root.monitorWorkspaces.length > 1
+    readonly property bool pageCounterVisible: root.pageCounterConfigured
         && (!(root.tabletDock?.hidePageCounterOnOccupiedWorkspace ?? true) || root.workspaceEmpty)
     readonly property bool compactWhenPageCounterHidden: root.tabletDock?.compactWhenPageCounterHidden ?? true
-    readonly property real dockContentHeight: dockColumn.implicitHeight + Appearance.sizes.elevationMargin * 2
+
+    /// A floating slab is lifted off the screen edge, and the controls have to be lifted
+    /// with it or they sit low in their own surface.
+    readonly property real dockBottomInset: (root.dockHasBackground && root.dockBackgroundFloating)
+        ? Appearance.sizes.elevationMargin : 0
+
+    /**
+     * The band the controls live in — the dock's own height, in the sense the setting means.
+     *
+     * `tablet.dock.height` used to be a *floor* under the whole surface, which is why the
+     * spin box appeared to do nothing: the content already came to about a hundred pixels,
+     * so every value up to that changed no number anywhere, and the page counter's slot
+     * moved the threshold around underneath it. It is the height of the control band now —
+     * what the shelf actually is — and the page counter sits above that rather than inside
+     * it, so raising this raises the dock and nothing else.
+     */
+    readonly property real appRowBandHeight: Math.max(root.appButtonSize,
+        (root.tabletDock?.height ?? 0) - Appearance.sizes.elevationMargin * 2 - root.dockBottomInset)
+
+    readonly property real dockContentHeight: dockColumn.implicitHeight
+        + Appearance.sizes.elevationMargin * 2 + root.dockBottomInset
     /// What the dock actually occupies at rest, and therefore what it reserves.
-    readonly property real dockSurfaceHeight: root.pageCounterVisible || !root.compactWhenPageCounterHidden
-        ? Math.max(root.tabletDock?.height ?? root.appButtonSize, root.dockContentHeight)
-        : root.dockContentHeight
+    ///
+    /// `dockContentHeight` follows the animated counter slot, so this glides with it rather
+    /// than needing a Behavior of its own — one animation, and the surface, the reserve and
+    /// the lift headroom all read the same number on every frame of it.
+    readonly property real dockSurfaceHeight: root.dockContentHeight
     /// Empty, transparent space kept above the dock purely so it has somewhere to travel to.
     ///
     /// A layer surface has no overflow: anything translated past its top edge is cut off by
@@ -258,7 +347,17 @@ PanelWindow {
 
     // The transparent reserved strip must never swallow taps intended for an application.
     mask: Region {
-        regions: [navigationRegion, appsRegion, searchRegion, workspacePrevRegion, workspaceNextRegion]
+        regions: [dockSurfaceRegion, navigationRegion, appsRegion, searchRegion,
+                  workspacePrevRegion, workspaceNextRegion]
+    }
+
+    // An opaque bar that let taps through to the window behind it would be a surface that
+    // is visibly there and not there at the same time. With no background the strip stays
+    // transparent and keeps handing every miss straight back to the application.
+    Region {
+        id: dockSurfaceRegion
+        item: dockBackground
+        intersection: root.dockHasBackground ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
@@ -291,6 +390,57 @@ PanelWindow {
         intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
+    /**
+     * The dock's surface, when it has one.
+     *
+     * Declared before the column so it stays behind it — declaration order is depth here —
+     * and carrying the same travel and fade, so with the drawer coming up the surface is
+     * part of what rises rather than a rectangle the dock leaves behind.
+     */
+    Rectangle {
+        id: dockBackground
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: root.dockBackgroundFloating ? Appearance.sizes.elevationMargin : 0
+        anchors.rightMargin: root.dockBackgroundFloating ? Appearance.sizes.elevationMargin : 0
+        anchors.bottomMargin: root.dockBackgroundFloating ? Appearance.sizes.elevationMargin : 0
+
+        /**
+         * Only as tall as the row of controls, so the page counter stays outside it.
+         *
+         * The counter is not dock chrome — it says which home screen you are on, and on
+         * Android it floats above the taskbar on the wallpaper. Wrapping it in the dock's
+         * surface made it look like a control the dock owned.
+         *
+         * Measured from the row's own position rather than from `dockSurfaceHeight`: the
+         * row's offset inside the column is whatever the counter's animated slot leaves it,
+         * so reading it directly is what keeps the surface's top edge still while the
+         * counter comes and goes.
+         */
+        // Half the gap above the row, so the shelf stops short of the page counter instead
+        // of running under it. The other half is the counter's own clearance.
+        height: root.height - (dockColumn.y + appRowArea.y)
+            + (appRowArea.y > 0 ? dockColumn.spacing / 2 : Appearance.sizes.elevationMargin)
+            - root.dockBottomInset
+        visible: root.dockHasBackground
+        color: root.dockBackgroundColor
+
+        // A bar spans the screen and ends where the screen does, so it is square — the same
+        // shape a taskbar or a shelf has. Only the floating slab is rounded, because none of
+        // its edges are the screen's.
+        radius: root.dockBackgroundFloating ? Appearance.rounding.large : 0
+
+        opacity: dockColumn.opacity
+        transform: Translate {
+            y: -root.drawerProgress * root.dockContentHeight
+        }
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(dockBackground)
+        }
+    }
+
     ColumnLayout {
         id: dockColumn
         // Bottom-anchored rather than filling: the surface is taller than the dock now, and
@@ -298,9 +448,18 @@ PanelWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: Appearance.sizes.elevationMargin
-        height: root.dockSurfaceHeight - Appearance.sizes.elevationMargin * 2
-        spacing: Appearance.sizes.elevationMargin / 2
+        // The slab's inset applies to the controls too, on every side it applies to the
+        // slab. Without it the workspace arrows sat exactly on the slab's rounded corners
+        // and read as half-circles bleeding onto the wallpaper.
+        anchors.leftMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
+        anchors.rightMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
+        anchors.topMargin: Appearance.sizes.elevationMargin
+        anchors.bottomMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
+        height: root.dockSurfaceHeight - Appearance.sizes.elevationMargin * 2 - root.dockBottomInset
+        // Wider once there is a surface below: the counter has to clear the shelf's top edge
+        // rather than sit on it, which is what it looked like at the old half-margin gap.
+        spacing: root.dockHasBackground
+            ? Appearance.sizes.elevationMargin * 1.5 : Appearance.sizes.elevationMargin / 2
         // Rises with the sheet rather than dropping away from it: the drawer is pulled up
         // out of the dock, so the dock is part of what is being pulled.
         //
@@ -312,32 +471,67 @@ PanelWindow {
             y: -root.drawerProgress * root.dockContentHeight
         }
 
-        Loader {
-            id: pageCounterLoader
+        /**
+         * The counter's slot in the column, which animates open and shut on its own.
+         *
+         * The row inside keeps its natural height and is clipped by the slot, rather than
+         * being squashed by it: a Loader sizes its item to itself, so animating the Loader
+         * directly would have flattened the dots instead of sliding them out of view.
+         */
+        Item {
+            id: pageCounterSlot
             Layout.alignment: Qt.AlignHCenter
             Layout.minimumHeight: 0
-            Layout.preferredHeight: item?.implicitHeight ?? 0
+            Layout.preferredWidth: pageCounterLoader.implicitWidth
+            // Animates between "there" and "not there" instead of the row being deleted out
+            // of the layout. Without this the dock's whole height changed in a single frame
+            // when a workspace stopped being empty, and everything below it appeared to hop.
+            // `compactWhenPageCounterHidden` off keeps the slot reserved while the counter
+            // is hidden, so the dock stays the height it has when the counter is showing.
+            Layout.preferredHeight: (root.pageCounterVisible || !root.compactWhenPageCounterHidden)
+                ? pageCounterLoader.implicitHeight : 0
             Layout.maximumHeight: Layout.preferredHeight
-            active: root.pageCounterVisible
+            visible: Layout.preferredHeight > 0.5
+            clip: true
 
-            sourceComponent: RowLayout {
-                spacing: Appearance.sizes.elevationMargin * 0.875
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(pageCounterSlot)
+            }
 
-                Repeater {
-                    model: root.monitorWorkspaces
+            Loader {
+                id: pageCounterLoader
+                anchors.horizontalCenter: parent.horizontalCenter
+                // Anchored to the bottom, so shutting the slot slides the dots down behind
+                // the app row rather than cropping them from underneath.
+                anchors.bottom: parent.bottom
+                width: implicitWidth
+                height: implicitHeight
+                active: root.pageCounterConfigured
+                opacity: root.pageCounterVisible ? 1 : 0
 
-                    delegate: Rectangle {
-                        required property int modelData
-                        readonly property bool current: modelData === root.activeWorkspaceId
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pageCounterLoader)
+                }
 
-                        implicitWidth: current ? root.pageIndicatorSize * 3 : root.pageIndicatorSize
-                        implicitHeight: root.pageIndicatorSize
-                        radius: Appearance.rounding.full
-                        color: Appearance.colors.colOnLayer0
-                        opacity: current ? 0.95 : 0.45
+                sourceComponent: RowLayout {
+                    spacing: Appearance.sizes.elevationMargin * 0.875
 
-                        Behavior on implicitWidth {
-                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                    Repeater {
+                        model: root.monitorWorkspaces
+
+                        delegate: Rectangle {
+                            required property int modelData
+                            readonly property bool current: modelData === root.activeWorkspaceId
+
+                            implicitWidth: current ? root.pageIndicatorSize * 3 : root.pageIndicatorSize
+                            implicitHeight: root.pageIndicatorSize
+                            radius: Appearance.rounding.full
+                            color: root.dockOnSurfaceColor
+                            opacity: current ? 0.95 : 0.45
+
+                            Behavior on implicitWidth {
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                            }
                         }
                     }
                 }
@@ -345,8 +539,14 @@ PanelWindow {
         }
 
         Item {
+            id: appRowArea
             Layout.fillWidth: true
-            Layout.preferredHeight: root.appButtonSize
+            Layout.preferredHeight: root.appRowBandHeight
+            // Never squeezed by the counter's slot. A ColumnLayout given less height than
+            // its contents shrinks whatever has no minimum, and the icons — anchored to
+            // this item's vertical centre — slid with it every time the counter came or
+            // went. The surface is what changes size; the app row is not.
+            Layout.minimumHeight: root.appRowBandHeight
 
             // Both arrows sit at the extreme ends, outside everything else: they are about
             // the screen you are on, not about what is on it.
@@ -473,7 +673,10 @@ PanelWindow {
                         iconSize: root.appIconSize
                         buttonSize: root.appButtonSize
                         running: root.isRunning(modelData)
+                        preferFocus: root.dockPrefersFocus
+                        doubleTapWindowMs: root.dockDoubleTapMs
                         onActivated: root.launch(modelData)
+                        onNewInstanceRequested: root.launch(modelData)
                     }
                 }
 
@@ -484,7 +687,7 @@ PanelWindow {
                     Layout.leftMargin: Appearance.sizes.elevationMargin / 2
                     Layout.rightMargin: Appearance.sizes.elevationMargin / 2
                     radius: Appearance.rounding.full
-                    color: Appearance.colors.colOnLayer0
+                    color: root.dockOnSurfaceColor
                     opacity: 0.3
                 }
 
@@ -497,7 +700,10 @@ PanelWindow {
                         iconSize: root.appIconSize
                         buttonSize: root.appButtonSize
                         running: true
+                        preferFocus: root.dockPrefersFocus
+                        doubleTapWindowMs: root.dockDoubleTapMs
                         onActivated: root.launch(modelData)
+                        onNewInstanceRequested: root.launch(modelData)
                     }
                 }
 
@@ -525,7 +731,7 @@ PanelWindow {
                     Layout.leftMargin: Appearance.sizes.elevationMargin / 2
                     Layout.rightMargin: Appearance.sizes.elevationMargin / 2
                     radius: Appearance.rounding.full
-                    color: Appearance.colors.colOnLayer0
+                    color: root.dockOnSurfaceColor
                     opacity: 0.3
                 }
 
@@ -540,9 +746,11 @@ PanelWindow {
                         text: "apps"
                         iconSize: root.appIconSize * 0.625
                         fill: 1
-                        color: Appearance.colors.colOnLayer0
-                        style: Text.Outline
-                        styleColor: Appearance.colors.colLayer0
+                        color: root.dockOnSurfaceColor
+                        // The outline is what makes a glyph readable on an unknown
+                        // wallpaper. On a surface of our own it is just a halo.
+                        style: root.dockHasBackground ? Text.Normal : Text.Outline
+                        styleColor: root.dockGlyphOutlineColor
                     }
                 }
             }

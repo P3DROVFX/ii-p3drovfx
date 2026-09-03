@@ -1673,6 +1673,8 @@ Singleton {
 
     /// Home screen app placement handlers, installed by the panel family owning home screen icons (Tablet).
     property var addAppToHomeScreenHandler: null
+    property var addAppPairToHomeScreenHandler: null
+    property var addFolderToHomeScreenHandler: null
     property var removeAppFromHomeScreenHandler: null
     property var isAppOnHomeScreenHandler: null
     property var clearHomeScreenAppsHandler: null
@@ -1731,8 +1733,49 @@ Singleton {
     }
 
     function _showAppDrawer(monitorName) {
+        // One full-screen tablet overlay at a time. Android never stacks the launcher on
+        // Overview either, and here it is also a correctness matter: each of these surfaces
+        // photographs the screen for its own blurred backdrop, so one opened over another
+        // bakes the other into its background — the drawer ended up showing Recents where
+        // the desktop should have been. See tabletOverlayVisible.
+        root.recentsOpen = false;
         root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.appDrawerOpen = true;
+    }
+
+    // ── Which tablet overlays are actually on screen ─────────────────────────
+    /**
+     * The full-screen tablet surfaces currently painting, by name.
+     *
+     * Not the same question as "is it open": these surfaces animate out, so a closed one is
+     * still on screen for the length of its transition. Anything that photographs the screen
+     * has to wait for that, or it captures a surface that is on its way out and freezes it
+     * into its own background.
+     *
+     * The surfaces register themselves; nothing here knows what they are.
+     */
+    property var tabletOverlaysOnScreen: ({})
+
+    function setTabletOverlayOnScreen(name, onScreen) {
+        const key = String(name ?? "");
+        if (key.length === 0)
+            return;
+        const current = Object.assign({}, root.tabletOverlaysOnScreen);
+        if (onScreen)
+            current[key] = true;
+        else
+            delete current[key];
+        root.tabletOverlaysOnScreen = current;
+    }
+
+    /// True when some *other* full-screen tablet overlay is still painting.
+    function otherTabletOverlayOnScreen(exceptName) {
+        const except = String(exceptName ?? "");
+        for (const key in root.tabletOverlaysOnScreen) {
+            if (key !== except)
+                return true;
+        }
+        return false;
     }
 
     function toggleAppDrawer(monitorName) {
@@ -1812,6 +1855,8 @@ Singleton {
     property string activeRecentsMonitor: ""
 
     function openRecents(monitorName) {
+        // See _showAppDrawer: two of these on screen at once means one photographs the other.
+        root.appDrawerOpen = false;
         root.activeRecentsMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.recentsOpen = true;
     }

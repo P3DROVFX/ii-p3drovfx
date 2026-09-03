@@ -375,6 +375,16 @@ Singleton {
                 // also state rather than preference — where the user last put an icon —
                 // which is why it lives here and not in Config.
                 property string homeIconsJson: "{}"
+
+                // Where the floating bubble was left, as a fraction of the screen, so it
+                // lands in the same corner on a different monitor rather than off the edge
+                // of a smaller one. -1 means "never moved": the first placement is the
+                // default corner, not a stored 0,0.
+                property real bubbleX: -1
+                property real bubbleY: -1
+                /// Which side the action panel opened towards last, so it does not flip
+                /// while the panel is on screen.
+                property bool bubbleOnRight: true
             }
 
             property JsonObject sidebar: JsonObject {

@@ -63,6 +63,8 @@ Item {
     signal drawerDockToggleRequested(string appId)
     signal drawerAddAppRequested(string appId, real dropX, real dropY)
     signal drawerToggleAppRequested(string appId)
+    signal drawerAddAppPairRequested(string firstAppId, string secondAppId, string name)
+    signal drawerAddFolderRequested(string folderName, var appsList)
     signal drawerClearHomeScreenAppsRequested()
     signal drawerLockLayoutResetRequested()
     // "widgets", "bar", "dock" or "lockIslands": that surface back to the
@@ -439,6 +441,8 @@ Item {
             onDockToggleRequested: appId => root.drawerDockToggleRequested(appId)
             onAddAppRequested: (appId, dropX, dropY) => root.drawerAddAppRequested(appId, dropX, dropY)
             onToggleAppOnHomeScreenRequested: appId => root.drawerToggleAppRequested(appId)
+            onAddAppPairRequested: (firstAppId, secondAppId, name) => root.drawerAddAppPairRequested(firstAppId, secondAppId, name)
+            onAddFolderRequested: (folderName, appsList) => root.drawerAddFolderRequested(folderName, appsList)
             onClearHomeScreenAppsRequested: root.drawerClearHomeScreenAppsRequested()
         }
     }

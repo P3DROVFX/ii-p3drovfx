@@ -1354,6 +1354,11 @@ Singleton {
             "lock.touchKeyboard.show": ["auto", "always", "never"],
             "tablet.gestures.sideEdges": ["back", "policies", "none"],
             "tablet.gestures.bottomEdge": ["android", "drawer"],
+            "tablet.dock.backgroundStyle": ["none", "translucent", "solid"],
+            "tablet.dock.appTapAction": ["focus", "launch"],
+            "tablet.recents.layout": ["list", "grid"],
+            "tablet.navigation.backKey": ["alt_left", "escape", "backspace", "browser_back", "custom"],
+            "tablet.windows.floatMode": ["off", "all", "keepDialogs"],
             "lock.touchKeyboard.mode": ["text", "pin"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
@@ -1726,6 +1731,149 @@ Singleton {
                     property bool showPageCounter: true
                     property bool hidePageCounterOnOccupiedWorkspace: true
                     property bool compactWhenPageCounterHidden: true
+
+                    /**
+                     * Whether the dock has a surface of its own.
+                     *
+                     * "none"        — Android's home screen: icons straight on the wallpaper,
+                     *                 outlined so they read against whatever is behind them.
+                     * "translucent" — a shelf, dimmed by `backgroundOpacity`.
+                     * "solid"       — an opaque shelf, like a Windows taskbar. Opaque even
+                     *                 when the theme's own layer 0 is translucent, since a
+                     *                 solid bar is the whole point of choosing this.
+                     *
+                     * The glyph outlines go with the surface: on a colour we chose they are
+                     * a halo, so the two are decided together rather than mixed.
+                     */
+                    property string backgroundStyle: "none"
+                    /// An inset rounded slab rather than a bar reaching the screen edges.
+                    property bool backgroundFloating: false
+                    /// Percent. Only read by "translucent".
+                    property int backgroundOpacity: 75
+
+                    /**
+                     * What tapping an app that is already running does.
+                     *
+                     * "focus"  — raise the window, and switch to its workspace if it is on
+                     *            another one. This is what a taskbar does everywhere, and
+                     *            what the running dot under the icon promises.
+                     * "launch" — always start another copy, which is what this dock used to
+                     *            do unconditionally.
+                     *
+                     * With "focus", a second app window is still one gesture away: a double
+                     * tap launches, and so does the long-press menu's "Open".
+                     */
+                    property string appTapAction: "focus"
+                    /// Milliseconds within which a second tap on a dock icon means "another
+                    /// window", not "focus again". 0 turns the double tap off entirely.
+                    property int doubleTapLaunchMs: 320
+                }
+
+                /**
+                 * The Recents surface — what was I just doing.
+                 *
+                 * "list" is a continuous row of cards you scrub sideways, which is what
+                 * Android does and what this surface is. "grid" pages through four windows
+                 * at a time: a genuinely better answer on a very large screen, but the wrong
+                 * default, because a page is a unit the user has to reason about and Recents
+                 * has no units — it has an order.
+                 */
+                property JsonObject recents: JsonObject {
+                    property string layout: "list"
+                    property int gridColumns: 2
+                    property int gridRows: 2
+                    /// Screenshot and Split under the card in the middle of the view, as
+                    /// Android shows them. Off reclaims the strip for taller cards; the same
+                    /// actions stay in the card's own menu either way.
+                    property bool showCardActions: true
+                    /// How opaque the backdrop behind the cards is, in percent, over an
+                    /// opaque base — so the number means what it says. The windows
+                    /// underneath stay faintly part of the transition rather than being
+                    /// replaced by a flat colour, which is why this is not simply 100.
+                    property int backdropOpacity: 82
+                }
+
+                /**
+                 * What the Back button and the back gesture do once no shell surface is left
+                 * to close.
+                 *
+                 * Android's Back is a key the focused application interprets. There is no
+                 * such key on a Linux desktop, so the closest equivalent is sent instead —
+                 * Alt+Left is browser and file-manager back, and it is what most toolkits
+                 * map their own back action to.
+                 */
+                property JsonObject navigation: JsonObject {
+                    /// Send the key at all. Off keeps Back inert on a bare home screen.
+                    property bool sendBackKeyToApps: true
+                    /// "alt_left" | "escape" | "backspace" | "browser_back" | "custom".
+                    property string backKey: "alt_left"
+                    /// Only read by "custom": Hyprland mods and key, e.g. "CTRL" / "bracketleft".
+                    property string customBackMods: ""
+                    property string customBackKey: ""
+                }
+
+                /**
+                 * Windows as a tablet expects them: floating by default, with touch handles
+                 * to move and resize them, because Hyprland's own move and resize are
+                 * pointer-drag bindings a finger cannot reach.
+                 */
+                property JsonObject windows: JsonObject {
+                    /// "off" | "all" | "keepDialogs". "keepDialogs" leaves anything the
+                    /// compositor already floated where it put itself — an application's own
+                    /// dialog knows its size and position better than a placement rule does.
+                    property string floatMode: "off"
+                    /// Percent of the monitor's usable area a newly floated window takes.
+                    property int floatWidthPercent: 62
+                    property int floatHeightPercent: 68
+                    /// Cascade each new window down and right of the last, so a second window
+                    /// does not land exactly on the first.
+                    property bool cascade: true
+                    /// App IDs that keep the compositor's own behaviour. Matched
+                    /// case-insensitively against the Hyprland class.
+                    property list<string> exclusions: ["quickshell"]
+                    /// A title bar over the focused floating window with drag, resize,
+                    /// fullscreen and close targets sized for a finger.
+                    property bool touchControls: true
+                    property int touchControlsHeight: 40
+                }
+
+                /**
+                 * A small always-present circle, draggable anywhere, that opens a sheet of
+                 * large quick actions.
+                 *
+                 * The gap it fills: a tablet held in two hands can reach one thing reliably,
+                 * and everything this shell can do is otherwise behind an edge gesture, a
+                 * keybind or a surface that first has to be summoned. Several of those —
+                 * float this window, make it fullscreen, bring up the keyboard — are one tap
+                 * on Android and a keyboard shortcut here. The bubble is the one control
+                 * that is always where the user left it, including over a fullscreen app,
+                 * which is exactly when the edge gestures are least reachable.
+                 */
+                property JsonObject bubble: JsonObject {
+                    property bool enable: true
+                    /// Stay on top of fullscreen windows. Off puts it below them, which is
+                    /// what a normal overlay does and what a video player would prefer.
+                    property bool showOverFullscreen: true
+                    /// Diameter, px.
+                    property int size: 56
+                    /// Percent, when the sheet is closed and nothing has touched it lately.
+                    property int idleOpacity: 65
+                    /// Seconds of no interaction before it fades to idleOpacity. 0 never fades.
+                    property int idleAfterSeconds: 4
+                    /// Snap to the nearest side edge when released, as a chat head does.
+                    property bool snapToEdge: true
+                    /**
+                     * Which actions the sheet offers, in order.
+                     *
+                     * Ids come from `ShellActionRegistry` — the same catalogue the gesture
+                     * bindings and the search use — so the bubble adds a way to reach the
+                     * shell's actions rather than a second list of them to keep in step.
+                     * "none" leaves the slot empty.
+                     */
+                    property list<string> actions: [
+                        "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot",
+                        "sidebarRight", "recents", "appDrawer", "home"
+                    ]
                 }
 
                 /**

@@ -52,7 +52,9 @@ Item {
 
     ActiveWindowPopup {
         id: titlePopup
-        targetItem: root
+        // The MouseArea, not the Item around it: the popup opens from a real press now, and
+        // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
+        targetItem: mouseArea
         appClassText: root.appClassText
         appTitleText: root.appTitleText
         activeWindowAddress: root.activeWindowAddress
