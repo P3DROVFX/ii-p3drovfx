@@ -7,6 +7,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions as CF
@@ -644,12 +645,16 @@ FloatingWindow {
                     root.currentPage = idx;
                 }
             }
-            Rectangle { // Content container
+            // The page's viewport, clipped to the window's own corner rather
+            // than to a square. `clip: true` on a Rectangle ignores its
+            // `radius` — the rounding was declared here all along and never
+            // reached the content, so a page scrolled to its end had its last
+            // row cut straight across the curve.
+            ClippingRectangle { // Content container
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: "transparent"
                 radius: Appearance.windowRounding
-                clip: true
 
                 Loader {
                     id: pageLoader
