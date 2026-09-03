@@ -8,16 +8,9 @@ import QtQuick.Layouts
 Toolbar {
     id: actionToolbar
 
-    property bool expanded: false
-    property real expandedProgress: expanded ? 1.0 : 0.0
-
     padding: 6
-    spacing: 6 * expandedProgress
+    spacing: 6
     colBackground: Appearance.m3colors.m3surfaceContainerLow
-
-    Behavior on expandedProgress {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(actionToolbar)
-    }
 
     component ActionButton: IconToolbarButton {
         implicitWidth: height
@@ -38,24 +31,15 @@ Toolbar {
 
         default property alias slotData: slot.data
 
-        implicitWidth: 0
+        implicitWidth: Math.max(0, Appearance.sizes.toolbarHeight - actionToolbar.padding * 2)
         implicitHeight: 0
         clip: true
-        opacity: actionToolbar.expandedProgress
-        enabled: actionToolbar.expandedProgress > 0.5
+        opacity: 1
+        enabled: true
 
         Layout.fillHeight: true
-        Layout.minimumWidth: 0
-        Layout.preferredWidth: Math.max(0, (actionToolbar.height - actionToolbar.padding * 2) * actionToolbar.expandedProgress)
-        Layout.maximumWidth: Math.max(0, (actionToolbar.height - actionToolbar.padding * 2) * actionToolbar.expandedProgress)
-
-        Behavior on Layout.preferredWidth {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(actionSlot)
-        }
-
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(actionSlot)
-        }
+        Layout.preferredWidth: implicitWidth
+        Layout.maximumWidth: implicitWidth
 
         Item {
             id: slot
@@ -123,7 +107,12 @@ Toolbar {
             text: "refresh"
 
             StyledToolTip {
-                text: Translation.tr("Reload thumbnails (for high resolution displays)")
+                text: wallpaperSelectorContent.thumbnailReloadSuggested
+                    ? Translation.tr("Some thumbnails failed to load. Click Reload thumbnails to regenerate them.")
+                    : Translation.tr("Reload thumbnails (for high resolution displays)")
+                extraVisibleCondition: !wallpaperSelectorContent.thumbnailReloadSuggested
+                alternativeVisibleCondition: wallpaperSelectorContent.thumbnailReloadSuggested
+                requireOverlay: false
             }
         }
     }
@@ -143,32 +132,4 @@ Toolbar {
         }
     }
 
-    ActionButton {
-        id: expandButton
-        implicitWidth: height
-        toggled: actionToolbar.expanded
-        text: "arrow_back_ios_new"
-
-        contentItem: MaterialSymbol {
-            anchors.centerIn: parent
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            iconSize: expandButton.iconSize
-            text: expandButton.text
-            fill: expandButton.iconFill ? 1 : 0
-            color: expandButton.colText
-            rotation: actionToolbar.expanded ? 180 : 0
-            animateChange: true
-
-            Behavior on rotation {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-        }
-
-        onClicked: actionToolbar.expanded = !actionToolbar.expanded
-
-        StyledToolTip {
-            text: actionToolbar.expanded ? Translation.tr("Collapse wallpaper actions") : Translation.tr("Expand wallpaper actions")
-        }
-    }
 }
