@@ -15,7 +15,9 @@ import qs.modules.ii.sidebarDashboard.volumeMixer
 FloatingWindow {
     id: root
 
-    visible: GlobalStates.welcomeOpen
+    // Hidden, not closed, while the guide is stepped aside: the flow, the page
+    // that is loaded and everything Edit Mode is doing carry straight through.
+    visible: GlobalStates.welcomeOpen && !GlobalStates.welcomeCollapsed
     title: WelcomePageRegistry.titleFor(flow.currentPageId) + " · Welcome"
     implicitWidth: 1080
     implicitHeight: 780
@@ -43,6 +45,25 @@ FloatingWindow {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(surface)
         }
 
+        // Driven by `collapseProgress` rather than by `scale`, which already
+        // has a Behavior of its own: two animations on one property is one
+        // animation chasing another's intermediate frames.
+        opacity: 1 - root.collapseProgress
+        transform: [
+            Scale {
+                // Toward the top-right corner, which is the direction the pill
+                // is in.
+                origin.x: surface.width
+                origin.y: 0
+                xScale: 1 - 0.32 * root.collapseProgress
+                yScale: 1 - 0.32 * root.collapseProgress
+            },
+            Translate {
+                x: root.collapseProgress * Appearance.rounding.verylarge * 2
+                y: -root.collapseProgress * Appearance.rounding.verylarge * 2
+            }
+        ]
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 24
@@ -59,6 +80,8 @@ FloatingWindow {
                 transitionDirection: flow.transitionDirection
                 transitionRunning: flow.transitionRunning
                 transitionReady: flow.transitionReady
+                collapsible: root.collapsible
+                onCollapseRequested: root.collapse()
                 onCloseRequested: root.closeWhenNavigationUnlocked()
             }
 
@@ -93,6 +116,7 @@ FloatingWindow {
                     onOpenAudioOutput: root.showAudioOutputDialog = true
                     onTrySidebar: root.trySidebarPreview()
                     onTrySearch: root.trySearchPreview()
+                    onOpenEditMode: root.tryEditModePreview()
 
                     onOpenSettingsPage: pageId => {
                         GlobalStates.openSettingsPage(pageId);
@@ -120,8 +144,8 @@ FloatingWindow {
             transitionRunning: flow.transitionRunning
             nextLabel: flow.currentNextLabel
             nextIcon: flow.currentNextIcon
-            skipVisible: flow.currentPageId === "keyboard"
-            skipLabel: Translation.tr("Skip")
+            skipVisible: flow.currentSkipLabel.length > 0
+            skipLabel: flow.currentSkipLabel
             restoreVisible: flow.currentPageId === "hello"
             onPreviousRequested: flow.goPrevious()
             onNextRequested: flow.goNext()
@@ -156,6 +180,75 @@ FloatingWindow {
     property bool previewSearchWasOpen: false
     property bool previewSidebarOwned: false
     property bool previewSearchOwned: false
+    property bool previewEditModeOwned: false
+
+    /**
+     * The bar step is the one that hands the screen over to Edit Mode, so it
+     * is the only one that can be stepped aside for.
+     */
+    readonly property bool collapsible: flow.currentPageId === "bar" && GlobalStates.editMode
+
+    /**
+     * Whether the step has already stepped aside by itself. The timer is an
+     * introduction, not a policy: someone who brought the window back has said
+     * they want it, and a second automatic collapse would be the guide
+     * arguing with them.
+     */
+    property bool autoCollapsedOnce: false
+
+    /**
+     * How far along the step-aside is: 0 is the full window, 1 is gone.
+     *
+     * The window cannot become the pill — one is a toplevel, the other a layer
+     * surface — so the two halves are stitched instead. On the way out the
+     * window shrinks toward the corner the pill lives in and only then hands
+     * over; on the way back it is already on screen at the pill's size when
+     * the pill disappears. What the eye follows is one object moving.
+     */
+    property real collapseProgress: 0
+
+    NumberAnimation {
+        id: collapseAnimation
+        target: root
+        property: "collapseProgress"
+        to: 1
+        duration: Appearance.animation.elementMoveExit.duration
+        easing.type: Appearance.animation.elementMoveExit.type
+        easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        onFinished: GlobalStates.welcomeCollapsed = true
+    }
+
+    NumberAnimation {
+        id: expandAnimation
+        target: root
+        property: "collapseProgress"
+        to: 0
+        duration: Appearance.animation.elementMoveEnter.duration
+        easing.type: Appearance.animation.elementMoveEnter.type
+        easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+    }
+
+    function collapse(): void {
+        if (!root.collapsible || GlobalStates.welcomeCollapsed)
+            return;
+        expandAnimation.stop();
+        if (!WelcomeMotion.motionEnabled) {
+            root.collapseProgress = 1;
+            GlobalStates.welcomeCollapsed = true;
+            return;
+        }
+        collapseAnimation.start();
+    }
+
+    function expand(): void {
+        collapseAnimation.stop();
+        GlobalStates.welcomeCollapsed = false;
+        if (!WelcomeMotion.motionEnabled) {
+            root.collapseProgress = 0;
+            return;
+        }
+        expandAnimation.start();
+    }
     property bool opening: false
     property real bodyEntranceY: 0
 
@@ -230,6 +323,31 @@ FloatingWindow {
             GlobalStates.openSearch();
             root.previewSearchOwned = !root.previewSearchWasOpen;
         }
+    }
+
+    /**
+     * Edit Mode, plain. No catalogue and no panel: the tour walks through the
+     * toolbar, and a drawer already slid out would be answering a question the
+     * reader has not been shown how to ask yet.
+     *
+     * `keepWorkspace` is the whole reason this is not the keybind's own entry
+     * point: the mode parks the desktop on an empty workspace when windows are
+     * covering it, and the window covering it here is the Welcome doing the
+     * asking.
+     */
+    function tryEditModePreview(): void {
+        if (GlobalStates.editMode)
+            return;
+        GlobalStates.openEditMode("", true);
+        // The mode refuses to open without a desktop to edit, so ownership is
+        // what actually happened rather than what was asked for.
+        root.previewEditModeOwned = GlobalStates.editMode;
+    }
+
+    function cleanupEditModePreview(): void {
+        if (root.previewEditModeOwned && GlobalStates.editMode)
+            GlobalStates.closeEditMode();
+        root.previewEditModeOwned = false;
     }
 
     function cleanupPreviews(): void {
@@ -315,13 +433,31 @@ FloatingWindow {
     Connections {
         target: flow
         function onPageChanged(pageId) {
-            if (pageId !== "experience")
+            // The Search step opens a real panel over the Welcome and should
+            // still have it when the page finishes arriving.
+            if (pageId !== "search")
                 root.cleanupPreviews();
+            // The bar step is Edit Mode: it opens on arrival rather than
+            // behind a button, because the page has nothing else to show.
+            if (pageId === "bar") {
+                GlobalStates.editGuideActive = true;
+                root.tryEditModePreview();
+            } else {
+                GlobalStates.editGuideActive = false;
+                root.autoCollapsedOnce = false;
+                root.expand();
+                root.cleanupEditModePreview();
+            }
             if (root.visible)
                 Qt.callLater(() => root.restoreFocus());
         }
     }
 
+    // The window now goes invisible for two very different reasons — the
+    // Welcome closing, and the guide stepping aside for Edit Mode — so only
+    // the arrival is handled here. Teardown belongs to the destruction of the
+    // window, which is what closing actually does: `shell.qml` keeps this
+    // whole tree behind a Loader.
     onVisibleChanged: {
         if (visible) {
             root.opening = WelcomeMotion.motionEnabled;
@@ -334,11 +470,55 @@ FloatingWindow {
         } else {
             root.opening = false;
             root.bodyEntranceY = 0;
-            root.cleanupPreviews();
-            root.showWifiDialog = false;
-            root.showBluetoothDialog = false;
-            root.showAudioOutputDialog = false;
-            flow.reset();
+        }
+    }
+
+    // Closing the Welcome destroys this tree, so this is the one place that
+    // runs exactly once per session and only on the way out.
+    Component.onDestruction: {
+        root.cleanupPreviews();
+        root.cleanupEditModePreview();
+        GlobalStates.editGuideActive = false;
+        GlobalStates.welcomeCollapsed = false;
+    }
+
+    /**
+     * The guide steps aside on its own.
+     *
+     * Someone who has just been dropped into Edit Mode looks at the toolbar,
+     * not at the card explaining it, and the card is sitting on the desktop
+     * they are being told to rearrange. The timer is generous enough to read
+     * the page first, and the header's button is there for anyone faster.
+     */
+    Timer {
+        interval: 9000
+        repeat: false
+        running: root.collapsible && root.visible
+            && !root.autoCollapsedOnce && !GlobalStates.welcomeCollapsed
+        onTriggered: {
+            root.autoCollapsedOnce = true;
+            root.collapse();
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+
+        // Done, on a guided session. The mode is finished with; the guide is
+        // not, so it comes back and moves on rather than leaving the user on a
+        // step whose whole content has just closed.
+        function onEditGuideDoneRequested() {
+            if (flow.currentPageId !== "bar")
+                return;
+            root.expand();
+            flow.goNext();
+        }
+
+        // The mode ending any other way - Escape, the keybind - has the same
+        // consequence for the pill: there is no toolbar left to sit beside.
+        function onEditModeChanged() {
+            if (!GlobalStates.editMode)
+                root.expand();
         }
     }
 }

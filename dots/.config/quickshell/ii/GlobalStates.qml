@@ -645,9 +645,34 @@ Singleton {
     // The screen a right-click asked the mode for, read once by the entry
     // below and cleared there: the menu knows which desktop or bar was
     // clicked, and it is not always the focused one.
-    property string _editRequestedMonitor: ""
+    // ── Edit Mode as a guided step ────────────────────────────────────────
+    // The Welcome hosts one on its bar step: the mode runs for real and the
+    // Welcome sits beside it as the guide. Two things behave differently while
+    // this is on — the toolbar's Done means "next step of the guide" rather
+    // than "close the mode", and the chrome shows the tour of its own toolbar.
+    property bool editGuideActive: false
+    // The Welcome, stepped aside. While it guides a live Edit Mode a
+    // full-size window sits on top of the thing it is guiding, so it collapses
+    // to a pill beside the toolbar. Here rather than in the window because the
+    // pill is a layer surface of its own — a window cannot place itself on a
+    // Wayland desktop, and a layer surface can.
+    property bool welcomeCollapsed: false
+    // Done, while a guide is hosting the session. Whoever set the flag answers
+    // it; the chrome only reports the press.
+    signal editGuideDoneRequested()
+    // The toolbar's rectangle on the edited screen, in that screen's
+    // coordinates, published by the chrome. A surface that is not the chrome —
+    // the Welcome's collapsed pill — has no other way to sit beside it.
+    property rect editToolbarRect: Qt.rect(0, 0, 0, 0)
 
-    function openEditMode(monitor = "") {
+    property string _editRequestedMonitor: ""
+    // Whether this entry leaves the workspace where it found it. The mode
+    // normally parks the desktop on an empty workspace because windows cover
+    // the thing being edited — but the Welcome is itself that window, and
+    // parking away from it takes the guide off the screen it is guiding.
+    property bool _editKeepWorkspace: false
+
+    function openEditMode(monitor = "", keepWorkspace = false) {
         if (root.editMode)
             return;
         // Nothing to edit without a desktop, and nothing to see while the
@@ -659,16 +684,17 @@ Singleton {
         root.overviewOpen = false;
         root.sessionOpen = false;
         root._editRequestedMonitor = monitor;
+        root._editKeepWorkspace = keepWorkspace;
         root.editMode = true;
     }
 
     // A right-click's way in: the mode, with the drawer already showing the
     // catalogue for what was clicked. Also the way to change catalogues when
     // the mode is already on, which is what a second right-click does.
-    function openEditCatalogue(section, screenName = "", page = "") {
+    function openEditCatalogue(section, screenName = "", page = "", keepWorkspace = false) {
         root.editDrawerSection = section;
         root.editDrawerPage = page;
-        root.openEditMode(screenName);
+        root.openEditMode(screenName, keepWorkspace);
         if (!root.editMode)
             return;
         // The bar and the dock are no part of the lock's face: asking for one
@@ -740,10 +766,12 @@ Singleton {
         root.policiesPanelOpen = false;
         root.dashboardPanelOpen = false;
         root.mediaControlsOpen = false;
-        root._editClearWorkspace();
+        if (!root._editKeepWorkspace)
+            root._editClearWorkspace();
     }
 
     function _leaveEditMode() {
+        root._editKeepWorkspace = false;
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
         root.closeDesktopMenu();
@@ -1247,14 +1275,22 @@ Singleton {
     }
 
     function toggleWelcome() {
-        root.welcomeOpen = !root.welcomeOpen;
+        if (root.welcomeOpen) {
+            root.closeWelcome();
+            return;
+        }
+        root.openWelcome();
     }
 
     function openWelcome() {
+        // A collapsed pill left over from the last session would be the only
+        // thing a fresh "open the Welcome" produced.
+        root.welcomeCollapsed = false;
         root.welcomeOpen = true;
     }
 
     function closeWelcome() {
+        root.welcomeCollapsed = false;
         root.welcomeOpen = false;
     }
 

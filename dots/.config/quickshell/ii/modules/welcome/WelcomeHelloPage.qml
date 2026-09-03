@@ -9,13 +9,17 @@ Item {
 
     property bool nextButtonHovered: false
 
-    readonly property var greetings: [
-        Translation.tr("Hi there"),
-        Translation.tr("Olá"),
-        Translation.tr("Bonjour"),
-        Translation.tr("Hola"),
-        Translation.tr("こんにちは")
-    ]
+    /**
+     * The greeting in the reader's own language first, then a few others as
+     * plain literals. "Bonjour" is not an English string awaiting a
+     * translation — running these through `tr()` asked every catalogue to
+     * translate words that are already the point.
+     */
+    readonly property var greetings: {
+        const own = Translation.tr("Hi there");
+        const others = ["Olá", "Bonjour", "Hola", "こんにちは"];
+        return [own, ...others.filter(greeting => greeting !== own)];
+    }
     property int greetingIndex: 0
 
     // Ambient movement is intentionally translational/rotational only: it
@@ -24,12 +28,16 @@ Item {
     readonly property real leftDriftDistance: Appearance.rounding.large * 2
     readonly property real rightDriftDistance: Appearance.rounding.normal * 2
 
+    // Text that swaps itself every couple of seconds is motion, the same as
+    // the shapes behind it, and it answers to the same preference.
     Timer {
         interval: 2200
         repeat: true
-        running: root.visible
+        running: root.visible && WelcomeMotion.motionEnabled
         onTriggered: root.greetingIndex = (root.greetingIndex + 1) % root.greetings.length
     }
+
+    onGreetingsChanged: root.greetingIndex = 0
 
     // The first screen deliberately uses only outline shapes. It echoes the
     // Pixel welcome screen without adding a second filled card to the shell.

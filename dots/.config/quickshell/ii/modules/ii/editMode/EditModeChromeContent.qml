@@ -79,6 +79,16 @@ Item {
     // Published for the surface's input mask: the only pixels of a
     // screen-sized layer surface that may take a click.
     readonly property alias toolbarItem: toolbar
+    // The guide's card is the other one, while a guided session is on.
+    readonly property alias guideItem: guide.cardItem
+
+    // The toolbar's rectangle, for a surface that is not this one. The
+    // Welcome's collapsed pill parks beside the toolbar and has no other way
+    // to know where it ended up.
+    readonly property rect toolbarRect: Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
+    // The chrome only exists on the screen the mode is on, so there is never a
+    // second one racing this write.
+    onToolbarRectChanged: GlobalStates.editToolbarRect = root.toolbarRect
 
     // ── The toolbar's cascade ────────────────────────────────────────────────
     // The pill rises out of the band as one piece (its `y` is a function of
@@ -380,6 +390,20 @@ Item {
             colText: Appearance.colors.colOnPrimary
             onClicked: root.doneRequested()
         }
+    }
+
+    // The tour of the toolbar, shown only while a guide is hosting the session.
+    // Above the toolbar in declaration order so its card is never behind the
+    //control it points at.
+    EditModeGuide {
+        id: guide
+        anchors.fill: parent
+        z: 150
+        tabsTarget: tabBar
+        sectionsTarget: sectionGroup
+        historyTarget: undoButton
+        doneTarget: doneButton
+        drawerTarget: drawerReveal
     }
 
     // Clicking anywhere but the field lets the keyboard go. Only this surface

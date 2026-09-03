@@ -12,6 +12,10 @@ Item {
     signal openBluetooth()
     signal openAudioOutput()
 
+    // The flow binds this on every page it loads; without it the binding
+    // logged a missing property each time this step came up.
+    property bool nextButtonHovered: false
+
     readonly property string wifiName: Network.networkName
         || (Network.active ? Network.active.ssid : "")
         || Translation.tr("No network selected")
@@ -28,6 +32,18 @@ Item {
         : Translation.tr("Battery unavailable")
     readonly property string audioName: Audio.sink ? Audio.friendlyDeviceName(Audio.sink) : Translation.tr("No output detected")
     readonly property bool wifiConnected: Network.wifiStatus === "connected"
+    /**
+     * Being online is what this step is actually asking about, and a machine
+     * on a cable is online. Keying the card on Wi-Fi alone painted a full red
+     * error for the one group of users with nothing left to fix.
+     */
+    readonly property bool online: root.wifiConnected || Network.ethernet
+    readonly property bool wiredOnly: !root.wifiConnected && Network.ethernet
+    /**
+     * The way out, offered only while there is genuinely nothing connected.
+     * A step that is already done needs no permission to leave it.
+     */
+    readonly property string skipLabel: root.online ? "" : Translation.tr("Set up later")
     property bool wifiConnectionWasKnown: false
 
     Component.onCompleted: root.wifiConnectionWasKnown = root.wifiConnected
@@ -86,7 +102,7 @@ Item {
                 Layout.minimumWidth: 420
                 Layout.preferredWidth: 2
                 radius: Appearance.rounding.large
-                color: root.wifiConnected
+                color: root.online
                     ? Appearance.colors.colPrimaryContainer
                     : Appearance.colors.colErrorContainer
 
@@ -100,7 +116,7 @@ Item {
                         spacing: Appearance.rounding.small
 
                         MaterialShapeWrappedMaterialSymbol {
-                            text: root.wifiConnected ? "wifi" : "wifi_off"
+                            text: root.wiredOnly ? "lan" : root.online ? "wifi" : "wifi_off"
                             shape: wifiButton.hovered
                                 ? MaterialShape.Shape.Sunny
                                 : MaterialShape.Shape.Cookie9Sided
@@ -108,15 +124,15 @@ Item {
                             padding: Appearance.rounding.normal
                             fill: 1
                             rotation: wifiButton.hovered ? 8 : 0
-                            color: root.wifiConnected ? Appearance.colors.colPrimary : Appearance.colors.colError
-                            colSymbol: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                            color: root.online ? Appearance.colors.colPrimary : Appearance.colors.colError
+                            colSymbol: root.online ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
                         }
 
                         StyledText {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
-                            text: Translation.tr("Wi-Fi")
-                            color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                            text: root.wiredOnly ? Translation.tr("Network") : Translation.tr("Wi-Fi")
+                            color: root.online ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
                             font.family: Appearance.font.family.title
                             font.variableAxes: Appearance.font.variableAxes.titleRounded
                             font.pixelSize: Appearance.font.pixelSize.hugeass
@@ -131,7 +147,7 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
                             implicitWidth: wifiStatusChipContent.implicitWidth + Appearance.rounding.normal * 2
                             implicitHeight: Appearance.font.pixelSize.huge + Appearance.rounding.small
-                            color: root.wifiConnected
+                            color: root.online
                                 ? Appearance.colors.colPrimary
                                 : Appearance.colors.colError
 
@@ -148,10 +164,10 @@ Item {
 
                                 MaterialSymbol {
                                     id: wifiStatusIcon
-                                    text: root.wifiConnected ? "check" : "error"
+                                    text: root.online ? "check" : "error"
                                     iconSize: Appearance.font.pixelSize.small
-                                    color: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
-                                    scale: root.wifiConnected ? 1 : 0.88
+                                    color: root.online ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                                    scale: root.online ? 1 : 0.88
 
                                     Behavior on scale {
                                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -159,10 +175,10 @@ Item {
                                 }
 
                                 StyledText {
-                                    text: root.wifiConnected
+                                    text: root.online
                                         ? Translation.tr("Connected")
                                         : Translation.tr("Not connected")
-                                    color: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                                    color: root.online ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
                                     font.pixelSize: Appearance.font.pixelSize.small
                                     font.weight: Font.Bold
                                 }
@@ -173,7 +189,7 @@ Item {
                     StyledText {
                         Layout.fillWidth: true
                         text: root.wifiName
-                        color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                        color: root.online ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
                         font.family: Appearance.font.family.title
                         font.variableAxes: Appearance.font.variableAxes.titleRounded
                         font.pixelSize: Appearance.font.pixelSize.larger
@@ -183,10 +199,12 @@ Item {
 
                     StyledText {
                         Layout.fillWidth: true
-                        text: Network.wifiStatus === "connected"
-                            ? Translation.tr("Wireless connection is active.")
-                            : Translation.tr("Choose a network to bring your desktop online.")
-                        color: root.wifiConnected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
+                        text: root.wiredOnly
+                            ? Translation.tr("You are online through a wired connection.")
+                            : root.wifiConnected
+                                ? Translation.tr("Wireless connection is active.")
+                                : Translation.tr("Choose a network to bring your desktop online. You can also do this later.")
+                        color: root.online ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnErrorContainer
                         font.family: Appearance.font.family.main
                         font.variableAxes: Appearance.font.variableAxes.rounded
                         font.pixelSize: Appearance.font.pixelSize.larger
@@ -213,11 +231,11 @@ Item {
                         iconPixelSize: Appearance.font.pixelSize.huge
                         textPixelSize: Appearance.font.pixelSize.larger
                         contentSpacing: Appearance.rounding.small
-                        colText: root.wifiConnected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
-                        colBackground: root.wifiConnected ? Appearance.colors.colPrimary : Appearance.colors.colError
-                        colBackgroundHover: root.wifiConnected ? Appearance.colors.colPrimaryHover : Appearance.colors.colErrorHover
-                        colBackgroundActive: root.wifiConnected ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorActive
-                        colRipple: root.wifiConnected ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorContainerActive
+                        colText: root.online ? Appearance.colors.colOnPrimary : Appearance.colors.colOnError
+                        colBackground: root.online ? Appearance.colors.colPrimary : Appearance.colors.colError
+                        colBackgroundHover: root.online ? Appearance.colors.colPrimaryHover : Appearance.colors.colErrorHover
+                        colBackgroundActive: root.online ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorActive
+                        colRipple: root.online ? Appearance.colors.colPrimaryActive : Appearance.colors.colErrorContainerActive
                         onClicked: root.openWifi()
                     }
                 }

@@ -150,6 +150,11 @@ PanelWindow {
         Region {
             item: chrome.drawerItem
         }
+        // The guide's card, so its own buttons are clickable. Hidden, it is
+        // still an item with a size, so the region follows its visibility.
+        Region {
+            item: chrome.guideItem
+        }
     }
 
     // The drawer's reveal, handed to the surface that owns the desktop: a
@@ -835,7 +840,16 @@ PanelWindow {
         drawer: Qt.rect(root.drawerGeometry.x, root.drawerGeometry.y, root.drawerGeometry.width, root.drawerGeometry.height)
         drawerScreenName: root.screenName
 
-        onDoneRequested: GlobalStates.editMode = false
+        // Done is the mode's way out — except while a guide is hosting the
+        // session, where the guide owns what "finished" means. The Welcome
+        // moves to its next step, and closing the mode is its business.
+        onDoneRequested: {
+            if (GlobalStates.editGuideActive) {
+                GlobalStates.editGuideDoneRequested();
+                return;
+            }
+            GlobalStates.editMode = false;
+        }
         onUndoRequested: GlobalStates.editUndo()
         onRedoRequested: GlobalStates.editRedo()
         onTabRequested: tab => {

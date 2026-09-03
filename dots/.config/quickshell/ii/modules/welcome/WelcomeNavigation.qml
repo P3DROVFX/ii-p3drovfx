@@ -11,7 +11,7 @@ Item {
     id: root
 
     property int pageIndex: 0
-    property int pageCount: 10
+    property int pageCount: WelcomePageRegistry.pages.length
     property bool transitionRunning: false
     property string nextLabel: ""
     property string nextIcon: "arrow_forward"

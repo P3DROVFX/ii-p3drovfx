@@ -30,21 +30,8 @@ Item {
         });
     })
 
-    Process {
+    UserProfileImagePicker {
         id: pickImageProc
-
-        command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then EXT=\"${FILE##*.}\"; mkdir -p ~/.config/illogical-impulse && cp \"$FILE\" \"$HOME/.config/illogical-impulse/profile.${EXT}\" && cp \"$FILE\" ~/.config/illogical-impulse/profile.png; echo \"$EXT\"; fi"]
-
-        stdout: SplitParser {
-            onRead: (data) => {
-                const ext = data.trim();
-                if (ext.length > 0) {
-                    const targetPath = Directories.shellConfig + "/profile." + ext;
-                    Config.options.userProfile.imagePath = "";
-                    Config.options.userProfile.imagePath = targetPath;
-                }
-            }
-        }
     }
 
     ContentPage {
@@ -85,10 +72,8 @@ Item {
                         interactive: Config.options.userProfile.imageStyle === "custom"
                         active: GlobalStates.settingsOpen
                         onClicked: {
-                            if (Config.options.userProfile.imageStyle === "custom") {
-                                pickImageProc.running = false;
-                                pickImageProc.running = true;
-                            }
+                            if (Config.options.userProfile.imageStyle === "custom")
+                                pickImageProc.pick();
                         }
                     }
                 }
@@ -105,10 +90,8 @@ Item {
                         currentValue: Config.options.userProfile.imageStyle
                         onSelected: (v) => {
                             Config.options.userProfile.imageStyle = v;
-                            if (v === "custom") {
-                                pickImageProc.running = false;
-                                pickImageProc.running = true;
-                            }
+                            if (v === "custom")
+                                pickImageProc.pick();
                         }
                         options: [{
                             "displayName": Translation.tr("Initial"),

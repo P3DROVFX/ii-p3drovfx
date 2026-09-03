@@ -40,8 +40,10 @@ RippleButton {
             Layout.alignment: Qt.AlignVCenter
             text: root.materialIcon
             shape: MaterialShape.Shape.Square
-            iconSize: root.hero ? Appearance.font.pixelSize.large : Appearance.font.pixelSize.normal
-            padding: root.hero ? 9 : 7
+            // The card is mostly air between a small glyph and a keycap; the
+            // shape is the only thing in it that can carry any weight.
+            iconSize: root.hero ? Appearance.font.pixelSize.hugeass : Appearance.font.pixelSize.huge
+            padding: root.hero ? Appearance.rounding.normal : Appearance.rounding.small
             color: Appearance.colors.colSecondaryContainer
             colSymbol: Appearance.colors.colOnSecondaryContainer
         }
@@ -52,7 +54,7 @@ RippleButton {
             Layout.alignment: Qt.AlignVCenter
             text: root.title
             color: Appearance.colors.colOnLayer1
-            font.pixelSize: root.hero ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
+            font.pixelSize: root.hero ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.normal
             font.weight: Font.Bold
             wrapMode: Text.WordWrap
             maximumLineCount: 2

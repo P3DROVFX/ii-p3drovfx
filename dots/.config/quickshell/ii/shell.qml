@@ -205,6 +205,18 @@ ShellRoot {
         source: "modules/welcome/WelcomeWindow.qml"
     }
 
+    // The Welcome's stand-in while it is stepped aside for Edit Mode. A layer
+    // surface rather than a smaller window: a Wayland toplevel cannot place
+    // itself beside the toolbar, and this has to.
+    LazyLoader {
+        id: welcomeCollapsedLoader
+        readonly property bool wanted: Config.ready
+            && GlobalStates.welcomeOpen
+            && GlobalStates.welcomeCollapsed
+        source: wanted ? "modules/welcome/WelcomeCollapsedPill.qml" : ""
+        active: wanted && source !== ""
+    }
+
     // ── The Welcome, when the setup script asked for one ─────────────────────
     //
     // A marker written by the SHELL would mean "I have greeted this user", and
