@@ -1283,21 +1283,24 @@ Singleton {
      *
      * Unlike Edit Mode's version of this, nothing is saved and nothing is put
      * back: the user is meant to stay on the clean workspace. Skipped when the
-     * current one is already empty, so a login that lands on a bare desktop
+     * current one is already empty, so opening the guide on a bare desktop
      * does not jump for no reason.
+     *
+     * Returns whether it actually asked for a switch, because the caller has
+     * to wait for one.
      */
-    function focusNearestEmptyWorkspace(): void {
+    function focusNearestEmptyWorkspace(): bool {
         const mon = Hyprland.focusedMonitor?.name ?? "";
         if (mon === "")
-            return;
+            return false;
         const mData = HyprlandData.monitors.find(m => m.name === mon);
         const ws = mData?.activeWorkspace?.id;
         // Already parked on a temp workspace (the lock's, or Edit Mode's).
         if (ws === undefined || ws === null || ws > 1000000)
-            return;
+            return false;
         const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
         if (!hasWindows)
-            return;
+            return false;
 
         const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
             monitors: [{
@@ -1314,6 +1317,7 @@ Singleton {
         const target = emptyMap[mon] || (ws + 1);
         Quickshell.execDetached(["hyprctl", "--batch",
             `dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${target}}`]);
+        return true;
     }
 
     // ── The displays step's "which screen is which" ───────────────────────
@@ -1329,11 +1333,36 @@ Singleton {
         root.openWelcome();
     }
 
+    /**
+     * The guide always opens on a clean workspace.
+     *
+     * It is a window that covers the middle of the screen and, on its bar
+     * step, hands the desktop over to Edit Mode — both of which are about a
+     * desktop nobody can see under the terminal that installed the shell, or
+     * under whatever else happens to be open. The jump is skipped when the
+     * current workspace is already empty, so this is only ever a jump away
+     * from clutter.
+     */
     function openWelcome() {
         // A collapsed pill left over from the last session would be the only
         // thing a fresh "open the Welcome" produced.
         root.welcomeCollapsed = false;
+        if (root.focusNearestEmptyWorkspace()) {
+            // A window maps on whatever workspace is active when it maps, so
+            // opening in the same tick as the switch is a race the window
+            // loses about as often as it wins — and losing means the guide is
+            // left behind on the workspace it was moving away from.
+            welcomeWorkspaceSettle.restart();
+            return;
+        }
         root.welcomeOpen = true;
+    }
+
+    Timer {
+        id: welcomeWorkspaceSettle
+        interval: 220
+        repeat: false
+        onTriggered: root.welcomeOpen = true
     }
 
     function closeWelcome() {

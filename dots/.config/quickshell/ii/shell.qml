@@ -262,10 +262,9 @@ ShellRoot {
         onTriggered: {
             root.welcomeRequested = false;
             Quickshell.execDetached(["rm", "-f", welcomeRequest.path]);
-            // The install ran in a terminal, and that terminal is still on
-            // screen covering the desktop the Welcome is about to describe.
-            // A clean workspace first, then the guide on top of it.
-            GlobalStates.focusNearestEmptyWorkspace();
+            // The clean workspace is `openWelcome`'s own business now — the
+            // install's terminal is only the loudest case of the clutter every
+            // way in has to get out from under.
             GlobalStates.openWelcome();
         }
     }
