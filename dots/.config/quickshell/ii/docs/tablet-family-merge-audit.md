@@ -1,6 +1,7 @@
 # Auditoria de merge — Tablet Panel Family → `dev`
 
-> **Data:** 2026-09-03 · **Branch:** `agent/tablet-family-base` · **Alvo:** `origin/dev`
+> **Data:** 2026-09-03, revisto em 2026-09-04 · **Branch:** `agent/tablet-family-base`
+> **Alvo:** `origin/dev` (já mesclada para dentro desta branch)
 > **Documentos irmãos:** [`tablet-family-plan.md`](./tablet-family-plan.md) (o que foi
 > construído) e [`tablet-family-audit.md`](./tablet-family-audit.md) (o que falta para isso
 > ser um tablet).
@@ -12,22 +13,27 @@
 
 ## 1. Veredito
 
-**Pronto para merge depois de três coisas pequenas** (§3). O risco não está no
-`modules/tablet/` — que é isolado, coberto por um guarda automático e não é carregado por
-nenhuma outra family — e sim nos **63 arquivos compartilhados** que a branch tocou fora
-dele.
+**Falta uma coisa: validar em hardware com toque** (§3, M2). Os outros dois bloqueadores
+foram resolvidos em 2026-09-04.
+
+O risco nunca esteve no `modules/tablet/` — isolado, coberto por um guarda automático, e
+não carregado por nenhuma outra family — e sim nos **326 arquivos compartilhados** que a
+branch toca fora dele. Esses foram exercitados: a `dev` foi mesclada para dentro, as três
+families foram carregadas, e a `ii` foi percorrida superfície a superfície sem um único
+erro de carga.
 
 | Número | Valor |
 |---|---|
-| Commits à frente da `dev` | 117 |
-| Commits atrás da `dev` | 11 |
-| Arquivos alterados | 390 (23 306 inserções, 802 remoções) |
-| Dos quais em `modules/tablet/` | 73 |
-| **Fora de `modules/tablet/`** | **317** |
-| Conflitos textuais com a `dev` hoje | **0** (`git merge-tree`) |
+| Commits à frente da `dev` | 124 (inclui o merge da `dev`) |
+| Commits atrás da `dev` | **0** — a `dev` já está dentro |
+| Arquivos alterados | 403 |
+| Dos quais em `modules/tablet/` | 77 |
+| **Fora de `modules/tablet/`** | **326** |
+| Conflitos ao mesclar a `dev` | **0** textuais · **1** semântico, corrigido |
 | Violações de camada | **0** (baseline vazia, guarda passando) |
-| Suíte QML | **223 passam, 0 falham** |
-| Contratos Python | 3 arquivos falham — **os três também falham na `dev`** |
+| Suíte QML | **228 passam, 0 falham** |
+| Contratos Python | 6 arquivos falham — **os seis também falham na `dev`** |
+| Erros de carga na family `ii` | **0** |
 
 ---
 
@@ -43,6 +49,27 @@ Seis itens levantados no uso real, cada um com commit e teste próprios.
 | 4 | Alças de toque não acompanham a janela e pulam ao soltar | Hyprland não emite evento para `movewindowpixel` | `d51115e96` |
 | 5 | Grade da gaveta alinhada à esquerda | `GridView` deixa o resto da divisão como espaço morto à direita | `3be9519a6` |
 | 6 | *(feature)* Live Draw | — | `6dd19c59f` |
+
+E uma segunda passagem em 2026-09-04, com a Huion HS64 ligada:
+
+| # | Sintoma relatado | Causa | Commit |
+|---|---|---|---|
+| 7 | O OSK continua não subindo, agora **com caneta conectada** | O daemon descartava qualquer dispositivo com "virtual" no nome — e o OTD chama o dele de "OpenTabletDriver **Virtual** Artist Tablet" | `8235d9eba` |
+| 8 | *(pedido)* Avisar que os helpers não estão compilados | — | `ada5517c5` |
+| 9 | *(pedido)* Pen mode: cursor de caneta e botões da caneta | — | `b142bc2c7` |
+| 10 | *(auditoria P2)* Nenhuma UI para trocar de family | — | `6a2c0cae1` |
+
+- **#7 é a causa raiz do item 3.** O filtro existe para o OSK não se fechar sozinho quando
+  o usuário aperta uma tecla *dele* — essas chegam por um dispositivo que nós injetamos.
+  Mas ele rodava antes da classificação e por nome apenas, então engolia a caneta inteira:
+  `devices 0 0 6`, zero canetas, com um tablet funcionando. Agora o filtro roda **depois**
+  da classificação e só vale para teclados e ponteiros, que são os únicos papéis que
+  alguém sintetiza em nosso nome. Com o tablet ligado: `devices 0 2 6`.
+- **#9 responde à pergunta sobre o OpenTabletDriver**: não é preciso integração nenhuma. O
+  OTD repassa os botões da caneta como `BTN_STYLUS`/`BTN_STYLUS2` ordinários no dispositivo
+  do tablet, que o daemon do teclado já observa. A alternativa — escrever combinações de
+  teclas no `settings.json` do OTD e vincular essas combinações no Hyprland — são três
+  arquivos que têm de concordar, e abrir a UI do próprio OTD reescreve o primeiro.
 
 Detalhes que valem para quem for revisar:
 
@@ -68,70 +95,90 @@ Detalhes que valem para quem for revisar:
 
 Três, todos pequenos.
 
-### M1 — Rebase na `dev` e revalidar os 15 arquivos em comum 🔴
+### M1 — ~~Trazer a `dev` para dentro~~ ✅ **feito em 2026-09-04**
 
-`git merge-tree` diz zero conflitos textuais **hoje**, mas a `dev` tem 11 commits que tocam
-arquivos que esta branch também toca:
+`git merge origin/dev` correu **sem um único conflito textual**, com onze commits da `dev`
+tocando quinze arquivos que esta branch também toca — `GlobalStates.qml`, `Config.qml`,
+`shell.qml`, o chrome do edit mode, a Welcome.
+
+> **`currentConfigVersion`**: a `dev` estava em **16** e a branch em **18** — sem colisão,
+> e as migrações v17/v18 sobreviveram intactas. Se a `dev` andar de novo antes do merge
+> final, **confira este número antes de qualquer teste**: duas numerações iguais colidem
+> sem o git dizer nada.
+
+**Ausência de conflito textual não é ausência de conflito semântico**, e o merge produziu
+exatamente um. A `dev` acrescentou `test_bar_timer_widget_contract` lendo
+`modules/ii/sidebarDashboard/pomodoro/CountdownTimer.qml`; esta branch moveu esse arquivo
+para `modules/common/dashboardWidgets/timer` no `e24b18ccb`, para que a tablet family
+pudesse usá-lo sem importar a ii. Nenhum dos dois lados estava errado e o git não viu nada
+— o teste passou a levantar `FileNotFoundError`. Corrigido em `80ae9c306`.
+
+É a mesma classe do que já tinha mordido em `10f4412e1`, e é o motivo de **procurar
+consumidores dos caminhos antigos ser um passo do checklist, não uma sugestão**: essas
+quebras falham *ao compilar ou ao abrir um arquivo*, não numa asserção, e é por isso que
+passam despercebidas.
+
+### M2 — Validar em hardware com toque e caneta 🔴 **o único que resta**
+
+Metade disto destravou em 2026-09-04: a Huion HS64 está ligada e o daemon a enxerga
+(`devices 0 2 6` — dois nós de caneta, nenhum touchscreen). O que continua sem validação é
+tudo que precisa de um **dedo ou de uma ponta de caneta encostando na tela**, que nenhuma
+ferramenta aqui pode simular.
 
 ```
-GlobalStates.qml            modules/common/Config.qml       shell.qml
-SettingsWindow.qml          modules/common/Appearance.qml   modules/common/Persistent.qml
-modules/common/Directories.qml   modules/common/SettingsPageRegistry.qml
-modules/ii/background/BackgroundRoot.qml      modules/ii/background/BackgroundWidgetsWindow.qml
-modules/ii/bar/BarComponent.qml               modules/ii/editMode/EditModeChromeContent.qml
-modules/ii/editMode/EditModeChromeSurface.qml modules/ii/editMode/EditModeDrawer.qml
-modules/welcome/WelcomeWindow.qml
-```
-
-Ausência de conflito textual **não é** ausência de conflito semântico. O caso concreto:
-
-> **`currentConfigVersion`**: a `dev` está em **16**, a branch em **18**. Se alguém subir a
-> `dev` para 17 antes do merge, as duas numerações colidem sem git dizer nada, e os blocos
-> `if (from < 17)` de cada lado passam a significar coisas diferentes. **Confira este número
-> como primeira coisa depois do rebase**, e renumere os blocos da branch se preciso.
-
-### M2 — Validar em hardware com toque 🔴
-
-A `tablet-family-audit.md` §4.4 já pedia isso e continua valendo, agora com mais itens.
-**Nada em §4 daquele documento pode ser marcado como pronto sem isto**, e três coisas
-entregues nesta sessão nunca tocaram um dedo ou uma caneta:
-
-```
-[ ] hyprctl devices  →  lista uma seção "Touch Devices"
-[ ] Settings › Overlays › On-screen keyboard → "Build it now" compila e o teclado
-    passa a subir sozinho ao tocar num campo, sem reiniciar o shell
-[ ] O daemon reporta devices com t>0 ou p>0 (e o aviso de "sem touchscreen" some)
+[ ] Tocar um campo de texto com a caneta faz o teclado subir
+[ ] hyprctl devices  →  lista uma seção "Touch Devices"   (ainda vazia nesta máquina)
 [ ] Live draw: um traço de caneta varia de espessura com a pressão
 [ ] Live draw: a ponta de borracha da caneta apaga sem passar pela bandeja
 [ ] Live draw: com o desenho "mantido", tocar na tela chega ao aplicativo embaixo
 [ ] Alças de janela: arrastar e soltar não dá salto nenhum
+[ ] Pen mode: apertar o botão inferior da caneta e arrastar move a janela flutuante
+[ ] Pen mode: o botão superior dispara a ação vinculada
 ```
 
-O que **foi** validado em runtime aqui, sem toque: dock persistente (screenshot), preview do
-hub mode (screenshot), grade centrada (medida em pixels: centro do bloco 856 → 954, tela
-960), alças seguindo a janela após um `move` (posição relatada acompanha o dispatch), tinta
-por workspace (11 608 px de tinta na ws 2, 165 na ws 4, e de volta ao trocar), recorte e
-gravação do PNG, e a nota criada com o caminho certo.
+O que **foi** validado em runtime, sem toque:
 
-### M3 — Decidir o que fazer com os dois helpers Rust 🟠
+- dock persistente com uma janela aberta (screenshot);
+- preview do hub mode (screenshot);
+- grade da gaveta centrada — medida em pixels, centro do bloco 856 → 954 numa tela de 960;
+- alças seguindo a janela depois de um `move` (a posição relatada acompanha o dispatch);
+- tinta por workspace — 11 608 px de tinta na ws 2, 165 na ws 4, e de volta ao trocar;
+- recorte e gravação do PNG, e a nota criada com o caminho certo;
+- a janela de setup nos quatro estados, incluindo o build ao vivo com barra e contador;
+- o cursor de caneta aplicado e restaurado (`hyprctl setcursor`), e o tema derivado gerado
+  a partir do `pencil` do próprio tema do usuário;
+- a family `ii` carregada e percorrida — bar, sidebars, overview, cheatsheet — com zero
+  erros e nenhuma superfície de tablet vazando.
+
+> Diagnóstico já embutido: Settings › Tablet › Pen diz "aperte uma vez para confirmar" ao
+> lado do botão inferior, e `qs -c ii ipc call penMode status` reporta o último botão
+> visto. Se ele continuar `-1` depois de apertar, o problema está entre a caneta e o
+> daemon, não entre o daemon e o shell.
+
+### M3 — ~~Os dois helpers Rust~~ ✅ **feito em 2026-09-04**
 
 `scripts/osk/osk_autoshow` e `scripts/touchGestures/touch_gestures` são **fonte, não
-binário** — corretamente ignorados pelo git. Numa instalação nova, gestos de toque e
-auto-show do teclado simplesmente não funcionam até alguém compilar.
+binário** — corretamente ignorados pelo git. Numa instalação nova, nem gestos de toque nem
+auto-show do teclado funcionavam até alguém compilar, e a única saída oferecida era colar
+um comando num terminal: circular num aparelho cujo teclado é justamente o que falta.
 
-A OSK agora tem um botão "Build it now" que resolve isso sem terminal (era obrigatório: o
-recurso que desbloqueia o teclado não podia exigir um teclado). **Falta a mesma coisa para
-`touch_gestures`**, que hoje só oferece o comando para copiar — e é o helper mais importante
-dos dois numa tablet.
+Resolvido de forma mais completa que a opção que o rascunho previa. Os dois helpers
+compartilham `services/RustHelperBuild.qml`, e a tablet family abre uma **janela na
+primeira execução** quando algum deles falta — uma janela normal, sem escurecer o fundo,
+na mesma forma da Welcome. Uma linha por helper com seu próprio botão, "Build both", e
+"Do it later", que significa mais tarde: a dispensa é lembrada contra o *conjunto* de
+helpers que faltava, então um helper diferente sumir depois é outro aviso e aparece de
+novo.
 
-Opções, em ordem de preferência:
+O botão mostra progresso, porque um botão que diz "Building…" por um minuto é
+indistinguível de um botão travado. O nome do crate vem da própria narração do cargo; o
+denominador vem do `Cargo.lock`, que lista exatamente as unidades de um build limpo — 23
+entradas para o daemon de gestos, e um build limpo reporta exatamente 23 crates. A linha
+então vira seu estado final e a janela **fica aberta para mostrá-lo**, coisa que a
+primeira versão não conseguia porque a linha se apagava no instante em que dava certo.
 
-1. Botão de build no `TouchGesturesConfig`, reusando o `HelperCodeBox.actionClicked` que esta
-   branch acabou de acrescentar. **Pequeno, e é a mesma solução já aprovada para a OSK.**
-2. Compilar os dois no `setup_ii-vynx.sh`, se o setup puder assumir uma toolchain Rust.
-3. Aceitar como está e documentar no README.
-
----
+Também alcançável por `qs -c ii ipc call tabletSetup open|build|status`, para um script de
+primeiro boot.
 
 ## 4. Polimento antes ou depois do merge
 
@@ -139,7 +186,7 @@ Nada aqui bloqueia, mas todos são coisas que um revisor vai notar.
 
 | # | Item | Por quê | Esforço |
 |---|---|---|---|
-| P1 | Botão de build para `touch_gestures` | Ver M3.1 — a metade que ficou | P |
+| ~~P1~~ | ~~Botão de build para `touch_gestures`~~ | ✅ feito — ver M3 | — |
 | P2 | Sem UI para trocar de panel family em Settings ou Welcome | O `ShellSwitcher` existe e é alcançável por ação/gesto/bubble/busca, mas quem nunca abriu o bubble não sabe que a family é trocável. O item 6 do backlog está ✅ pela superfície, não pela descoberta | P |
 | P3 | Live draw sem desfazer múltiplo nem redo | Um `undo` só volta um traço por toque; para uma anotação rápida basta, para um desenho não | P |
 | P4 | Live draw não sobrevive a hot-reload | É deliberado (a tinta é efêmera por design), mas durante o desenvolvimento cada save de QML apaga a folha. Persistir em `Persistent` seria contra a decisão; **documentar basta** | — |
@@ -147,47 +194,64 @@ Nada aqui bloqueia, mas todos são coisas que um revisor vai notar.
 | P6 | `notes.json` não é versionado | O campo `sketch` novo é ignorado por um shell antigo, que o **descarta na próxima escrita** — o PNG fica órfão. Sem consequência real, mas é a única regressão possível de downgrade nesta branch | P |
 | P7 | Live draw só tem uma cor de "tinta clara" e uma de "tinta escura" na paleta | Sobre um papel de parede claro, o preto some; sobre um escuro, o branco. Um seletor de cor livre resolveria | M |
 | P8 | Bandeja do live draw fixa no rodapé | Cobre o canto inferior central da tela, que é exatamente onde muita gente escreve | M |
+| P9 | Pen mode não sabe quando a caneta some | O cursor de caneta continua depois de desconectar o tablet. `OskAutoShow` já conta os dispositivos; falta reagir à contagem cair a zero | P |
+| P10 | Botões da caneta sem confirmação visual | Settings diz "aperte uma vez para confirmar", mas nada pisca quando chega. Um toast pequeno fecharia o laço | P |
+| P11 | Só dois botões de caneta são vinculáveis | As teclas de expressão do tablet (a HS64 tem quatro) chegam por outro caminho e não são lidas | M |
 
 ---
 
 ## 5. Como introduzir na `dev`
 
-A branch tem 117 commits e toca 390 arquivos. **Não faça squash** — o histórico é a
+A branch tem 124 commits e toca 403 arquivos. **Não faça squash** — o histórico é a
 documentação de por que cada decisão foi tomada, e as mensagens já carregam o raciocínio.
+
+O passo 1 já foi dado: a `dev` está mesclada para dentro, sem conflito textual, e o único
+conflito semântico foi corrigido. O que segue é a sequência para o dia do merge.
 
 ```bash
 ii                                   # cd ~/.config/quickshell/ii
 git fetch origin
 
-# 1. Traga a dev para dentro da branch primeiro, nunca o contrário.
-#    Merge, não rebase: 117 commits reescritos perdem as datas e obrigam a
+# 1. Se a dev tiver andado, traga-a para dentro de novo — nunca o contrário.
+#    Merge, não rebase: 124 commits reescritos perdem as datas e obrigam a
 #    resolver o mesmo conflito uma vez por commit.
 git merge origin/dev
 
 # 2. A primeira coisa a conferir, antes de qualquer teste:
 grep -n "currentConfigVersion:" modules/common/Config.qml
-#    Se a dev tiver subido para 17, renumere os blocos desta branch para 18/19
-#    e ajuste as guardas `if (from < …)`.
+#    A branch está em 18. Se a dev tiver subido para 17 ou 18, renumere os blocos
+#    desta branch e ajuste as guardas `if (from < …)`.
 
-# 3. Guardas automáticas.
+# 3. Procure consumidores de caminhos que esta branch moveu. É a quebra que o git
+#    não vê, e já mordeu duas vezes — os testes falham ao abrir o arquivo, não
+#    numa asserção.
+git diff --diff-filter=D --name-only origin/dev...HEAD | grep -E '\.(qml|js)$'
+#    Para cada um, procure o nome do arquivo no resto da árvore.
+
+# 4. Guardas automáticas.
 bash scripts/dev/check-panel-family-layering.sh
 QT_QPA_PLATFORM=offscreen /usr/lib64/qt6/bin/qmltestrunner \
   -import /usr/lib64/qt6/qml -input tests -o -,txt -silent
 for f in scripts/tests/test_*.py; do python3 "$f" >/dev/null 2>&1 || echo "FAIL $f"; done
-#    Esperado: layering OK, 223 QML passando, e exatamente três arquivos Python
-#    falhando (bar search, browser sites, raycast) — os mesmos que falham na dev.
+#    Esperado: layering OK, 228 QML passando, e exatamente seis arquivos Python
+#    falhando — bar search, browser sites, raycast, edit-mode scope, typing test,
+#    user profile avatar. Todos falham na dev também.
 
-# 4. Teste as TRÊS families, não só a tablet. 317 dos 390 arquivos são compartilhados.
-for family in ii waffle tablet; do
-  qs -c ii ipc call panelFamily set "$family"   # ou troque pela UI
-  # abra bar, sidebars, overview, settings, lock; confira o log
-  qs log -c ii -t 50
-done
-ii-restart
+# 5. Teste as TRÊS families. 326 dos 403 arquivos são compartilhados, e agora há
+#    UI para isto: Settings › Interface & Fonts › Shell family.
+#    Em cada uma: bar, sidebars, overview, settings, lock. Depois:
+qs log -c ii | grep -icE "is not a type|unavailable|ReferenceError"
+#    Esperado: 0.
 
-# 5. Só então:
+# 6. Só então:
 git checkout dev && git merge --no-ff agent/tablet-family-base
 ```
+
+> [!CAUTION]
+> **Não reinicie o shell com a tela bloqueada.** O shell é dono da superfície de session
+> lock; matá-lo ali deixa o Hyprland com a sessão trancada e sem cliente para destrancar,
+> e a saída é `hyprctl --instance 0 eval 'hl.clear_crashed_lockscreen()'` de outro TTY.
+> Aprendido da forma difícil durante esta sessão.
 
 ### Checklist de revisão sugerido para o PR
 
@@ -201,6 +265,9 @@ Um revisor com pouco tempo deve olhar, nesta ordem:
    instala.
 3. **`shell.qml` e os três `panelFamilies/*.qml`** — o ponto de acoplamento entre families.
 4. **`services/NotesService.qml`** — único serviço compartilhado com mudança de schema.
+   E `services/RustHelperBuild.qml` / `PenMode.qml`, serviços novos: o primeiro roda
+   `cargo` a pedido, o segundo escreve o tema de cursor da sessão inteira. Ambos só são
+   instanciados pela tablet family.
 5. O resto de `modules/tablet/` pode ser lido por amostragem: o guarda de camadas garante
    que nada ali importa `qs.modules.ii.*`.
 
@@ -217,6 +284,8 @@ Um revisor com pouco tempo deve olhar, nesta ordem:
 | `osk.autoShow.allowMouse` novo | 🟢 Baixa | Default `false`; sem ele nada muda para ninguém |
 | `TouchGestureActionRegistry` ganhou `liveDraw` e `hubMode` | 🟢 Baixa | Ambos `families: ["tablet"]`; `availableForFamily` já os esconde nas outras |
 | Ação `prominent` no bubble | 🟢 Baixa | Superfície exclusiva da tablet |
+| Pen mode troca o tema de cursor da sessão | 🟡 Média | `hyprctl setcursor` é global e dura a sessão. Restaurado ao sair do modo **e na destruição do singleton**, então trocar de family devolve o cursor. Um `kill -9` no shell com pen mode ligado deixa o cursor de caneta até o próximo `setcursor` |
+| Seletor de family em Interface & Fonts | 🟢 Baixa | Escreve só `panelFamily`, pelo `PanelFamily.select`, que é o único setter e recusa um id desconhecido |
 | `modules/common/animations/` e `functions/SpaceArbitration.js` movidos | 🟠 **Já mordeu** | Três testes ficaram apontando para o caminho antigo e **falhavam ao compilar**, não numa asserção — por isso passaram despercebidos. Corrigidos em `10f4412e1`. Vale procurar outros consumidores dos caminhos antigos no rebase |
 
 ---
