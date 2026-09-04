@@ -849,10 +849,21 @@ Item {
             }
 
             // ── The page ─────────────────────────────────────────────────────
-            Item {
+            // Clipped to a rounded rectangle, not a square one. The panel's
+            // corner is `verylarge` and this sits `column`'s margin inside it,
+            // so a straight clip cuts across the curve — which is exactly what
+            // the last row of a scrolled list landed on. The inner radius is
+            // the outer one less that inset, which is what keeps two rounded
+            // rectangles concentric.
+            //
+            // `ClippingRectangle` clips through the scene graph rather than
+            // through a layer, so a list being scrolled inside it does not pay
+            // for a full-surface redraw per frame.
+            ClippingRectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
+                color: "transparent"
+                radius: Math.max(0, panel.radius - column.anchors.margins)
 
                 Loader {
                     id: pageLoader
@@ -1007,8 +1018,19 @@ Item {
                     // The row always offers ANOTHER one, and says how many are
                     // out there. A checkmark would be claiming the row is a
                     // switch, and it is not one any more.
+                    //
+                    // Once one is placed the count becomes a stepper: the plus
+                    // it already had, and the minus it never did. Taking a
+                    // widget back off meant hunting the copy down on the
+                    // desktop and using its own menu - fine for one, absurd for
+                    // the five a stray click leaves behind, and impossible for
+                    // a copy that landed under another window's worth of
+                    // widgets. The minus takes the last one placed.
                     valueText: widgetRow.placed > 0 ? `×${widgetRow.placed}` : ""
-                    trailingKind: "add"
+                    trailingKind: widgetRow.placed > 0 ? "stepper" : "add"
+                    stepDownEnabled: widgetRow.placed > 0
+                    onStepDown: Config.removeLastWidgetInstance(modelData.widgetId)
+                    onStepUp: root.addInstanceRequested(modelData.widgetId)
                     draggable: true
                     dragOwner: widgetList
 

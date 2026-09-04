@@ -87,6 +87,12 @@ MouseArea {
     property string activeColorFilter: ""
     property real colorCacheProgress: 0
     property bool isColorFiltering: false
+    property bool thumbnailDiagnosticsReady: false
+    property bool thumbnailFailureDetected: false
+    readonly property bool thumbnailReloadSuggested: localMode
+        && thumbnailDiagnosticsReady
+        && thumbnailFailureDetected
+        && !Wallpapers.thumbnailGenerationRunning
 
     function wallpaperModelKey(modelData) {
         if (!modelData) return "";
@@ -172,9 +178,47 @@ MouseArea {
     }
 
     function updateThumbnails(force = false) {
+        scheduleThumbnailDiagnostics();
         const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2;
         const thumbnailSizeName = Images.thumbnailSizeNameForDimensions(grid.cellWidth - totalImageMargin, grid.cellHeight - totalImageMargin);
         Wallpapers.generateThumbnail(thumbnailSizeName, force);
+    }
+
+    function refreshThumbnailDiagnostics() {
+        if (!localMode) {
+            thumbnailFailureDetected = false;
+            return;
+        }
+
+        let failed = false;
+        for (let i = 0; i < grid.count; i++) {
+            const delegate = grid.itemAtIndex(i);
+            if (delegate && delegate.thumbnailLoadFailed) {
+                failed = true;
+                break;
+            }
+        }
+        thumbnailFailureDetected = failed;
+    }
+
+    function scheduleThumbnailDiagnostics() {
+        thumbnailDiagnosticsReady = false;
+        thumbnailDiagnosticTimer.restart();
+    }
+
+    Component.onCompleted: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
+    onFavModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
+    onBrowserModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
+
+    Timer {
+        id: thumbnailDiagnosticTimer
+        // Give the delegates' asynchronous thumbnail generation time to settle.
+        interval: 1200
+        repeat: false
+        onTriggered: {
+            wallpaperSelectorContent.refreshThumbnailDiagnostics();
+            wallpaperSelectorContent.thumbnailDiagnosticsReady = true;
+        }
     }
 
     Connections {
@@ -184,6 +228,7 @@ MouseArea {
             wallpaperSelectorContent.browserMode = false;
             grid.currentIndex = -1;
             grid.keyboardNavigationActive = false;
+            wallpaperSelectorContent.scheduleThumbnailDiagnostics();
         }
     }
 
@@ -1123,6 +1168,7 @@ function moveToTrashFile(modelData) {
                             keyboardNavigationActive = false
                             loadedCount = 0
                             loadTimer.restart()
+                            wallpaperSelectorContent.scheduleThumbnailDiagnostics()
                         }
                         onCountChanged: {
                             if (count <= 0) {
@@ -1132,6 +1178,7 @@ function moveToTrashFile(modelData) {
                             if (count > 0 && loadedCount < count) {
                                 loadTimer.restart()
                             }
+                            wallpaperSelectorContent.scheduleThumbnailDiagnostics()
                         }
                         delegate: WallpaperDirectoryItem {
                             id: wpItemDelegate
@@ -1160,6 +1207,8 @@ function moveToTrashFile(modelData) {
                             isApplied: appliedState
                             appliedLabel: wallpaperSelectorContent.targetLabel
                             shouldLoad: index < grid.loadedCount
+
+                            onThumbnailLoadStateChanged: Qt.callLater(() => wallpaperSelectorContent.refreshThumbnailDiagnostics())
 
                             scale: 0.72
                             opacity: 0
@@ -1378,6 +1427,7 @@ function moveToTrashFile(modelData) {
             grid.currentIndex = -1;
             grid.keyboardNavigationActive = false;
             grid.positionViewAtBeginning();
+            wallpaperSelectorContent.scheduleThumbnailDiagnostics();
         }
     }
 
@@ -1395,6 +1445,7 @@ function moveToTrashFile(modelData) {
             if (wallpaperSelectorContent.activeColorFilter) {
                 wallpaperSelectorContent.applyColorFilter();
             }
+            wallpaperSelectorContent.scheduleThumbnailDiagnostics();
         }
     }
 }

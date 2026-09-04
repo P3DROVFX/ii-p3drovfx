@@ -59,7 +59,7 @@ RippleButton {
                         verticalCenter: parent.verticalCenter
                     }
                     text: root.buttonText
-                    color: Appearance.colors.colOnPrimaryContainer
+                    color: root.colOnBackground
                     font.pixelSize: 14
                     font.weight: 450
                 }

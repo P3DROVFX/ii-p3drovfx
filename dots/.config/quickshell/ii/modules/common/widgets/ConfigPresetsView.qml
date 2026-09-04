@@ -248,7 +248,7 @@ ColumnLayout {
                         colBackground: "transparent"
                         colBackgroundHover: "transparent"
                         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-                        onClicked: presetsViewRoot.requestApply(String(model.name))
+                        onClicked: presetsViewRoot.applyPreset(String(model.name))
 
                         StyledToolTip {
                             text: Translation.tr("Made for a newer version of the shell")

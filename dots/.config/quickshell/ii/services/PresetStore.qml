@@ -318,6 +318,16 @@ Singleton {
         return root.linkFor(name) !== null;
     }
 
+    function installedNameForRepo(repo) {
+        if (!repo)
+            return "";
+        for (let i = 0; i < root.installed.length; i++) {
+            if (root.installed[i].repo === repo)
+                return root.installed[i].name;
+        }
+        return "";
+    }
+
     function isOwned(name) {
         let link = root.linkFor(name);
         return link !== null && link.owned === true;

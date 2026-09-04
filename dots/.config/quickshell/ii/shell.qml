@@ -208,6 +208,70 @@ ShellRoot {
         source: "modules/welcome/WelcomeWindow.qml"
     }
 
+    // The Welcome's stand-in while it is stepped aside for Edit Mode. A layer
+    // surface rather than a smaller window: a Wayland toplevel cannot place
+    // itself beside the toolbar, and this has to.
+    // A number on each physical panel while the displays step asks which is
+    // which. One surface per screen, so the answer is on the screen itself.
+    LazyLoader {
+        id: displayIdentifyLoader
+        readonly property bool wanted: Config.ready && GlobalStates.displayIdentifyActive
+        source: wanted ? "modules/welcome/WelcomeDisplayIdentifier.qml" : ""
+        active: wanted && source !== ""
+    }
+
+    LazyLoader {
+        id: welcomeCollapsedLoader
+        readonly property bool wanted: Config.ready
+            && GlobalStates.welcomeOpen
+            && GlobalStates.welcomeCollapsed
+        source: wanted ? "modules/welcome/WelcomeCollapsedPill.qml" : ""
+        active: wanted && source !== ""
+    }
+
+    // ── The Welcome, when the setup script asked for one ─────────────────────
+    //
+    // A marker written by the SHELL would mean "I have greeted this user", and
+    // that is a one-way door: after the first install it would never open
+    // again - not on a reinstall, not after `./setup resetfirstrun`. Deciding
+    // is the setup's job, and it already knows the difference between a first
+    // install and an update (`INSTALL_FIRSTRUN`).
+    //
+    // So the setup asks in whichever way can work. If a shell is already
+    // running it calls `qs -c ii ipc call welcome open` and this is not
+    // involved at all. A real first install is run from a TTY with no shell to
+    // answer - and `hyprctl reload` does not re-run exec-once, so it will not
+    // start one - and there the setup leaves this file behind instead. Read
+    // once, opened once, deleted.
+    property bool welcomeRequested: false
+
+    FileView {
+        id: welcomeRequest
+        path: Directories.welcomeRequestPath
+        // No file is the normal state - every start without a pending request
+        // would otherwise log a read failure - so the miss is silent and
+        // onLoadFailed needs no handler.
+        printErrors: false
+        onLoaded: root.welcomeRequested = true
+        Component.onCompleted: welcomeRequest.reload()
+    }
+
+    // Let the session draw itself before a window lands on top of it: on a
+    // first login this runs while the bar and the wallpaper are still arriving.
+    Timer {
+        interval: 2500
+        repeat: false
+        running: root.welcomeRequested && Config.ready
+        onTriggered: {
+            root.welcomeRequested = false;
+            Quickshell.execDetached(["rm", "-f", welcomeRequest.path]);
+            // The clean workspace is `openWelcome`'s own business now — the
+            // install's terminal is only the loudest case of the clutter every
+            // way in has to get out from under.
+            GlobalStates.openWelcome();
+        }
+    }
+
     // Shortcuts
     IpcHandler {
         target: "panelFamily"

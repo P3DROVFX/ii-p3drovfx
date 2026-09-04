@@ -22,6 +22,11 @@ MouseArea {
     }
     property bool isApi: fileModelData.isApi || false
     property bool useThumbnail: (Images.isValidImageByName(fileModelData.fileName) || root.isVideo) && !root.isApi
+    readonly property bool thumbnailLoadFailed: root.shouldLoad && root.useThumbnail && !root.isApi
+        && thumbnailImageLoader.active
+        && thumbnailImageLoader.item !== null
+        && !thumbnailImageLoader.item.thumbnailGenerationRunning
+        && thumbnailImageLoader.item.status === Image.Error
     property bool showLoadingIndicator: false
 
     property alias colBackground: background.color
@@ -35,6 +40,9 @@ MouseArea {
     signal activated
     signal searchSimilarRequested(string filePath, string wallhavenId)
     signal moreOptionsRequested(var modelData)
+    signal thumbnailLoadStateChanged
+
+    onThumbnailLoadFailedChanged: root.thumbnailLoadStateChanged()
 
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton

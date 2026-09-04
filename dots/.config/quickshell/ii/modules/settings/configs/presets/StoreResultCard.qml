@@ -8,33 +8,56 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 
 /**
- * One repository as the search returned it.
+ * One repository/preset card in the Store, styled consistently with My Presets.
  *
- * A search result carries no pictures, only what GitHub knows about the
- * repository, so the card stays deliberately textual and the screenshots wait
- * for the detail sheet where the manifest has actually been read.
+ * `applyMode` is the Welcome flow's reading of the same card. There a click
+ * WEARS the look rather than opening a detail page - the download is a step on
+ * the way, not a decision - so the badge answers "is this the look I have on"
+ * instead of "is this downloaded", and the button offers to put it on.
  */
 Rectangle {
     id: card
     required property var entry
 
+    property bool applyMode: false
+
     readonly property string installedAs: card.entry.installedAs ?? ""
     readonly property bool installed: card.installedAs.length > 0
+    readonly property bool applied: card.installed
+        && PresetStore.activePreset === card.installedAs
     readonly property bool hasUpdate: card.installed && PresetStore.updateFor(card.installedAs) !== null
     readonly property bool working: card.installed
         ? PresetStore.busyFor(card.installedAs) : PresetStore.busyFor(card.entry.repo)
 
-    height: cardColumn.implicitHeight + 24
+    readonly property string repoSlug: (card.entry.repo ?? "").split(":")[0]
+    readonly property string repoBranch: card.entry.defaultBranch ?? "main"
+    readonly property string fallbackWallpaperUrl: (card.entry.wallpaperUrl && card.entry.wallpaperUrl.length > 0)
+        ? card.entry.wallpaperUrl
+        : (repoSlug.length > 0 ? `https://raw.githubusercontent.com/${repoSlug}/${repoBranch}/wallpaper.png` : "")
+
+    property string effectiveImageSource: (card.entry.imageUrl && card.entry.imageUrl.length > 0)
+        ? card.entry.imageUrl
+        : (fallbackWallpaperUrl.length > 0 ? fallbackWallpaperUrl : `${Directories.assetsPath}/images/default_wallpaper.png`)
+
+    height: width * 0.82
     radius: Appearance.rounding.normal
     color: Appearance.colors.colSurfaceContainerLow
     border.width: 2
     border.color: cardButton.down ? Appearance.colors.colPrimaryActive
         : (cardButton.hovered ? Appearance.colors.colPrimary : "transparent")
+    scale: cardButton.down ? 0.96 : 1
 
     signal activated
 
     Behavior on border.color {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(card)
+    }
+    Behavior on scale {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
 
     RippleButton {
@@ -48,48 +71,184 @@ Rectangle {
     }
 
     ColumnLayout {
-        id: cardColumn
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.margins: 12
+        anchors.fill: parent
+        anchors.margins: 10
         spacing: 8
 
-        RowLayout {
+        // Preset Preview Image
+        Item {
             Layout.fillWidth: true
-            spacing: 8
+            Layout.fillHeight: true
 
-            Item {
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
+            // Layer 1 placeholder underneath image
+            Rectangle {
+                anchors.fill: parent
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colLayer1
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "wallpaper"
+                    iconSize: 32
+                    color: Appearance.colors.colOnLayer1Inactive
+                }
+            }
+
+            StyledImage {
+                id: previewImage
+                anchors.fill: parent
+                sourceSize: Qt.size(400, 400)
+                source: card.effectiveImageSource
+                fillMode: Image.PreserveAspectCrop
+                layer.enabled: true
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: previewImage.width
+                        height: previewImage.height
+                        radius: Appearance.rounding.small
+                    }
+                }
+
+                onStatusChanged: {
+                    if (status === Image.Error) {
+                        if (card.effectiveImageSource !== card.fallbackWallpaperUrl && card.fallbackWallpaperUrl.length > 0) {
+                            card.effectiveImageSource = card.fallbackWallpaperUrl;
+                        } else if (card.effectiveImageSource !== `${Directories.assetsPath}/images/default_wallpaper.png`) {
+                            card.effectiveImageSource = `${Directories.assetsPath}/images/default_wallpaper.png`;
+                        }
+                    }
+                }
+            }
+
+            // Top-left: Stars Badge
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.margins: 6
+                implicitHeight: 22
+                implicitWidth: starRow.implicitWidth + 12
+                radius: Appearance.rounding.full
+                color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.35)
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+
+                RowLayout {
+                    id: starRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    MaterialSymbol {
+                        text: "star"
+                        iconSize: 12
+                        color: Appearance.colors.colTertiary
+                    }
+
+                    StyledText {
+                        text: String(card.entry.stars ?? 0)
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnLayer0
+                    }
+                }
+            }
+
+            // Top-right: Status Badge (Installed / Update / Working)
+            Rectangle {
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 6
+                // In apply mode "on disk" is not news - the only state worth a
+                // badge is the look the shell is actually wearing.
+                visible: card.working || (card.applyMode ? card.applied : card.installed)
+                implicitHeight: 22
+                implicitWidth: statusRow.implicitWidth + 12
+                radius: Appearance.rounding.full
+                color: card.working
+                    ? Appearance.colors.colSecondaryContainer
+                    : (!card.applyMode && card.hasUpdate
+                        ? Appearance.colors.colTertiaryContainer : Appearance.colors.colPrimaryContainer)
+
+                RowLayout {
+                    id: statusRow
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    MaterialSymbol {
+                        text: card.working ? "sync"
+                            : card.applyMode ? "check_circle"
+                            : (card.hasUpdate ? "arrow_circle_up" : "check")
+                        iconSize: 12
+                        color: card.working
+                            ? Appearance.colors.colOnSecondaryContainer
+                            : (!card.applyMode && card.hasUpdate
+                                ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
+                    }
+
+                    StyledText {
+                        text: card.working
+                            ? Translation.tr("Working…")
+                            : card.applyMode
+                                ? Translation.tr("In use")
+                                : (card.hasUpdate ? Translation.tr("Update") : Translation.tr("Installed"))
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: card.working
+                            ? Appearance.colors.colOnSecondaryContainer
+                            : (!card.applyMode && card.hasUpdate
+                                ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer)
+                    }
+                }
+            }
+
+            // Bottom-left avatar overlay on image
+            Rectangle {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.margins: 6
+                width: 24
+                height: 24
+                radius: width / 2
+                color: Appearance.colors.colLayer0
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+                visible: (card.entry.avatarUrl ?? "").length > 0
 
                 StyledImage {
-                    id: avatar
+                    id: authorAvatar
                     anchors.fill: parent
                     source: card.entry.avatarUrl ?? ""
                     fillMode: Image.PreserveAspectCrop
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: Rectangle {
-                            width: avatar.width
-                            height: avatar.height
+                            width: authorAvatar.width
+                            height: authorAvatar.height
                             radius: width / 2
                         }
                     }
                 }
             }
+        }
+
+        // Bottom Bar: Title, Author & Action Button
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: 32
 
             ColumnLayout {
-                Layout.fillWidth: true
+                anchors.left: parent.left
+                anchors.right: actionButton.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 6
                 spacing: 0
 
                 StyledText {
                     Layout.fillWidth: true
                     text: card.entry.name ?? ""
                     elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnLayer1
+                    color: Appearance.colors.colOnSurface
                 }
 
                 StyledText {
@@ -100,73 +259,28 @@ Rectangle {
                     color: Appearance.colors.colOnSurfaceVariant
                 }
             }
-        }
 
-        StyledText {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            text: (card.entry.description ?? "").length > 0
-                ? card.entry.description : Translation.tr("No description.")
-            wrapMode: Text.Wrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            verticalAlignment: Text.AlignTop
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colOnSurfaceVariant
-        }
+            RippleButton {
+                id: actionButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                implicitWidth: 30
+                implicitHeight: 30
+                buttonRadius: Appearance.rounding.full
+                readonly property bool quiet: card.applyMode ? card.applied : card.installed
+                colBackground: quiet ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
+                colBackgroundHover: quiet ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryContainerHover
+                colRipple: quiet ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colPrimaryContainerActive
+                onClicked: card.activated()
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-
-            MaterialSymbol {
-                text: "star"
-                iconSize: 14
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            StyledText {
-                text: String(card.entry.stars ?? 0)
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Rectangle {
-                visible: card.installed
-                implicitWidth: stateRow.implicitWidth + 16
-                implicitHeight: 24
-                radius: Appearance.rounding.full
-                color: card.hasUpdate ? Appearance.colors.colTertiaryContainer
-                    : Appearance.colors.colSecondaryContainer
-
-                RowLayout {
-                    id: stateRow
+                MaterialSymbol {
                     anchors.centerIn: parent
-                    spacing: 4
-
-                    MaterialSymbol {
-                        text: card.hasUpdate ? "arrow_circle_up" : "check"
-                        iconSize: 14
-                        color: card.hasUpdate ? Appearance.colors.colOnTertiaryContainer
-                            : Appearance.colors.colOnSecondaryContainer
-                    }
-
-                    StyledText {
-                        text: card.hasUpdate ? Translation.tr("Update") : Translation.tr("Installed")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: card.hasUpdate ? Appearance.colors.colOnTertiaryContainer
-                            : Appearance.colors.colOnSecondaryContainer
-                    }
+                    text: card.applyMode
+                        ? (card.applied ? "check" : "auto_awesome")
+                        : (card.hasUpdate ? "download" : (card.installed ? "visibility" : "arrow_forward"))
+                    iconSize: Appearance.font.pixelSize.smaller
+                    color: actionButton.quiet ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimaryContainer
                 }
-            }
-
-            StyledText {
-                visible: card.working
-                text: Translation.tr("Working…")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colOnSurfaceVariant
             }
         }
     }

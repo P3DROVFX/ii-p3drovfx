@@ -10,6 +10,9 @@ import qs.services
 /**
  * Active Welcome setup pages. Page IDs are stable contracts; page order is
  * presentation metadata and must never be used as identity.
+ *
+ * `nextLabelKey` names the step the button leads to, not the action it
+ * performs, so inserting a page means fixing the label of the one before it.
  */
 QtObject {
     id: root
@@ -61,13 +64,23 @@ QtObject {
         "icon": "wifi",
         "headerShape": MaterialShape.Shape.Cookie9Sided,
         "accentRole": "primary",
-        "nextLabelKey": "Continue",
-        "nextIcon": "wifi",
+        "nextLabelKey": "Add your name",
+        "nextIcon": "person",
         "component": "WelcomeStartPage.qml"
+    }, {
+        "id": "profile",
+        "titleKey": "Add your name",
+        "subtitleKey": "II greets you by name and signs your desktop with it.",
+        "icon": "person",
+        "headerShape": MaterialShape.Shape.Clover4Leaf,
+        "accentRole": "secondary",
+        "nextLabelKey": "Make it yours",
+        "nextIcon": "palette",
+        "component": "WelcomeProfilePage.qml"
     }, {
         "id": "personalize",
         "titleKey": "Make it yours",
-        "subtitleKey": "Choose a wallpaper and a color scheme.",
+        "subtitleKey": "Choose a wallpaper and a color scheme, or start from a ready-made look.",
         "icon": "palette",
         "headerShape": MaterialShape.Shape.SoftBurst,
         "accentRole": "secondary",
@@ -81,24 +94,49 @@ QtObject {
         "icon": "desktop_windows",
         "headerShape": MaterialShape.Shape.Cookie7Sided,
         "accentRole": "tertiary",
-        "nextLabelKey": "Choose your experience",
-        "nextIcon": "dashboard_customize",
+        "nextLabelKey": "Arrange your bar",
+        "nextIcon": "edit",
         "component": "WelcomeDisplaysPage.qml"
     }, {
-        "id": "experience",
-        "titleKey": "Choose how II behaves",
-        "subtitleKey": "Pick a shell mode and the bar placement that fits your workflow.",
-        "icon": "dashboard_customize",
-        "headerShape": MaterialShape.Shape.Sunny,
+        "id": "bar",
+        // The step does not ask questions of its own: it opens Edit Mode, and
+        // the real bar answers them.
+        "titleKey": "Arrange your bar",
+        "subtitleKey": "Edit mode is open behind this window. Move things around, or skip it.",
+        "icon": "edit",
+        "headerShape": MaterialShape.Shape.Gem,
+        "accentRole": "secondary",
+        "nextLabelKey": "Learn the shortcuts",
+        "nextIcon": "keyboard",
+        "component": "WelcomeBarPage.qml"
+    }, {
+        "id": "shortcuts",
+        "titleKey": "Shortcuts to remember",
+        "subtitleKey": "A few keys to start with, and where every other one lives.",
+        "icon": "keyboard",
+        "headerShape": MaterialShape.Shape.PixelTriangle,
+        "accentRole": "tertiary",
+        "nextLabelKey": "Meet Search",
+        "nextIcon": "search",
+        "component": "WelcomeShortcutsPage.qml"
+    }, {
+        "id": "search",
+        "titleKey": "One box for everything",
+        "subtitleKey": "Search finds apps, files, windows and answers — and opens whole panels.",
+        "icon": "search",
+        "headerShape": MaterialShape.Shape.VerySunny,
         "accentRole": "primary",
-        "nextLabelKey": "Explore tutorials",
-        "nextIcon": "school",
-        "component": "WelcomeExperiencePage.qml"
+        "nextLabelKey": "Connect your accounts",
+        "nextIcon": "link",
+        "component": "WelcomeSearchPage.qml"
     }, {
         "id": "learn",
-        "titleKey": "Learn the useful features",
-        "subtitleKey": "Set up only the integrations you plan to use.",
-        "icon": "school",
+        // Named for what it holds. It offers four account integrations, and
+        // calling that "the useful features" both oversold it and took the
+        // word the shortcuts and Search steps needed.
+        "titleKey": "Connect your accounts",
+        "subtitleKey": "Only the ones you already use. The rest can wait.",
+        "icon": "link",
         "headerShape": MaterialShape.Shape.Flower,
         "accentRole": "tertiary",
         "nextLabelKey": "Finish setup",

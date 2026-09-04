@@ -55,11 +55,8 @@ WindowDialog {
         PresetStore.refreshAuth();
     }
 
-    // Mirrors what the store itself would pick, so the field starts on the
-    // name that will be used rather than on an empty box.
     function suggestedRepoName(name) {
-        let slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-        return slug.length > 0 ? `ii-preset-${slug}` : "ii-preset";
+        return "ii-presets";
     }
 
     function capture() {
@@ -146,7 +143,7 @@ WindowDialog {
                 id: repoField
                 Layout.fillWidth: true
                 visible: dialog.signedIn
-                placeholderText: Translation.tr("Repository name")
+                placeholderText: Translation.tr("Repository name (presets collection, e.g. ii-presets)")
                 error: repoField.text.length > 0 && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(repoField.text)
             }
 

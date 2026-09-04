@@ -31,6 +31,10 @@ Singleton {
     property int stopwatchStart: Persistent.states.timer.stopwatch.start
     property var stopwatchLaps: Persistent.states.timer.stopwatch.laps
     readonly property var countdowns: Persistent.states.timer.countdowns
+    // Shared display clock for every countdown consumer. The list stores an
+    // absolute end date, so views bind to this tick instead of each owning a
+    // one-second Timer solely to refresh their remaining-time labels.
+    property int countdownTick: 0
     // Monotonic suffix for timer ids: two timers created in the same
     // millisecond would otherwise share one id and be cancelled together.
     property int countdownSerial: 0
@@ -209,7 +213,10 @@ Singleton {
         interval: 1000
         repeat: true
         running: root.countdowns.some(countdown => !countdown.notified && !countdown.paused)
-        onTriggered: root.refreshCountdowns()
+        onTriggered: {
+            root.countdownTick++;
+            root.refreshCountdowns();
+        }
     }
 
     // Pomodoro

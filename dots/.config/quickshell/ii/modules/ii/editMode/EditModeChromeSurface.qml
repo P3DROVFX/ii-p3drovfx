@@ -66,7 +66,11 @@ PanelWindow {
     // Holding it means no click can take the keyboard away by itself, so the
     // field is released explicitly instead: by the catcher in the chrome for a
     // click on this surface, and by the canvas for one on the desktop.
-    readonly property bool searchFocused: chrome.drawerSearchFocused
+    // The catalogue's search field, or a widget's options panel with a text
+    // field in it: either wants the keyboard on this surface, and neither can
+    // have it by asking the compositor on its own.
+    readonly property bool searchFocused: chrome.drawerSearchFocused || root.menuWantsKeyboard
+    readonly property bool menuWantsKeyboard: menuLoader.item ? (menuLoader.item.wantsKeyboard ?? false) : false
     // Published so the desktop's canvas stands down while the field types and
     // takes the keyboard back the moment it lets go.
     onSearchFocusedChanged: GlobalStates.editSearchFocused = root.searchFocused
@@ -145,6 +149,11 @@ PanelWindow {
         // A closed drawer is a zero-width item and contributes nothing.
         Region {
             item: chrome.drawerItem
+        }
+        // The guide's card, so its own buttons are clickable. Hidden, it is
+        // still an item with a size, so the region follows its visibility.
+        Region {
+            item: chrome.guideItem
         }
     }
 
@@ -848,6 +857,8 @@ PanelWindow {
         active: root.menuOpenHere
         z: 10
         sourceComponent: Item {
+            readonly property bool wantsKeyboard: menuCard.wantsKeyboard
+
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -894,7 +905,16 @@ PanelWindow {
         drawer: Qt.rect(root.drawerGeometry.x, root.drawerGeometry.y, root.drawerGeometry.width, root.drawerGeometry.height)
         drawerScreenName: root.screenName
 
-        onDoneRequested: GlobalStates.editMode = false
+        // Done is the mode's way out — except while a guide is hosting the
+        // session, where the guide owns what "finished" means. The Welcome
+        // moves to its next step, and closing the mode is its business.
+        onDoneRequested: {
+            if (GlobalStates.editGuideActive) {
+                GlobalStates.editGuideDoneRequested();
+                return;
+            }
+            GlobalStates.editMode = false;
+        }
         onUndoRequested: GlobalStates.editUndo()
         onRedoRequested: GlobalStates.editRedo()
         onTabRequested: tab => {

@@ -337,6 +337,7 @@ Singleton {
     property real screenshotOverlayRegionW: 0
     property real screenshotOverlayRegionH: 0
     property bool settingsOpen: false
+    property bool settingsSuspendedForScreenshot: false
     property int settingsPendingPage: -1
     property string settingsPendingSubPage: ""
     property string settingsPendingPageName: ""
@@ -651,9 +652,34 @@ Singleton {
     // The screen a right-click asked the mode for, read once by the entry
     // below and cleared there: the menu knows which desktop or bar was
     // clicked, and it is not always the focused one.
-    property string _editRequestedMonitor: ""
+    // ── Edit Mode as a guided step ────────────────────────────────────────
+    // The Welcome hosts one on its bar step: the mode runs for real and the
+    // Welcome sits beside it as the guide. Two things behave differently while
+    // this is on — the toolbar's Done means "next step of the guide" rather
+    // than "close the mode", and the chrome shows the tour of its own toolbar.
+    property bool editGuideActive: false
+    // The Welcome, stepped aside. While it guides a live Edit Mode a
+    // full-size window sits on top of the thing it is guiding, so it collapses
+    // to a pill beside the toolbar. Here rather than in the window because the
+    // pill is a layer surface of its own — a window cannot place itself on a
+    // Wayland desktop, and a layer surface can.
+    property bool welcomeCollapsed: false
+    // Done, while a guide is hosting the session. Whoever set the flag answers
+    // it; the chrome only reports the press.
+    signal editGuideDoneRequested()
+    // The toolbar's rectangle on the edited screen, in that screen's
+    // coordinates, published by the chrome. A surface that is not the chrome —
+    // the Welcome's collapsed pill — has no other way to sit beside it.
+    property rect editToolbarRect: Qt.rect(0, 0, 0, 0)
 
-    function openEditMode(monitor = "") {
+    property string _editRequestedMonitor: ""
+    // Whether this entry leaves the workspace where it found it. The mode
+    // normally parks the desktop on an empty workspace because windows cover
+    // the thing being edited — but the Welcome is itself that window, and
+    // parking away from it takes the guide off the screen it is guiding.
+    property bool _editKeepWorkspace: false
+
+    function openEditMode(monitor = "", keepWorkspace = false) {
         if (root.editMode)
             return;
         // Nothing to edit without a desktop, and nothing to see while the
@@ -665,16 +691,17 @@ Singleton {
         root.overviewOpen = false;
         root.sessionOpen = false;
         root._editRequestedMonitor = monitor;
+        root._editKeepWorkspace = keepWorkspace;
         root.editMode = true;
     }
 
     // A right-click's way in: the mode, with the drawer already showing the
     // catalogue for what was clicked. Also the way to change catalogues when
     // the mode is already on, which is what a second right-click does.
-    function openEditCatalogue(section, screenName = "", page = "") {
+    function openEditCatalogue(section, screenName = "", page = "", keepWorkspace = false) {
         root.editDrawerSection = section;
         root.editDrawerPage = page;
-        root.openEditMode(screenName);
+        root.openEditMode(screenName, keepWorkspace);
         if (!root.editMode)
             return;
         // The bar and the dock are no part of the lock's face: asking for one
@@ -746,10 +773,12 @@ Singleton {
         root.policiesPanelOpen = false;
         root.dashboardPanelOpen = false;
         root.mediaControlsOpen = false;
-        root._editClearWorkspace();
+        if (!root._editKeepWorkspace)
+            root._editClearWorkspace();
     }
 
     function _leaveEditMode() {
+        root._editKeepWorkspace = false;
         root.closeEditWidgetMenu();
         root.closeEditBarMenu();
         root.closeDesktopMenu();
@@ -778,6 +807,8 @@ Singleton {
     // replaces (2147483647 - id), which the parallax and the workspace
     // indicator already map back to the real one, so nothing visibly jumps.
     // Pinned windows are ignored: they follow to the temp workspace anyway.
+    property var lockSavedWorkspaces: ({})
+    property var lockTempWorkspaces: ({})
     property int _editSavedWorkspace: 0
     property int _editTempWorkspace: 0
 
@@ -806,7 +837,19 @@ Singleton {
         if (ws <= 1000000) {
             const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
             if (hasWindows) {
-                const temp = 2147483647 - ws;
+                const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+                    monitors: [{
+                        name: mon,
+                        activeWorkspaceId: ws,
+                        index: Quickshell.screens.findIndex(s => s.name === mon)
+                    }],
+                    windowList: HyprlandData.windowList || [],
+                    allMonitors: HyprlandData.monitors || [],
+                    useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+                    workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+                    workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+                });
+                const temp = emptyMap[mon] || (ws + 1);
                 batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${temp}}`;
                 root._editSavedWorkspace = ws;
                 root._editTempWorkspace = temp;
@@ -1238,15 +1281,99 @@ Singleton {
         return pending;
     }
 
-    function toggleWelcome() {
-        root.welcomeOpen = !root.welcomeOpen;
+    /**
+     * Move the focused monitor to the nearest empty workspace.
+     *
+     * The Welcome opens moments after an install that ran in a terminal
+     * filling the screen, and a first-run guide underneath the terminal that
+     * installed it is a guide nobody sees.
+     *
+     * Unlike Edit Mode's version of this, nothing is saved and nothing is put
+     * back: the user is meant to stay on the clean workspace. Skipped when the
+     * current one is already empty, so opening the guide on a bare desktop
+     * does not jump for no reason.
+     *
+     * Returns whether it actually asked for a switch, because the caller has
+     * to wait for one.
+     */
+    function focusNearestEmptyWorkspace(): bool {
+        const mon = Hyprland.focusedMonitor?.name ?? "";
+        if (mon === "")
+            return false;
+        const mData = HyprlandData.monitors.find(m => m.name === mon);
+        const ws = mData?.activeWorkspace?.id;
+        // Already parked on a temp workspace (the lock's, or Edit Mode's).
+        if (ws === undefined || ws === null || ws > 1000000)
+            return false;
+        const hasWindows = (HyprlandData.windowList ?? []).some(w => w.workspace?.id === ws && !w.pinned);
+        if (!hasWindows)
+            return false;
+
+        const emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+            monitors: [{
+                name: mon,
+                activeWorkspaceId: ws,
+                index: Quickshell.screens.findIndex(screen => screen.name === mon)
+            }],
+            windowList: HyprlandData.windowList || [],
+            allMonitors: HyprlandData.monitors || [],
+            useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+            workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+            workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+        });
+        const target = emptyMap[mon] || (ws + 1);
+        Quickshell.execDetached(["hyprctl", "--batch",
+            `dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${target}}`]);
+        return true;
     }
 
+    // ── The displays step's "which screen is which" ───────────────────────
+    // A number on every physical panel, the way macOS does it. Read by the
+    // per-screen overlay the shell loads for it.
+    property bool displayIdentifyActive: false
+
+    function toggleWelcome() {
+        if (root.welcomeOpen) {
+            root.closeWelcome();
+            return;
+        }
+        root.openWelcome();
+    }
+
+    /**
+     * The guide always opens on a clean workspace.
+     *
+     * It is a window that covers the middle of the screen and, on its bar
+     * step, hands the desktop over to Edit Mode — both of which are about a
+     * desktop nobody can see under the terminal that installed the shell, or
+     * under whatever else happens to be open. The jump is skipped when the
+     * current workspace is already empty, so this is only ever a jump away
+     * from clutter.
+     */
     function openWelcome() {
+        // A collapsed pill left over from the last session would be the only
+        // thing a fresh "open the Welcome" produced.
+        root.welcomeCollapsed = false;
+        if (root.focusNearestEmptyWorkspace()) {
+            // A window maps on whatever workspace is active when it maps, so
+            // opening in the same tick as the switch is a race the window
+            // loses about as often as it wins — and losing means the guide is
+            // left behind on the workspace it was moving away from.
+            welcomeWorkspaceSettle.restart();
+            return;
+        }
         root.welcomeOpen = true;
     }
 
+    Timer {
+        id: welcomeWorkspaceSettle
+        interval: 220
+        repeat: false
+        onTriggered: root.welcomeOpen = true
+    }
+
     function closeWelcome() {
+        root.welcomeCollapsed = false;
         root.welcomeOpen = false;
     }
 

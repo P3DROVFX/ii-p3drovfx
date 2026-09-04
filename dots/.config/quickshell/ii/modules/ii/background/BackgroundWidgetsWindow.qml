@@ -138,7 +138,12 @@ PanelWindow {
         if (activeWorkspace == undefined)
             return false;
         let activeId = activeWorkspace.id;
-        if (activeId > 1000000)
+        const monName = monitor?.name ?? "";
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeId = GlobalStates._editSavedWorkspace;
+        else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
         return HyprlandData.windowList.some(function (w) {
             return w.workspace.id === activeId;
@@ -252,7 +257,12 @@ PanelWindow {
         let activeId = monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id : undefined;
         if (!activeId)
             return 0;
-        if (activeId > 1000000)
+        const monName = monitor?.name ?? "";
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeId = GlobalStates._editSavedWorkspace;
+        else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
         if (activeId <= workspaceOffset)
             return 0;
@@ -351,6 +361,11 @@ PanelWindow {
         wallpaperCentered: lockAnim.wallpaperCentered
         wallpaperIsVideo: bgWidgetsWindow.videoEffectsDisabled
         activeWorkspaceId: {
+            const monName = bgWidgetsWindow.monitor?.name ?? "";
+            if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+                return GlobalStates.lockSavedWorkspaces[monName];
+            if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+                return GlobalStates._editSavedWorkspace;
             let activeId = bgWidgetsWindow.monitor && bgWidgetsWindow.monitor.activeWorkspace ? bgWidgetsWindow.monitor.activeWorkspace.id : 1;
             return activeId > 1000000 ? (2147483647 - activeId) : activeId;
         }

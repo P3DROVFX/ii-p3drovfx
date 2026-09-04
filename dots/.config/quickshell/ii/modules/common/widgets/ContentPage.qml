@@ -10,6 +10,10 @@ Item {
     property real baseWidth: 600
     property bool forceWidth: false
     property real bottomContentPadding: 100
+    // A host that draws its own title - Edit Mode's per-widget options popup -
+    // hides the page's header row rather than showing a back button into a
+    // navigation stack that host does not have.
+    property bool headerVisible: true
     readonly property bool scrollFadeEnabled: Config.options?.appearance?.scrollFadeMask ?? true
     readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
     readonly property bool allowScrollFade: root.scrollFadeEnabled && !root.settingsPerformanceMode
@@ -27,7 +31,8 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: (children.length > 0 && children[0].visible) ? children[0].implicitHeight : 0
+        visible: root.headerVisible
+        height: (root.headerVisible && children.length > 0 && children[0].visible) ? children[0].implicitHeight : 0
         z: 2
     }
 

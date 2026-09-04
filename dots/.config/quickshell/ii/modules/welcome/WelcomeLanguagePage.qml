@@ -26,6 +26,29 @@ Item {
         "zh_CN": "简体中文"
     })
 
+    /**
+     * The same languages named in the language currently on screen. Someone
+     * looking for their own language reads the native name; someone who
+     * landed here by accident, in a script they cannot read, needs the second
+     * line to find their way back out.
+     */
+    readonly property var languageEndonyms: ({
+        "de_DE": Translation.tr("German"),
+        "en_US": Translation.tr("English (United States)"),
+        "es_MX": Translation.tr("Spanish (Mexico)"),
+        "fr_FR": Translation.tr("French"),
+        "he_HE": Translation.tr("Hebrew"),
+        "id_ID": Translation.tr("Indonesian"),
+        "it_IT": Translation.tr("Italian"),
+        "ja_JP": Translation.tr("Japanese"),
+        "pt_BR": Translation.tr("Portuguese (Brazil)"),
+        "ru_RU": Translation.tr("Russian"),
+        "tr_TR": Translation.tr("Turkish"),
+        "uk_UA": Translation.tr("Ukrainian"),
+        "vi_VN": Translation.tr("Vietnamese"),
+        "zh_CN": Translation.tr("Chinese (Simplified)")
+    })
+
     readonly property var languageOptions: {
         const codes = Translation.allAvailableLanguages && Translation.allAvailableLanguages.length > 0
             ? Array.from(Translation.allAvailableLanguages)
@@ -33,14 +56,20 @@ Item {
         if (!codes.includes("en_US"))
             codes.unshift("en_US");
         codes.sort((a, b) => a === "en_US" ? -1 : b === "en_US" ? 1 : a.localeCompare(b));
-        return codes.map(code => ({
-            code: code,
-            label: root.languageNames[code] || code
-        }));
+        return codes.map(code => {
+            const label = root.languageNames[code] || code;
+            const endonym = root.languageEndonyms[code] || "";
+            return {
+                value: code,
+                label: label,
+                // A language whose two names are the same needs only one line.
+                secondaryLabel: endonym === label ? "" : endonym
+            };
+        });
     }
 
     readonly property string configuredLanguage: Config.options.language.ui
-    property string selectedLanguage: root.languageOptions.some(option => option.code === root.configuredLanguage)
+    property string selectedLanguage: root.languageOptions.some(option => option.value === root.configuredLanguage)
         ? root.configuredLanguage
         : "en_US"
 
@@ -56,58 +85,13 @@ Item {
         anchors.topMargin: Appearance.rounding.small
         spacing: Appearance.rounding.small
 
-        ListView {
-            id: languageList
+        WelcomeChoiceList {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            // Let the hover scale breathe past the list viewport. The
-            // Welcome window remains the outer clipping boundary.
-            clip: false
-            spacing: Appearance.rounding.verysmall
-            boundsBehavior: Flickable.StopAtBounds
-            model: root.languageOptions
-
-            delegate: RippleButton {
-                id: languageButton
-                required property var modelData
-                width: languageList.width
-                implicitHeight: Appearance.rounding.large * 2.5
-                buttonRadius: Appearance.rounding.normal
-                toggled: root.selectedLanguage === modelData.code
-                colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1
-                colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer1Hover
-                colBackgroundActive: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
-                colRipple: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
-                Accessible.name: modelData.label
-
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Appearance.rounding.normal
-                    anchors.rightMargin: Appearance.rounding.normal
-                    spacing: Appearance.rounding.small
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: languageButton.modelData.label
-                        color: languageButton.toggled
-                            ? Appearance.colors.colOnPrimary
-                            : Appearance.colors.colOnLayer1
-                        font.family: Appearance.font.family.title
-                        font.variableAxes: Appearance.font.variableAxes.titleRounded
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.weight: languageButton.toggled ? Font.Bold : Font.DemiBold
-                    }
-
-                    MaterialSymbol {
-                        visible: languageButton.toggled
-                        text: "check"
-                        iconSize: Appearance.font.pixelSize.large
-                        color: Appearance.colors.colOnPrimary
-                    }
-                }
-
-                onClicked: root.selectLanguage(languageButton.modelData.code)
-            }
+            Layout.minimumHeight: Appearance.rounding.large * 8
+            choices: root.languageOptions
+            currentValue: root.selectedLanguage
+            onChosen: value => root.selectLanguage(value)
         }
 
         Rectangle {

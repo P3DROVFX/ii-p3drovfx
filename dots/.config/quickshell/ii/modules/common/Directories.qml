@@ -48,6 +48,11 @@ Singleton {
     property string shellConfig: FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse`)
     property string shellConfigName: "config.json"
     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
+    // The setup script's standing request to run the Welcome once, consumed
+    // and deleted by shell.qml. Written only when the install was a first
+    // install AND no running shell answered the IPC call that would have
+    // opened it on the spot.
+    property string welcomeRequestPath: FileUtils.trimFileProtocol(`${Directories.state}/user/welcome_pending`)
     property string todoPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo.json`)
     property string appUsagePath: FileUtils.trimFileProtocol(`${Directories.state}/user/app_usage.json`)
     // One file per local day, written by the app_stats sampler.

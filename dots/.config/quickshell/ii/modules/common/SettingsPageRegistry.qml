@@ -76,7 +76,12 @@ Singleton {
             "name": "Presets",
             "icon": "auto_awesome",
             "component": "modules/settings/configs/PresetsConfig.qml",
-            "subPages": [],
+            "subPages": [
+                "presets/PublishSubPage.qml",
+                "presets/PresetDetailSubPage.qml",
+                "presets/PushUpdateSubPage.qml",
+                "presets/PresetDiffSubPage.qml"
+            ],
             "aliases": []
         },
         {
@@ -329,8 +334,8 @@ Singleton {
             "name": "Accounts & Backup",
             "icon": "checklist",
             "component": "modules/settings/configs/TasksAccountsConfig.qml",
-            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml", "widgets/CoreGoogleTasksConfig.qml", "widgets/CoreTickTickConfig.qml"],
-            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Google Tasks", "Google Tasks API", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone"]
+            "subPages": ["widgets/GoogleDriveBackupConfig.qml", "widgets/AdvancedDriveConfig.qml", "widgets/CoreGoogleTasksConfig.qml", "widgets/CoreTickTickConfig.qml", "widgets/ShellBackupConfig.qml"],
+            "aliases": ["Core Services", "Tasks & Accounts", "TickTick", "Google Tasks", "Google Tasks API", "Tasks", "Accounts", "Google Drive", "Backup", "Cloud backup", "rclone", "Settings backup", "Restore", "Restore settings", "Export settings", "Import settings", "Zip"]
         },
         {
             "id": "soundAlerts",

@@ -8,22 +8,28 @@ singleton WelcomeTutorialContent 1.0 WelcomeTutorialContent.qml
 singleton WelcomeMotion 1.0 WelcomeMotion.qml
 
 WelcomeActionCard 1.0 WelcomeActionCard.qml
+WelcomeChoiceList 1.0 WelcomeChoiceList.qml
+WelcomeCollapsedPill 1.0 WelcomeCollapsedPill.qml
+WelcomeDisplayIdentifier 1.0 WelcomeDisplayIdentifier.qml
+WelcomeProfilePage 1.0 WelcomeProfilePage.qml
+WelcomeBarPage 1.0 WelcomeBarPage.qml
+WelcomeShortcutsPage 1.0 WelcomeShortcutsPage.qml
+WelcomeSearchPage 1.0 WelcomeSearchPage.qml
 WelcomeDisplaysPage 1.0 WelcomeDisplaysPage.qml
 WelcomeKeyboardLayoutPage 1.0 WelcomeKeyboardLayoutPage.qml
 WelcomeLanguagePage 1.0 WelcomeLanguagePage.qml
 WelcomeTimePage 1.0 WelcomeTimePage.qml
 WelcomeHelloPage 1.0 WelcomeHelloPage.qml
 WelcomeIntegrationCard 1.0 WelcomeIntegrationCard.qml
-WelcomeExperiencePage 1.0 WelcomeExperiencePage.qml
 WelcomeFinishPage 1.0 WelcomeFinishPage.qml
-WelcomeShellModeCard 1.0 WelcomeShellModeCard.qml
-WelcomeQuickToggle 1.0 WelcomeQuickToggle.qml
 WelcomeFlow 1.0 WelcomeFlow.qml
 WelcomeHeader 1.0 WelcomeHeader.qml
 WelcomeKeybindCard 1.0 WelcomeKeybindCard.qml
 WelcomeLearnPage 1.0 WelcomeLearnPage.qml
 WelcomeNavigation 1.0 WelcomeNavigation.qml
 WelcomePersonalizePage 1.0 WelcomePersonalizePage.qml
+WelcomePresetStorePane 1.0 WelcomePresetStorePane.qml
+WelcomeRestoreDialog 1.0 WelcomeRestoreDialog.qml
 WelcomeColorPreviewGrid 1.0 WelcomeColorPreviewGrid.qml
 WelcomeLightDarkToggle 1.0 WelcomeLightDarkToggle.qml
 WelcomeProgress 1.0 WelcomeProgress.qml

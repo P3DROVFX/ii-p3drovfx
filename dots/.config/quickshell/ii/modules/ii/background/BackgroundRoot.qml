@@ -108,6 +108,11 @@ PanelWindow {
         wallpaperCentered: lockAnim.wallpaperCentered
         wallpaperIsVideo: bgRoot.videoEffectsDisabled
         activeWorkspaceId: {
+            const monName = bgRoot.monitor?.name ?? "";
+            if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+                return GlobalStates.lockSavedWorkspaces[monName];
+            if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+                return GlobalStates._editSavedWorkspace;
             let activeId = bgRoot.monitor && bgRoot.monitor.activeWorkspace ? bgRoot.monitor.activeWorkspace.id : 1;
             return activeId > 1000000 ? (2147483647 - activeId) : activeId;
         }
@@ -171,7 +176,13 @@ PanelWindow {
     property bool hasWindowsInActiveWorkspace: {
         if (activeWorkspace == undefined) return false;
         let activeId = activeWorkspace.id;
-        if (activeId > 1000000) activeId = 2147483647 - activeId;
+        const monName = monitor?.name ?? "";
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeId = GlobalStates._editSavedWorkspace;
+        else if (activeId > 1000000)
+            activeId = 2147483647 - activeId;
         return HyprlandData.windowList.some(function(w) { return w.workspace.id === activeId; });
     }
     // Deferred to avoid Wayland dispatch reentrancy crash in PanelWindow visibility
@@ -206,7 +217,12 @@ PanelWindow {
         let activeId = monitor && monitor.activeWorkspace ? monitor.activeWorkspace.id : undefined;
         if (!activeId)
             return 0;
-        if (activeId > 1000000)
+        const monName = monitor?.name ?? "";
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeId = GlobalStates._editSavedWorkspace;
+        else if (activeId > 1000000)
             activeId = 2147483647 - activeId;
         if (activeId <= workspaceOffset)
             return 0;

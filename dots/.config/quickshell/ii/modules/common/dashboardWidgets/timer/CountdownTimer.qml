@@ -24,8 +24,9 @@ Item {
     readonly property var countdowns: Array.from(TimerService.countdowns ?? [])
     readonly property var draft: Persistent.states.timer.countdownDraft
     readonly property int draftSeconds: TimerService.draftCountdownSeconds()
-    // Rebinds the remaining-time labels; the service only stores an end date.
-    property int displayTick: 0
+    // The service stores an absolute end date and exposes the shared display
+    // clock used by both this list and the bar widget.
+    readonly property int displayTick: TimerService.countdownTick
 
     function setDraft(hours, minutes, seconds) {
         if (!root.draft)
@@ -80,13 +81,6 @@ Item {
                 }
             }
         }
-    }
-
-    Timer {
-        interval: 250
-        repeat: true
-        running: root.countdowns.some(countdown => !countdown.notified && !countdown.paused)
-        onTriggered: root.displayTick++
     }
 
     ColumnLayout {

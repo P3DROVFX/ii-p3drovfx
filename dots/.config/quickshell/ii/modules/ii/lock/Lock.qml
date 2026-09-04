@@ -13,6 +13,7 @@ LockScreen {
 
     // Monitor name -> workspace id to restore on unlock (set when locking)
     property var savedWorkspaces: ({})
+    property var temporaryWorkspaces: ({})
     property var savedPinnedAddresses: []
     property string unlockFocusedMonitor: ""
 
@@ -29,9 +30,11 @@ LockScreen {
             for (var j = 0; j < Quickshell.screens.length; ++j) {
                 var monName = Quickshell.screens[j].name;
                 var wsId = root.savedWorkspaces[monName];
+                var tempWs = root.temporaryWorkspaces[monName];
                 if (wsId !== undefined) {
                     var mData = HyprlandData.monitors.find(m => m.name === monName);
-                    if (mData && mData.activeWorkspace && mData.activeWorkspace.id > 1000000) {
+                    var curWs = mData?.activeWorkspace?.id;
+                    if (curWs === tempWs || curWs > 1000000 || (curWs !== undefined && curWs !== wsId)) {
                         batch += ` ; dispatch hl.dsp.focus {monitor="${monName}"} ; dispatch hl.dsp.focus {workspace=${wsId}}`;
                         hasCmds = true;
                     }
@@ -55,6 +58,11 @@ LockScreen {
             if (hasCmds) {
                 Quickshell.execDetached(["hyprctl", "--batch", batch]);
             }
+
+            root.savedWorkspaces = {};
+            root.temporaryWorkspaces = {};
+            GlobalStates.lockSavedWorkspaces = {};
+            GlobalStates.lockTempWorkspaces = {};
 
             // Keep workspace labels hidden until Hyprland has applied the
             // restore batch. The reveal is then driven by the label's own
@@ -104,17 +112,47 @@ LockScreen {
                         hasCmds = true;
                     }
                     var ws = (mData?.activeWorkspace?.id ?? 1);
-                    // If already on a lock workspace (> 1000000), preserve existing saved workspace if present
-                    if (ws <= 1000000 || !root.savedWorkspaces[mon]) {
-                        next[mon] = ws;
-                    } else {
+                    // If already on a recorded temp workspace, preserve existing saved workspace
+                    if (root.savedWorkspaces[mon] && (ws === root.temporaryWorkspaces[mon] || ws > 1000000)) {
                         next[mon] = root.savedWorkspaces[mon];
+                    } else {
+                        next[mon] = ws;
                     }
+                }
 
-                    var lockWs = ws > 1000000 ? ws : (2147483647 - Math.abs(ws));
+                var monitorsToAlloc = [];
+                for (var i = 0; i < Quickshell.screens.length; ++i) {
+                    var mon = Quickshell.screens[i] ? Quickshell.screens[i].name : null;
+                    if (!mon)
+                        continue;
+                    var mData = HyprlandData.monitors.find(m => m.name === mon);
+                    if (!mData?.activeWorkspace)
+                        continue;
+                    monitorsToAlloc.push({
+                        name: mon,
+                        activeWorkspaceId: next[mon] ?? 1,
+                        index: i
+                    });
+                }
+
+                var emptyMap = WorkspaceLockUtils.allocateEmptyWorkspaces({
+                    monitors: monitorsToAlloc,
+                    windowList: HyprlandData.windowList || [],
+                    allMonitors: HyprlandData.monitors || [],
+                    useWorkspaceMap: Config.options?.bar?.workspaces?.useWorkspaceMap ?? false,
+                    workspaceMap: Config.options?.bar?.workspaces?.workspaceMap ?? [],
+                    workspacesShown: Config.options?.bar?.workspaces?.shown || 10
+                });
+
+                var temps = {};
+                for (var i = 0; i < monitorsToAlloc.length; ++i) {
+                    var mon = monitorsToAlloc[i].name;
+                    var lockWs = emptyMap[mon] || (next[mon] + 1);
+                    temps[mon] = lockWs;
                     batch += ` ; dispatch hl.dsp.focus {monitor="${mon}"} ; dispatch hl.dsp.focus {workspace=${lockWs}}`;
                     hasCmds = true;
                 }
+
                 // Unpin any pinned windows so they hide when switching to lock workspace
                 var pinnedAddrs = [];
                 if (HyprlandData.windowList) {
@@ -134,6 +172,10 @@ LockScreen {
                 }
                 batch += " ; keyword animation workspaces,1";
                 root.savedWorkspaces = next;
+                root.temporaryWorkspaces = temps;
+                GlobalStates.lockSavedWorkspaces = next;
+                GlobalStates.lockTempWorkspaces = temps;
+
                 if (hasCmds) {
                     Quickshell.execDetached(["hyprctl", "--batch", batch]);
                 }
@@ -154,13 +196,18 @@ LockScreen {
 
             var batch = "";
             var hasCmds = false;
+            var tempValues = Object.values(root.temporaryWorkspaces);
+
             for (var i = 0; i < HyprlandData.windowList.length; ++i) {
                 var win = HyprlandData.windowList[i];
-                if (win && win.workspace && win.workspace.id > 10000 && win.address) {
+                if (!win || !win.workspace || !win.address) continue;
+
+                var isLockWs = tempValues.includes(win.workspace.id) || win.workspace.id > 1000000;
+                if (isLockWs) {
                     var targetWs = 1;
                     if (HyprlandData.monitors && win.monitor !== undefined && HyprlandData.monitors[win.monitor]) {
                         var monName = HyprlandData.monitors[win.monitor].name;
-                        if (monName && root.savedWorkspaces[monName] && root.savedWorkspaces[monName] <= 10000) {
+                        if (monName && root.savedWorkspaces[monName] && !tempValues.includes(root.savedWorkspaces[monName])) {
                             targetWs = root.savedWorkspaces[monName];
                         }
                     }

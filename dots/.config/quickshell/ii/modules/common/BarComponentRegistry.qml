@@ -291,6 +291,8 @@ Singleton {
             id: "timer",
             icon: "timer",
             title: "Timer & Pomodoro",
+            styleConfigKey: "timer",
+            styleOptions: defaultStyleOptions,
             configPage: "IndicatorsConfig.qml"
         },
         {

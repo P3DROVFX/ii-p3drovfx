@@ -7,6 +7,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions as CF
@@ -449,6 +450,10 @@ FloatingWindow {
         function onSettingsOpenChanged() {
             root.visible = GlobalStates.settingsOpen;
             if (GlobalStates.settingsOpen) {
+                if (GlobalStates.settingsSuspendedForScreenshot) {
+                    GlobalStates.settingsSuspendedForScreenshot = false;
+                    return;
+                }
                 root.navigationHistoryActive = false;
                 SearchRegistry.setSettingsActive(true);
                 settingsSearchBar.forceFocus();
@@ -457,7 +462,8 @@ FloatingWindow {
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
-                root.endNavigationSession();
+                if (!GlobalStates.settingsSuspendedForScreenshot)
+                    root.endNavigationSession();
             }
         }
     }
@@ -487,12 +493,14 @@ FloatingWindow {
         if (!visible) {
             root.pendingSearchText = "";
             SearchRegistry.setSettingsActive(false);
-            root.endNavigationSession();
-            if (GlobalStates.settingsOpen)
+            if (!GlobalStates.settingsSuspendedForScreenshot)
+                root.endNavigationSession();
+            if (GlobalStates.settingsOpen && !GlobalStates.settingsSuspendedForScreenshot)
                 GlobalStates.settingsOpen = false;
         } else if (GlobalStates.settingsOpen) {
             SearchRegistry.setSettingsActive(true);
-            Qt.callLater(() => root.ensurePageReady());
+            if (!GlobalStates.settingsSuspendedForScreenshot)
+                Qt.callLater(() => root.ensurePageReady());
         }
     }
 
@@ -670,12 +678,16 @@ FloatingWindow {
                     root.currentPage = idx;
                 }
             }
-            Rectangle { // Content container
+            // The page's viewport, clipped to the window's own corner rather
+            // than to a square. `clip: true` on a Rectangle ignores its
+            // `radius` — the rounding was declared here all along and never
+            // reached the content, so a page scrolled to its end had its last
+            // row cut straight across the curve.
+            ClippingRectangle { // Content container
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: "transparent"
                 radius: Appearance.windowRounding
-                clip: true
 
                 Loader {
                     id: pageLoader

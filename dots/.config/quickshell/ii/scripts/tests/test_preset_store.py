@@ -99,6 +99,62 @@ class StoreTestCase(unittest.TestCase):
         git(["commit", "-m", message], work)
         git(["push", bare, "main"], work)
 
+    def make_monorepo_remote(self, slug, presets_data):
+        """Create a bare repo holding an index.json and subfolders for each preset."""
+        work = os.path.join(self.root, "work", slug.replace("/", "__"))
+        os.makedirs(work, exist_ok=True)
+        index = {"schema": 1, "author": slug.split("/")[0], "presets": []}
+        for p_id, p_info in presets_data.items():
+            sub = os.path.join(work, "presets", p_id)
+            os.makedirs(sub, exist_ok=True)
+            with open(os.path.join(sub, "preset.json"), "w", encoding="utf-8") as handle:
+                json.dump(p_info["manifest"], handle, indent=4)
+            with open(os.path.join(sub, p_info["manifest"].get("config", "config.json")), "w", encoding="utf-8") as handle:
+                json.dump(p_info["config"], handle, indent=4)
+            for asset_name, content in (p_info.get("assets") or {}).items():
+                with open(os.path.join(sub, asset_name), "wb") as handle:
+                    handle.write(content)
+            index["presets"].append({
+                "id": p_id,
+                "name": p_info["manifest"]["name"],
+                "description": p_info["manifest"].get("description", ""),
+                "version": p_info["manifest"]["version"],
+                "configVersion": p_info["manifest"].get("configVersion"),
+                "path": "presets/%s" % p_id,
+            })
+        with open(os.path.join(work, "index.json"), "w", encoding="utf-8") as handle:
+            json.dump(index, handle, indent=4)
+        git(["init", "-b", "main"], work)
+        git(["add", "-A"], work)
+        git(["commit", "-m", "initial collection"], work)
+
+        bare = os.path.join(self.remotes, slug + ".git")
+        os.makedirs(os.path.dirname(bare), exist_ok=True)
+        git(["clone", "--bare", work, bare], self.root)
+        return work, bare
+
+    def push_monorepo_remote(self, work, bare, preset_id, manifest=None, config=None, message="update"):
+        sub = os.path.join(work, "presets", preset_id)
+        if manifest is not None:
+            with open(os.path.join(sub, "preset.json"), "w", encoding="utf-8") as handle:
+                json.dump(manifest, handle, indent=4)
+            with open(os.path.join(work, "index.json"), "r+", encoding="utf-8") as handle:
+                idx = json.load(handle)
+                for p in idx.get("presets", []):
+                    if p["id"] == preset_id:
+                        p["version"] = manifest["version"]
+                        p["configVersion"] = manifest.get("configVersion")
+                        break
+                handle.seek(0)
+                json.dump(idx, handle, indent=4)
+                handle.truncate()
+        if config is not None:
+            with open(os.path.join(sub, "config.json"), "w", encoding="utf-8") as handle:
+                json.dump(config, handle, indent=4)
+        git(["add", "-A"], work)
+        git(["commit", "-m", message], work)
+        git(["push", bare, "main"], work)
+
     def basic_manifest(self, **overrides):
         manifest = {
             "schema": 1,
@@ -662,6 +718,107 @@ class TestSignInSetup(unittest.TestCase):
             body = handle.read()
         self.assertIn("--scopes repo", body)
         self.assertIn("github-cli", body)
+
+
+class TestMonoRepoStore(StoreTestCase):
+    """Multiple presets living inside subdirectories of a single repository."""
+
+    def setUp(self):
+        super().setUp()
+        self.presets_data = {
+            "cyberpunk": {
+                "manifest": self.basic_manifest(name="Cyberpunk", description="Neon theme", version="1.0.0"),
+                "config": self.basic_config(appearance={"palette": {"type": "scheme-vibrant"}}),
+                "assets": {"wallpaper.png": b"\x89PNG neon"},
+            },
+            "minimal": {
+                "manifest": self.basic_manifest(name="Minimal", description="Monochrome theme", version="1.0.0"),
+                "config": self.basic_config(appearance={"palette": {"type": "scheme-neutral"}}),
+            },
+        }
+        self.work, self.bare = self.make_monorepo_remote("alice/ii-presets", self.presets_data)
+
+    def test_parse_slug_and_validation(self):
+        import preset_store
+        repo, preset = preset_store.parse_slug("alice/ii-presets:cyberpunk")
+        self.assertEqual(repo, "alice/ii-presets")
+        self.assertEqual(preset, "cyberpunk")
+
+        repo, preset = preset_store.parse_slug("https://github.com/alice/ii-presets:cyberpunk.git")
+        self.assertEqual(repo, "alice/ii-presets")
+        self.assertEqual(preset, "cyberpunk")
+
+        repo, preset = preset_store.parse_slug("alice/nord-deep")
+        self.assertEqual(repo, "alice/nord-deep")
+        self.assertIsNone(preset)
+
+    def test_monorepo_install_and_links(self):
+        result = self.run_store("install", "alice/ii-presets:cyberpunk")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["name"], "Cyberpunk")
+        self.assertEqual(result["repo"], "alice/ii-presets:cyberpunk")
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Cyberpunk.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Cyberpunk.png")))
+
+        links = self.run_store("links")["links"]
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["repo"], "alice/ii-presets:cyberpunk")
+        self.assertEqual(links[0]["baseRepo"], "alice/ii-presets")
+        self.assertEqual(links[0]["subpath"], "presets/cyberpunk")
+
+    def test_monorepo_multiple_installations_share_clone(self):
+        res1 = self.run_store("install", "alice/ii-presets:cyberpunk")
+        res2 = self.run_store("install", "alice/ii-presets:minimal")
+        self.assertTrue(res1["ok"])
+        self.assertTrue(res2["ok"])
+
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Cyberpunk.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Minimal.json")))
+
+        clone_dir = os.path.join(self.config_dir, "preset-store", "alice__ii-presets")
+        self.assertTrue(os.path.isdir(clone_dir))
+        # Ensure there is only one clone folder in preset-store
+        store_folders = os.listdir(os.path.join(self.config_dir, "preset-store"))
+        store_clones = [f for f in store_folders if not f.endswith(".json")]
+        self.assertEqual(store_clones, ["alice__ii-presets"])
+
+        # Uninstall first preset: clone must stay because Minimal still needs it
+        self.run_store("uninstall", "Cyberpunk")
+        self.assertFalse(os.path.exists(os.path.join(self.presets_dir, "Cyberpunk.json")))
+        self.assertTrue(os.path.isdir(clone_dir))
+
+        # Uninstall second preset: clone is now removed
+        self.run_store("uninstall", "Minimal")
+        self.assertFalse(os.path.exists(os.path.join(self.presets_dir, "Minimal.json")))
+        self.assertFalse(os.path.exists(clone_dir))
+
+    def test_monorepo_updates_and_pull(self):
+        self.run_store("install", "alice/ii-presets:cyberpunk")
+
+        # Remote pushes v1.1.0 to cyberpunk
+        updated_manifest = self.basic_manifest(
+            name="Cyberpunk", version="1.1.0",
+            changelog=[{"version": "1.1.0", "date": "2026-09-02", "notes": "New glow"}]
+        )
+        updated_config = self.basic_config(appearance={"palette": {"type": "scheme-rainbow"}})
+        self.push_monorepo_remote(self.work, self.bare, "cyberpunk",
+                                  manifest=updated_manifest, config=updated_config)
+
+        # Check updates
+        result = self.run_store("check-updates")
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(result["updates"]), 1)
+        self.assertEqual(result["updates"][0]["name"], "Cyberpunk")
+        self.assertEqual(result["updates"][0]["availableVersion"], "1.1.0")
+
+        # Pull update
+        pull_result = self.run_store("pull", "Cyberpunk")
+        self.assertTrue(pull_result["ok"], pull_result)
+        self.assertTrue(pull_result["changed"])
+        self.assertEqual(pull_result["version"], "1.1.0")
+
+        with open(os.path.join(self.presets_dir, "Cyberpunk.json"), encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle)["appearance"]["palette"]["type"], "scheme-rainbow")
 
 
 if __name__ == "__main__":
