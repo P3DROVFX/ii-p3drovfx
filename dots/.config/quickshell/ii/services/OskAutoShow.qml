@@ -35,16 +35,43 @@ Singleton {
     Process {
         id: binaryCheck
         command: ["test", "-f", root.binaryPath]
-        onExited: code => root.binaryExists = (code === 0)
+        onExited: code => {
+            root.binaryExists = (code === 0);
+            if (root._checkPending) {
+                root._checkPending = false;
+                Qt.callLater(root.checkBinary);
+            }
+        }
     }
 
+    /// A check asked for while one was already running.
+    property bool _checkPending: false
+
+    /**
+     * Re-reads whether the helper is on disk.
+     *
+     * Never cancels a check in flight. The previous version set `running = false` and
+     * then scheduled `true`, which was fine with one caller and became a race the moment
+     * there were two: cancelling a running `test` makes it exit non-zero, so the pending
+     * result was "missing" for a binary that was there — a built helper reported as
+     * absent, with a button offering to compile what already existed.
+     */
     function checkBinary() {
         if (Directories.scriptPath.length === 0)
             return;
-        binaryCheck.running = false;
-        Qt.callLater(() => binaryCheck.running = true);
+        if (binaryCheck.running) {
+            root._checkPending = true;
+            return;
+        }
+        binaryCheck.running = true;
     }
 
+    // Re-checked whenever the path becomes known, not only at completion. `checkBinary`
+    // gives up when `Directories.scriptPath` is still empty, and if the only call is at
+    // component completion then losing that race means `binaryExists` stays false for
+    // the life of the shell — a built helper reported as missing, with a build button
+    // offering to compile what is already there.
+    onBinaryPathChanged: root.checkBinary()
     Component.onCompleted: root.checkBinary()
 
     // ── Building the helper ─────────────────────────────────────────────────
@@ -58,80 +85,38 @@ Singleton {
      * to `enabled`, so the keyboard starts raising itself the moment the build lands,
      * with no restart.
      *
-     * The command is deliberately the same one the box printed, so a user who prefers the
-     * terminal and a user who taps the button get identical results.
+     * The machinery is shared with the touch gesture daemon, which has the same problem.
      */
-    property bool building: false
-    /// "" while nothing has been attempted this session, else "ok" or "failed".
-    property string buildResult: ""
-    /// Whatever cargo said when it failed. Empty on success — nobody reads a build log
-    /// that worked, and keeping it around only invites showing it.
-    property string buildOutput: ""
-    /// No toolchain, no button: pointing someone at a build they cannot run is worse than
-    /// telling them what is missing.
-    property bool cargoAvailable: false
+    readonly property RustHelperBuild helperBuild: RustHelperBuild {
+        label: "OskAutoShow"
+        sourceDir: root.sourcePath
+        binaryPath: root.binaryPath
+        crateName: "osk_autoshow"
 
-    Process {
-        id: cargoCheck
-        command: ["sh", "-c", "command -v cargo"]
-        onExited: code => root.cargoAvailable = (code === 0)
-        Component.onCompleted: running = true
-    }
-
-    Process {
-        id: buildProcess
-        // `sh -c` rather than an argv list because this is three steps — configure, build,
-        // install — and the install has to be conditional on the build.
-        //
-        // Installed through a rename rather than a copy. By the time anyone rebuilds, the
-        // previous helper is usually running, and writing over a running executable is
-        // ETXTBSY — `cp` fails, the build reports failure, and the successful compile is
-        // thrown away. A rename swaps the directory entry instead and leaves the running
-        // process on the old inode until it exits, which it does the moment `enabled`
-        // cycles below.
-        command: ["sh", "-c",
-            `cd '${root.sourcePath}' && cargo build --release`
-            + ` && cp target/release/osk_autoshow '${root.binaryPath}.new'`
-            + ` && mv -f '${root.binaryPath}.new' '${root.binaryPath}'`]
-
-        stdout: StdioCollector { id: buildOut }
-        stderr: StdioCollector { id: buildErr }
-
-        onExited: code => {
-            root.building = false;
-            root.buildResult = code === 0 ? "ok" : "failed";
-            root.buildOutput = code === 0 ? "" : (buildErr.text || buildOut.text || "").trim();
-            if (code !== 0)
-                console.warn(`[OskAutoShow] helper build failed (${code}): ${root.buildOutput}`);
+        onFinished: ok => {
             // What makes the button worth having: the helper is started off `enabled`,
             // which is `wanted && binaryExists`, so re-checking is the whole handover.
             root.checkBinary();
             // A rebuild leaves the old process running on the old inode. Cycling the
             // restart guard drops it and spawns the binary that was just installed.
-            if (code === 0)
+            if (ok)
                 root.restartHelper();
         }
     }
 
+    readonly property bool building: root.helperBuild.building
+    readonly property string buildResult: root.helperBuild.buildResult
+    readonly property string buildOutput: root.helperBuild.buildOutput
+    readonly property bool cargoAvailable: root.helperBuild.cargoAvailable
+    /// Cargo's own narration, for a build that has to be watched rather than waited out.
+    readonly property string buildProgress: root.helperBuild.progressText
+    readonly property int buildUnits: root.helperBuild.unitsCompiled
+    readonly property int buildSeconds: root.helperBuild.elapsedSeconds
+    readonly property real buildProgressValue: root.helperBuild.progress
+
     function buildHelper() {
-        if (root.building || Directories.scriptPath.length === 0)
-            return;
-        root.building = true;
-        root.buildResult = "";
-        root.buildOutput = "";
-        buildProcess.running = false;
-        Qt.callLater(() => buildProcess.running = true);
+        root.helperBuild.build();
     }
-
-    // Keyboard bounds in 0..1 screen coordinates, published by OnScreenKeyboard.qml.
-    // Normalized so it can be compared against helper coordinates without knowing
-    // which output the touchscreen is mapped to.
-    property rect keyboardBounds: Qt.rect(0, 0, 1, 1)
-    property bool keyboardPinned: false
-
-    // Whether the keyboard currently on screen is one *we* raised. A manually opened
-    // or pinned keyboard is never closed behind the user's back.
-    property bool autoShown: false
 
     // ── What the helper can see ─────────────────────────────────────────────
     /**

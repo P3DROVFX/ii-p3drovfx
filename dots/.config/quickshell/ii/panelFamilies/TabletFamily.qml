@@ -16,6 +16,7 @@ import qs.modules.tablet.hubMode
 import qs.modules.tablet.liveDraw
 import qs.modules.tablet.navigation
 import qs.modules.tablet.recents
+import qs.modules.tablet.setup
 import qs.modules.tablet.sidebarDashboard
 import qs.modules.tablet.windows
 
@@ -317,6 +318,11 @@ Scope {
     // One control that is always where the user left it, including over a fullscreen app —
     // which is exactly when the edge gestures are least reachable. See the component.
     PanelLoader { component: TabletFloatingBubble {} }
+
+    // Says, once, that the two native helpers have not been built — because until it
+    // did, the two things standing between a device with no keyboard and a usable shell
+    // were exactly the two whose fix required a keyboard to type.
+    TabletHelperSetup {}
 
     // Write on the screen with a pen. Not a PanelLoader: it owns per-screen Variants and
     // has to keep the ink alive whether or not it is currently showing anything.

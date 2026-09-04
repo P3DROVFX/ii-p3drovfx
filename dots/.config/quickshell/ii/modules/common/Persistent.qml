@@ -375,6 +375,16 @@ Singleton {
                 // also state rather than preference — where the user last put an icon —
                 // which is why it lives here and not in Config.
                 property string homeIconsJson: "{}"
+                /**
+                 * Which set of missing helpers the first-launch prompt was dismissed for.
+                 *
+                 * The *set*, not a boolean: "Do it later" means later, and re-asking on
+                 * every launch would make it a nag. But a helper going missing later — a
+                 * deleted binary, a second one that was never built — is a different
+                 * situation and deserves to be raised again, which a boolean could not
+                 * express. Empty means never dismissed.
+                 */
+                property string helperSetupDismissed: ""
 
                 // Where the floating bubble was left, as a fraction of the screen, so it
                 // lands in the same corner on a different monitor rather than off the edge

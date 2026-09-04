@@ -176,17 +176,33 @@ Singleton {
         command: ["test", "-f", Directories.scriptPath + "/touchGestures/touch_gestures"]
         onExited: (code) => {
             root.binaryExists = (code === 0);
+            if (root._checkPending) {
+                root._checkPending = false;
+                Qt.callLater(root.checkBinary);
+            }
         }
     }
 
+    /// A check asked for while one was already running.
+    property bool _checkPending: false
+
+    /// Never cancels a check in flight: killing a running `test` makes it exit non-zero,
+    /// so a second caller arriving mid-check produced "missing" for a binary that was
+    /// there. See the same note in OskAutoShow.
     function checkBinary() {
-        if (Directories.scriptPath.length > 0) {
-            checkBinaryProcess.running = false;
-            Qt.callLater(() => {
-                checkBinaryProcess.running = true;
-            });
+        if (Directories.scriptPath.length === 0)
+            return;
+        if (checkBinaryProcess.running) {
+            root._checkPending = true;
+            return;
         }
+        checkBinaryProcess.running = true;
     }
+
+    // Same reason as OskAutoShow's: the check gives up while the path is still empty, so
+    // it has to run again when the path arrives rather than only at completion.
+    readonly property string _scriptPath: Directories.scriptPath
+    on_ScriptPathChanged: root.checkBinary()
 
     Process {
         id: deleteBinaryProcess
@@ -206,6 +222,41 @@ Singleton {
         Qt.callLater(() => {
             deleteBinaryProcess.running = true;
         });
+    }
+
+    // ── Building the helper ─────────────────────────────────────────────────
+    /**
+     * The daemon ships as source, and until this existed the page offered a command to
+     * paste into a terminal.
+     *
+     * On a tablet that is circular: touch gestures are how you navigate a shell with no
+     * keyboard, and the instruction for turning them on needed a keyboard. The keyboard's
+     * own helper got a build button first; this is the same machinery, and the two are
+     * the pair a fresh install has to get past.
+     */
+    readonly property RustHelperBuild helperBuild: RustHelperBuild {
+        label: "TouchGestures"
+        sourceDir: Directories.scriptPath + "/touchGestures/touch_gestures_src"
+        binaryPath: Directories.scriptPath + "/touchGestures/touch_gestures"
+        crateName: "touch_gestures"
+
+        // `helperProcess` is bound to `enabled`, which the check below feeds, so
+        // re-checking is the whole handover — the daemon starts without a restart.
+        onFinished: ok => root.checkBinary()
+    }
+
+    readonly property bool building: root.helperBuild.building
+    readonly property string buildResult: root.helperBuild.buildResult
+    readonly property string buildOutput: root.helperBuild.buildOutput
+    readonly property bool cargoAvailable: root.helperBuild.cargoAvailable
+    /// Cargo's own narration, for a build that has to be watched rather than waited out.
+    readonly property string buildProgress: root.helperBuild.progressText
+    readonly property int buildUnits: root.helperBuild.unitsCompiled
+    readonly property int buildSeconds: root.helperBuild.elapsedSeconds
+    readonly property real buildProgressValue: root.helperBuild.progress
+
+    function buildHelper() {
+        root.helperBuild.build();
     }
 
     Process {
