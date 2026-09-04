@@ -65,6 +65,41 @@ Singleton {
         }
     ]
 
+    // ── Per-family preferences ──────────────────────────────────────────────
+    /**
+     * The quick-toggle layout this family draws and edits.
+     *
+     * The families have different screens to fit the grid on — a four-column block tuned
+     * for a 460px sidebar is not the arrangement anyone wants on a tablet's full-width
+     * shade — so each keeps its own, and adapting one no longer rearranges the other.
+     *
+     * Every *write* goes to the object this returns, which is what keeps them apart.
+     */
+    function quickToggleLayout() {
+        const toggles = Config.options?.sidebar?.quickToggles ?? null;
+        if (!toggles)
+            return null;
+        return root.isTablet ? toggles.androidTablet : toggles.android;
+    }
+
+    /**
+     * The pages to *draw*, which is not quite the same question.
+     *
+     * A family that has never been edited has no layout of its own, and a blank grid is a
+     * worse answer than the one the user already arranged. So an untouched family borrows
+     * the desktop's until its first edit, which writes a normalized set of its own and
+     * ends the borrowing.
+     */
+    function quickTogglePages() {
+        const toggles = Config.options?.sidebar?.quickToggles ?? null;
+        if (!toggles)
+            return [];
+        const own = root.quickToggleLayout();
+        if (own && own.pages && own.pages.length > 0)
+            return own.pages;
+        return toggles.android.pages ?? [];
+    }
+
     function entry(familyId) {
         return root.available.find(family => family.id === familyId) ?? null;
     }

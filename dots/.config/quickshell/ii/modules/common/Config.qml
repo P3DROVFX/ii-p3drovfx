@@ -5202,6 +5202,30 @@ Singleton {
                         // Order matters: it is the order the toggles appear in.
                         property list<var> toggles: ["network", "bluetooth", "vpn", "tailscale", "nightLight", "gameMode", "idleInhibitor", "modes", "easyEffects", "cloudflareWarp", "keyboardBacklight"]
                     }
+                    /**
+                     * The quick-toggle layout the *tablet* family draws and edits.
+                     *
+                     * A separate object, because the two families have different screens
+                     * to fit the grid on: a four-column block tuned for a 460px sidebar
+                     * is not the arrangement anyone wants on a tablet's full-width shade,
+                     * and before this, adapting one silently rearranged the other.
+                     *
+                     * Empty `pages` means "never edited here". While it is empty the
+                     * tablet draws the desktop's layout — see PanelFamily.quickTogglePages
+                     * — so a new tablet user starts from something known-good rather than
+                     * from a blank grid, and an existing one keeps the arrangement they
+                     * already had. The first edit on the tablet writes a whole normalized
+                     * set here, and from then on the two are independent.
+                     *
+                     * Empty rather than a copy of the list below on purpose: two copies of
+                     * one default are two things to keep in step, and the fallback says
+                     * "the same, until you say otherwise" without either drifting.
+                     */
+                    property JsonObject androidTablet: JsonObject {
+                        property int columns: 4
+                        property int layoutVersion: 2
+                        property list<var> pages: []
+                    }
                     property JsonObject android: JsonObject {
                         property int columns: 4
                         property int layoutVersion: 2

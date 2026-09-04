@@ -68,25 +68,37 @@ AbstractQuickPanel {
     function isToggleVisible(toggleType) {
         return QuickToggleCatalog.availableForFamily(toggleType, PanelFamily.current)
     }
-    readonly property int columns: Config.options.sidebar.quickToggles.android.columns
+    /**
+     * The layout object this family owns, and the one every edit writes to.
+     *
+     * Not `quickToggles.android` directly any more: the desktop sidebar is 460px wide and
+     * the tablet's shade is the whole screen, so one arrangement cannot serve both — and
+     * sharing the key meant adapting either silently rearranged the other. See
+     * PanelFamily.quickToggleLayout.
+     */
+    readonly property var layoutConfig: PanelFamily.quickToggleLayout()
+
+    readonly property int columns: root.layoutConfig?.columns ?? 4
 
     // Pages data — reads from Config and exposes the canonical in-memory shape.
     // The legacy `size` field is read only by the catalog normalizer and is not
     // returned to delegates.
     readonly property list<var> pages: {
-        const cfg = Config.options.sidebar.quickToggles.android;
         if (!Config.ready)
             return [[]];
-        if (!cfg.pages || cfg.pages.length === 0)
+        // Not `layoutConfig.pages`: a family that has never been edited borrows the
+        // desktop's arrangement rather than opening on a blank grid.
+        const stored = PanelFamily.quickTogglePages();
+        if (!stored || stored.length === 0)
             return [[]];
-        return QuickToggleCatalog.normalizePages(cfg.pages, root.columns, {
+        return QuickToggleCatalog.normalizePages(stored, root.columns, {
             warn: function(message) { console.warn(message); }
         });
     }
 
     QuickToggleEditController {
         id: editController
-        config: Config.options.sidebar.quickToggles.android
+        config: root.layoutConfig
         persistedPages: root.pages
         columns: root.columns
         // Hold a fresh swap for exactly as long as the delegates take to slide
@@ -206,7 +218,7 @@ AbstractQuickPanel {
     function removePage(pageIndex) {
         if (!editController.removePage(pageIndex))
             return;
-        var remaining = Config.options.sidebar.quickToggles.android.pages.length;
+        var remaining = root.pages.length;
         currentPage = Math.min(currentPage, Math.max(0, remaining - 1));
     }
 

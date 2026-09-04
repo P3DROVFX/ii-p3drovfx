@@ -75,12 +75,13 @@ ContentPage {
             visible: Config.options.sidebar.quickToggles.style === "android"
             icon: "view_column"
             text: Translation.tr("Android style Columns")
-            value: Config.options.sidebar.quickToggles.android.columns
+            // The family's own grid, not a shared one. See PanelFamily.quickToggleLayout.
+            value: PanelFamily.quickToggleLayout()?.columns ?? 4
             from: 1
             to: 6
             stepSize: 1
             onValueChanged: {
-                Config.options.sidebar.quickToggles.android.columns = value;
+                PanelFamily.quickToggleLayout().columns = value;
             }
         }
 
