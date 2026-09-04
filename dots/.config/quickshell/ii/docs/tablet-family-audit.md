@@ -605,7 +605,7 @@ Coluna **St**: ⬜ a fazer · 🟨 em andamento · ✅ feito.
 |---|---|---|---|---|---|
 | 1 | ✅ | Teclado de toque na lock screen (dentro da lock surface) | 🔴 P0 | M | `common/panels/lock/LockTouchKeyboard.qml`, `ii/lock/LockSurface.qml` |
 | 2 | ✅ | Camada PIN numérica no mesmo teclado | 🔴 P0 | P | idem, `lock.touchKeyboard.mode` |
-| 3 | ✅ | Auto-show da OSK ligada por padrão + build do helper na UI | 🔴 P0 | P | `common/Config.qml`, `settings/configs/TabletConfig.qml`, `scripts/osk/` |
+| 3 | ✅ | Auto-show da OSK ligada por padrão + build do helper na UI | 🔴 P0 | P | `common/Config.qml`, `settings/configs/TabletConfig.qml`, `scripts/osk/` — **fechado de verdade em 2026-09-03, ver addendum** |
 | 4 | ✅ | Recentes em ordem MRU + rolar até o app atual | 🔴 P0 | P | `tablet/recents/TabletRecentsContent.qml` |
 | 5 | ✅ | Home workspace determinístico | 🔴 P0 | M | `tablet/navigation/TabletNavigation.qml`, `tablet/homeScreen/TabletHomeIcons.qml` |
 | 6 | ✅ | Seletor de panel family (superfície + entradas) | 🔴 P0 | M | novo em `modules/common/`, `settings/`, `welcome/`, `TabletSystemActionRow.qml` |
@@ -815,3 +815,69 @@ ls scripts/osk/osk_autoshow && qs log -c ii -t 50 | grep OskAutoShow
 # touchscreen presente (obrigatório para tudo em §4)
 hyprctl devices | grep -A5 "Touch Devices"
 ```
+
+---
+
+## Addendum — 2026-09-03/04
+
+Seis itens vindos do uso real, fora do backlog acima. O detalhamento de cada um, com o
+raciocínio, está nas mensagens de commit; o que segue é só o que muda **neste** documento.
+
+### O item 3 estava marcado ✅ cedo demais
+
+O default já era `true` e a `HelperCodeBox` já existia, mas o recurso continuava sem
+funcionar em nenhuma máquina, por **quatro** causas com o mesmo sintoma silencioso:
+
+1. o helper nunca tinha sido compilado, e a única saída oferecida era colar um comando num
+   terminal — que é justamente o que um aparelho sem teclado não tem;
+2. `binaryExists` era sondado uma vez no arranque, então compilar não mudava nada até
+   reiniciar o shell;
+3. sem touchscreen legível, o daemon ligava o input method, emitia `activate` e nunca emitia
+   `touch` — e o shell esperava a correlação para sempre;
+4. `/dev/input` sem permissão é indistinguível de (3) por fora e tem conserto diferente.
+
+Agora: botão "Build it now" (instala por rename — escrever por cima do helper em execução é
+`ETXTBSY`, e um `cp` joga fora um build que deu certo), re-sondagem e restart do daemon sem
+reiniciar o shell, e o daemon reportando `devices <t> <p> <m>` e `denied` para que Settings
+diga qual dos casos é. Nesta máquina: `devices 0 0 6` — sem toque e sem caneta.
+
+Também: `osk.autoShow.allowMouse`, desligado por padrão e que deve continuar desligado em
+qualquer aparelho com touchscreen. Existe porque numa máquina sem painel de toque **todos** os
+outros interruptores da página são inertes, e "liguei e nunca aconteceu nada" era
+indistinguível de um defeito.
+
+### §1 — linhas da tabela que mudaram
+
+| Área | Era | É |
+|---|---|---|
+| Dock / taskbar | 🟢 8/10 — "fica embaixo de recentes" | 🟢 9/10 — a barra é **persistente** (o padrão era escondê-la assim que algo abria, e isso lia como defeito, não como calma); recentes desenha a própria fileira |
+| Gaveta de apps | 🟡 6/10 | 🟢 8/10 — a grade é dimensionada em colunas inteiras e **centrada**; antes o `GridView` deixava o resto da divisão como espaço morto à direita |
+| OSK | 🔴 3/10 | 🟡 6/10 — compilável pela UI, com diagnóstico; falta validar em hardware |
+| Multi-janela | 🔴 1/10 | 🟡 5/10 — split a partir de recentes e da dock (item 15), e as alças de toque **não pulam mais** ao soltar |
+
+### Um bloqueador novo, encontrado e corrigido
+
+`TabletFloatingWindowControls` largava a posição do dedo no `release` e voltava para o que o
+`hyprctl clients` dizia. O Hyprland **não emite evento nenhum** para `movewindowpixel`, então
+essa resposta era a posição de *antes* do arrasto, às vezes por minutos — e a faixa saltava
+para o outro lado da tela e ficava lá. Todo dispatch de geometria agora pede uma releitura da
+lista de clientes, e a última geometria enviada vale mais que o relatório até o relatório
+concordar (ou 600 ms).
+
+### Feature nova: Live Draw
+
+Escrever na tela com caneta, por cima do que já está lá; a folha pertence à workspace onde foi
+feita e fica lá até ser apagada ou salva em Notes. Pressão vinda do OpenTabletDriver, três
+passes de suavização, apagar com a ponta de borracha. Documentada por inteiro no `AGENTS.md`.
+
+Duas coisas que valem para além dela:
+
+- **`Canvas.save(path)` não funciona sob o Quickshell** — resolve o nome contra a base URL do
+  componente, que aqui é sempre `qs:`. Use `grabToImage` + `saveToFile("file://" + path)`.
+- **Um parâmetro QML tipado `string` converte um argumento ausente para o texto literal
+  `"undefined"`.** Parâmetros opcionais ficam sem anotação de tipo.
+
+### Onde continua
+
+A leitura de merge — o que falta para isto entrar na `dev` sem quebrar quem não usa tablet —
+está em [`tablet-family-merge-audit.md`](./tablet-family-merge-audit.md).
