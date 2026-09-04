@@ -632,8 +632,16 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             z: 0
+            // The button is filtered by hand rather than trusted to acceptedButtons:
+            // parenting any pointer handler - the TapHandler below - makes Qt widen the
+            // item to Qt.AllButtons, so the line above stops being the whole story and a
+            // left click would open the menu too.
             acceptedButtons: Qt.RightButton
-            onClicked: mouse => GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y)
+            onClicked: mouse => {
+                if (mouse.button !== Qt.RightButton)
+                    return;
+                GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y);
+            }
 
             // A touch screen's long press: the same way in as the widget
             // canvas offers when it is mapped.
