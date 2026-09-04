@@ -51,8 +51,6 @@ Item {
         implicitHeight: Math.min(root.height - 80, cardContent.implicitHeight + 40)
         radius: Appearance.rounding.verylarge
         color: Appearance.m3colors.m3surfaceContainer
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
 
         // Absorb clicks on the card so it doesn't dismiss
         MouseArea {
@@ -158,7 +156,7 @@ Item {
                             anchors.top: parent.top
                             width: 22
                             height: 22
-                            radius: 11
+                            radius: Appearance.rounding.full
                             color: Appearance.m3colors.m3error
 
                             MaterialSymbol {
@@ -202,10 +200,8 @@ Item {
                             Layout.alignment: Qt.AlignHCenter
                             implicitWidth: 52
                             implicitHeight: 52
-                            radius: 26
-                            color: Appearance.colors.colSurfaceContainerHigh
-                            border.width: 1
-                            border.color: Appearance.colors.colOutlineVariant
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colSurfaceContainerHighest
 
                             MaterialSymbol {
                                 anchors.centerIn: parent

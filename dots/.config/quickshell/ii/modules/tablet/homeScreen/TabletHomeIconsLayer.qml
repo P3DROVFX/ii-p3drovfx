@@ -73,16 +73,18 @@ Item {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visual)
                 }
 
-                // Drop target highlight ring
+                // Where a dragged icon would land: a filled halo, not an outline. The
+                // shell draws no borders, and a disc behind the icon says "this slot"
+                // just as clearly while staying in the same vocabulary as every other
+                // selected surface here.
                 Rectangle {
                     visible: iconItem.isDropTarget
                     anchors.centerIn: parent
                     width: root.iconSize + 16
                     height: root.iconSize + 16
-                    radius: width / 2
-                    color: Qt.rgba(Appearance.colors.colPrimary.r, Appearance.colors.colPrimary.g, Appearance.colors.colPrimary.b, 0.2)
-                    border.width: 2
-                    border.color: Appearance.colors.colPrimary
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimaryContainer
+                    opacity: 0.55
                 }
 
                 ColumnLayout {
@@ -104,10 +106,11 @@ Item {
                         Layout.alignment: Qt.AlignHCenter
                         implicitWidth: root.iconSize
                         implicitHeight: root.iconSize
-                        radius: root.iconSize / 2
-                        color: Appearance.colors.colLayer1
-                        border.width: 1
-                        border.color: Appearance.colors.colLayer0Border
+                        radius: Appearance.rounding.full
+                        // A container one step up rather than an outline: the wallpaper
+                        // behind is arbitrary, and a filled surface separates the pair
+                        // from it without a border.
+                        color: Appearance.m3colors.m3surfaceContainerHigh
                         clip: true
 
                         RowLayout {
@@ -153,9 +156,9 @@ Item {
                         implicitWidth: root.iconSize
                         implicitHeight: root.iconSize
                         radius: Math.round(root.iconSize * 0.28)
-                        color: Appearance.m3colors.m3surfaceContainer
-                        border.width: 1
-                        border.color: Appearance.colors.colLayer0Border
+                        // Same as the pair above: a step up in the container scale is
+                        // what lifts the folder off the wallpaper.
+                        color: Appearance.m3colors.m3surfaceContainerHigh
 
                         Grid {
                             anchors.centerIn: parent

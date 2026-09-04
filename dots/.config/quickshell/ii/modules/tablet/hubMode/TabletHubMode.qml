@@ -188,10 +188,7 @@ Scope {
                     property real fadeOpacity: root.shown ? 1 : 0
 
                     Behavior on fadeOpacity {
-                        NumberAnimation {
-                            duration: 450
-                            easing.type: Easing.OutCubic
-                        }
+                        animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(hub)
                     }
 
                     anchors {
