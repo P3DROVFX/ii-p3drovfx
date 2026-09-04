@@ -111,11 +111,37 @@ Singleton {
 
     // ── Dispatch ────────────────────────────────────────────────────────────
 
+    /**
+     * Ask for a fresh client list after moving or resizing something.
+     *
+     * Hyprland emits `movewindow` when a window changes workspace or monitor and
+     * nothing at all when `movewindowpixel` repositions it inside one. `hyprctl clients`
+     * is what HyprlandData reads, and HyprlandData only reads it on an event — so after
+     * a drag the reported position stayed whatever it was *before* the drag, sometimes
+     * for minutes, until an unrelated event happened along. Everything that draws itself
+     * over a window was reading that stale answer.
+     *
+     * Debounced because the drag commits at 60 Hz and each refresh is a process: the
+     * finger leads during the gesture and needs no confirmation, so one refresh shortly
+     * after the last dispatch is exactly enough.
+     */
+    function requestGeometryRefresh() {
+        geometryRefreshDebounce.restart();
+    }
+
+    Timer {
+        id: geometryRefreshDebounce
+        interval: 90
+        repeat: false
+        onTriggered: HyprlandData.updateWindowList()
+    }
+
     function moveTo(address, x, y) {
         const target = root.normalizeAddress(address);
         if (target.length === 0)
             return;
         Hyprland.dispatch(`hl.dsp.window.move({ x = ${Math.round(x)}, y = ${Math.round(y)}, window = "address:${target}" })`);
+        root.requestGeometryRefresh();
     }
 
     function resizeTo(address, width, height) {
@@ -125,6 +151,7 @@ Singleton {
         const w = Math.max(root.minimumWidth, Math.round(width));
         const h = Math.max(root.minimumHeight, Math.round(height));
         Hyprland.dispatch(`hl.dsp.window.resize({ x = ${w}, y = ${h}, window = "address:${target}" })`);
+        root.requestGeometryRefresh();
     }
 
     /// Resize keeps the centre, so the top-left has to be restored afterwards or a window
@@ -160,6 +187,7 @@ Singleton {
         if (target.length === 0)
             return;
         Hyprland.dispatch(`hl.dsp.window.pin({ action = 'toggle', window = "address:${target}" })`);
+        root.requestGeometryRefresh();
     }
 
     function centerWindow(address) {
@@ -167,6 +195,8 @@ Singleton {
         if (target.length === 0)
             return;
         Hyprland.dispatch(`hl.dsp.window.center({ window = "address:${target}" })`);
+        // `center` is a pixel move under another name, and emits no event either.
+        root.requestGeometryRefresh();
     }
 
     function closeWindow(address) {

@@ -9,6 +9,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "TabletWindowGeometry.js" as WindowGeometry
 
 /**
  * A title strip and a corner handle for the floating window in front.
@@ -148,10 +149,86 @@ Scope {
                     property real liveWidth: -1
                     property real liveHeight: -1
 
-                    readonly property real effectiveX: controlsWindow.dragX >= 0 ? controlsWindow.dragX : controlsWindow.windowX
-                    readonly property real effectiveY: controlsWindow.dragY >= 0 ? controlsWindow.dragY : controlsWindow.windowY
-                    readonly property real effectiveWidth: controlsWindow.liveWidth >= 0 ? controlsWindow.liveWidth : controlsWindow.windowWidth
-                    readonly property real effectiveHeight: controlsWindow.liveHeight >= 0 ? controlsWindow.liveHeight : controlsWindow.windowHeight
+                    /**
+                     * The last geometry dispatched and not yet seen coming back, or -1.
+                     *
+                     * Lifting the finger used to drop straight back to the reported
+                     * position, and Hyprland reports nothing at all for a pixel move — so
+                     * the strip snapped back to wherever the window had been *before* the
+                     * drag and stayed there. Holding the request until the report agrees
+                     * with it is what closes that gap; see TabletWindowGeometry.js.
+                     */
+                    property real pendingX: -1
+                    property real pendingY: -1
+                    property real pendingWidth: -1
+                    property real pendingHeight: -1
+
+                    readonly property real effectiveX: WindowGeometry.effective(
+                        controlsWindow.dragX, controlsWindow.pendingX, controlsWindow.windowX)
+                    readonly property real effectiveY: WindowGeometry.effective(
+                        controlsWindow.dragY, controlsWindow.pendingY, controlsWindow.windowY)
+                    readonly property real effectiveWidth: WindowGeometry.effective(
+                        controlsWindow.liveWidth, controlsWindow.pendingWidth, controlsWindow.windowWidth)
+                    readonly property real effectiveHeight: WindowGeometry.effective(
+                        controlsWindow.liveHeight, controlsWindow.pendingHeight, controlsWindow.windowHeight)
+
+                    /// True while the finger is down. The strip is animated between
+                    /// positions except now, when it has to be exactly under the finger.
+                    readonly property bool dragging: controlsWindow.dragX >= 0 || controlsWindow.liveWidth >= 0
+
+                    function clearPending() {
+                        settleTimeout.stop();
+                        controlsWindow.pendingX = -1;
+                        controlsWindow.pendingY = -1;
+                        controlsWindow.pendingWidth = -1;
+                        controlsWindow.pendingHeight = -1;
+                    }
+
+                    /// The report caught up: stop overriding it.
+                    ///
+                    /// Watched rather than polled, because a refresh is a process and the
+                    /// only thing that reliably triggers one after a pixel move is the
+                    /// request TabletWindowActions makes on our behalf.
+                    onWindowXChanged: controlsWindow.settleIfReported()
+                    onWindowYChanged: controlsWindow.settleIfReported()
+                    onWindowWidthChanged: controlsWindow.settleIfReported()
+                    onWindowHeightChanged: controlsWindow.settleIfReported()
+
+                    function settleIfReported() {
+                        if (controlsWindow.pendingX < 0 && controlsWindow.pendingY < 0
+                                && controlsWindow.pendingWidth < 0 && controlsWindow.pendingHeight < 0)
+                            return;
+                        const reported = {
+                            x: controlsWindow.windowX,
+                            y: controlsWindow.windowY,
+                            width: controlsWindow.windowWidth,
+                            height: controlsWindow.windowHeight
+                        };
+                        const pending = {
+                            x: controlsWindow.pendingX,
+                            y: controlsWindow.pendingY,
+                            width: controlsWindow.pendingWidth,
+                            height: controlsWindow.pendingHeight
+                        };
+                        if (WindowGeometry.geometrySettled(reported, pending))
+                            controlsWindow.clearPending();
+                    }
+
+                    // A compositor is allowed to honour a request approximately — clamp it
+                    // to the monitor, apply a size floor — and then the report never matches
+                    // and the override would be held forever. Short enough that the
+                    // correction reads as the window settling rather than as a jump.
+                    Timer {
+                        id: settleTimeout
+                        interval: 600
+                        repeat: false
+                        onTriggered: controlsWindow.clearPending()
+                    }
+
+                    // The window in front changed: whatever was pending belonged to the
+                    // last one, and applying it to this one would place the strip nowhere
+                    // near it.
+                    onTargetAddressChanged: controlsWindow.clearPending()
 
                     /// One dispatch per frame at most. A move per mouse event is a hundred
                     /// IPC round trips a second, and the compositor coalesces them anyway.
@@ -189,21 +266,44 @@ Scope {
 
                     function endDrag() {
                         commitTimer.stop();
-                        if (controlsWindow.targetAddress.length > 0) {
-                            const originX = controlsWindow.effectiveX + Number(controlsWindow.monitor?.x ?? 0);
-                            const originY = controlsWindow.effectiveY + Number(controlsWindow.monitor?.y ?? 0);
-                            if (controlsWindow.liveWidth >= 0 || controlsWindow.liveHeight >= 0) {
-                                TabletWindowActions.setGeometry(controlsWindow.targetAddress, originX, originY,
-                                                                controlsWindow.effectiveWidth,
-                                                                controlsWindow.effectiveHeight);
-                            } else {
-                                TabletWindowActions.moveTo(controlsWindow.targetAddress, originX, originY);
-                            }
-                        }
+                        // Read before the overrides are cleared: these *are* the finger's
+                        // final answer, and they are what has to be held until the report
+                        // agrees. Clearing first and reading `effective*` afterwards would
+                        // hand back the stale reported position, which is the bug.
+                        const finalX = controlsWindow.effectiveX;
+                        const finalY = controlsWindow.effectiveY;
+                        const resized = controlsWindow.liveWidth >= 0 || controlsWindow.liveHeight >= 0;
+                        const finalWidth = controlsWindow.effectiveWidth;
+                        const finalHeight = controlsWindow.effectiveHeight;
+
                         controlsWindow.dragX = -1;
                         controlsWindow.dragY = -1;
                         controlsWindow.liveWidth = -1;
                         controlsWindow.liveHeight = -1;
+
+                        if (controlsWindow.targetAddress.length === 0) {
+                            controlsWindow.clearPending();
+                            return;
+                        }
+
+                        const originX = finalX + Number(controlsWindow.monitor?.x ?? 0);
+                        const originY = finalY + Number(controlsWindow.monitor?.y ?? 0);
+                        if (resized) {
+                            TabletWindowActions.setGeometry(controlsWindow.targetAddress, originX, originY,
+                                                            finalWidth, finalHeight);
+                        } else {
+                            TabletWindowActions.moveTo(controlsWindow.targetAddress, originX, originY);
+                        }
+
+                        controlsWindow.pendingX = finalX;
+                        controlsWindow.pendingY = finalY;
+                        controlsWindow.pendingWidth = resized ? finalWidth : -1;
+                        controlsWindow.pendingHeight = resized ? finalHeight : -1;
+                        settleTimeout.restart();
+                        // Already asked for by the dispatch above; asking again here is what
+                        // guarantees one refresh lands after the *last* commit rather than
+                        // the debounce swallowing it into the middle of the drag.
+                        TabletWindowActions.requestGeometryRefresh();
                     }
 
                     // ── The strip ───────────────────────────────────────────
@@ -216,6 +316,25 @@ Scope {
                         width: Math.max(controlsWindow.stripHeight * 3, controlsWindow.effectiveWidth)
                         height: controlsWindow.stripHeight
                         radius: Appearance.rounding.full
+
+                        // Hyprland animates a window into its new place; `hyprctl clients`
+                        // reports the destination the moment it is decided. Without this the
+                        // strip arrives first and waits there while the window slides in
+                        // under it, which is most of what "the handles don't follow the
+                        // window" looks like. Off during a drag, where the strip has to be
+                        // exactly under the finger and nowhere else.
+                        Behavior on x {
+                            enabled: !controlsWindow.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(strip)
+                        }
+                        Behavior on y {
+                            enabled: !controlsWindow.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(strip)
+                        }
+                        Behavior on width {
+                            enabled: !controlsWindow.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(strip)
+                        }
                         color: Appearance.colors.colLayer1
                         visible: controlsWindow.shown
                         opacity: controlsWindow.shown ? 1 : 0
@@ -242,8 +361,14 @@ Scope {
                                 const point = stripDrag.mapToItem(null, mouse.x, mouse.y);
                                 stripDrag.pressGlobalX = point.x;
                                 stripDrag.pressGlobalY = point.y;
-                                stripDrag.originX = controlsWindow.windowX;
-                                stripDrag.originY = controlsWindow.windowY;
+                                // Where the strip is drawn, not what the compositor last
+                                // reported: a drag started while the previous one is still
+                                // unconfirmed would otherwise take its origin from the old
+                                // position and throw the window back there on the first
+                                // millimetre of movement.
+                                stripDrag.originX = controlsWindow.effectiveX;
+                                stripDrag.originY = controlsWindow.effectiveY;
+                                controlsWindow.clearPending();
                                 controlsWindow.dragX = stripDrag.originX;
                                 controlsWindow.dragY = stripDrag.originY;
                             }
@@ -327,6 +452,17 @@ Scope {
                         height: controlsWindow.handleSize
                         radius: Appearance.rounding.full
                         color: resizeDrag.pressed ? Appearance.colors.colPrimary : Appearance.colors.colLayer1
+
+                        // Same reason as the strip: travel with the window rather than
+                        // arriving at its destination ahead of it.
+                        Behavior on x {
+                            enabled: !controlsWindow.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(resizeHandle)
+                        }
+                        Behavior on y {
+                            enabled: !controlsWindow.dragging
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(resizeHandle)
+                        }
                         visible: controlsWindow.shown
                         opacity: controlsWindow.shown ? 1 : 0
 
@@ -358,13 +494,16 @@ Scope {
                                 const point = resizeDrag.mapToItem(null, mouse.x, mouse.y);
                                 resizeDrag.pressGlobalX = point.x;
                                 resizeDrag.pressGlobalY = point.y;
-                                resizeDrag.originWidth = controlsWindow.windowWidth;
-                                resizeDrag.originHeight = controlsWindow.windowHeight;
+                                resizeDrag.originWidth = controlsWindow.effectiveWidth;
+                                resizeDrag.originHeight = controlsWindow.effectiveHeight;
                                 // The top-left is held for the whole gesture: `resize`
                                 // recentres, so without pinning the origin the window walks
                                 // up and left as it grows.
-                                controlsWindow.dragX = controlsWindow.windowX;
-                                controlsWindow.dragY = controlsWindow.windowY;
+                                const heldX = controlsWindow.effectiveX;
+                                const heldY = controlsWindow.effectiveY;
+                                controlsWindow.clearPending();
+                                controlsWindow.dragX = heldX;
+                                controlsWindow.dragY = heldY;
                                 controlsWindow.liveWidth = resizeDrag.originWidth;
                                 controlsWindow.liveHeight = resizeDrag.originHeight;
                             }
