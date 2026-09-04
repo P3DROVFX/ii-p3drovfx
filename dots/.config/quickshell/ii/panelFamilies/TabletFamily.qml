@@ -268,8 +268,13 @@ Scope {
             return TabletHomeIcons.has(TabletHomeIcons.currentWorkspace, appId);
         };
         GlobalStates.liveDrawHandler = () => {
-            TabletLiveDrawStore.ensureTools();
-            TabletLiveDrawStore.drawing = !TabletLiveDrawStore.drawing;
+            // The action toggles the whole feature — tray and pen together. Toggling the
+            // pen alone belongs to the pencil in the tray, which is where the user can
+            // see what state it is in.
+            if (TabletLiveDrawStore.trayOpen)
+                TabletLiveDrawStore.close();
+            else
+                TabletLiveDrawStore.open();
         };
         GlobalStates.clearHomeScreenAppsHandler = () => {
             const ws = TabletHomeIcons.currentWorkspace;

@@ -8,19 +8,21 @@ import Quickshell.Wayland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.draw
 import qs.modules.common.widgets
-import "TabletStrokeGeometry.js" as StrokeGeometry
+import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
 
 /**
  * Draw on the screen, over whatever is on it.
  *
- * The surface exists in two states and the difference between them is the whole feature:
+ * The surface has three states, and the difference between them is the whole feature:
  *
- *   drawing — the layer takes every touch, so a pen stroke goes to the ink and not to
- *             the browser underneath. The pen tray is up.
- *   kept    — the ink is still there and still on top, and the layer takes nothing: taps
- *             go straight through to the applications. This is the sticky-note state,
- *             and it lasts until the sheet is rubbed out.
+ *   drawing  — the layer takes every touch, so a stroke goes to the ink and not to the
+ *              browser underneath. The tray is up and the pencil is lit.
+ *   kept     — the ink is still there and still on top, the tray is still up, and the
+ *              layer takes nothing but the tray: taps go straight through to the
+ *              applications. One tap on the pencil goes back to drawing.
+ *   closed   — no tray at all, and the ink still on its workspace until it is rubbed out.
  *
  * A sheet belongs to the workspace it was drawn on, so switching away takes the drawing
  * with it and switching back brings it out again — which is what makes it an annotation
@@ -42,11 +44,9 @@ PanelWindow {
     }
     readonly property bool hasInk: root.strokes.length > 0
 
-    /// Drawing mode belongs to the focused monitor only: two pen trays on two screens
-    /// would both claim the pen, and only one of them is where the pen is.
+    /// Drawing mode belongs to the focused monitor only: two trays on two screens would
+    /// both claim the pen, and only one of them is where the pen is.
     readonly property bool focusedHere: String(Hyprland.focusedMonitor?.name ?? "") === root.screenName
-    readonly property bool drawing: TabletLiveDrawStore.drawing && root.focusedHere
-        && !GlobalStates.screenLocked
 
     /// Shell surfaces cover the screen; ink floating over the app drawer would be ink
     /// annotating the wrong thing.
@@ -55,16 +55,13 @@ PanelWindow {
         || GlobalStates.sessionOpen
         || GlobalStates.screenLocked
 
-    readonly property bool shown: (root.drawing || root.hasInk) && !root.shellSurfaceOpen
+    /// Hidden for the length of a screenshot, so the tray is not in the picture.
+    property bool hiddenForCapture: false
 
-    // ── Pen state ───────────────────────────────────────────────────────────
-    /// Whether anything on this seat has ever reported a stylus. Drives the pressure
-    /// control's enabled state, so it explains itself instead of looking broken.
-    property bool penSeen: false
-    property var livePoints: []
-    property var smoothPoint: null
-
-    readonly property real eraserRadius: Math.max(20, TabletLiveDrawStore.width * 3)
+    readonly property bool trayShown: TabletLiveDrawStore.trayOpen && root.focusedHere
+        && !root.shellSurfaceOpen && !root.hiddenForCapture
+    readonly property bool drawing: TabletLiveDrawStore.drawing && root.trayShown
+    readonly property bool shown: (root.trayShown || root.hasInk) && !root.shellSurfaceOpen
 
     property string statusText: ""
 
@@ -80,60 +77,49 @@ PanelWindow {
         onTriggered: root.statusText = ""
     }
 
-    // ── Drawing ─────────────────────────────────────────────────────────────
-    function beginStroke(x, y, pressure) {
-        TabletLiveDrawStore.ensureTools();
-        const first = StrokeGeometry.point(x, y, pressure);
-        root.smoothPoint = first;
-        root.livePoints = [first];
-        canvas.liveStroke = root.currentStrokeRecord();
-        canvas.refreshLive();
+    // ── Screenshot ──────────────────────────────────────────────────────────
+    /**
+     * Takes the tray out of the picture, then takes the picture.
+     *
+     * Two steps because the tray is part of this layer and `grim` photographs the
+     * composited output: without the pause it would appear in its own screenshot. The
+     * ink is meant to be in the shot — annotating a screen and then capturing it is the
+     * point — so only the tray goes.
+     */
+    function captureScreen() {
+        root.hiddenForCapture = true;
+        captureDelay.restart();
     }
 
-    function currentStrokeRecord() {
-        return {
-            points: root.livePoints,
-            color: TabletLiveDrawStore.color,
-            width: TabletLiveDrawStore.width,
-            usePressure: TabletLiveDrawStore.usePressure
-        };
+    Timer {
+        id: captureDelay
+        // Long enough for the tray's fade to finish and the compositor to present a
+        // frame without it. Shorter than this and the shot catches it mid-fade.
+        interval: 320
+        repeat: false
+        onTriggered: {
+            ShellActionRegistry.trigger("fullscreenScreenshot", root.screenName);
+            captureRestore.restart();
+        }
     }
 
-    function extendStroke(x, y, pressure) {
-        if (root.livePoints.length === 0)
-            return;
-        const raw = StrokeGeometry.point(x, y, pressure);
-        // Smoothed before the distance test, so the filter sees every sample and the
-        // thinning only decides what is worth keeping afterwards.
-        root.smoothPoint = StrokeGeometry.smoothed(root.smoothPoint, raw, TabletLiveDrawStore.smoothing);
-        const last = root.livePoints[root.livePoints.length - 1];
-        if (!StrokeGeometry.shouldAppend(last, root.smoothPoint))
-            return;
-        root.livePoints = root.livePoints.concat([root.smoothPoint]);
-        canvas.liveStroke = root.currentStrokeRecord();
-        canvas.refreshLive();
+    Timer {
+        id: captureRestore
+        interval: 600
+        repeat: false
+        onTriggered: {
+            root.hiddenForCapture = false;
+            root.statusFor(Translation.tr("Saved to Pictures, and on the clipboard."));
+        }
     }
 
-    function endStroke() {
-        if (root.livePoints.length > 0)
-            TabletLiveDrawStore.addStroke(root.sheetKey, root.currentStrokeRecord());
-        root.livePoints = [];
-        root.smoothPoint = null;
-        canvas.liveStroke = null;
-        canvas.refreshLive();
-    }
-
-    function eraseAt(x, y) {
-        TabletLiveDrawStore.eraseAt(root.sheetKey, x, y, root.eraserRadius);
-    }
-
-    // ── Saving ──────────────────────────────────────────────────────────────
+    // ── Saving to Notes ─────────────────────────────────────────────────────
     /**
      * Crops the ink out of the screen-sized sheet and puts it in Notes.
      *
      * Cropped because a note holding a 1920×1080 PNG that is almost entirely empty is a
-     * note nobody can read at a glance — what you drew is usually a corner of the
-     * screen, and the corner is the note.
+     * note nobody can read at a glance — what you drew is usually a corner of the screen,
+     * and the corner is the note.
      *
      * Two steps, because a Canvas paints when the scene graph gets round to it rather
      * than when asked: the crop is requested here and grabbed once it has painted. A grab
@@ -172,7 +158,7 @@ PanelWindow {
         // The ink has somewhere permanent to live now, so the sheet goes. Leaving it
         // would mean the next save wrote the same drawing to a second note.
         TabletLiveDrawStore.clear(root.sheetKey);
-        TabletLiveDrawStore.drawing = false;
+        TabletLiveDrawStore.close();
     }
 
     // ── Surface ─────────────────────────────────────────────────────────────
@@ -188,181 +174,137 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "quickshell:tabletLiveDraw"
     WlrLayershell.layer: WlrLayer.Overlay
-    // Never takes the keyboard. The pen tray has no text in it, and a surface holding
-    // focus over every application is a surface that breaks typing everywhere.
+    // Never takes the keyboard. The tray has no text in it, and a surface holding focus
+    // over every application is a surface that breaks typing everywhere.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
     /**
      * What the layer accepts.
      *
-     * Everything while drawing; only the tray once the drawing is being kept. This is
-     * the mechanism behind "leave it on this workspace": the ink stays painted on the
-     * Overlay layer and the compositor stops routing input to it, so the applications
-     * underneath behave exactly as if it were not there.
+     * Everything while drawing; only the tray once the pen is down; nothing at all once
+     * the tray is closed. That last state is what "leave it on this workspace" means —
+     * the ink stays painted on the Overlay layer and the compositor stops routing input
+     * to it, so the applications underneath behave exactly as if it were not there.
+     *
+     * Both regions are always listed and the intersection flags do the work: two
+     * Subtracts leave an empty mask, which is the click-through state.
      */
     mask: Region {
-        regions: root.drawing ? [fullRegion] : [trayRegion]
+        regions: [fullRegion, trayRegion]
     }
 
     Region {
         id: fullRegion
-        item: inkArea
+        item: inkSurface
         intersection: root.drawing ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: trayRegion
         item: tray
-        intersection: (!root.drawing && root.hasInk) ? Intersection.Combine : Intersection.Subtract
+        intersection: root.trayShown ? Intersection.Combine : Intersection.Subtract
     }
 
-    Item {
-        id: inkArea
+    DrawSurface {
+        id: inkSurface
         anchors.fill: parent
 
-        TabletLiveDrawCanvas {
-            id: canvas
-            anchors.fill: parent
-            strokes: root.strokes
+        strokes: root.strokes
+        drawing: root.drawing
+        color: TabletLiveDrawStore.color
+        strokeWidth: TabletLiveDrawStore.width
+        usePressure: TabletLiveDrawStore.usePressure
+        smoothing: TabletLiveDrawStore.smoothing
+        eraser: TabletLiveDrawStore.eraser
+        // The tray floats over the sheet; without this the canvas swallowed every pen
+        // tap on it. See DrawSurface.excludeItem.
+        excludeItem: tray
+
+        onStrokeFinished: stroke => TabletLiveDrawStore.addStroke(root.sheetKey, stroke)
+        onEraseRequested: (x, y) => TabletLiveDrawStore.eraseAt(root.sheetKey, x, y, inkSurface.eraserRadius)
+    }
+
+    /**
+     * The same ink again, at the size of its own bounding box, offscreen.
+     *
+     * `Canvas.save` writes the whole item, so cropping means painting the strokes a
+     * second time into a canvas that *is* the crop, with every point re-expressed
+     * relative to its corner. One extra paint of a finished drawing, in exchange for a
+     * file that is the drawing rather than the screen it happened to be on.
+     */
+    DrawCanvas {
+        id: cropCanvas
+        property var bounds: null
+        property var sourceStrokes: []
+        property string pendingPath: ""
+
+        // Moved off the surface rather than hidden: an invisible item is not rendered at
+        // all, and this one exists for nothing but its pixels.
+        x: -20000
+        y: -20000
+        // Painted in the GUI thread and into an image, which is what the grab reads.
+        immediate: true
+
+        strokes: {
+            if (!cropCanvas.bounds)
+                return [];
+            return (cropCanvas.sourceStrokes ?? []).map(stroke => ({
+                color: stroke.color,
+                width: stroke.width,
+                usePressure: stroke.usePressure,
+                points: stroke.points.map(p => ({
+                    x: p.x - cropCanvas.bounds.x,
+                    y: p.y - cropCanvas.bounds.y,
+                    p: p.p
+                }))
+            }));
         }
 
-        /**
-         * The same ink again, at the size of its own bounding box, offscreen.
-         *
-         * `Canvas.save` writes the whole item, so cropping means painting the strokes a
-         * second time into a canvas that *is* the crop, with every point re-expressed
-         * relative to its corner. One extra paint of a finished drawing, in exchange for
-         * a file that is the drawing rather than the screen it happened to be on.
-         */
-        TabletLiveDrawCanvas {
-            id: cropCanvas
-            property var bounds: null
-            property var sourceStrokes: []
-            property string pendingPath: ""
-
-            // Moved off the surface rather than hidden: an invisible item is not
-            // rendered, and this one exists for nothing but its pixels.
-            x: -20000
-            y: -20000
-            // Painted in the GUI thread and into an image, which is what `save` reads.
-            immediate: true
-
-            strokes: {
-                if (!cropCanvas.bounds)
-                    return [];
-                return (cropCanvas.sourceStrokes ?? []).map(stroke => ({
-                    color: stroke.color,
-                    width: stroke.width,
-                    usePressure: stroke.usePressure,
-                    points: stroke.points.map(p => ({
-                        x: p.x - cropCanvas.bounds.x,
-                        y: p.y - cropCanvas.bounds.y,
-                        p: p.p
-                    }))
-                }));
-            }
-
-            // The paint has landed, so there are pixels to grab. Requesting the grab any
-            // earlier gets an empty image: a Canvas has nothing in its scene graph until
-            // it has painted once.
-            onCommittedPainted: {
-                if (cropCanvas.pendingPath.length === 0)
-                    return;
-                const path = cropCanvas.pendingPath;
-                cropCanvas.pendingPath = "";
-                cropCanvas.saveCommitted(path);
-            }
-
-            onSaved: (ok, path) => root.finishSave(ok, path)
+        // The paint has landed, so there are pixels to grab. Requesting the grab any
+        // earlier gets an empty image: a Canvas has nothing in its scene graph until it
+        // has painted once.
+        onCommittedPainted: {
+            if (cropCanvas.pendingPath.length === 0)
+                return;
+            const path = cropCanvas.pendingPath;
+            cropCanvas.pendingPath = "";
+            cropCanvas.saveCommitted(path);
         }
 
-        /**
-         * The pen.
-         *
-         * A PointHandler rather than a MouseArea, because a MouseArea reports no
-         * pressure: Qt delivers a stylus as a pointer device with a `pressure` on each
-         * point, and that number is what OpenTabletDriver spends its whole existence
-         * producing. Fingers and the mouse arrive through the same handler and report
-         * pressure 1, which is the right answer for them — a finger has no pressure to
-         * report and a stroke drawn with one should be an even line.
-         *
-         * The eraser end of a stylus is a distinct pointer type, so turning the pen over
-         * rubs out without going near the tray.
-         */
-        PointHandler {
-            id: pen
-            enabled: root.drawing
-
-            readonly property bool eraserTip:
-                pen.point.device?.pointerType === PointerDevice.Eraser
-            readonly property bool erasing: pen.eraserTip || TabletLiveDrawStore.eraser
-
-            /**
-             * Whether a real pressure-reporting device has been seen.
-             *
-             * Measured from the values rather than asked of the device: a mouse and a
-             * finger both report exactly 1, and anything strictly between the ends is a
-             * device that is actually measuring. That test needs no enum to be spelled
-             * correctly and no assumption about how the driver presents itself, which
-             * matters when the driver is OpenTabletDriver presenting a virtual tablet.
-             */
-            function noteDevice() {
-                const pressure = pen.point.pressure;
-                if (pressure > 0.001 && pressure < 0.999)
-                    root.penSeen = true;
-                if (pen.point.device?.pointerType === PointerDevice.Pen
-                        || pen.point.device?.pointerType === PointerDevice.Eraser)
-                    root.penSeen = true;
-            }
-
-            onActiveChanged: {
-                if (pen.active) {
-                    pen.noteDevice();
-                    if (pen.erasing)
-                        root.eraseAt(pen.point.position.x, pen.point.position.y);
-                    else
-                        root.beginStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure);
-                } else if (root.livePoints.length > 0) {
-                    root.endStroke();
-                }
-            }
-
-            onPointChanged: {
-                if (!pen.active)
-                    return;
-                pen.noteDevice();
-                if (pen.erasing)
-                    root.eraseAt(pen.point.position.x, pen.point.position.y);
-                else
-                    root.extendStroke(pen.point.position.x, pen.point.position.y, pen.point.pressure);
-            }
-        }
+        onSaved: (ok, path) => root.finishSave(ok, path)
     }
 
     // ── The pen tray ────────────────────────────────────────────────────────
-    TabletLiveDrawToolbar {
+    DrawToolbar {
         id: tray
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         // Clear of the dock, which is where a tray anchored to the bottom would land.
         anchors.bottomMargin: Appearance.sizes.minimumTouchTarget * 2.6
-        visible: root.shown
-        opacity: root.drawing || root.hasInk ? 1 : 0
+        visible: root.trayShown
+        opacity: root.trayShown ? 1 : 0
 
         palette: TabletLiveDrawStore.palette
         currentColor: TabletLiveDrawStore.color
         strokeWidth: TabletLiveDrawStore.width
         eraser: TabletLiveDrawStore.eraser
         usePressure: TabletLiveDrawStore.usePressure
-        pressureAvailable: root.penSeen
+        pressureAvailable: inkSurface.penSeen
         canUndo: root.hasInk
-        canSave: root.hasInk
         statusText: root.statusText
+        drawing: TabletLiveDrawStore.drawing
+        showDrawToggle: true
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(tray)
         }
 
+        onDrawToggled: {
+            TabletLiveDrawStore.drawing = !TabletLiveDrawStore.drawing;
+            root.statusFor(TabletLiveDrawStore.drawing
+                ? Translation.tr("Drawing.")
+                : Translation.tr("Pen down — taps go through to the apps."));
+        }
         onColorPicked: colorValue => {
             TabletLiveDrawStore.color = colorValue;
             TabletLiveDrawStore.eraser = false;
@@ -382,17 +324,30 @@ PanelWindow {
             TabletLiveDrawStore.clear(root.sheetKey);
             root.statusFor(Translation.tr("Sheet cleared."));
         }
-        onSaveRequested: root.saveToNotes()
-        onKeepRequested: {
-            TabletLiveDrawStore.drawing = false;
-            root.statusFor(Translation.tr("Left on this workspace. Rub it out to remove it."));
-        }
-        onCloseRequested: {
-            // Closes the pen, not the drawing: ink already on the sheet stays where it
-            // is. Rubbing out is a separate, deliberate button, because "put the pen
-            // down" should never be the thing that loses work.
-            TabletLiveDrawStore.drawing = false;
-        }
+
+        // ── What happens to the drawing ─────────────────────────────────────
+        trailingContent: [
+            DrawToolButton {
+                symbol: "screenshot_monitor"
+                enabled: !root.hiddenForCapture
+                tooltipText: Translation.tr("Screenshot without the toolbar")
+                onTriggered: root.captureScreen()
+            },
+            DrawToolButton {
+                symbol: "note_add"
+                enabled: root.hasInk
+                emphasised: true
+                tooltipText: Translation.tr("Save to Notes")
+                onTriggered: root.saveToNotes()
+            },
+            DrawToolButton {
+                symbol: "close"
+                tooltipText: Translation.tr("Put the toolbar away and leave the drawing")
+                // Closes the tray *and* the pen, and keeps the ink. Losing work must
+                // never be a side effect of tidying up — rubbing out is its own button.
+                onTriggered: TabletLiveDrawStore.close()
+            }
+        ]
     }
 
     Connections {
@@ -401,12 +356,5 @@ PanelWindow {
             if (root.focusedHere)
                 root.saveToNotes();
         }
-    }
-
-    // Drawing mode is per-monitor, and leaving the monitor puts the pen down rather than
-    // leaving a surface swallowing every touch on a screen the user has left.
-    onFocusedHereChanged: {
-        if (!root.focusedHere && TabletLiveDrawStore.drawing)
-            root.endStroke();
     }
 }

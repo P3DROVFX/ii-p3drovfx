@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 
 import qs.modules.common
-import "TabletStrokeGeometry.js" as StrokeGeometry
+import "StrokeGeometry.js" as StrokeGeometry
 
 /**
  * The ink itself: committed strokes, plus the one currently under the pen.

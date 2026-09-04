@@ -8,7 +8,8 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
-import "TabletStrokeGeometry.js" as StrokeGeometry
+import qs.modules.common.draw
+import "../../common/draw/StrokeGeometry.js" as StrokeGeometry
 
 /**
  * The ink, and which home screen each sheet of it belongs to.
@@ -35,9 +36,46 @@ Singleton {
     /// binding. Everything that draws watches this rather than the object.
     property int revision: 0
 
-    /// Whether the surface is in drawing mode. Off with ink on screen is the "keep it on
-    /// this workspace" state: the drawing shows, and taps go through it to the apps.
+    /**
+     * Whether the pen is down.
+     *
+     * Off with the tray still up is the "keep it on this workspace" state: the ink shows,
+     * taps go through to the applications, and one tap on the pencil picks the pen back
+     * up. That round trip is the whole point — the first version had no way back, so a
+     * sheet you had stopped drawing on could never be drawn on again, and the toolbar sat
+     * there looking like it should still work.
+     */
     property bool drawing: false
+
+    /**
+     * Whether the toolbar is on screen.
+     *
+     * Separate from `drawing`, because "put the pen down" and "put everything away" are
+     * different requests and were previously the same button. Closing the tray leaves the
+     * ink exactly where it is: losing work must never be a side effect of tidying up.
+     */
+    property bool trayOpen: false
+
+    /// Enter live draw: tray up, pen down.
+    function open() {
+        root.ensureTools();
+        root.trayOpen = true;
+        root.drawing = true;
+    }
+
+    /// Leave live draw entirely. The ink stays on its workspace until it is rubbed out.
+    function close() {
+        root.drawing = false;
+        root.trayOpen = false;
+    }
+
+    function toggleDrawing() {
+        if (!root.trayOpen) {
+            root.open();
+            return;
+        }
+        root.drawing = !root.drawing;
+    }
 
     // ── Tools ───────────────────────────────────────────────────────────────
     // Live, not persisted: which colour you were last using is a property of the drawing

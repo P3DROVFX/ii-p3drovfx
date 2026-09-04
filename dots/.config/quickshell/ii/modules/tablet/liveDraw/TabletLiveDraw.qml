@@ -31,18 +31,17 @@ Scope {
         function draw(): string {
             if (!root.enabled)
                 return "Live draw is switched off in Settings.";
-            TabletLiveDrawStore.ensureTools();
-            TabletLiveDrawStore.drawing = true;
-            return "Drawing. Tap the tray to keep it, save it, or put the pen down.";
+            TabletLiveDrawStore.open();
+            return "Drawing. The pencil puts the pen down; close puts the toolbar away.";
         }
 
         function stop(): string {
-            TabletLiveDrawStore.drawing = false;
-            return "Pen down. Anything drawn stays on its workspace.";
+            TabletLiveDrawStore.close();
+            return "Toolbar closed. Anything drawn stays on its workspace.";
         }
 
         function toggle(): string {
-            return TabletLiveDrawStore.drawing ? stop() : draw();
+            return TabletLiveDrawStore.trayOpen ? stop() : draw();
         }
 
         /// Files the focused screen's sheet into Notes, as the tray's button does.
@@ -57,7 +56,7 @@ Scope {
 
         function clear(): string {
             TabletLiveDrawStore.clearAll();
-            TabletLiveDrawStore.drawing = false;
+            TabletLiveDrawStore.close();
             return "Every sheet rubbed out.";
         }
     }
@@ -71,7 +70,7 @@ Scope {
 
             Loader {
                 active: root.enabled
-                    && (TabletLiveDrawStore.drawing || TabletLiveDrawStore.sheetCount > 0)
+                    && (TabletLiveDrawStore.trayOpen || TabletLiveDrawStore.sheetCount > 0)
 
                 sourceComponent: TabletLiveDrawWindow {
                     screen: screenScope.modelData
@@ -83,5 +82,5 @@ Scope {
     // Live draw is a tablet surface, and the family unloading has to take the pen with
     // it — otherwise switching to the desktop shell leaves `drawing` set and the next
     // switch back opens with a full-screen input grab nobody asked for.
-    Component.onDestruction: TabletLiveDrawStore.drawing = false
+    Component.onDestruction: TabletLiveDrawStore.close()
 }

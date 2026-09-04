@@ -301,7 +301,7 @@ Em ordem de valor por linha de código, todas na linguagem do que já existe.
    tela ao vivo: mesmo canvas, mesma bandeja, uma origem diferente. É o caso de uso mais
    comum de caneta que este shell ainda não cobre.
 3. **Formas reconhecidas.** Desenhar um retângulo tosco e ele virar um retângulo. Barato de
-   aproximar com a geometria que já está em `TabletStrokeGeometry.js`.
+   aproximar com a geometria que já está em `modules/common/draw/StrokeGeometry.js`.
 4. **Uma folha de live draw por app, não por workspace.** A anotação seguiria a janela em vez
    da tela. Mais próximo do que um tablet faz, e o `TabletWindowActions` já sabe casar
    toplevels com clientes do Hyprland.

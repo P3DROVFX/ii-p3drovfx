@@ -8,15 +8,30 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * The pen tray: colour, thickness, eraser, and what happens to the drawing.
+ * The pen tray: colour, thickness, eraser, and whatever the host adds to the end.
  *
  * One row, wide targets, no menus. Everything here is reached mid-thought with a pen in
  * the other hand, and a control that needs a second tap to reveal itself is a control
- * that gets used once. The thickness slider is the only thing that is not a button, and
- * it is the width of three of them so it can be dragged without aiming.
+ * that gets used once.
+ *
+ * The ink controls are shared; what happens to the drawing is not. A sheet floating over
+ * a workspace can be saved to Notes, screenshotted or put away; a sketch inside a note is
+ * simply finished or abandoned. So the host appends its own buttons through the default
+ * slot rather than this growing a flag per host.
  */
 Rectangle {
     id: root
+
+    /**
+     * Host buttons, appended after the shared controls.
+     *
+     * A named property rather than the default one: a `default property alias` also
+     * captures the objects this file declares in its own body, which would put the
+     * toolbar's own layout inside the slot it is trying to fill. Explicit at the call
+     * site is worth more than the saved word anyway — these buttons are the host's half
+     * of the toolbar, not incidental children.
+     */
+    property alias trailingContent: trailing.data
 
     property var palette: []
     property string currentColor: ""
@@ -25,18 +40,27 @@ Rectangle {
     property bool usePressure: true
     property bool pressureAvailable: false
     property bool canUndo: false
-    property bool canSave: false
     property string statusText: ""
+
+    /**
+     * Whether the pen is down.
+     *
+     * The toolbar's own mode switch, and the reason it exists: without it the only way
+     * out of drawing was a button that also put the toolbar away, so a sheet you had
+     * stopped drawing on could never be drawn on again. Hosts that are always in drawing
+     * mode — a sketch inside a note has nothing else to be — leave `showDrawToggle` off.
+     */
+    property bool drawing: true
+    property bool showDrawToggle: false
+    property bool showPressure: true
 
     signal colorPicked(string color)
     signal widthPicked(real width)
+    signal drawToggled()
     signal eraserToggled()
     signal pressureToggled()
     signal undoRequested()
     signal clearRequested()
-    signal saveRequested()
-    signal keepRequested()
-    signal closeRequested()
 
     implicitWidth: layout.implicitWidth + 28
     implicitHeight: layout.implicitHeight + 20
@@ -47,6 +71,25 @@ Rectangle {
         id: layout
         anchors.centerIn: parent
         spacing: 10
+
+        // ── Mode ────────────────────────────────────────────────────────────
+        DrawToolButton {
+            visible: root.showDrawToggle
+            symbol: "stylus_note"
+            active: root.drawing
+            tooltipText: root.drawing
+                ? Translation.tr("Drawing — tap to let taps through again")
+                : Translation.tr("Not drawing — tap to pick the pen back up")
+            onTriggered: root.drawToggled()
+        }
+
+        Rectangle {
+            visible: root.showDrawToggle
+            Layout.preferredWidth: 1
+            Layout.preferredHeight: Appearance.sizes.minimumTouchTarget * 0.5
+            color: Appearance.colors.colOnLayer0
+            opacity: 0.15
+        }
 
         // ── Ink ─────────────────────────────────────────────────────────────
         Repeater {
@@ -77,9 +120,13 @@ Rectangle {
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: root.colorPicked(swatch.modelData)
+                // A TapHandler rather than a MouseArea, for the same reason the tool
+                // buttons have one: a MouseArea never sees a tablet event, and whether
+                // one is synthesised into a mouse event depends on nobody else having
+                // accepted it first. See DrawToolButton.
+                TapHandler {
+                    acceptedDevices: PointerDevice.AllDevices
+                    onTapped: root.colorPicked(swatch.modelData)
                 }
             }
         }
@@ -111,14 +158,15 @@ Rectangle {
         }
 
         // ── Tools ───────────────────────────────────────────────────────────
-        TabletLiveDrawToolButton {
+        DrawToolButton {
             symbol: "ink_eraser"
             active: root.eraser
             tooltipText: Translation.tr("Eraser")
             onTriggered: root.eraserToggled()
         }
 
-        TabletLiveDrawToolButton {
+        DrawToolButton {
+            visible: root.showPressure
             symbol: "stylus"
             active: root.usePressure
             // Greyed rather than hidden without a pen: the switch says the feature is
@@ -131,40 +179,24 @@ Rectangle {
             onTriggered: root.pressureToggled()
         }
 
-        TabletLiveDrawToolButton {
+        DrawToolButton {
             symbol: "undo"
             enabled: root.canUndo
             tooltipText: Translation.tr("Undo stroke")
             onTriggered: root.undoRequested()
         }
 
-        TabletLiveDrawToolButton {
+        DrawToolButton {
             symbol: "delete"
             enabled: root.canUndo
             tooltipText: Translation.tr("Rub the whole sheet out")
             onTriggered: root.clearRequested()
         }
 
-        // ── What happens to it ──────────────────────────────────────────────
-        TabletLiveDrawToolButton {
-            symbol: "note_add"
-            enabled: root.canSave
-            emphasised: true
-            tooltipText: Translation.tr("Save to Notes")
-            onTriggered: root.saveRequested()
-        }
-
-        TabletLiveDrawToolButton {
-            symbol: "picture_in_picture"
-            enabled: root.canSave
-            tooltipText: Translation.tr("Leave it on this workspace")
-            onTriggered: root.keepRequested()
-        }
-
-        TabletLiveDrawToolButton {
-            symbol: "close"
-            tooltipText: Translation.tr("Put the pen down")
-            onTriggered: root.closeRequested()
+        // ── What the host does with the drawing ─────────────────────────────
+        RowLayout {
+            id: trailing
+            spacing: 10
         }
     }
 

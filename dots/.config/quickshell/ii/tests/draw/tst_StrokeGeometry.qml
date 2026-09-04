@@ -1,9 +1,9 @@
 import QtQuick
 import QtTest
-import "../../modules/tablet/liveDraw/TabletStrokeGeometry.js" as StrokeGeometry
+import "../../modules/common/draw/StrokeGeometry.js" as StrokeGeometry
 
 TestCase {
-    name: "TabletStrokeGeometry"
+    name: "StrokeGeometry"
 
     // ── Samples in ────────────────────────────────────────────────────────
 
