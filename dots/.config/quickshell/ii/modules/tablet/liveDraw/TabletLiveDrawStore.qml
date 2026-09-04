@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 
 import qs
 import qs.services
@@ -189,5 +190,76 @@ Singleton {
     function clearAll() {
         root.sheets = ({});
         root.revision++;
+    }
+
+    // ── The compositor's workspace animation ────────────────────────────────
+    /**
+     * How Hyprland slides between workspaces, read from Hyprland.
+     *
+     * The ink travels alongside the windows, so its animation has to be *the same*
+     * animation — and the first version hard-coded a duration and a curve copied out of
+     * the user's config by hand. That is a guess with a shelf life: it was already wrong
+     * (the curve was written with four values where `Easing.BezierSpline` needs six, so
+     * QML fell back to linear and the ink kept sliding long after the windows had
+     * arrived), and it would have gone wrong again the first time anyone edited their
+     * `animations` block.
+     *
+     * `hyprctl animations -j` returns the configured animations and the bezier table, so
+     * there is nothing here to keep in step by hand.
+     */
+    property int workspaceSlideMs: 500
+    property var workspaceSlideCurve: [0.25, 0.1, 0.25, 1, 1, 1]
+    /// False when the compositor animates workspaces instantly. Nothing to travel with.
+    property bool workspaceSlideEnabled: true
+
+    Process {
+        id: animationProbe
+        command: ["hyprctl", "animations", "-j"]
+        stdout: StdioCollector { id: animationOut }
+        onExited: code => {
+            if (code !== 0)
+                return;
+            try {
+                const parsed = JSON.parse(animationOut.text);
+                const animations = parsed[0] ?? [];
+                const beziers = parsed[1] ?? [];
+                const workspaces = animations.find(entry => entry?.name === "workspaces");
+                if (!workspaces)
+                    return;
+
+                root.workspaceSlideEnabled = workspaces.enabled !== false;
+                // Hyprland's speed is in deciseconds. Zero means "inherit", which in
+                // practice is the built-in default rather than an instant switch.
+                const speed = Number(workspaces.speed ?? 0);
+                root.workspaceSlideMs = speed > 0 ? Math.round(speed * 100) : 500;
+
+                const curve = beziers.find(entry => entry?.name === workspaces.bezier);
+                if (curve) {
+                    // Six values: the two control points and the end point, which
+                    // Easing.BezierSpline requires to be exactly (1, 1).
+                    root.workspaceSlideCurve = [Number(curve.X0), Number(curve.Y0),
+                                                Number(curve.X1), Number(curve.Y1), 1, 1];
+                }
+            } catch (error) {
+                console.warn("[LiveDraw] could not read the workspace animation:", error);
+            }
+        }
+    }
+
+    function refreshWorkspaceAnimation() {
+        if (animationProbe.running)
+            return;
+        animationProbe.running = true;
+    }
+
+    Component.onCompleted: root.refreshWorkspaceAnimation()
+
+    /// A reloaded Hyprland config can change both numbers under us.
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "configreloaded")
+                root.refreshWorkspaceAnimation();
+        }
     }
 }

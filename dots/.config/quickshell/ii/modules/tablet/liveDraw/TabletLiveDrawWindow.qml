@@ -114,7 +114,7 @@ PanelWindow {
         root.lastWorkspaceId = root.activeWorkspaceId;
         if (from < 0 || root.activeWorkspaceId < 0 || from === root.activeWorkspaceId)
             return;
-        if (!root.parallaxEnabled)
+        if (!root.parallaxEnabled || !TabletLiveDrawStore.workspaceSlideEnabled)
             return;
 
         const previous = TabletLiveDrawStore.strokesFor(`${root.screenName}:${from}`);
@@ -135,13 +135,13 @@ PanelWindow {
         property: "slideProgress"
         from: 0
         to: 1
-        // Tuned to the compositor's own workspace slide rather than to this shell's
-        // element animations: the ink is travelling alongside the windows, and the two
-        // finishing at different times is exactly what would give the trick away.
-        // Hyprland's `animations` block has `workspaces, speed = 7, bezier = menu_decel`.
-        duration: 700
+        // The compositor's own numbers, read from `hyprctl animations`. Not this shell's
+        // element animations and not a constant copied out of a config by hand: the ink
+        // travels alongside the windows, and the two finishing at different times is
+        // exactly what gives the trick away. See TabletLiveDrawStore.
+        duration: TabletLiveDrawStore.workspaceSlideMs
         easing.type: Easing.BezierSpline
-        easing.bezierCurve: [0.1, 1, 0, 1]
+        easing.bezierCurve: TabletLiveDrawStore.workspaceSlideCurve
         onFinished: root.outgoingStrokes = []
     }
 
