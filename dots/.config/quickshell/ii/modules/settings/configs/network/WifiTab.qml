@@ -66,14 +66,14 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: !NetworkState.backendAvailable
+            visible: !NetworkState.managerAvailable
             materialIcon: "error"
             text: Translation.tr("NetworkManager is not running, so none of this page can act. Start it with `systemctl enable --now NetworkManager`.")
         }
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: NetworkState.backendAvailable && !NetworkState.hasWifiDevice
+            visible: NetworkState.managerAvailable && !NetworkState.hasWifiDevice
             materialIcon: "wifi_off"
             text: Translation.tr("No Wi-Fi adapter is available. Either the machine has none, or its driver did not load.")
         }

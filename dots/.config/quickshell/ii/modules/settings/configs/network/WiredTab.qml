@@ -88,14 +88,14 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: !NetworkState.backendAvailable
+            visible: !NetworkState.managerAvailable
             materialIcon: "error"
             text: Translation.tr("NetworkManager is not running, so none of this page can act. Start it with `systemctl enable --now NetworkManager`.")
         }
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: NetworkState.backendAvailable && !NetworkState.hasWiredDevice
+            visible: NetworkState.managerAvailable && !NetworkState.hasWiredDevice
             materialIcon: "cable"
             text: Translation.tr("The wired port is gone. A USB or dock adapter was unplugged, or its driver was unloaded.")
         }

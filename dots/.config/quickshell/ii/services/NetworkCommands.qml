@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "network/NmcliDeviceStatus.js" as Nmcli
 
 /**
  * Every NetworkManager write the shell makes, through one serialised nmcli queue.
@@ -158,24 +159,10 @@ Singleton {
     }
 
     // ---- Reads nmcli still owns -------------------------------------------
-    // nmcli --escape writes a literal colon inside a field as a backslash pair,
-    // so the separator can only be found by walking the line.
+    // Shared with the device parser, which needs the same escape rules and is
+    // tested on its own.
     function splitEscaped(line: string): var {
-        const fields = [];
-        let current = "";
-        for (let i = 0; i < line.length; i++) {
-            const c = line.charAt(i);
-            if (c === "\\" && i + 1 < line.length) {
-                current += line.charAt(++i);
-            } else if (c === ":") {
-                fields.push(current);
-                current = "";
-            } else {
-                current += c;
-            }
-        }
-        fields.push(current);
-        return fields;
+        return Nmcli.splitEscaped(line);
     }
 
     /**

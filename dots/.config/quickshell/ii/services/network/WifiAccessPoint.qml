@@ -9,6 +9,10 @@ import qs.services
  * backend and drives everything that changes on its own. `details` carries the
  * few extras that backend doesn't expose — BSSID, frequency, NetworkManager's
  * own security string — refreshed from nmcli alongside it.
+ *
+ * Where the backend has no adapter at all, `backend` is null and the same nmcli
+ * scan row arrives as `lastIpcObject` instead, so every property below answers
+ * from whichever of the two the machine actually has. See NetworkFallback.
  */
 QtObject {
     id: root
@@ -25,7 +29,10 @@ QtObject {
     readonly property int strength: root.backend ? Math.round(root.backend.signalStrength * 100) : (root.lastIpcObject?.strength ?? 0)
     readonly property int frequency: root.details?.frequency ?? root.lastIpcObject?.frequency ?? 0
     readonly property bool active: root.backend?.connected ?? root.lastIpcObject?.active ?? false
-    readonly property bool known: root.backend?.known ?? false
+    // nmcli names the saved profile an access point matches in the same scan
+    // row the rest of `details` comes from, which is the only thing that can
+    // answer this where there is no backend network object to ask.
+    readonly property bool known: root.backend?.known ?? ((root.details?.profile ?? "").length > 0)
 
     readonly property int securityType: root.backend?.security ?? QNet.WifiSecurityType.Unknown
     // NetworkManager's string is the friendlier of the two and covers mixed

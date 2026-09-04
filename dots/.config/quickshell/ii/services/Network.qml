@@ -87,9 +87,9 @@ Singleton {
             return root.seedNetworkName;
         return ConnectionSelection.preferredConnectionName(
             NetworkState.wiredConnected,
-            NetworkState.wiredNetwork?.name ?? "",
+            NetworkState.wiredNetworkName,
             NetworkState.wifiConnected,
-            NetworkState.activeWifiNetwork?.name ?? ""
+            NetworkState.wifiNetworkName
         );
     }
     readonly property string activeConnectionName: root.networkName
@@ -239,6 +239,10 @@ Singleton {
 
     // ---- Backend to WifiAccessPoint bridge --------------------------------
     function syncNetworks(): void {
+        if (NetworkState.wifiFromNmcli) {
+            root.syncNetworksFromDetails();
+            return;
+        }
         const live = Array.from(NetworkState.wifiNetworks ?? []);
         const wrappers = root.wifiNetworks;
         for (let i = wrappers.length - 1; i >= 0; i--) {
@@ -258,6 +262,44 @@ Singleton {
             wrappers.push(apComponent.createObject(root, {
                 backend: network,
                 details: root.wifiDetails[network.name] ?? null
+            }));
+        }
+        root.applyDetails();
+        root.resortFriendlyNetworks();
+    }
+
+    /**
+     * The same list, built from the nmcli scan instead of the backend, for
+     * machines where the backend has no adapter to scan with. `wifiDetails` is
+     * already read on every network event for the extras the backend does not
+     * expose, and carries everything an access point needs on its own: SSID,
+     * signal, band, security and whether it is the one in use.
+     */
+    function syncNetworksFromDetails(): void {
+        const rows = Object.keys(root.wifiDetails ?? ({})).map(ssid => root.wifiDetails[ssid]);
+        const wrappers = root.wifiNetworks;
+        for (let i = wrappers.length - 1; i >= 0; i--) {
+            const wrapper = wrappers[i];
+            if (rows.some(row => row.ssid === wrapper.ssid))
+                continue;
+            wrappers.splice(i, 1);
+            if (root.wifiConnectTarget === wrapper)
+                root.wifiConnectTarget = null;
+            if (root.wifiErrorTarget === wrapper)
+                root.wifiErrorTarget = null;
+            wrapper.destroy();
+        }
+        for (const row of rows) {
+            // Updated in place rather than rebuilt, so an access point being
+            // asked for a password is not destroyed under the dialog asking.
+            const existing = wrappers.find(w => w.ssid === row.ssid);
+            if (existing) {
+                existing.lastIpcObject = row;
+                continue;
+            }
+            wrappers.push(apComponent.createObject(root, {
+                lastIpcObject: row,
+                details: row
             }));
         }
         root.applyDetails();
@@ -294,6 +336,14 @@ Singleton {
         root.syncNetworks();
         root.refreshDetails();
     }
+    readonly property bool wifiFromNmcli: NetworkState.wifiFromNmcli
+    onWifiFromNmcliChanged: {
+        // The two lists hold different objects, so the wrappers built for one
+        // source cannot be handed to the other.
+        root.syncNetworks();
+        root.refreshDetails();
+    }
+
     onWifiConnectedChanged: {
         root.refreshSaved();
     }
@@ -318,6 +368,17 @@ Singleton {
                 return;
             }
             root.lastWifiError = NetworkState.failReasonLabel(reason);
+        }
+    }
+
+    // Nothing pushes signal strength at a shell reading the scan through nmcli,
+    // so the list follows the probe that is already running for device state.
+    Connections {
+        target: NetworkFallback
+
+        function onProbed(): void {
+            if (NetworkState.wifiFromNmcli)
+                root.refreshDetails();
         }
     }
 
@@ -375,6 +436,7 @@ Singleton {
             onRead: {
                 root.refreshSaved();
                 root.refreshDetails();
+                NetworkFallback.refresh();
             }
         }
     }

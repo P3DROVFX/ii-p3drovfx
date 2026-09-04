@@ -167,14 +167,14 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: !NetworkState.backendAvailable
+            visible: !NetworkState.managerAvailable
             materialIcon: "error"
             text: Translation.tr("NetworkManager is not running, so no hotspot can be started. Start it with `systemctl enable --now NetworkManager`.")
         }
 
         NoticeBox {
             Layout.fillWidth: true
-            visible: NetworkState.backendAvailable && !NetworkState.hasWifiDevice
+            visible: NetworkState.managerAvailable && !NetworkState.hasWifiDevice
             materialIcon: "wifi_off"
             text: Translation.tr("No Wi-Fi adapter is available, so there is nothing to run an access point on.")
         }
