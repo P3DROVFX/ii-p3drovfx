@@ -63,9 +63,15 @@ Item {
         root.pendingPath = "";
         root.statusText = "";
         root.eraser = false;
-        // A note is usually a light sheet, so the default ink is the dark end of the
-        // palette rather than the first entry, which live draw picks for a wallpaper.
-        root.inkColor = root.palette.find(c => c === "#111111") ?? root.palette[0];
+        // The darkest ink in the palette, rather than its first entry.
+        //
+        // Live draw starts on white because it draws over a wallpaper; a note is a light
+        // sheet, and starting there with white ink would look exactly like a pen that
+        // does not work. Measured rather than hard-coded to a hex, so a palette somebody
+        // edited still opens with something you can see.
+        root.inkColor = root.palette.reduce((darkest, candidate) =>
+            Qt.color(candidate).hslLightness < Qt.color(darkest).hslLightness
+                ? candidate : darkest, root.palette[0]);
         root.inkWidth = Math.max(1, root.opts?.width ?? 4);
     }
 
