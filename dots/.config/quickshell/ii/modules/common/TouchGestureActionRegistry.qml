@@ -22,6 +22,10 @@ Singleton {
         { id: "appDrawer", name: "App Drawer", icon: "apps", families: ["tablet"] },
         { id: "recents", name: "Recent Apps", icon: "overview", families: ["tablet"] },
         { id: "home", name: "Home Screen", icon: "home", families: ["tablet"] },
+        // Shows hub mode on demand instead of waiting for the charge-and-idle trigger,
+        // which is the only way anyone can see what the preference does before choosing
+        // it. See GlobalStates.hubModePreview.
+        { id: "hubMode", name: "Hub Mode (Display)", icon: "dock", families: ["tablet"] },
         { id: "workspaceNext", name: "Next Workspace", icon: "chevron_right" },
         { id: "workspacePrev", name: "Previous Workspace", icon: "chevron_left" },
         { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
@@ -127,6 +131,10 @@ Singleton {
 
         case "appDrawer":
             GlobalStates.toggleAppDrawer(screenName);
+            break;
+
+        case "hubMode":
+            GlobalStates.toggleHubModePreview();
             break;
 
         case "recents":

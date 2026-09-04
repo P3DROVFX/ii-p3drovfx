@@ -656,6 +656,33 @@ Item {
                         Config.options.tablet.hubMode.idleSeconds = value;
                 }
             }
+
+            // Deliberately outside the `enable` gate above. Everything else on this page is
+            // a preference you set once you know what it does; this is how you find that
+            // out, and hiding it behind the switch would mean turning the feature on,
+            // plugging in a cable and walking away for two minutes just to look at it.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 8
+
+                RippleButtonWithIcon {
+                    buttonRadius: Appearance.rounding.small
+                    materialIcon: "play_arrow"
+                    mainText: Translation.tr("Show me what it looks like")
+                    onClicked: GlobalStates.hubModePreview = true
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: PanelFamily.isTablet
+                        ? Translation.tr("Tap the screen to leave it.")
+                        : Translation.tr("Only the Tablet panel family draws this surface.")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.Wrap
+                }
+            }
         }
 
         // The one surface this family cannot assume exists elsewhere. A tablet with no

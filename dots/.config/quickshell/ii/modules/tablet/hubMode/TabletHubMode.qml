@@ -3,12 +3,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "TabletHubModeState.js" as HubState
 
 /**
  * What the tablet becomes when it is charging and nobody is using it.
@@ -33,18 +35,44 @@ Scope {
 
     readonly property var opts: Config.options?.tablet?.hubMode ?? null
     readonly property bool enabled: Config.ready && (root.opts?.enable ?? false)
-    /// Only while charging by default. Someone using this as a desk display can drop that.
-    readonly property bool powerSatisfied: !(root.opts?.requireCharging ?? true)
-        || !Battery.available
-        || Battery.isPluggedIn
     readonly property int idleSeconds: root.opts?.idleSeconds ?? 120
+
+    /**
+     * Everything that decides whether hub mode *can* happen, without anything that says
+     * whether it is happening now.
+     *
+     * Split from `hubState` on purpose: the idle monitor's `enabled` is bound to `armed`,
+     * so folding `isIdle` in here would have the monitor's arming depend on its own
+     * output. It settles — the boolean does not change, so nothing re-notifies — but it is
+     * a loop waiting for the first condition that makes it oscillate.
+     */
+    readonly property var armingState: ({
+        enable: root.enabled,
+        requireCharging: root.opts?.requireCharging ?? true,
+        batteryAvailable: Battery.available,
+        pluggedIn: Battery.isPluggedIn,
+        screenLocked: GlobalStates.screenLocked
+    })
+
+    // One record, so the conditions below can be exercised without a battery, an idle
+    // seat and a two-minute wait. See TabletHubModeState.js.
+    readonly property var hubState: Object.assign({}, root.armingState, {
+        idle: idleMonitor.isIdle,
+        dismissed: root.dismissed,
+        pauseWhilePlaying: root.opts?.pauseWhilePlaying ?? true,
+        mediaPlaying: MprisController.isPlaying,
+        previewRequested: GlobalStates.hubModePreview
+    })
+
+    /// Only while charging by default. Someone using this as a desk display can drop that.
+    readonly property bool powerSatisfied: HubState.powerSatisfied(root.armingState)
 
     /// Cleared the moment the seat reports activity again, so dismissing does not need a
     /// timer of its own: touching the screen ends the idle state, which ends Hub Mode, and
     /// this only stops it flashing back during the same idle period.
     property bool dismissed: false
 
-    readonly property bool armed: root.enabled && root.powerSatisfied && !GlobalStates.screenLocked
+    readonly property bool armed: HubState.armed(root.armingState)
 
     // Changing `timeout` in place leaves the monitor latched to a notification that no
     // longer exists — the keyboard backlight learned this the hard way — so the timeout is
@@ -77,11 +105,70 @@ Scope {
     }
 
     /// Something is playing and visible; taking the screen would interrupt watching it.
-    readonly property bool mediaPlaying: (root.opts?.pauseWhilePlaying ?? true)
-        && MprisController.isPlaying
+    readonly property bool mediaPlaying: HubState.mediaHolding(root.hubState)
 
-    readonly property bool shown: root.armed && idleMonitor.isIdle
-        && !root.dismissed && !root.mediaPlaying
+    /**
+     * A preview the user asked for.
+     *
+     * Deliberately bypasses `armed` in full — the charging cable, the idle timer, even
+     * `enable` itself. Someone reaching for this is deciding whether to turn hub mode on,
+     * and requiring it to already be on to see what it does is the circle that left this
+     * feature untestable. See GlobalStates.hubModePreview.
+     */
+    readonly property bool previewing: HubState.previewing(root.hubState)
+
+    readonly property bool shown: HubState.shouldShow(root.hubState)
+
+    /// Ends the surface however it was started: a preview clears the request, an idle
+    /// takeover is dismissed for the rest of this idle period.
+    function dismiss() {
+        if (GlobalStates.hubModePreview)
+            GlobalStates.hubModePreview = false;
+        else
+            root.dismissed = true;
+    }
+
+    // A preview is a surface with no keyboard that covers the screen. The tap-to-exit
+    // target is the whole thing, so this should never fire — but "should never" is a poor
+    // guarantee for something the user cannot alt-tab away from, and the cost of the net
+    // is one timer.
+    readonly property Timer _previewSafety: Timer {
+        interval: 45000
+        repeat: false
+        running: root.previewing
+        onTriggered: GlobalStates.hubModePreview = false
+    }
+
+    // Locking the screen while a preview is up would otherwise leave the request set, and
+    // hub mode would be waiting on the other side of the unlock.
+    readonly property Connections _lockWatch: Connections {
+        target: GlobalStates
+        function onScreenLockedChanged() {
+            if (GlobalStates.screenLocked)
+                GlobalStates.hubModePreview = false;
+        }
+    }
+
+    /// `qs -c ii ipc call hubMode preview` — the same door Settings and the bubble use.
+    IpcHandler {
+        target: "hubMode"
+
+        function preview(): string {
+            GlobalStates.hubModePreview = true;
+            return "Hub mode preview shown. Tap the screen to leave it.";
+        }
+
+        function hide(): string {
+            GlobalStates.hubModePreview = false;
+            root.dismissed = true;
+            return "Hub mode dismissed.";
+        }
+
+        function toggle(): string {
+            GlobalStates.toggleHubModePreview();
+            return GlobalStates.hubModePreview ? "Hub mode preview shown." : "Hub mode preview hidden.";
+        }
+    }
 
     Variants {
         model: Quickshell.screens
@@ -131,7 +218,7 @@ Scope {
                         // should be.
                         MouseArea {
                             anchors.fill: parent
-                            onPressed: root.dismissed = true
+                            onPressed: root.dismiss()
                         }
 
                         ColumnLayout {
@@ -193,6 +280,26 @@ Scope {
                                     Layout.maximumWidth: Math.round((screenScope.modelData?.width ?? 1920) * 0.5)
                                 }
                             }
+                        }
+
+                        /**
+                         * The way out, spelled out — but only for a preview.
+                         *
+                         * An idle takeover is dismissed by the same touch that would have
+                         * woken the device anyway, so it needs no instructions. A preview
+                         * is a full-screen surface the user summoned on purpose from a
+                         * settings page, and the one thing they need to know is that it is
+                         * not stuck.
+                         */
+                        StyledText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 40
+                            visible: root.previewing
+                            opacity: hub.fadeOpacity
+                            text: Translation.tr("Preview — tap anywhere to leave")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
                         }
 
                         // Charge state in a corner, the way a docked device shows it. Small:

@@ -1790,6 +1790,26 @@ Singleton {
         root.openAppDrawer(name);
     }
 
+    // ── Hub mode (tablet family) ─────────────────────────────────────────────
+    /**
+     * A hub-mode session the user asked for, rather than one idling into existence.
+     *
+     * Hub mode's whole trigger is "charging and untouched for two minutes", which means
+     * the only way to find out what it looks like was to plug the tablet in and walk
+     * away — and then not touch it, because touching it is what dismisses it. Nobody
+     * configures a feature they cannot see, so the preference gets a way to be shown on
+     * demand: from Settings, from the floating bubble, or over IPC.
+     *
+     * A preview ignores every arming condition, including the feature being switched
+     * off. Deciding whether to switch it on is exactly what someone is doing when they
+     * ask for one.
+     */
+    property bool hubModePreview: false
+
+    function toggleHubModePreview() {
+        root.hubModePreview = !root.hubModePreview;
+    }
+
     // ── Tablet app windows ───────────────────────────────────────────────────
     // Which shell surface the tablet family is currently showing as an app, or "" for none.
     // See TabletSystemApps for what an "app" means here.

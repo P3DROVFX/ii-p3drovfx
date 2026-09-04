@@ -18,7 +18,8 @@ Singleton {
             screenTranslate: ["translate screen", "traduzir tela"], regionRecord: ["record", "gravar"],
             regionScreenshot: ["screenshot", "print", "snip"], localSend: ["localsend", "enviar arquivo"],
             videoEditor: ["video editor", "editar video"], notes: ["notes", "notas", "quick notes"], scratchpad: ["scratchpad"],
-            mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"]
+            mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"],
+            hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"]
         };
         return base.concat(extras[action.id] ?? []);
     }
