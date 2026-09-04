@@ -60,6 +60,19 @@ Singleton {
     property string activeActionId: ""
     property string activeScreenName: ""
 
+    /**
+     * Whether `gestureStarted` has been emitted without a matching end.
+     *
+     * `gestureCancelled` used to be emitted only from the tracking and qualified states,
+     * so every other route to `resetGestureState()` — the touch-up safety net, the
+     * binary being deleted, a device disappearing — announced a gesture that listeners
+     * then never heard the end of. The feedback overlay is the one that noticed: its pill
+     * stayed on screen until the shell restarted.
+     *
+     * Every announced gesture now gets exactly one end signal, whichever way it ends.
+     */
+    property bool gestureAnnounced: false
+
     property real startX: 0
     property real startY: 0
     property real currentX: 0
@@ -907,6 +920,7 @@ Singleton {
 
         console.log("[TouchGestures] Gesture START on", screenName, ":", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
         gestureStarted(screenName, origin, actionId, px, py);
+        root.gestureAnnounced = true;
 
         TouchGestureDragRegistry.begin(origin, screenName);
     }
@@ -1046,17 +1060,20 @@ Singleton {
 
         console.log("[TouchGestures] Gesture COMMITTED:", origin, "-> action:", actionId, "on screen:", screenName);
         gestureCommitted(screenName, origin, actionId);
+        root.gestureAnnounced = false;
         TouchGestureActionRegistry.trigger(actionId, screenName);
 
         enterCooldown();
     }
 
     function cancelActiveGesture(reason) {
-        if (gestureState === root.stateTracking || gestureState === root.stateQualified) {
-            console.log("[TouchGestures] Gesture CANCELLED:", reason);
-            gestureCancelled(activeScreenName, activeOrigin, activeActionId);
+        // The drag registry only knows about gestures that reached tracking, so its
+        // cancel keeps the old guard. The *signal* does not: anyone told a gesture began
+        // has to be told it ended, from whatever state it ends in.
+        if (gestureState === root.stateTracking || gestureState === root.stateQualified)
             TouchGestureDragRegistry.cancel(activeOrigin);
-        }
+        if (root.gestureAnnounced)
+            console.log("[TouchGestures] Gesture CANCELLED:", reason);
         resetGestureState();
     }
 
@@ -1066,6 +1083,13 @@ Singleton {
     }
 
     function resetGestureState() {
+        // Emitted before the fields are cleared, so listeners get the gesture's own
+        // identity rather than empty strings. This is the single place every route out
+        // of a gesture passes through, which is why the end signal lives here.
+        if (root.gestureAnnounced) {
+            root.gestureAnnounced = false;
+            gestureCancelled(activeScreenName, activeOrigin, activeActionId);
+        }
         gestureState = root.stateIdle;
         activeDeviceId = "";
         activeContactId = -1;

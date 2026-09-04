@@ -22,12 +22,55 @@ Item {
 
     readonly property var actionObj: TouchGestureActionRegistry.actionById(actionId)
 
+    readonly property string myScreenName: root.screen ? root.screen.name : ""
+
+    /**
+     * Whether the service still has a gesture in flight on this screen.
+     *
+     * The authority on that, and the reason this is a binding rather than another
+     * signal handler. `active` used to be raised by `gestureStarted` and lowered only by
+     * `gestureCancelled` or `gestureCommitted` — but the service emits `gestureCancelled`
+     * only from the tracking and qualified states, so every other route to
+     * `resetGestureState()` left the overlay up with nothing to take it down again. A
+     * press on an edge that went nowhere was enough, and the pill then sat on the screen
+     * until the shell restarted.
+     *
+     * `activeOrigin` and `activeScreenName` are cleared by `resetGestureState()` on
+     * *every* path, so watching them cannot miss one.
+     */
+    readonly property bool serviceBusy: TouchGestureService.activeScreenName === root.myScreenName
+        && TouchGestureService.activeOrigin.length > 0
+
+    onServiceBusyChanged: {
+        if (!root.serviceBusy && root.active)
+            fadeTimer.restart();
+    }
+
+    /**
+     * Last line of defence.
+     *
+     * If the service somehow neither finishes nor resets, this overlay is a full-screen
+     * layer with a pill on it that the user cannot dismiss and did not ask for. Nothing
+     * about a swipe takes seconds, so anything still showing after four of them is a
+     * stuck state rather than a slow gesture.
+     */
+    Timer {
+        id: watchdog
+        interval: 4000
+        repeat: false
+        running: root.active
+        onTriggered: {
+            console.warn("[GestureFeedback] no gesture end seen; hiding the overlay");
+            root.active = false;
+            root.isCommitted = false;
+        }
+    }
+
     Connections {
         target: TouchGestureService
 
         function onGestureStarted(screenName, orig, actId, x, y) {
-            var myScreenName = root.screen ? root.screen.name : "";
-            if (screenName !== myScreenName) return;
+            if (screenName !== root.myScreenName) return;
             root.origin = orig;
             root.actionId = actId;
             root.startX = x;
@@ -40,22 +83,21 @@ Item {
         }
 
         function onGestureProgressChanged(screenName, orig, actId, prog, trav) {
-            var myScreenName = root.screen ? root.screen.name : "";
-            if (screenName !== myScreenName) return;
+            if (screenName !== root.myScreenName) return;
             root.gestureProgress = prog;
             root.travel = trav;
+            // A finger still moving is not a stuck overlay.
+            watchdog.restart();
         }
 
         function onGestureCancelled(screenName, orig, actId) {
-            var myScreenName = root.screen ? root.screen.name : "";
-            if (screenName !== myScreenName) return;
+            if (screenName !== root.myScreenName) return;
             root.gestureProgress = 0;
             fadeTimer.restart();
         }
 
         function onGestureCommitted(screenName, orig, actId) {
-            var myScreenName = root.screen ? root.screen.name : "";
-            if (screenName !== myScreenName) return;
+            if (screenName !== root.myScreenName) return;
             root.isCommitted = true;
             root.gestureProgress = 1.0;
             fadeTimer.restart();
