@@ -217,6 +217,32 @@ Singleton {
         return { ok: true, index: tabs.length - 1, title: tab.title, sketch: file };
     }
 
+    /**
+     * Attaches a drawing to an existing note, replacing whatever it had.
+     *
+     * Separate from `createSketch`, which makes a new note: drawing *into* the note you
+     * are looking at is the common case once notes can be drawn in at all, and creating a
+     * second note every time somebody added a line would be its own bug.
+     *
+     * The previous file is left on disk. Deleting it here would be right up until the
+     * moment two notes shared a path — which nothing prevents, since a path is just a
+     * string in a JSON file — and an orphaned PNG is a much smaller problem than a note
+     * whose picture vanished.
+     */
+    function setSketch(index: int, path: string): bool {
+        const tabs = root.cloneTabs(root.tabsData);
+        if (index < 0 || index >= tabs.length)
+            return false;
+        tabs[index].sketch = String(path ?? "");
+        if (tabs[index].icon === "article" && tabs[index].sketch.length > 0)
+            tabs[index].icon = "draw";
+        return root.scheduleWrite({ tabs: tabs });
+    }
+
+    function clearSketch(index: int): bool {
+        return root.setSketch(index, "");
+    }
+
     /// Makes sure the sketch directory exists. Called before the first write rather than
     /// at startup: a shell that never draws anything should not create the folder.
     function ensureSketchDir(): void {

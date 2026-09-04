@@ -51,8 +51,11 @@ RippleButton {
      */
     TapHandler {
         enabled: root.enabled
-        acceptedDevices: PointerDevice.TabletDevice | PointerDevice.Stylus | PointerDevice.Puck
-            | PointerDevice.Airbrush | PointerDevice.TouchScreen
+        // Tablet devices only, and that exclusion is load-bearing. A mouse click and a
+        // touch tap both reach the ripple button's MouseArea as ordinary (or synthesised)
+        // mouse events, so accepting those here would fire the button twice. A tablet
+        // event is the one kind a MouseArea can never see.
+        acceptedDevices: PointerDevice.Stylus | PointerDevice.Puck | PointerDevice.Airbrush
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: root.triggered()
     }

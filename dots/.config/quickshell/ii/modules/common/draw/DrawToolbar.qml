@@ -120,12 +120,12 @@ Rectangle {
                     }
                 }
 
-                // A TapHandler rather than a MouseArea, for the same reason the tool
-                // buttons have one: a MouseArea never sees a tablet event, and whether
-                // one is synthesised into a mouse event depends on nobody else having
-                // accepted it first. See DrawToolButton.
+                // A TapHandler rather than a MouseArea, and here it takes every device:
+                // a swatch has no MouseArea to double with, and a handler is the only
+                // thing that sees a tablet event at all. See DrawToolButton.
                 TapHandler {
                     acceptedDevices: PointerDevice.AllDevices
+                    gesturePolicy: TapHandler.ReleaseWithinBounds
                     onTapped: root.colorPicked(swatch.modelData)
                 }
             }

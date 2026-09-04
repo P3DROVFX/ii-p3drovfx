@@ -101,16 +101,27 @@ Singleton {
     /**
      * Sets the compositor's cursor theme.
      *
-     * `hyprctl setcursor` is global and lasts for the session, so leaving pen mode has to
-     * put the user's own theme back — including when the shell exits, which is what the
+     * Run through `hyprctl` rather than `Hyprland.dispatch`, and that is not a style
+     * choice: `setcursor` is a top-level hyprctl *command*, not a dispatcher. Sending it
+     * as one made Hyprland try to parse it as Lua and fail with `')' expected near
+     * 'aosp'` — the pen cursor never applied, and the only sign was a line in the log.
+     *
+     * The theme is global and lasts for the session, so leaving pen mode has to put the
+     * user's own theme back — including when the shell exits, which is what the
      * destruction handler is for. A shell that quit leaving a pen for a pointer would be
      * a shell that broke the desktop on its way out.
      */
+    function setCursorTheme(theme, size) {
+        if (String(theme ?? "").length === 0)
+            return;
+        Quickshell.execDetached(["hyprctl", "setcursor", String(theme), String(Math.round(size))]);
+    }
+
     function applyCursor() {
         if (root.wantsPenCursor && root.penThemeName.length > 0)
-            Hyprland.dispatch(`setcursor ${root.penThemeName} ${root.cursorSize}`);
-        else if (root.parentTheme.length > 0)
-            Hyprland.dispatch(`setcursor ${root.parentTheme} ${root.restoreSize}`);
+            root.setCursorTheme(root.penThemeName, root.cursorSize);
+        else
+            root.setCursorTheme(root.parentTheme, root.restoreSize);
     }
 
     onWantsPenCursorChanged: {
@@ -122,8 +133,8 @@ Singleton {
 
     Component.onCompleted: if (root.wantsPenCursor) root.ensurePenTheme()
     Component.onDestruction: {
-        if (root.wantsPenCursor && root.parentTheme.length > 0)
-            Hyprland.dispatch(`setcursor ${root.parentTheme} ${root.restoreSize}`);
+        if (root.wantsPenCursor)
+            root.setCursorTheme(root.parentTheme, root.restoreSize);
     }
 
     // ── The buttons ─────────────────────────────────────────────────────────
@@ -137,6 +148,9 @@ Singleton {
     property int draggingButton: -1
     property real dragLastX: 0
     property real dragLastY: 0
+    /// The window's own position, accumulated across the drag. See continueDrag.
+    property real dragX: 0
+    property real dragY: 0
     property string dragAddress: ""
 
     readonly property var focusedMonitor: {
@@ -175,6 +189,11 @@ Singleton {
         root.dragAddress = String(client.address ?? "");
         root.dragLastX = x;
         root.dragLastY = y;
+        // Where the window is now, in layout coordinates. Every step adds the pen's
+        // travel to this rather than re-reading the client list, which is only refreshed
+        // on an event and would lag a drag badly.
+        root.dragX = Number(client?.at?.[0] ?? 0);
+        root.dragY = Number(client?.at?.[1] ?? 0);
         return true;
     }
 
@@ -182,9 +201,13 @@ Singleton {
      * Moves the held window by however far the pen travelled.
      *
      * The pen reports 0..1 across its own surface, which in absolute mode is the screen,
-     * so a delta scales by the monitor's size. Relative rather than absolute placement on
-     * purpose: the window should follow the hand, not jump so its corner lands under the
-     * nib.
+     * so a delta scales by the monitor's size. The window should follow the hand rather
+     * than jump so its corner lands under the nib, which is why this accumulates a
+     * position of its own instead of placing the window at the pen.
+     *
+     * Dispatched as an absolute move — the same call the touch handles use — because
+     * that one is known to work. A `relative = true` argument was a guess about the Lua
+     * dispatcher's shape, and a guess that fails does so silently in a log line.
      */
     function continueDrag(x, y) {
         if (root.dragAddress.length === 0)
@@ -199,7 +222,9 @@ Singleton {
         root.dragLastY = y;
         if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5)
             return;
-        Hyprland.dispatch(`hl.dsp.window.move({ x = ${Math.round(dx)}, y = ${Math.round(dy)}, relative = true, window = "address:${root.dragAddress}" })`);
+        root.dragX += dx;
+        root.dragY += dy;
+        Hyprland.dispatch(`hl.dsp.window.move({ x = ${Math.round(root.dragX)}, y = ${Math.round(root.dragY)}, window = "address:${root.dragAddress}" })`);
     }
 
     function endDrag() {
