@@ -32,9 +32,22 @@ impl Role {
     }
 }
 
-/// Devices we inject through ourselves. Reacting to these would make the OSK
-/// close itself the moment the user pressed one of its own keys.
-fn is_virtual(name: &str) -> bool {
+/// Devices whose events we generated ourselves.
+///
+/// Reacting to these would make the OSK close itself the moment the user pressed one
+/// of its own keys, which is what the name check is for.
+///
+/// It applies to keyboards and pointers only, and that restriction is the whole point:
+/// OpenTabletDriver presents a real graphics tablet as "OpenTabletDriver **Virtual**
+/// Artist Tablet", so a blanket name filter threw away the one device this daemon
+/// exists to notice. A connected Huion reported no pen at all, and tapping a text field
+/// with it did nothing — indistinguishable from the daemon not running. Nothing
+/// synthesises a pen or a touchscreen on our behalf, so those two roles are never
+/// filtered by name.
+fn is_injected(name: &str, role: Role) -> bool {
+    if matches!(role, Role::Pen | Role::Touch) {
+        return false;
+    }
     let name = name.to_ascii_lowercase();
     name.contains("ydotool") || name.contains("virtual") || name.contains("uinput")
 }
@@ -80,13 +93,15 @@ pub fn spawn_watchers() {
 
     for (path, dev) in evdev::enumerate() {
         let name = dev.name().unwrap_or_default().to_string();
-        if is_virtual(&name) {
-            continue;
-        }
 
+        // Classified before the name is judged: what a device *is* decides whether we
+        // could have synthesised it. See is_injected.
         let Some(role) = classify(&dev) else {
             continue;
         };
+        if is_injected(&name, role) {
+            continue;
+        }
         drop(dev);
 
         // Opened once here rather than trusting enumerate(): a device that enumerates
