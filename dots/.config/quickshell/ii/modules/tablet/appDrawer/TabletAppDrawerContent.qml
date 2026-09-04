@@ -11,6 +11,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "TabletAppGridLayout.js" as AppGridLayout
 import qs.modules.tablet.appWindow
 import qs.modules.tablet.menu
 
@@ -904,13 +905,42 @@ Item {
                         }
                     }
                 }
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.right: parent.right
-                anchors.rightMargin: body.sideColumnWidth > 0
+                /**
+                 * The columns, centred in what is left after the rail and the side column.
+                 *
+                 * A GridView lays its cells out from its left edge and leaves whatever does
+                 * not divide evenly as dead space on the right — so a grid anchored across
+                 * the whole body was a block of icons pushed to one side, with a ragged gap
+                 * beside the A–Z rail that grew and shrank with the tile size. Sizing the
+                 * view to a whole number of columns and centring *that* is what makes the
+                 * grid sit in the middle of the screen, and it is exact rather than
+                 * approximately even.
+                 *
+                 * Centred against the whole body rather than against what the rail leaves,
+                 * because the rail is a thin overlay on the edge and the eye centres the
+                 * block against the screen. The clamp is what keeps that honest: when the
+                 * slack is smaller than the reserve — a side column open, a very wide tile
+                 * — the grid slides left just far enough to clear it instead of running
+                 * underneath.
+                 */
+                readonly property real rightReserve: body.sideColumnWidth > 0
                     ? body.sideColumnWidth + 24
                     : (letterRail.width > 0 ? letterRail.width + 8 : 0)
+                readonly property real availableWidth: Math.max(0, body.width - appGrid.rightReserve)
+                readonly property int columnCount: AppGridLayout.columnCount(
+                    appGrid.availableWidth, appGrid.cellWidth)
+
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: AppGridLayout.gridWidth(appGrid.availableWidth, appGrid.cellWidth)
+                x: AppGridLayout.originX(body.width, appGrid.availableWidth, appGrid.width)
+
+                // The columns change place when the side column opens; easing that keeps it
+                // reading as the grid making room rather than as the grid being replaced.
+                Behavior on x {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(appGrid)
+                }
+
                 visible: root.activeToolId.length === 0
                 enabled: visible
 
