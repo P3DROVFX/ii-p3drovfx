@@ -764,6 +764,20 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "animation"
+                text: Translation.tr("Slide drawings with their workspace")
+                visible: Config.options.tablet.liveDraw.enable
+                checked: Config.options.tablet.liveDraw.workspaceParallax
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.liveDraw.workspaceParallax)
+                        Config.options.tablet.liveDraw.workspaceParallax = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("The drawing travels in alongside the windows, swinging a little wider so it trails them into place and reads as a plane of its own. Costs one extra canvas for the length of the switch.")
+                }
+            }
+
             ConfigSpinBox {
                 icon: "gesture"
                 text: Translation.tr("Curve smoothing (%)")

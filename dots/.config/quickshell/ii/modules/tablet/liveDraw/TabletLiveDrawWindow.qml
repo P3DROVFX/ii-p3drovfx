@@ -60,14 +60,112 @@ PanelWindow {
 
     readonly property bool trayShown: TabletLiveDrawStore.trayOpen && root.focusedHere
         && !root.shellSurfaceOpen && !root.hiddenForCapture
-    readonly property bool drawing: TabletLiveDrawStore.drawing && root.trayShown
-    readonly property bool shown: (root.trayShown || root.hasInk) && !root.shellSurfaceOpen
+    // Not while the sheets are sliding past each other: the ink is translated then, so a
+    // stroke would land wherever the animation happened to have put the canvas.
+    readonly property bool drawing: TabletLiveDrawStore.drawing && root.trayShown && !root.sliding
+    readonly property bool shown: (root.trayShown || root.hasInk || root.sliding)
+        && !root.shellSurfaceOpen
+
+    // ── Sliding between workspaces ──────────────────────────────────────────
+    /**
+     * The ink travels with the workspace it belongs to, a little behind the windows.
+     *
+     * A sheet is tied to a workspace, so switching already swaps which one is painted —
+     * but swapping it instantly made the drawing look like part of the shell rather than
+     * part of the screen it annotates. Sliding it in alongside the windows says what it
+     * is; letting it swing a little wider than they do is what gives it a plane of its
+     * own instead of being stuck to the glass.
+     */
+    readonly property bool parallaxEnabled: Config.options?.tablet?.liveDraw?.workspaceParallax ?? true
+
+    readonly property int activeWorkspaceId: {
+        for (const monitor of (Hyprland.monitors?.values ?? [])) {
+            if (String(monitor?.name ?? "") === root.screenName)
+                return monitor?.activeWorkspace?.id ?? -1;
+        }
+        return -1;
+    }
+
+    property int lastWorkspaceId: -1
+    /// The sheet being left behind, painted only for the length of the transition.
+    property var outgoingStrokes: []
+    /// +1 when the new workspace is to the right, which is the way Hyprland slides.
+    property int slideDirection: 1
+    /// 0 at the start of the transition, 1 at rest.
+    property real slideProgress: 1
+    readonly property bool sliding: root.slideProgress < 0.999
+
+    /**
+     * How far the ink travels, against the full screen width the windows travel.
+     *
+     * Greater than one, so the sheet swings a little wider than the windows and trails
+     * them into place — which is what a plane *in front* of them does, and the ink is on
+     * the Overlay layer, in front of everything.
+     *
+     * Less than one was the first try and it is wrong here for a concrete reason, not an
+     * aesthetic one: a sheet that starts closer to its resting place is already partly on
+     * screen when the transition begins, overlapping the sheet still leaving. Two
+     * drawings crossing through each other reads as a glitch rather than as depth.
+     */
+    readonly property real parallaxFactor: 1.12
+
+    onActiveWorkspaceIdChanged: {
+        const from = root.lastWorkspaceId;
+        root.lastWorkspaceId = root.activeWorkspaceId;
+        if (from < 0 || root.activeWorkspaceId < 0 || from === root.activeWorkspaceId)
+            return;
+        if (!root.parallaxEnabled)
+            return;
+
+        const previous = TabletLiveDrawStore.strokesFor(`${root.screenName}:${from}`);
+        // Two blank sheets have nothing to slide, and animating them would keep an
+        // Overlay surface painting for no reason on every workspace change.
+        if (previous.length === 0 && root.strokes.length === 0)
+            return;
+
+        root.outgoingStrokes = previous;
+        root.slideDirection = root.activeWorkspaceId > from ? 1 : -1;
+        root.slideProgress = 0;
+        slideAnimation.restart();
+    }
+
+    NumberAnimation {
+        id: slideAnimation
+        target: root
+        property: "slideProgress"
+        from: 0
+        to: 1
+        // Tuned to the compositor's own workspace slide rather than to this shell's
+        // element animations: the ink is travelling alongside the windows, and the two
+        // finishing at different times is exactly what would give the trick away.
+        // Hyprland's `animations` block has `workspaces, speed = 7, bezier = menu_decel`.
+        duration: 700
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: [0.1, 1, 0, 1]
+        onFinished: root.outgoingStrokes = []
+    }
+
+    Component.onCompleted: root.lastWorkspaceId = root.activeWorkspaceId
 
     property string statusText: ""
 
     function statusFor(text) {
         root.statusText = text;
         statusTimer.restart();
+    }
+
+    /**
+     * Says something that outlives the toolbar.
+     *
+     * The status line under the tray is immediate but it dies with the tray — and the two
+     * things worth confirming, filing a drawing into Notes and taking a screenshot, both
+     * end with the tray gone or hidden. So they went through with no feedback at all. A
+     * notification is the shell's own way of saying a thing happened, and it is still
+     * there a moment later when the user looks up.
+     */
+    function announce(title, body, icon) {
+        Quickshell.execDetached(["notify-send", "-a", "Live draw",
+                                 String(title), String(body), "-i", String(icon)]);
     }
 
     Timer {
@@ -109,7 +207,10 @@ PanelWindow {
         repeat: false
         onTriggered: {
             root.hiddenForCapture = false;
-            root.statusFor(Translation.tr("Saved to Pictures, and on the clipboard."));
+            root.statusFor(Translation.tr("Screenshot saved."));
+            root.announce(Translation.tr("Screenshot saved"),
+                          Translation.tr("In Pictures/Screenshots, and on the clipboard."),
+                          "camera-photo");
         }
     }
 
@@ -147,14 +248,22 @@ PanelWindow {
     function finishSave(written, path) {
         if (!written) {
             root.statusFor(Translation.tr("Could not write the drawing."));
+            root.announce(Translation.tr("Could not save the drawing"),
+                          Translation.tr("Writing the image failed."), "dialog-error");
             return;
         }
         const result = NotesService.createSketch(path);
         if (!result.ok) {
             root.statusFor(Translation.tr("Could not add it to Notes."));
+            root.announce(Translation.tr("Could not save the drawing"),
+                          Translation.tr("Notes would not take it."), "dialog-error");
             return;
         }
         root.statusFor(Translation.tr("Saved to Notes as “%1”.").arg(result.title));
+        // Said out loud as well: the next two lines take the tray off the screen, and
+        // the status line with it.
+        root.announce(Translation.tr("Saved to Notes"),
+                      Translation.tr("As “%1”.").arg(result.title), "accessories-text-editor");
         // The ink has somewhere permanent to live now, so the sheet goes. Leaving it
         // would mean the next save wrote the same drawing to a second note.
         TabletLiveDrawStore.clear(root.sheetKey);
@@ -205,9 +314,32 @@ PanelWindow {
         intersection: root.trayShown ? Intersection.Combine : Intersection.Subtract
     }
 
+    /**
+     * The sheet being left behind.
+     *
+     * A plain canvas rather than a second DrawSurface: it is a picture for the length of
+     * the transition and never takes input. Loaded only while it has something to show,
+     * so an idle shell carries one canvas, not two.
+     */
+    Loader {
+        anchors.fill: parent
+        active: root.sliding && root.outgoingStrokes.length > 0
+
+        sourceComponent: DrawCanvas {
+            strokes: root.outgoingStrokes
+            transform: Translate {
+                x: -root.slideProgress * root.width * root.slideDirection * root.parallaxFactor
+            }
+        }
+    }
+
     DrawSurface {
         id: inkSurface
         anchors.fill: parent
+
+        transform: Translate {
+            x: (1 - root.slideProgress) * root.width * root.slideDirection * root.parallaxFactor
+        }
 
         strokes: root.strokes
         drawing: root.drawing

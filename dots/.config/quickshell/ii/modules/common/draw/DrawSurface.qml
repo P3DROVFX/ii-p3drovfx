@@ -144,6 +144,62 @@ Item {
     }
 
     /**
+     * The brush cursor: a small ring the size of the stroke it will leave.
+     *
+     * Drawn here rather than left to the system pointer, because an arrow is the wrong
+     * shape for this — it has a tip somewhere off to one side and a body that covers the
+     * paper you are about to mark. A ring is centred on the point the ink will come out
+     * of and shows how wide it will be, which is what every drawing application puts
+     * under the pen for the same reason.
+     */
+    HoverHandler {
+        id: hover
+        enabled: root.drawing
+        // The system pointer would otherwise sit inside the ring, which is one pointer
+        // too many.
+        cursorShape: Qt.BlankCursor
+    }
+
+    Item {
+        id: brushCursor
+
+        readonly property real diameter: root.eraser
+            ? root.eraserRadius * 2
+            : Math.max(8, root.strokeWidth)
+
+        visible: root.drawing && hover.hovered
+        width: brushCursor.diameter
+        height: brushCursor.diameter
+        x: hover.point.position.x - brushCursor.diameter / 2
+        y: hover.point.position.y - brushCursor.diameter / 2
+        z: 10
+
+        /**
+         * Two filled discs rather than an outlined ring.
+         *
+         * An outline would be a `border`, which this shell does not draw anywhere — and
+         * the pair says more anyway: the wide translucent disc is exactly how wide the
+         * stroke will be, and the opaque dot at its centre is exactly where the ink will
+         * come out. Both carry the current colour, so the cursor also answers "what am I
+         * about to draw with" without a glance at the toolbar.
+         */
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: root.eraser ? Appearance.colors.colSubtext : root.color
+            opacity: 0.28
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(4, brushCursor.diameter * 0.5)
+            height: width
+            radius: width / 2
+            color: root.eraser ? Appearance.colors.colSubtext : root.color
+        }
+    }
+
+    /**
      * The pen.
      *
      * A PointHandler rather than a MouseArea, because a MouseArea reports no pressure:

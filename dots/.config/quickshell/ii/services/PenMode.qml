@@ -73,7 +73,12 @@ Singleton {
 
     Process {
         id: penThemeBuilder
-        command: [`${Directories.scriptPath}/tablet/pen-cursor.sh`, root.parentTheme]
+        // The ring is drawn rather than borrowed from the user's theme. The first version
+        // reused whatever `pencil` that theme happened to ship — which was not a circle,
+        // and was not guaranteed to exist at all, so a theme without one silently got no
+        // pen cursor. See scripts/tablet/pen-cursor.py.
+        command: [`${Directories.scriptPath}/tablet/pen-cursor.py`, "ii-pen-cursor",
+                  root.parentTheme]
         stdout: StdioCollector { id: penThemeOut }
         stderr: StdioCollector { id: penThemeErr }
         onExited: code => {
@@ -83,17 +88,16 @@ Singleton {
                 root.applyCursor();
             } else {
                 root.penThemeName = "";
-                // A theme with no pencil is the ordinary failure, and it is the user's
-                // theme choice rather than a fault: say so instead of retrying.
-                root.cursorError = penThemeErr.text.trim()
-                    || `no pencil cursor in "${root.parentTheme}"`;
+                root.cursorError = penThemeErr.text.trim() || "could not write the cursor theme";
                 console.warn(`[PenMode] ${root.cursorError}`);
             }
         }
     }
 
+    /// The parent is only for the shapes the ring does not replace, so a session with no
+    /// XCURSOR_THEME still gets a pointer.
     function ensurePenTheme() {
-        if (root.parentTheme.length === 0 || penThemeBuilder.running)
+        if (penThemeBuilder.running)
             return;
         penThemeBuilder.running = true;
     }

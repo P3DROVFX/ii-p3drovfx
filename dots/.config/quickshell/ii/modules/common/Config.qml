@@ -1984,6 +1984,19 @@ Singleton {
                         "#ffffff", "#111111", "#e53935", "#fb8c00",
                         "#fdd835", "#43a047", "#1e88e5", "#8e24aa"
                     ]
+                    /**
+                     * Whether the ink slides with the workspace it belongs to.
+                     *
+                     * The sheets are per workspace, so switching already swaps which one
+                     * is painted — this is about *how*. With it on, the outgoing sheet
+                     * leaves and the incoming one arrives alongside the windows, but
+                     * travelling slightly less far, so the ink reads as sitting a little
+                     * behind the glass rather than being stuck to it.
+                     *
+                     * Costs one extra canvas for the length of the transition, and only
+                     * when at least one of the two sheets has something on it.
+                     */
+                    property bool workspaceParallax: true
                 }
 
                 /**
