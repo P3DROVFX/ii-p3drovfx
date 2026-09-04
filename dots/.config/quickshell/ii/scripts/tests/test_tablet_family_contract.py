@@ -85,9 +85,13 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("ScreencopyView", drawer)
         self.assertIn("blur: Math.min(1.0, root.openProgress * 1.15)", drawer)
         self.assertIn("live: false", drawer)
-        # Transparency off means no capture, no blur, and a solid surface colour.
+        # Transparency off means no capture, no blur, and a solid surface colour. The
+        # capture is refused by the Loader rather than by a null captureSource: the view is
+        # rebuilt per open anyway (see the comment in the file), so "do not build it" is
+        # the same statement and one fewer state a stale frame could hide in.
         self.assertIn("readonly property bool useBlur: Config.options?.appearance?.transparency?.enable", drawer)
-        self.assertIn("captureSource: root.useBlur ? root.screen : null", drawer)
+        self.assertIn("readonly property bool wantsBackdrop: root.useBlur", drawer)
+        self.assertIn("active: root.wantsBackdrop && !GlobalStates.otherTabletOverlayOnScreen(root.overlayName)", drawer)
         self.assertIn("visible: root.useBlur && root.openProgress > 0.001", drawer)
 
     def test_dock_keeps_headroom_so_its_lift_is_not_clipped_by_its_own_surface(self):

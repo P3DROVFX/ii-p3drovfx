@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard"
+import "../../modules/common/animations"
 
 TestCase {
     id: testCase
