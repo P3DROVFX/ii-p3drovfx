@@ -7,6 +7,7 @@ import Quickshell.Io
 import qs
 import qs.modules.common
 import qs.modules.common.functions
+import "OskAutoShowProtocol.js" as OskProtocol
 
 /**
  * Raises the on-screen keyboard when a text field is focused by finger or pen.
@@ -29,6 +30,7 @@ Singleton {
     /// path that is not there on every config reload, and the only sign is a log line.
     property bool binaryExists: false
     readonly property string binaryPath: `${Directories.scriptPath}/osk/osk_autoshow`
+    readonly property string sourcePath: `${Directories.scriptPath}/osk/osk_autoshow_src`
 
     Process {
         id: binaryCheck
@@ -45,6 +47,82 @@ Singleton {
 
     Component.onCompleted: root.checkBinary()
 
+    // ── Building the helper ─────────────────────────────────────────────────
+    /**
+     * Compiling the helper from inside the shell.
+     *
+     * This used to be a command in a box for the user to paste into a terminal, which is
+     * the one thing a device with no keyboard cannot do — and the auto-show switch is
+     * *the* feature that stands between such a device and a text field. So the build is a
+     * button, and the binary check re-runs when it finishes: the helper process is bound
+     * to `enabled`, so the keyboard starts raising itself the moment the build lands,
+     * with no restart.
+     *
+     * The command is deliberately the same one the box printed, so a user who prefers the
+     * terminal and a user who taps the button get identical results.
+     */
+    property bool building: false
+    /// "" while nothing has been attempted this session, else "ok" or "failed".
+    property string buildResult: ""
+    /// Whatever cargo said when it failed. Empty on success — nobody reads a build log
+    /// that worked, and keeping it around only invites showing it.
+    property string buildOutput: ""
+    /// No toolchain, no button: pointing someone at a build they cannot run is worse than
+    /// telling them what is missing.
+    property bool cargoAvailable: false
+
+    Process {
+        id: cargoCheck
+        command: ["sh", "-c", "command -v cargo"]
+        onExited: code => root.cargoAvailable = (code === 0)
+        Component.onCompleted: running = true
+    }
+
+    Process {
+        id: buildProcess
+        // `sh -c` rather than an argv list because this is three steps — configure, build,
+        // install — and the install has to be conditional on the build.
+        //
+        // Installed through a rename rather than a copy. By the time anyone rebuilds, the
+        // previous helper is usually running, and writing over a running executable is
+        // ETXTBSY — `cp` fails, the build reports failure, and the successful compile is
+        // thrown away. A rename swaps the directory entry instead and leaves the running
+        // process on the old inode until it exits, which it does the moment `enabled`
+        // cycles below.
+        command: ["sh", "-c",
+            `cd '${root.sourcePath}' && cargo build --release`
+            + ` && cp target/release/osk_autoshow '${root.binaryPath}.new'`
+            + ` && mv -f '${root.binaryPath}.new' '${root.binaryPath}'`]
+
+        stdout: StdioCollector { id: buildOut }
+        stderr: StdioCollector { id: buildErr }
+
+        onExited: code => {
+            root.building = false;
+            root.buildResult = code === 0 ? "ok" : "failed";
+            root.buildOutput = code === 0 ? "" : (buildErr.text || buildOut.text || "").trim();
+            if (code !== 0)
+                console.warn(`[OskAutoShow] helper build failed (${code}): ${root.buildOutput}`);
+            // What makes the button worth having: the helper is started off `enabled`,
+            // which is `wanted && binaryExists`, so re-checking is the whole handover.
+            root.checkBinary();
+            // A rebuild leaves the old process running on the old inode. Cycling the
+            // restart guard drops it and spawns the binary that was just installed.
+            if (code === 0)
+                root.restartHelper();
+        }
+    }
+
+    function buildHelper() {
+        if (root.building || Directories.scriptPath.length === 0)
+            return;
+        root.building = true;
+        root.buildResult = "";
+        root.buildOutput = "";
+        buildProcess.running = false;
+        Qt.callLater(() => buildProcess.running = true);
+    }
+
     // Keyboard bounds in 0..1 screen coordinates, published by OnScreenKeyboard.qml.
     // Normalized so it can be compared against helper coordinates without knowing
     // which output the touchscreen is mapped to.
@@ -54,6 +132,29 @@ Singleton {
     // Whether the keyboard currently on screen is one *we* raised. A manually opened
     // or pinned keyboard is never closed behind the user's back.
     property bool autoShown: false
+
+    // ── What the helper can see ─────────────────────────────────────────────
+    /**
+     * The daemon's own inventory of pointing devices, reported once at startup.
+     *
+     * This exists because the failure was silent. A helper that can open no touchscreen
+     * still binds the input method, still emits `activate`, and still never raises the
+     * keyboard — identically to a helper that was never built, a switch that was never
+     * turned on, and a machine with no touchscreen. Four different problems, one
+     * symptom, and nothing anywhere distinguishing them.
+     */
+    property bool deviceReportReceived: false
+    property int touchDeviceCount: 0
+    property int penDeviceCount: 0
+    property int mouseDeviceCount: 0
+    /// At least one device that can actually fire the trigger, honouring the switches.
+    readonly property bool anyTriggerDevice: OskProtocol.anyTriggerDevice({
+        touch: root.touchDeviceCount,
+        pen: root.penDeviceCount,
+        mouse: root.mouseDeviceCount
+    }, root.opts)
+    /// /dev/input refused at least one device. Fixed by group membership, not by us.
+    property bool permissionDenied: false
 
     property real lastPointerMs: -Infinity
     // An activate that arrived without a preceding touch. Kept briefly in case the
@@ -87,8 +188,7 @@ Singleton {
     }
 
     function pointerAllowed(kind) {
-        if (kind === "touch") return root.opts?.allowTouch ?? true;
-        return root.opts?.allowPen ?? true;
+        return OskProtocol.pointerAllowed(kind, root.opts);
     }
 
     function outsideKeyboard(x, y) {
@@ -116,6 +216,10 @@ Singleton {
         // e.g. tapping it again to move the cursor. Let `deactivate` drive hiding
         // instead of guessing from touch position while the field is still active.
         if (root.textInputActive) return;
+        // A relative pointer reports no position, so there is no "outside" to be on the
+        // wrong side of. Hiding on every click would close the keyboard the first time
+        // someone used the mouse for anything at all.
+        if (kind === "mouse") return;
         if (root.outsideKeyboard(x, y)) root.scheduleHide();
     }
 
@@ -134,10 +238,9 @@ Singleton {
     }
 
     function handleLine(line) {
-        const parts = line.trim().split(" ");
-        if (parts.length === 0) return;
+        const event = OskProtocol.parseLine(line);
 
-        switch (parts[0]) {
+        switch (event.kind) {
         case "activate":
             root.onActivate();
             break;
@@ -145,9 +248,26 @@ Singleton {
             root.textInputActive = false;
             root.scheduleHide();
             break;
-        case "touch":
-        case "pen":
-            root.onPointerPress(parts[0], parseFloat(parts[1]), parseFloat(parts[2]));
+        case "pointer":
+            root.onPointerPress(event.pointer, event.x, event.y);
+            break;
+        // How many pointing devices the helper could actually open. Reported once at
+        // startup so "nothing happens" can say which of its causes it is: a machine with
+        // no touchscreen, or /dev/input we are not allowed to read.
+        case "devices":
+            root.touchDeviceCount = event.touch;
+            root.penDeviceCount = event.pen;
+            root.mouseDeviceCount = event.mouse;
+            root.deviceReportReceived = true;
+            if (!root.anyTriggerDevice) {
+                console.warn("[OskAutoShow] no touchscreen or pen found;"
+                    + " nothing can raise the keyboard until one appears"
+                    + " (or the mouse trigger is switched on)");
+            }
+            break;
+        case "denied":
+            root.permissionDenied = true;
+            console.warn("[OskAutoShow] /dev/input is not readable; add this user to the input group");
             break;
         case "key":
             if (root.opts?.hideOnPhysicalKey ?? true) root.hideNow();
@@ -175,9 +295,17 @@ Singleton {
         }
     }
 
+    /// Held false for one tick to make the helper Process stop and start again.
+    property bool _restarting: false
+
+    function restartHelper() {
+        root._restarting = true;
+        Qt.callLater(() => root._restarting = false);
+    }
+
     Process {
         id: helper
-        running: root.enabled && !GlobalStates.screenLocked
+        running: root.enabled && !GlobalStates.screenLocked && !root._restarting
         command: [root.binaryPath]
 
         stdout: SplitParser {
@@ -185,7 +313,12 @@ Singleton {
         }
 
         onRunningChanged: {
-            if (helper.running) return;
+            if (helper.running) {
+                // A fresh process reports its own inventory; the previous one's is stale.
+                root.deviceReportReceived = false;
+                root.permissionDenied = false;
+                return;
+            }
             root.hideNow();
             root.lastPointerMs = -Infinity;
             root.pendingActivateMs = -Infinity;

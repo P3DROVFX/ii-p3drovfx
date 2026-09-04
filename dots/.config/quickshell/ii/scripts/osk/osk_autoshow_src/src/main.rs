@@ -10,7 +10,10 @@
 //!   deactivate          the focused text field went away
 //!   touch <x> <y>       finger contact, coordinates normalized to 0..1
 //!   pen <x> <y>         pen contact, coordinates normalized to 0..1
+//!   mouse -1 -1         a left click on a relative pointer; ignored unless asked for
 //!   key                 a press on a physical keyboard
+//!   devices <t> <p> <m> how many touch, pen and pointer devices could be opened
+//!   denied              at least one input device could not be opened for permissions
 //!   unavailable         another input method holds the seat; the daemon exits
 
 mod emit;

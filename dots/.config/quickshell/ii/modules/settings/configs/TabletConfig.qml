@@ -692,11 +692,41 @@ Item {
             title: Translation.tr("Keyboard")
             icon: "keyboard"
 
+            // The one blocker on this page that leaves a keyboard-less device unable to
+            // reach a text field, so it gets its own build button rather than a pointer
+            // to the page that has one.
             NoticeBox {
                 Layout.fillWidth: true
                 visible: Config.options.osk.autoShow.enable && !OskAutoShow.binaryExists
                 materialIcon: "build"
-                text: Translation.tr("The keyboard cannot raise itself yet: its helper has not been built. Open On-screen keyboard below for the one-line build command.")
+                text: OskAutoShow.building
+                    ? Translation.tr("Building the keyboard helper — this takes about a minute the first time.")
+                    : OskAutoShow.buildResult === "failed"
+                        ? Translation.tr("The keyboard helper failed to build. Open On-screen keyboard below for what went wrong.")
+                        : Translation.tr("The keyboard cannot raise itself yet: its helper has not been built.")
+
+                RippleButtonWithIcon {
+                    visible: OskAutoShow.cargoAvailable && OskAutoShow.buildResult !== "failed"
+                    buttonRadius: Appearance.rounding.small
+                    materialIcon: OskAutoShow.building ? "hourglass_top" : "build"
+                    mainText: OskAutoShow.building
+                        ? Translation.tr("Building…") : Translation.tr("Build it now")
+                    enabled: !OskAutoShow.building
+                    onClicked: OskAutoShow.buildHelper()
+                }
+            }
+
+            // Built and switched on, and still nothing happens: the two remaining reasons,
+            // which look identical from the outside and have different fixes.
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.osk.autoShow.enable && OskAutoShow.binaryExists
+                    && (OskAutoShow.permissionDenied
+                        || (OskAutoShow.deviceReportReceived && !OskAutoShow.anyTriggerDevice))
+                materialIcon: OskAutoShow.permissionDenied ? "vpn_key" : "touch_app"
+                text: OskAutoShow.permissionDenied
+                    ? Translation.tr("The keyboard helper cannot read /dev/input, so it cannot tell a finger from a mouse. See On-screen keyboard below.")
+                    : Translation.tr("No touchscreen or pen was found, so nothing can raise the keyboard. See On-screen keyboard below.")
             }
 
             ConfigSwitch {

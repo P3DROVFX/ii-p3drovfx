@@ -17,6 +17,7 @@ use crate::emit::emit;
 enum Role {
     Touch,
     Pen,
+    Mouse,
     Keyboard,
 }
 
@@ -25,6 +26,7 @@ impl Role {
         match self {
             Role::Touch => "touch",
             Role::Pen => "pen",
+            Role::Mouse => "mouse",
             Role::Keyboard => "key",
         }
     }
@@ -50,13 +52,32 @@ fn classify(dev: &Device) -> Option<Role> {
     if keys.contains(KeyCode::KEY_A) && keys.contains(KeyCode::KEY_Z) && keys.contains(KeyCode::KEY_SPACE) {
         return Some(Role::Keyboard);
     }
+    // A pointer, reported so the shell *can* offer a mouse trigger. Not because
+    // clicking into a field should raise a keyboard — it should not — but because
+    // without it this daemon is untestable on any machine without a touchscreen, and
+    // "nothing happens and nothing says why" is how the feature spent its life. The
+    // shell ignores these lines unless the user asks for them.
+    if keys.contains(KeyCode::BTN_LEFT) && !dev.properties().contains(PropType::DIRECT) {
+        return Some(Role::Mouse);
+    }
     None
 }
 
-/// Spawns one watcher thread per interesting device. Devices that cannot be opened
-/// (permission, hotplug race) are skipped silently — the daemon stays useful with
-/// whatever it can read.
+/// Spawns one watcher thread per interesting device, then reports what it found.
+///
+/// The inventory line is the point of this function's return value. A daemon that can
+/// read no input device still binds the input method perfectly happily and still emits
+/// `activate` — it simply never emits the `touch` line the shell correlates it with, so
+/// the keyboard never rises and nothing anywhere says why. Two causes look identical
+/// from the outside and have completely different fixes: no touchscreen on this machine
+/// (nothing to do), and /dev/input not readable by this user (join the input group). So
+/// both are reported rather than inferred.
 pub fn spawn_watchers() {
+    let mut touch = 0;
+    let mut pen = 0;
+    let mut mouse = 0;
+    let mut denied = false;
+
     for (path, dev) in evdev::enumerate() {
         let name = dev.name().unwrap_or_default().to_string();
         if is_virtual(&name) {
@@ -68,6 +89,24 @@ pub fn spawn_watchers() {
         };
         drop(dev);
 
+        // Opened once here rather than trusting enumerate(): a device that enumerates
+        // but cannot be opened is exactly the permission case, and the watcher thread
+        // would otherwise swallow it into its retry loop forever.
+        match Device::open(&path) {
+            Ok(_) => match role {
+                Role::Touch => touch += 1,
+                Role::Pen => pen += 1,
+                Role::Mouse => mouse += 1,
+                Role::Keyboard => {}
+            },
+            Err(error) => {
+                if error.kind() == std::io::ErrorKind::PermissionDenied {
+                    denied = true;
+                }
+                continue;
+            }
+        }
+
         thread::spawn(move || loop {
             if watch(&path, role).is_err() {
                 // Device disappeared (suspend, unplug). Back off and retry so a
@@ -76,6 +115,11 @@ pub fn spawn_watchers() {
             }
         });
     }
+
+    if denied {
+        emit("denied");
+    }
+    emit(&format!("devices {touch} {pen} {mouse}"));
 }
 
 fn axis_range(dev: &Device, axis: AbsoluteAxisCode) -> Option<AbsInfo> {
@@ -122,6 +166,12 @@ fn watch(path: &PathBuf, role: Role) -> std::io::Result<()> {
                         if last_key.elapsed() >= Duration::from_millis(200) {
                             last_key = Instant::now();
                             emit(role.label());
+                        }
+                    } else if role == Role::Mouse {
+                        if code == KeyCode::BTN_LEFT {
+                            // A relative pointer has no absolute position to report, and
+                            // -1 is the same "unknown" the axis normaliser already uses.
+                            emit("mouse -1 -1");
                         }
                     } else if code == KeyCode::BTN_TOUCH {
                         // Contact down — the position from this same SYN batch is current.

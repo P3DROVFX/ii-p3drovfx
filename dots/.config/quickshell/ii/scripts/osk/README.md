@@ -22,11 +22,22 @@ so that mouse clicks and Tab navigation never raise the keyboard.
 
 ## Building
 
+**Settings → On-screen keyboard → Automatic keyboard → "Build it now"** runs exactly the
+command below and picks up the result without a restart. That button is the supported
+path: this helper is what stands between a device with no keyboard and a text field, so
+unblocking it cannot itself require a terminal to type in.
+
+By hand:
+
 ```bash
 cd ~/.config/quickshell/ii/scripts/osk/osk_autoshow_src
 cargo build --release
-cp target/release/osk_autoshow ../
+cp target/release/osk_autoshow ../osk_autoshow.new
+mv -f ../osk_autoshow.new ../osk_autoshow
 ```
+
+The rename matters on a rebuild: writing over the running helper is `ETXTBSY`, so a
+plain `cp` fails and throws away a compile that worked.
 
 ## Output protocol
 
@@ -38,6 +49,9 @@ One event per line on stdout:
 | `deactivate` | the focused text field went away |
 | `touch <x> <y>` | finger contact, coordinates normalized to 0..1 |
 | `pen <x> <y>` | pen contact, coordinates normalized to 0..1 |
+| `mouse -1 -1` | left click on a relative pointer; ignored unless `osk.autoShow.allowMouse` |
+| `devices <t> <p> <m>` | how many touch, pen and pointer devices could be opened, once at startup |
+| `denied` | at least one input device could not be opened for permissions |
 | `key` | a press on a physical keyboard (throttled to 5 Hz) |
 | `unavailable` | another input method holds the seat; the helper exits |
 
@@ -54,5 +68,10 @@ One event per line on stdout:
 ## Configuration
 
 Everything lives under `osk.autoShow` in `~/.config/illogical-impulse/config.json`,
-and is exposed in Settings → Overlays → On-screen Keyboard. `enable` is `false` by
-default; while it is off the helper is never launched.
+and is exposed in Settings → Overlays → On-screen Keyboard. While `enable` is off the
+helper is never launched.
+
+`allowMouse` is off, and should stay off on any device with a touchscreen — someone
+using a mouse has a keyboard. It exists so the pipeline can be demonstrated on a
+machine with no touch panel, where the daemon reports `devices 0 0 N` and nothing else
+on the page can possibly fire.

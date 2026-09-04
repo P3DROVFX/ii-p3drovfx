@@ -4397,6 +4397,20 @@ Singleton {
                     property bool enable: true
                     property bool allowTouch: true
                     property bool allowPen: true
+                    /**
+                     * Whether a left click also raises the keyboard.
+                     *
+                     * Off, and it should stay off on any device that has a touchscreen:
+                     * someone with a mouse has a keyboard, and a keyboard drawn over
+                     * their text field is a nuisance rather than a feature.
+                     *
+                     * It exists because the alternative is a feature nobody can try. On a
+                     * machine with no touch panel every other switch here is inert, and
+                     * "I turned it on and nothing ever happened" is indistinguishable
+                     * from a bug. This makes the pipeline demonstrable on the hardware
+                     * people develop on.
+                     */
+                    property bool allowMouse: false
                     // How long after a touch a text field may claim focus and still count as touch-driven.
                     property int touchWindowMs: 1200
                     property bool hideOnPhysicalKey: true

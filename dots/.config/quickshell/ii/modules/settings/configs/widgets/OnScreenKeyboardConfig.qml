@@ -108,15 +108,55 @@ Item {
 
                 // The switch above is the user's intent; this is whether it can be honoured.
                 // Without the box, turning the switch on does nothing and says nothing.
+                //
+                // The button matters more than the snippet here. Pasting a command into a
+                // terminal needs a keyboard, and the whole point of this switch is a
+                // device that has none — so the box that unblocks the keyboard cannot
+                // itself require one.
                 HelperCodeBox {
-                    visible: Config.options.osk.autoShow.enable && !OskAutoShow.binaryExists
+                    visible: Config.options.osk.autoShow.enable
+                        && (!OskAutoShow.binaryExists || OskAutoShow.building
+                            || OskAutoShow.buildResult === "failed")
                     Layout.fillWidth: true
                     Layout.topMargin: 4
                     Layout.bottomMargin: 4
                     icon: "terminal"
                     title: Translation.tr("Compile the keyboard helper")
-                    text: Translation.tr("Wayland tells an input method when a text field is focused, and Quickshell has no binding for that protocol — so a small helper observes it. Build it once, then restart Quickshell:")
+                    text: Translation.tr("Wayland tells an input method when a text field is focused, and Quickshell has no binding for that protocol — so a small helper observes it. It only has to be built once, and it starts working straight away — no restart.")
                     codeSnippet: "cd " + Directories.scriptPath + "/osk/osk_autoshow_src && cargo build --release && cp target/release/osk_autoshow ../osk_autoshow"
+                    snippetWrapMode: Text.Wrap
+
+                    actionText: Translation.tr("Build it now")
+                    actionIcon: "build"
+                    actionBusy: OskAutoShow.building
+                    busyText: Translation.tr("Building…")
+                    statusIsError: OskAutoShow.buildResult === "failed" || !OskAutoShow.cargoAvailable
+                    statusText: {
+                        if (!OskAutoShow.cargoAvailable)
+                            return Translation.tr("Rust and cargo are not installed, so the build cannot run here.");
+                        if (OskAutoShow.building)
+                            return Translation.tr("Compiling — this takes about a minute the first time.");
+                        if (OskAutoShow.buildResult === "failed")
+                            return Translation.tr("The build failed: %1").arg(
+                                OskAutoShow.buildOutput.split("\n").slice(-3).join(" "));
+                        return "";
+                    }
+                    onActionClicked: OskAutoShow.buildHelper()
+                }
+
+                // Built, switched on, and still nothing happens: the helper has to be able
+                // to read /dev/input to tell a finger from a mouse, and that is a group
+                // membership rather than anything the shell can grant itself.
+                HelperCodeBox {
+                    visible: Config.options.osk.autoShow.enable && OskAutoShow.binaryExists
+                        && OskAutoShow.permissionDenied
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    icon: "vpn_key"
+                    title: Translation.tr("Input device permissions")
+                    text: Translation.tr("The helper cannot read /dev/input, so it cannot tell a finger from a mouse. Add your user to the input group and log back in:")
+                    codeSnippet: "sudo usermod -aG input $USER"
                     snippetWrapMode: Text.Wrap
                 }
 
@@ -142,6 +182,33 @@ Item {
                     StyledToolTip {
                         text: Translation.tr("Automatically show the virtual keyboard when tapping text fields with a stylus or pen")
                     }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "mouse"
+                    text: Translation.tr("Trigger with mouse click")
+                    enabled: Config.options.osk.autoShow.enable
+                    checked: Config.options.osk.autoShow.allowMouse
+                    onCheckedChanged: Config.options.osk.autoShow.allowMouse = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Off by default, and best left off on a device with a touchscreen — someone using a mouse has a keyboard. It is here so the feature can be tried on a machine that has no touch panel, where every other switch on this page is inert.")
+                    }
+                }
+
+                // The last of the four ways this could silently do nothing. The helper is
+                // built, the switch is on, permissions are fine — and there is simply no
+                // device on this machine that can fire the trigger.
+                NoticeBox {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                    visible: Config.options.osk.autoShow.enable && OskAutoShow.binaryExists
+                        && OskAutoShow.deviceReportReceived && !OskAutoShow.anyTriggerDevice
+                    materialIcon: "touch_app"
+                    text: OskAutoShow.touchDeviceCount === 0 && OskAutoShow.penDeviceCount === 0
+                        ? Translation.tr("No touchscreen or pen was found on this machine, so nothing can raise the keyboard. Turn on the mouse trigger above to try it with a pointer.")
+                        : Translation.tr("Every device that could raise the keyboard is switched off above.")
                 }
 
                 ConfigSwitch {
