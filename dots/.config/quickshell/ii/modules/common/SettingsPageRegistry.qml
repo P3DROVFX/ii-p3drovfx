@@ -69,7 +69,7 @@ Singleton {
             "icon": "font_download",
             "component": "modules/settings/configs/InterfaceFontsConfig.qml",
             "subPages": ["widgets/CustomFontsConfig.qml"],
-            "aliases": ["Base Icon Themes", "Decorative Options"]
+            "aliases": ["Base Icon Themes", "Decorative Options", "Shell family", "Panel family", "Tablet mode", "Waffle", "illogical-impulse", "Switch shell"]
         },
         {
             "id": "presets",
