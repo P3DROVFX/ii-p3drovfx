@@ -26,6 +26,10 @@ Singleton {
         // which is the only way anyone can see what the preference does before choosing
         // it. See GlobalStates.hubModePreview.
         { id: "hubMode", name: "Hub Mode (Display)", icon: "dock", families: ["tablet"] },
+        // Marked prominent: the bubble draws it as the wide tile at the top of its sheet.
+        // A pen comes out mid-thought and the control for it has to be the one you cannot
+        // miss, not the fourth icon in a grid.
+        { id: "liveDraw", name: "Draw on Screen", icon: "draw", families: ["tablet"], prominent: true },
         { id: "workspaceNext", name: "Next Workspace", icon: "chevron_right" },
         { id: "workspacePrev", name: "Previous Workspace", icon: "chevron_left" },
         { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
@@ -135,6 +139,13 @@ Singleton {
 
         case "hubMode":
             GlobalStates.toggleHubModePreview();
+            break;
+
+        case "liveDraw":
+            // The family owns the ink; shared code cannot import the store to reach it.
+            // Doing nothing is correct on a family that installed no handler.
+            if (GlobalStates.liveDrawHandler)
+                GlobalStates.liveDrawHandler();
             break;
 
         case "recents":

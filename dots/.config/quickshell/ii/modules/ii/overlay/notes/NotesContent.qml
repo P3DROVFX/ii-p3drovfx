@@ -336,6 +336,55 @@ OverlayBackground {
             }
         }
 
+        /**
+         * The drawing, when the note is one.
+         *
+         * A sketch note carries a path rather than pixels — notes.json is rewritten on
+         * every keystroke and a base64 PNG inside it would travel through that loop for
+         * every character typed in an unrelated tab. So the note shows the file, and the
+         * text field underneath stays exactly what it was, for anything the drawing needs
+         * said about it.
+         */
+        Loader {
+            id: sketchLoader
+            readonly property string sketchPath: {
+                const tab = root.tabsData.tabs[root.currentTabIndex];
+                return String(tab?.sketch ?? "");
+            }
+            Layout.fillWidth: true
+            Layout.maximumHeight: root.height * 0.55
+            active: sketchLoader.sketchPath.length > 0
+
+            sourceComponent: Rectangle {
+                implicitHeight: Math.min(sketchImage.implicitHeight + 20,
+                                         sketchLoader.Layout.maximumHeight)
+                radius: Appearance.rounding.normal
+                color: Appearance.colors.colLayer2
+
+                Image {
+                    id: sketchImage
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    source: `file://${sketchLoader.sketchPath}`
+                    fillMode: Image.PreserveAspectFit
+                    // Drawn on a surface of our own rather than on the wallpaper it was
+                    // made over, so the ink needs somewhere with contrast to sit.
+                    smooth: true
+                    asynchronous: true
+                }
+
+                // A file someone moved or deleted: the note still exists and still says
+                // what it is, instead of showing an empty box.
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: sketchImage.status === Image.Error
+                    text: Translation.tr("This drawing's file is missing.")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
+            }
+        }
+
         ScrollView {
             id: editorScrollView
             Layout.fillWidth: true

@@ -19,7 +19,8 @@ Singleton {
             regionScreenshot: ["screenshot", "print", "snip"], localSend: ["localsend", "enviar arquivo"],
             videoEditor: ["video editor", "editar video"], notes: ["notes", "notas", "quick notes"], scratchpad: ["scratchpad"],
             mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"],
-            hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"]
+            hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"],
+            liveDraw: ["draw", "desenhar", "desenho", "sketch", "pen", "caneta", "stylus", "annotate", "anotar"]
         };
         return base.concat(extras[action.id] ?? []);
     }
@@ -30,6 +31,7 @@ Singleton {
 
     readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
         keywords: action.keywords ?? root.keywordsFor(action),
+        prominent: action.prominent === true,
         category: action.category ?? "shell",
         searchable: action.searchable !== false,
         enabled: action.enabled ?? (() => true)

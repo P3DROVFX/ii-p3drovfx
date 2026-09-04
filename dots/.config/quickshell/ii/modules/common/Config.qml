@@ -809,7 +809,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 17
+    readonly property int currentConfigVersion: 18
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1235,6 +1235,17 @@ Singleton {
         if (from < 17 && raw.tablet?.dock?.autoHideOnOccupiedWorkspace === true) {
             raw.tablet.dock.autoHideOnOccupiedWorkspace = false;
             console.log("[Config] Migrated tablet.dock.autoHideOnOccupiedWorkspace -> false (persistent taskbar)");
+        }
+
+        // v17 -> v18: live draw joined the floating bubble's sheet. The action list is a
+        // stored user ordering, so a new default reaches nobody who already has a config
+        // — and the bubble is the only place this feature is discoverable from.
+        if (from < 18 && Array.isArray(raw.tablet?.bubble?.actions)) {
+            const actions = raw.tablet.bubble.actions;
+            if (!actions.some(entry => String(entry ?? "") === "liveDraw")) {
+                actions.unshift("liveDraw");
+                console.log("[Config] Added liveDraw to the tablet bubble's actions");
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -1894,8 +1905,39 @@ Singleton {
                      * "none" leaves the slot empty.
                      */
                     property list<string> actions: [
+                        // Live draw leads: it is marked prominent in the registry, so it
+                        // is the wide bar at the top of the sheet rather than one square
+                        // among eight. A pen comes out mid-thought and the control for it
+                        // has to be the one that cannot be missed.
+                        "liveDraw",
                         "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot",
-                        "sidebarRight", "recents", "appDrawer", "home"
+                        "sidebarRight", "recents", "appDrawer"
+                    ]
+                }
+
+                /**
+                 * Drawing on the screen with a pen, over whatever is on it.
+                 *
+                 * The palette is a list of colours rather than theme tokens on purpose,
+                 * and it is the one place in this shell where a literal colour is the
+                 * right answer: these are pigment, not chrome. Ink that recoloured itself
+                 * when the wallpaper changed would be ink you could not rely on, and a
+                 * drawing done in red is a drawing done in red.
+                 */
+                property JsonObject liveDraw: JsonObject {
+                    property bool enable: true
+                    /// Nominal stroke width in px, before pressure scales it.
+                    property int width: 4
+                    /// Whether a stylus's pressure varies the stroke width. Ignored by
+                    /// devices that do not report it — a finger draws an even line.
+                    property bool pressure: true
+                    /// How much the input filter smooths, 0–95. Higher is steadier and
+                    /// lags further behind the tip; 0 draws the raw samples, tremble and
+                    /// all.
+                    property int smoothing: 55
+                    property list<string> palette: [
+                        "#ffffff", "#111111", "#e53935", "#fb8c00",
+                        "#fdd835", "#43a047", "#1e88e5", "#8e24aa"
                     ]
                 }
 

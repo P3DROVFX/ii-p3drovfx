@@ -1810,6 +1810,18 @@ Singleton {
         root.hubModePreview = !root.hubModePreview;
     }
 
+    // ── Live draw (tablet family) ────────────────────────────────────────────
+    /**
+     * Installed by the family that owns the ink, so shared code can start a drawing
+     * without importing a tablet module.
+     *
+     * The same shape as `navigateBackHandler` and the home-screen handlers above, and for
+     * the same reason: modules/common may not reach into modules/tablet, and a family
+     * that has no live draw simply installs nothing.
+     */
+    property var liveDrawHandler: null
+    property int liveDrawSaveRequest: 0
+
     // ── Tablet app windows ───────────────────────────────────────────────────
     // Which shell surface the tablet family is currently showing as an app, or "" for none.
     // See TabletSystemApps for what an "app" means here.

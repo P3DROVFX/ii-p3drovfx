@@ -13,6 +13,7 @@ import qs.modules.tablet.dock
 import qs.modules.tablet.floatingBubble
 import qs.modules.tablet.homeScreen
 import qs.modules.tablet.hubMode
+import qs.modules.tablet.liveDraw
 import qs.modules.tablet.navigation
 import qs.modules.tablet.recents
 import qs.modules.tablet.sidebarDashboard
@@ -265,6 +266,10 @@ Scope {
         GlobalStates.isAppOnHomeScreenHandler = (appId) => {
             return TabletHomeIcons.has(TabletHomeIcons.currentWorkspace, appId);
         };
+        GlobalStates.liveDrawHandler = () => {
+            TabletLiveDrawStore.ensureTools();
+            TabletLiveDrawStore.drawing = !TabletLiveDrawStore.drawing;
+        };
         GlobalStates.clearHomeScreenAppsHandler = () => {
             const ws = TabletHomeIcons.currentWorkspace;
             for (const icon of TabletHomeIcons.iconsFor(ws)) {
@@ -280,6 +285,7 @@ Scope {
         GlobalStates.removeAppFromHomeScreenHandler = null;
         GlobalStates.isAppOnHomeScreenHandler = null;
         GlobalStates.clearHomeScreenAppsHandler = null;
+        GlobalStates.liveDrawHandler = null;
     }
 
     // Both side edges go Back, as on Android. They have to *claim* the drag: an edge the
@@ -311,6 +317,10 @@ Scope {
     // One control that is always where the user left it, including over a fullscreen app —
     // which is exactly when the edge gestures are least reachable. See the component.
     PanelLoader { component: TabletFloatingBubble {} }
+
+    // Write on the screen with a pen. Not a PanelLoader: it owns per-screen Variants and
+    // has to keep the ink alive whether or not it is currently showing anything.
+    TabletLiveDraw {}
 
 
 

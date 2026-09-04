@@ -598,6 +598,73 @@ Item {
             }
         }
 
+        // ── Live draw ─────────────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Draw on screen")
+            icon: "draw"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Write on top of whatever is on screen. The drawing belongs to the workspace it was made on and stays there — over the applications, out of their way — until it is rubbed out or saved into Notes. Reach it from the floating bubble, a gesture, or a keybind.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "draw"
+                text: Translation.tr("Enable drawing on screen")
+                checked: Config.options.tablet.liveDraw.enable
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.liveDraw.enable)
+                        Config.options.tablet.liveDraw.enable = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "stylus"
+                text: Translation.tr("Vary the line with pen pressure")
+                visible: Config.options.tablet.liveDraw.enable
+                checked: Config.options.tablet.liveDraw.pressure
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.liveDraw.pressure)
+                        Config.options.tablet.liveDraw.pressure = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Uses the pressure a stylus reports, including one presented by OpenTabletDriver. A finger and a mouse report no pressure and draw an even line either way.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "line_weight"
+                text: Translation.tr("Line thickness (px)")
+                visible: Config.options.tablet.liveDraw.enable
+                value: Config.options.tablet.liveDraw.width
+                from: 1
+                to: 24
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.liveDraw.width)
+                        Config.options.tablet.liveDraw.width = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "gesture"
+                text: Translation.tr("Curve smoothing (%)")
+                visible: Config.options.tablet.liveDraw.enable
+                value: Config.options.tablet.liveDraw.smoothing
+                from: 0
+                to: 95
+                stepSize: 5
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.liveDraw.smoothing)
+                        Config.options.tablet.liveDraw.smoothing = value;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Higher is steadier and lags a little further behind the tip. Zero draws the samples exactly as they arrive, tremble and all.")
+                }
+            }
+        }
+
         ContentSection {
             title: Translation.tr("Hub mode")
             icon: "dock"

@@ -180,6 +180,9 @@ PanelWindow {
         return resolved;
     }
 
+    readonly property var prominentActions: root.sheetActions.filter(action => action.prominent)
+    readonly property var gridActions: root.sheetActions.filter(action => !action.prominent)
+
     function runAction(actionId) {
         root.sheetOpen = false;
         // After the sheet is down: several of these focus or move a window, and doing that
@@ -223,11 +226,11 @@ PanelWindow {
         id: sheet
 
         readonly property real tileSize: Math.max(Appearance.sizes.minimumTouchTarget * 1.6, 84)
-        readonly property int columns: Math.min(2, Math.max(1, root.sheetActions.length))
+        readonly property int columns: Math.min(2, Math.max(1, root.gridActions.length))
         readonly property real padding: 14
 
         width: sheet.columns * sheet.tileSize + (sheet.columns - 1) * 10 + sheet.padding * 2
-        height: Math.max(sheet.tileSize, sheetGrid.implicitHeight) + sheet.padding * 2
+        height: sheetColumn.implicitHeight + sheet.padding * 2
 
         // Beside the bubble, on whichever side has the room, vertically centred on it but
         // never off the top or bottom of the screen.
@@ -252,22 +255,52 @@ PanelWindow {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(sheet)
         }
 
-        GridLayout {
-            id: sheetGrid
+        ColumnLayout {
+            id: sheetColumn
             anchors.centerIn: parent
-            columns: sheet.columns
-            columnSpacing: 10
-            rowSpacing: 10
+            spacing: 10
 
+            /**
+             * The actions that ask for the top of the sheet.
+             *
+             * A prominent action gets a full-width bar rather than a square in the grid.
+             * Live draw is the reason the flag exists: a pen comes out mid-thought, and
+             * the control for it has to be the one you cannot miss — not the fourth icon
+             * in a grid of eight identical tiles.
+             */
             Repeater {
-                model: root.sheetActions
+                model: root.prominentActions
 
                 delegate: TabletBubbleActionTile {
                     required property var modelData
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.round(sheet.tileSize * 0.68)
                     tileSize: sheet.tileSize
+                    wide: true
+                    emphasised: true
                     symbol: modelData.icon ?? "bolt"
                     label: Translation.tr(modelData.name ?? "")
                     onTriggered: root.runAction(modelData.id)
+                }
+            }
+
+            GridLayout {
+                id: sheetGrid
+                Layout.alignment: Qt.AlignHCenter
+                columns: sheet.columns
+                columnSpacing: 10
+                rowSpacing: 10
+
+                Repeater {
+                    model: root.gridActions
+
+                    delegate: TabletBubbleActionTile {
+                        required property var modelData
+                        tileSize: sheet.tileSize
+                        symbol: modelData.icon ?? "bolt"
+                        label: Translation.tr(modelData.name ?? "")
+                        onTriggered: root.runAction(modelData.id)
+                    }
                 }
             }
         }
