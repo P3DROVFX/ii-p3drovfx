@@ -375,7 +375,7 @@ Item {
                 label: Translation.tr("Layout")
 
                 ChoiceChips {
-                    values: ["qwerty", "qwertz", "azerty", "dvorak", "colemak"]
+                    values: ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"]
                     current: root.options.keyboard.layout
                     onPicked: value => root.options.keyboard.layout = value
                 }

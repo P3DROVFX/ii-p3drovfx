@@ -482,6 +482,9 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Appearance.sizes.elevationMargin
                 visible: root.options.keyboard.enable && !engine.isFinished
+                // A split board is wider than the three rows it replaces, so it
+                // needs to know what it may take before it decides its scale.
+                maxWidth: stageColumn.width
                 nextChar: engine.nextExpectedChar.toLowerCase()
                 opacity: engine.isRunning ? 0.85 : 1
             }

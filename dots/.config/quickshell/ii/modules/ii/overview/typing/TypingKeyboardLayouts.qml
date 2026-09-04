@@ -47,8 +47,16 @@ Singleton {
         qwertz: "qwertz",
         azerty: "azerty",
         dvorak: "dvorak",
-        colemak: "colemak"
+        colemak: "colemak",
+        vial: "vial"
     })
+
+    /**
+     * "vial" is not in `layouts` on purpose: that board is not a static picture
+     * but the keyboard on the desk, whose shape and keymap VialKeyboard reads
+     * from its own firmware. The preview draws it from there instead of here.
+     */
+    readonly property string liveLayoutId: "vial"
 
     function rowsFor(layoutId) {
         return root.layouts[layoutId] ?? root.layouts.qwerty;
