@@ -30,6 +30,9 @@ Singleton {
         // A pen comes out mid-thought and the control for it has to be the one you cannot
         // miss, not the fourth icon in a grid.
         { id: "liveDraw", name: "Draw on Screen", icon: "draw", families: ["tablet"], prominent: true },
+        // Pen mode only: it means something for as long as a barrel button is held, which
+        // no gesture or bubble tile can express. Listed so the binding UI can offer it.
+        { id: "dragWindow", name: "Drag Window (hold)", icon: "drag_pan", families: ["tablet"], penOnly: true },
         { id: "workspaceNext", name: "Next Workspace", icon: "chevron_right" },
         { id: "workspacePrev", name: "Previous Workspace", icon: "chevron_left" },
         { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
@@ -96,8 +99,17 @@ Singleton {
         return action.families.indexOf(family ?? "ii") !== -1;
     }
 
-    function availableActionsForFamily(family) {
-        return root.actions.filter(a => root.availableForFamily(a, family));
+    /**
+     * Actions a family can perform, for a binding UI to offer.
+     *
+     * `penOnly` actions are left out unless asked for. "Drag window" means something for
+     * as long as a stylus barrel button is held, and a swipe or a bubble tile has no way
+     * to express a hold — offering it there would produce a binding that recognises the
+     * gesture and then does nothing.
+     */
+    function availableActionsForFamily(family, includePenOnly) {
+        return root.actions.filter(a => root.availableForFamily(a, family)
+            && (includePenOnly === true || a.penOnly !== true));
     }
 
     function actionById(actionId) {

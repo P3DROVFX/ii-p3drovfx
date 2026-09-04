@@ -374,6 +374,12 @@ Scope {
 
     readonly property var _touchGestureService: TouchGestureService
 
+    // Same reason as the line above: a QML singleton is created on first use, and pen
+    // mode's only other reference is behind a `||` that short-circuits whenever the
+    // keyboard's auto-show is on. Without this it would never exist, and its IPC target
+    // and its cursor handling would never register.
+    readonly property var _penMode: PenMode
+
     PanelLoader {
         extraCondition: Config.ready && Boolean(Config.options?.interactions?.touchGestures?.enable)
         component: TouchGestures {}

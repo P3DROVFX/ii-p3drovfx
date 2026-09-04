@@ -75,3 +75,28 @@ helper is never launched.
 using a mouse has a keyboard. It exists so the pipeline can be demonstrated on a
 machine with no touch panel, where the daemon reports `devices 0 0 N` and nothing else
 on the page can possibly fire.
+
+## Pen mode
+
+The same daemon reports the stylus's barrel buttons, because it is already watching the
+pen device and nothing else in the shell is:
+
+| Line | Meaning |
+| --- | --- |
+| `penbutton <n> <0\|1> <x> <y>` | barrel button `n` released/pressed, with the pen's position |
+| `penmove <x> <y>` | pen motion, **only while a barrel button is held** |
+
+Both states of a button are reported because the shell binds press and hold separately:
+holding one and moving the pen is how a window gets dragged, and a press-only report
+cannot express the end of a hold. Motion is gated on a held button for the same reason
+the rest of this file is careful: a pen reports position continuously whenever it is
+anywhere near the tablet, and forwarding all of it would be thousands of lines a minute
+for something only a drag cares about.
+
+### Why not OpenTabletDriver's own bindings
+
+OTD can bind a barrel button to a key combination, and the shell could then bind that
+combination in Hyprland. That is three files that have to agree — OTD's `settings.json`,
+Hyprland's config, and the shell's — and opening OTD's own UI rewrites the first one.
+OTD passes the buttons through as ordinary `BTN_STYLUS` / `BTN_STYLUS2` on the tablet
+device regardless, so reading them here needs nothing configured anywhere else.

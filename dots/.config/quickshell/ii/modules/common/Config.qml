@@ -1916,6 +1916,37 @@ Singleton {
                 }
 
                 /**
+                 * The shell behaving as though a pen, not a mouse, is the pointer.
+                 *
+                 * Off by default: it changes the system cursor for the whole session,
+                 * which is not something to do to somebody who never asked.
+                 *
+                 * No OpenTabletDriver configuration is involved, and that is deliberate.
+                 * OTD passes the barrel buttons through as ordinary `BTN_STYLUS` and
+                 * `BTN_STYLUS2` on the tablet device, which the keyboard's helper daemon
+                 * already watches — so the buttons are bound here, in one place, rather
+                 * than by writing key combinations into OTD's settings and binding those
+                 * combinations again in Hyprland. Three files that have to agree is three
+                 * files that can disagree, and opening OTD's own UI would break it.
+                 */
+                property JsonObject pen: JsonObject {
+                    property bool enable: false
+                    /// Swap the pointer for the current cursor theme's own pencil.
+                    property bool cursor: true
+                    /// Blank means "whatever XCURSOR_THEME says".
+                    property string cursorTheme: ""
+                    /// Smaller than a normal pointer, because a nib is a point.
+                    property int cursorSize: 20
+                    /**
+                     * What each barrel button does, in order, as action ids from
+                     * ShellActionRegistry — plus "dragWindow", which is handled by pen
+                     * mode itself because it means something for as long as the button is
+                     * held rather than once when it is pressed.
+                     */
+                    property list<string> buttons: ["dragWindow", "back"]
+                }
+
+                /**
                  * Drawing on the screen with a pen, over whatever is on it.
                  *
                  * The palette is a list of colours rather than theme tokens on purpose,

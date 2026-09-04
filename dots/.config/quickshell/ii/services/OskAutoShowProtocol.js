@@ -48,6 +48,26 @@ function parseLine(line) {
             pen: intOr(parts[2], 0),
             mouse: intOr(parts[3], 0)
         };
+    // A stylus barrel button, either edge. The shell binds press and hold separately —
+    // holding one and moving the pen is how a window is dragged — so both states are
+    // reported rather than only the press.
+    case "penbutton":
+        return {
+            kind: "penButton",
+            button: intOr(parts[1], 0),
+            pressed: intOr(parts[2], 0) === 1,
+            x: numberOr(parts[3], -1),
+            y: numberOr(parts[4], -1)
+        };
+    // Pen motion, sent only while a barrel button is held. A pen reports position
+    // continuously whenever it is near the tablet, and forwarding all of it would be
+    // thousands of lines a minute for something only a drag cares about.
+    case "penmove":
+        return {
+            kind: "penMove",
+            x: numberOr(parts[1], -1),
+            y: numberOr(parts[2], -1)
+        };
     default:
         return { kind: "unknown" };
     }

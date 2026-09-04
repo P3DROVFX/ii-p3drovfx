@@ -23,7 +23,18 @@ Singleton {
     readonly property var opts: Config.options?.osk?.autoShow ?? null
     /// Whether the user wants auto-show. Separate from `enabled`, which also needs the helper
     /// to exist — Settings shows the build instructions off the difference between the two.
-    readonly property bool wanted: root.opts?.enable ?? true
+    readonly property bool autoShowWanted: root.opts?.enable ?? true
+    /**
+     * Whether the daemon should run at all.
+     *
+     * Auto-show is not its only consumer any more: pen mode binds the stylus barrel
+     * buttons, and those arrive on the same device this already watches. Someone who
+     * turned auto-show off and pen buttons on still needs the process.
+     *
+     * Read from PenMode rather than pushed into here, because the dependency only points
+     * one way: pen mode knows it needs pen events; this has no opinion about pen mode.
+     */
+    readonly property bool wanted: root.autoShowWanted || PenMode.wantsPenEvents
     readonly property bool enabled: root.wanted && root.binaryExists
 
     /// The helper ships as source. Without this check, a fresh install spawns a process for a
@@ -153,6 +164,8 @@ Singleton {
     property bool textInputActive: false
 
     function show() {
+        if (!root.autoShowWanted)
+            return;
         hideTimer.stop();
         // Already up by the user's own doing — don't take ownership of it.
         if (GlobalStates.oskOpen) return;
@@ -253,6 +266,14 @@ Singleton {
         case "denied":
             root.permissionDenied = true;
             console.warn("[OskAutoShow] /dev/input is not readable; add this user to the input group");
+            break;
+        // Forwarded rather than acted on: the barrel buttons are pen mode's business,
+        // and this singleton's business is the keyboard.
+        case "penButton":
+            PenMode.handleButton(event.button, event.pressed, event.x, event.y);
+            break;
+        case "penMove":
+            PenMode.handleMove(event.x, event.y);
             break;
         case "key":
             if (root.opts?.hideOnPhysicalKey ?? true) root.hideNow();

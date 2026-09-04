@@ -14,6 +14,8 @@ Rectangle {
     property string directionIcon: ""
     property string actionId: "none"
     property bool isHighlighted: false
+    /// Offer actions that only a held stylus button can perform. See the registry.
+    property bool allowPenOnly: false
 
     signal actionSelected(string newAction)
     signal cardHovered(string origin)
@@ -95,7 +97,7 @@ Rectangle {
             // family never loads produces a binding that recognises the swipe and then does
             // nothing, which reads as a broken touchscreen.
             readonly property var availableActions:
-                TouchGestureActionRegistry.availableActionsForFamily(PanelFamily.current)
+                TouchGestureActionRegistry.availableActionsForFamily(PanelFamily.current, root.allowPenOnly)
 
             model: availableActions.map(function(a) { return Translation.tr(a.name); })
             currentIndex: {

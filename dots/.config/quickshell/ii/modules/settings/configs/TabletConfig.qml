@@ -598,6 +598,123 @@ Item {
             }
         }
 
+        // ── Pen ───────────────────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Pen")
+            icon: "stylus"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Nothing needs configuring in OpenTabletDriver. It passes the barrel buttons through as ordinary stylus buttons, which the shell's own input helper already watches — so they are bound here, in one place.")
+            }
+
+            // Says whether the pen is reaching the shell at all. A binding nobody can
+            // confirm is a binding nobody trusts, and the two ways this silently fails —
+            // no pen device found, and a pen whose buttons never arrive — look identical.
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.tablet.pen.enable && OskAutoShow.deviceReportReceived
+                    && OskAutoShow.penDeviceCount === 0
+                materialIcon: "stylus_note"
+                text: Translation.tr("No pen was found. Connect a tablet, and if it is running through OpenTabletDriver, check that its daemon is up.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "stylus"
+                text: Translation.tr("Pen mode")
+                checked: Config.options.tablet.pen.enable
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.pen.enable)
+                        Config.options.tablet.pen.enable = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Turns the pointer into a pen and gives the stylus's barrel buttons shell actions.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "edit"
+                text: Translation.tr("Use a pen for the pointer")
+                visible: Config.options.tablet.pen.enable
+                checked: Config.options.tablet.pen.cursor
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.pen.cursor)
+                        Config.options.tablet.pen.cursor = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Uses your own cursor theme's pencil, so the pen matches everything else on screen. A theme without one is left alone.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "straighten"
+                text: Translation.tr("Pen pointer size (px)")
+                visible: Config.options.tablet.pen.enable && Config.options.tablet.pen.cursor
+                value: Config.options.tablet.pen.cursorSize
+                from: 12
+                to: 48
+                stepSize: 2
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.pen.cursorSize)
+                        Config.options.tablet.pen.cursorSize = value;
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.tablet.pen.enable && PenMode.cursorError.length > 0
+                materialIcon: "warning"
+                text: Translation.tr("The pen pointer could not be made: %1").arg(PenMode.cursorError)
+            }
+
+            ContentSubsection {
+                Layout.fillWidth: true
+                icon: "radio_button_checked"
+                title: Translation.tr("Barrel buttons")
+                tooltip: Translation.tr("The buttons on the side of the stylus. Drag window is the only one that acts while held rather than when pressed.")
+                visible: Config.options.tablet.pen.enable
+
+                TouchGestureBindingCard {
+                    Layout.fillWidth: true
+                    allowPenOnly: true
+                    directionIcon: "counter_1"
+                    title: Translation.tr("Lower button")
+                    description: PenMode.penButtonsSeen
+                        ? Translation.tr("Seen — the pen is reaching the shell.")
+                        : Translation.tr("Press it once to confirm the shell can see it.")
+                    actionId: Config.options.tablet.pen.buttons[0] ?? "none"
+                    onActionSelected: newAction => {
+                        if (!Config.ready)
+                            return;
+                        const next = Config.options.tablet.pen.buttons.slice();
+                        while (next.length < 2)
+                            next.push("none");
+                        next[0] = newAction;
+                        Config.options.tablet.pen.buttons = next;
+                    }
+                }
+
+                TouchGestureBindingCard {
+                    Layout.fillWidth: true
+                    allowPenOnly: true
+                    directionIcon: "counter_2"
+                    title: Translation.tr("Upper button")
+                    description: Translation.tr("Not every stylus has a second one.")
+                    actionId: Config.options.tablet.pen.buttons[1] ?? "none"
+                    onActionSelected: newAction => {
+                        if (!Config.ready)
+                            return;
+                        const next = Config.options.tablet.pen.buttons.slice();
+                        while (next.length < 2)
+                            next.push("none");
+                        next[1] = newAction;
+                        Config.options.tablet.pen.buttons = next;
+                    }
+                }
+            }
+        }
+
         // ── Live draw ─────────────────────────────────────────────────────────
         ContentSection {
             title: Translation.tr("Draw on screen")

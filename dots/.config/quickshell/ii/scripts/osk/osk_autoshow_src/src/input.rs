@@ -168,14 +168,53 @@ fn watch(path: &PathBuf, role: Role) -> std::io::Result<()> {
     let mut x = 0.0f32;
     let mut y = 0.0f32;
     let mut last_key = Instant::now() - Duration::from_secs(1);
+    // Bitmask of barrel buttons currently down, so motion is only forwarded while one is.
+    let mut held_buttons: u8 = 0;
+    let mut moved = false;
 
     loop {
         for event in dev.fetch_events()? {
             match event.destructure() {
-                EventSummary::AbsoluteAxis(_, code, value) if code == x_axis => x = normalize(value, x_info),
-                EventSummary::AbsoluteAxis(_, code, value) if code == y_axis => y = normalize(value, y_info),
+                EventSummary::AbsoluteAxis(_, code, value) if code == x_axis => {
+                    x = normalize(value, x_info);
+                    moved = true;
+                }
+                EventSummary::AbsoluteAxis(_, code, value) if code == y_axis => {
+                    y = normalize(value, y_info);
+                    moved = true;
+                }
 
-                EventSummary::Key(_, code, 1) => {
+                // One line per SYN batch while a barrel button is held, and none at all
+                // otherwise. A pen reports motion continuously whenever it is anywhere
+                // near the tablet; forwarding all of that would be thousands of lines a
+                // minute for something the shell only cares about mid-drag.
+                EventSummary::Synchronization(_, _, _) => {
+                    if held_buttons != 0 && moved {
+                        emit(&format!("penmove {x:.4} {y:.4}"));
+                    }
+                    moved = false;
+                }
+
+                EventSummary::Key(_, code, value @ (0 | 1)) => {
+                    // The barrel buttons on a stylus, either edge. Reported for both
+                    // states because the shell binds press *and* hold to them: holding
+                    // one and moving the pen is how a window gets dragged, and a
+                    // press-only report cannot express the end of a hold.
+                    if code == KeyCode::BTN_STYLUS || code == KeyCode::BTN_STYLUS2 {
+                        let index: u8 = if code == KeyCode::BTN_STYLUS { 0 } else { 1 };
+                        if value == 1 {
+                            held_buttons |= 1 << index;
+                        } else {
+                            held_buttons &= !(1 << index);
+                        }
+                        emit(&format!("penbutton {index} {value} {x:.4} {y:.4}"));
+                        continue;
+                    }
+
+                    if value == 0 {
+                        continue;
+                    }
+
                     if role == Role::Keyboard {
                         // A held key repeats; one line per burst is enough to hide the OSK.
                         if last_key.elapsed() >= Duration::from_millis(200) {
