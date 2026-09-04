@@ -13,6 +13,7 @@ import qs.modules.tablet.appDrawer
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.tablet.navigation
+import "TabletDockVisibility.js" as DockVisibility
 
 /**
  * Tablet taskbar: an Android-style launcher row with three-button navigation.
@@ -36,21 +37,33 @@ PanelWindow {
         return HyprlandData.hyprlandClientsForWorkspace(workspaceId).length === 0;
     }
 
+    // One record, one place the rules are written down: see TabletDockVisibility.js
+    // for why five interlocking bindings became a library.
+    readonly property var visibilityState: ({
+        showAppRow: root.tabletDock?.showAppRow ?? true,
+        autoHideOnOccupiedWorkspace: root.tabletDock?.autoHideOnOccupiedWorkspace ?? false,
+        keepNavigationVisible: root.tabletDock?.keepNavigationVisible ?? true,
+        showNavigation: root.tabletDock?.showNavigation ?? true,
+        showSearchBar: root.tabletDock?.showSearchBar ?? true,
+        showWorkspaceArrows: root.tabletDock?.showWorkspaceArrows ?? true,
+        pinned: root.pinned,
+        anySidebarOpen: root.anySidebarOpen,
+        workspaceEmpty: root.workspaceEmpty,
+        configReady: Config.ready,
+        screenLocked: GlobalStates.screenLocked
+    })
+
     readonly property bool appRowEnabled: root.tabletDock?.showAppRow ?? true
-    readonly property bool autoHideOnOccupiedWorkspace: root.tabletDock?.autoHideOnOccupiedWorkspace ?? true
-    readonly property bool appsRevealed: root.appRowEnabled && (root.pinned || (!root.anySidebarOpen
-        && (!root.autoHideOnOccupiedWorkspace || root.workspaceEmpty)))
+    readonly property bool appsRevealed: DockVisibility.appsRevealed(root.visibilityState)
     readonly property bool navigationEnabled: root.tabletDock?.showNavigation ?? true
-    readonly property bool navigationRevealed: root.navigationEnabled
-        && (root.appsRevealed || (root.tabletDock?.keepNavigationVisible ?? true))
-    readonly property bool dockRevealed: root.appsRevealed || root.navigationRevealed
+    readonly property bool navigationRevealed: DockVisibility.navigationRevealed(root.visibilityState)
+    readonly property bool dockRevealed: DockVisibility.dockRevealed(root.visibilityState)
     // Keep the dock mapped long enough to leave the screen instead of unmapping it on the
     // first state change. The same structural clock drives opacity and translation below.
     // The same number the drawer uses, so the dock travels with the sheet instead of
     // animating its own copy of appDrawerOpen and finishing first.
     readonly property real drawerProgress: TabletAppDrawerGestureController.progress
-    readonly property bool surfaceVisible: Config.ready && !GlobalStates.screenLocked
-        && root.dockRevealed
+    readonly property bool surfaceVisible: DockVisibility.surfaceVisible(root.visibilityState)
     readonly property bool reservesSpace: (root.tabletDock?.reserveSpace ?? true) && root.surfaceVisible
         && root.drawerProgress < 0.999
 
@@ -85,12 +98,11 @@ PanelWindow {
     }
     // The search pill follows the app row: both belong to the home screen and both get out
     // of the way once something is running.
-    readonly property bool searchRevealed: root.searchBarEnabled && root.appsRevealed
+    readonly property bool searchRevealed: DockVisibility.searchRevealed(root.visibilityState)
     readonly property bool showAppDividers: root.tabletDock?.showAppDividers ?? true
     // Tied to the dock as a whole rather than to the app row: moving between home screens
     // is useful exactly when something is open and the apps have got out of the way.
-    readonly property bool workspaceArrowsRevealed: (root.tabletDock?.showWorkspaceArrows ?? true)
-        && root.dockRevealed
+    readonly property bool workspaceArrowsRevealed: DockVisibility.workspaceArrowsRevealed(root.visibilityState)
 
     /// The same dispatch the wallpaper swipe uses, so the button and the gesture cannot
     /// disagree about which way is "next".

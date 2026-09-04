@@ -809,7 +809,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 16
+    readonly property int currentConfigVersion: 17
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1224,6 +1224,17 @@ Singleton {
                 }
             }
             console.log("[Config] Added Now playing search result group");
+        }
+
+        // v16 -> v17: the tablet taskbar stopped hiding its app row on an occupied
+        // workspace. The old default was `true`, so every file written before this
+        // carries it explicitly — and a stored value always wins over a changed
+        // default, which would have left the fix invisible to exactly the people who
+        // reported the dock going blank. The reference product's taskbar is
+        // persistent; anyone who wants the old behaviour turns it back on in Settings.
+        if (from < 17 && raw.tablet?.dock?.autoHideOnOccupiedWorkspace === true) {
+            raw.tablet.dock.autoHideOnOccupiedWorkspace = false;
+            console.log("[Config] Migrated tablet.dock.autoHideOnOccupiedWorkspace -> false (persistent taskbar)");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -1696,7 +1707,19 @@ Singleton {
                     property int height: 96
                     property int iconSize: 48
                     property bool showAppRow: true
-                    property bool autoHideOnOccupiedWorkspace: true
+                    /**
+                     * Whether the launcher row gets out of the way once the workspace
+                     * has a window on it.
+                     *
+                     * Off by default, because the reference product's taskbar is
+                     * persistent: on a Pixel Tablet the row of apps is there whether or
+                     * not something is open, and it is how you switch apps without going
+                     * through Recents. Hiding it made the dock look broken instead of
+                     * calm — the icons and the drawer button simply stopped existing the
+                     * moment anything was running, with nothing on screen saying why.
+                     * It stays available for people who want the home screen bare.
+                     */
+                    property bool autoHideOnOccupiedWorkspace: false
                     property bool keepNavigationVisible: true
                     property bool showNavigation: true
                     property list<string> navigationOrder: ["back", "home", "recents"]
