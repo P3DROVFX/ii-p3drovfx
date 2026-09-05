@@ -1879,10 +1879,12 @@ ytmusic-player-page[player-page-open] ytmusic-player-queue #contents.ytmusic-pla
 }
 
 ytmusic-app-layout[player-page-open] > [slot="player-bar"] {
-  right: calc(var(--m3-player-side-width) + 48px) !important;
-  left: 96px !important;
+  right: calc(var(--m3-player-side-width) + 68px) !important;
+  bottom: 36px !important;
+  left: 120px !important;
   width: auto !important;
-  height: 104px !important;
+  height: 84px !important;
+  padding: 8px 16px !important;
   background: color-mix(in srgb, var(--m3-surface-container-highest) 97%, transparent) !important;
 }
 
@@ -1966,8 +1968,8 @@ ytmusic-grid-renderer {
   }
 
   ytmusic-app-layout[player-page-open] > [slot="player-bar"] {
-    right: 16px !important;
-    left: 88px !important;
+    right: 32px !important;
+    left: 104px !important;
   }
 
   ytmusic-app-layout[player-page-open] ytmusic-player-bar {
