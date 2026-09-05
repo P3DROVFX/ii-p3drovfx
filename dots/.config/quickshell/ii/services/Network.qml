@@ -130,6 +130,42 @@ Singleton {
         });
     }
 
+    // ---- Keeping the list of networks alive -------------------------------
+    /**
+     * The surfaces currently showing a list of networks, by name.
+     *
+     * A one-shot rescan when a dialog opens is not enough to keep a list
+     * populated: NetworkManager scans on its own only now and then, so the
+     * backend hands out whatever it last cached — here that was three networks
+     * against the sixteen in range, and on an adapter that had just connected
+     * it can be the one network in use and nothing else, which is an empty
+     * "Available Wi-Fi" list under a working connection.
+     *
+     * Scanning costs power and briefly interrupts the radio, so it is asked for
+     * only while something is on screen to show the result. Holders are keyed
+     * rather than counted so that a surface asking twice, or releasing what it
+     * never took, cannot leave the radio scanning forever.
+     */
+    property var wifiScanHolders: ({})
+    readonly property bool wifiScanWanted: Object.keys(root.wifiScanHolders).length > 0
+
+    function setWifiScanHolder(key: string, held: bool): void {
+        if ((root.wifiScanHolders[key] === true) === held)
+            return;
+        const holders = Object.assign({}, root.wifiScanHolders);
+        if (held)
+            holders[key] = true;
+        else
+            delete holders[key];
+        root.wifiScanHolders = holders;
+    }
+
+    onWifiScanWantedChanged: {
+        NetworkState.setScannerEnabled(root.wifiScanWanted);
+        if (root.wifiScanWanted)
+            root.rescanWifi();
+    }
+
     function connectToWifiNetwork(accessPoint: WifiAccessPoint): void {
         if (!accessPoint)
             return;
@@ -380,6 +416,19 @@ Singleton {
             if (NetworkState.wifiFromNmcli)
                 root.refreshDetails();
         }
+    }
+
+    /**
+     * The same job on the nmcli path, where there is no backend scanner to turn
+     * on. Deliberately quiet: it does not raise `wifiScanning`, because a
+     * spinner blinking every few seconds on its own is not progress anybody
+     * asked to watch.
+     */
+    Timer {
+        interval: 10000
+        repeat: true
+        running: root.wifiScanWanted && NetworkState.wifiFromNmcli
+        onTriggered: NetworkCommands.rescanWifi(() => root.refreshDetails())
     }
 
     Timer {

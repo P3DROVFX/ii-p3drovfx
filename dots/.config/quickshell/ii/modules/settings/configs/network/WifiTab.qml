@@ -29,6 +29,11 @@ ContentPage {
     // unloaded the moment someone switches away from it.
     signal openSubPage(url page)
 
+    // The tab is built when it is opened and destroyed when another one is, so
+    // its lifetime is exactly how long the scan list is worth keeping fresh.
+    Component.onCompleted: Network.setWifiScanHolder("settingsWifi", true)
+    Component.onDestruction: Network.setWifiScanHolder("settingsWifi", false)
+
     function editProfile(uuid: string): void {
         NetworkProfiles.editUuid = uuid;
         root.openSubPage(Qt.resolvedUrl("WifiProfileEditor.qml"));

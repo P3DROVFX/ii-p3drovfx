@@ -16,8 +16,11 @@ Item {
     id: root
 
     Component.onCompleted: {
+        Network.setWifiScanHolder("waffleWifi", true);
         Network.rescanWifi();
     }
+
+    Component.onDestruction: Network.setWifiScanHolder("waffleWifi", false)
 
     WPanelPageColumn {
         anchors.fill: parent

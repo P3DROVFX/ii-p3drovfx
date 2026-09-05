@@ -27,11 +27,17 @@ WindowDialog {
     }
 
     onShowChanged: {
+        // Scanning is asked for only while this is visible, so a dialog left
+        // closed never keeps the radio busy.
+        Network.setWifiScanHolder("wifiDialog", root.show);
         if (show)
             root.prepareForOpen();
         else
             NetworkSpeed.stop();
     }
+
+    // A dialog torn down while open would otherwise hold the scan for good.
+    Component.onDestruction: Network.setWifiScanHolder("wifiDialog", false)
 
     // ── Header ────────────────────────────────────────────
     RowLayout {

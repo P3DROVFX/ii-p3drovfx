@@ -119,9 +119,29 @@ Singleton {
         QNet.Networking.wifiEnabled = enabled;
     }
 
-    function setScannerEnabled(enabled: bool): void {
+    /**
+     * Whether the adapter should keep looking for networks.
+     *
+     * NetworkManager only scans on its own occasionally, so the backend's list
+     * is whatever it happened to have cached — often just the networks already
+     * saved, and sometimes only the one in use. Nothing else fills that list,
+     * so a surface showing networks has to ask for the scan while it is open.
+     * Network owns that decision; this only carries it to the device.
+     */
+    property bool scanRequested: false
+
+    onScanRequestedChanged: root.applyScanRequest()
+    // An adapter that appears, or is swapped for another, has not been told.
+    readonly property var scanTarget: root.wifiDevice
+    onScanTargetChanged: root.applyScanRequest()
+
+    function applyScanRequest(): void {
         if (root.wifiDevice)
-            root.wifiDevice.scannerEnabled = enabled;
+            root.wifiDevice.scannerEnabled = root.scanRequested;
+    }
+
+    function setScannerEnabled(enabled: bool): void {
+        root.scanRequested = enabled;
     }
 
     function checkConnectivity(): void {
