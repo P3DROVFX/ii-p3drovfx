@@ -556,7 +556,10 @@ Item {
             return true;
         if (modelData.id === "active_window" && Config.options.bar.styles.activeWindow === "expressive")
             return true;
-        if (modelData.id === "record_indicator")
+        // Only the two families that paint their own surface go bare. The
+        // default one is a plain bar widget and wants the group chip, exactly
+        // like the clock or the weather.
+        if (modelData.id === "record_indicator" && Config.options.bar.styles.recordIndicator !== "default")
             return true;
         if (modelData.id === "dictation_indicator")
             return true;

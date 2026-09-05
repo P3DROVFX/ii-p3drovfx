@@ -596,11 +596,39 @@ Item {
                 readonly property bool shouldPlayBanner: {
                     return GlobalStates.dashboardPanelOpen && wallpaperArea.isBannerAnimated;
                 }
+
+                // Cache a cropped banner at the physical resolution that the
+                // scene graph needs. A static metadata load establishes the
+                // source aspect ratio before the QMovie is created.
+                readonly property size animatedDecodeBox: {
+                    const target = bannerImage.decodeBox;
+                    const naturalWidth = bannerAnimatedMetadata.implicitWidth;
+                    const naturalHeight = bannerAnimatedMetadata.implicitHeight;
+                    if (target.width <= 0 || target.height <= 0 || naturalWidth <= 0 || naturalHeight <= 0)
+                        return Qt.size(0, 0);
+
+                    const sourceAspect = naturalWidth / naturalHeight;
+                    const targetAspect = target.width / target.height;
+                    if (sourceAspect >= targetAspect)
+                        return Qt.size(Math.ceil(target.height * sourceAspect), target.height);
+                    return Qt.size(target.width, Math.ceil(target.width / sourceAspect));
+                }
                 
                 Rectangle {
                     id: imageMask
                     anchors.fill: parent
                     radius: 15
+                    visible: false
+                }
+
+                // Read the first GIF frame solely to obtain its native aspect
+                // ratio. AnimatedImage must never be created with a 0×0
+                // sourceSize, as QMovie cannot produce that first frame.
+                Image {
+                    id: bannerAnimatedMetadata
+                    source: wallpaperArea.isBannerAnimated ? wallpaperArea.cleanBannerSource : ""
+                    asynchronous: true
+                    cache: false
                     visible: false
                 }
 
@@ -642,11 +670,17 @@ Item {
                 AnimatedImage {
                     id: bannerAnimatedImage
                     anchors.fill: parent
-                    source: wallpaperArea.isBannerAnimated ? wallpaperArea.cleanBannerSource : ""
+                    source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0)
+                        ? wallpaperArea.cleanBannerSource
+                        : ""
+                    sourceSize: wallpaperArea.animatedDecodeBox
                     fillMode: Image.PreserveAspectCrop
                     playing: wallpaperArea.shouldPlayBanner
                     paused: !wallpaperArea.shouldPlayBanner
-                    cache: false
+                    // AnimatedImage maps this to QMovie::CacheAll only after
+                    // the display-sized target is known, avoiding both a full
+                    // GIF decode on every loop and a native-size frame cache.
+                    cache: wallpaperArea.animatedDecodeBox.width > 0
                     asynchronous: true
                     visible: wallpaperArea.isBannerAnimated && status === Image.Ready
                     layer.enabled: true

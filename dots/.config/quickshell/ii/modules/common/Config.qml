@@ -3501,6 +3501,7 @@ Singleton {
                     property string search: "default"
                     property string date: "default"
                     property string timer: "expressive"
+                    property string recordIndicator: "expressive" // default | expressive | neural
                 }
 
                 property JsonObject activeWindow: JsonObject {
@@ -3821,7 +3822,16 @@ Singleton {
                         property bool showUnreadCount: true
                     }
                     property JsonObject record: JsonObject {
+                        // Minimal drops the elapsed time and keeps the mark, in
+                        // every design. See RecordIndicator.qml.
                         property bool minimal: false
+                        property string expressiveVariant: "capsule" // capsule | badge | ribbon
+                        property string neuralVariant: "duo" // duo | slab | meter
+                        // `alert` is the error family — the default here, and the
+                        // only widget entitled to it. See BarWidgetPalette.
+                        property string colorMode: "alert" // alert | tonal | vibrant | neutral
+                        property bool showLabel: true
+                        property bool animateDigits: true
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {

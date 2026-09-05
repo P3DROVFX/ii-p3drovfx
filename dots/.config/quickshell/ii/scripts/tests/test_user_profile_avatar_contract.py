@@ -33,11 +33,40 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.assertNotIn("id: hardcodedProfilePicture", self.sidebar_qml)
         self.assertNotIn("id: profilePicMask", self.sidebar_qml)
 
+    def test_hidden_dashboard_header_pauses_its_animated_avatar(self):
+        self.assertIn("active: GlobalStates.dashboardPanelOpen && headerRoot.visible", self.sidebar_qml)
+        self.assertIn("active: GlobalStates.dashboardPanelOpen && systemButtonRowRoot.visible", self.sidebar_qml)
+
+    def test_animated_avatar_decoding_matches_the_static_high_quality_target(self):
+        animated_avatar = self.avatar_qml.split("id: avatarImg", 1)[1]
+        self.assertIn(
+            "sourceSize: Qt.size(Math.max(256, Math.ceil(root.width * 2)), Math.max(256, Math.ceil(root.height * 2)))",
+            animated_avatar,
+        )
+        self.assertIn("smooth: true", animated_avatar)
+        self.assertIn("mipmap: true", animated_avatar)
+        self.assertIn("OpacityMask", animated_avatar)
+        self.assertIn("cache: true", animated_avatar)
+
     def test_sidebar_dashboard_banner_supports_animated_gifs(self):
         self.assertIn("id: bannerAnimatedImage", self.sidebar_qml)
         self.assertIn("playing: wallpaperArea.shouldPlayBanner", self.sidebar_qml)
         self.assertIn("paused: !wallpaperArea.shouldPlayBanner", self.sidebar_qml)
         self.assertIn("shouldPlayBanner: {", self.sidebar_qml)
+
+    def test_animated_dashboard_banner_caches_only_display_sized_frames(self):
+        animated_banner = self.sidebar_qml.split("id: bannerAnimatedImage", 1)[1]
+        self.assertIn("sourceSize: wallpaperArea.animatedDecodeBox", animated_banner)
+        self.assertIn("cache: wallpaperArea.animatedDecodeBox.width > 0", animated_banner)
+
+    def test_animated_dashboard_banner_reads_metadata_before_starting_movie(self):
+        self.assertIn("id: bannerAnimatedMetadata", self.sidebar_qml)
+        self.assertIn("bannerAnimatedMetadata.implicitWidth", self.sidebar_qml)
+        animated_banner = self.sidebar_qml.split("id: bannerAnimatedImage", 1)[1]
+        self.assertIn(
+            "source: (wallpaperArea.isBannerAnimated && wallpaperArea.animatedDecodeBox.width > 0)",
+            animated_banner,
+        )
 
     def test_banner_selector_supports_gifs(self):
         self.assertIn("*.gif", self.banner_selector_qml)

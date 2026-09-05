@@ -83,13 +83,13 @@ ContentPage {
                 Config.options.bar.timers.showCountdowns = checked;
             }
         }
-        ConfigSwitch {
-            buttonIcon: "check_indeterminate_small"
-            text: Translation.tr("Record - Minimal mode")
-            checked: Config.options.bar.indicators.record.minimal
-            onCheckedChanged: {
-                Config.options.bar.indicators.record.minimal = checked;
-            }
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("The record indicator has its own page now — style, variant, colour and minimal mode all live there. Open it from Bar \u2192 Widgets \u2192 Record Indicator.")
+            color: Appearance.colors.colOnLayer1
+            opacity: 0.75
+            font.pixelSize: Appearance.font.pixelSize.small
+            wrapMode: Text.Wrap
         }
     }
 }

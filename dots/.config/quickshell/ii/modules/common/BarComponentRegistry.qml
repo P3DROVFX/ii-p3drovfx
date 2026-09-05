@@ -207,7 +207,25 @@ Singleton {
             id: "record_indicator",
             icon: "screen_record",
             title: "Record indicator",
-            configPage: "IndicatorsConfig.qml"
+            styleConfigKey: "recordIndicator",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ],
+            configPage: "RecordIndicatorConfig.qml"
         },
         {
             id: "dictation_indicator",

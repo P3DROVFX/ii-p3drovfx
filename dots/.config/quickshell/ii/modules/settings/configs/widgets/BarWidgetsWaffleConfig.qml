@@ -337,7 +337,7 @@ ContentPage {
                 cardShape: "Circle"
                 cardHue: 280
                 title: Translation.tr("Record Indicator")
-                description: Translation.tr("Screen recording status, active recorder control, and snip tools")
+                description: Translation.tr("Recording indicator design, variants, colour treatment, and minimal mode")
                 onOpenCard: root.openComponentPage("record_indicator")
             }
 

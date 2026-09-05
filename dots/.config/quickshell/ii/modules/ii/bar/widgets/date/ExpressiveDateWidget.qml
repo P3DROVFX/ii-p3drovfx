@@ -101,10 +101,10 @@ Item {
             dayText: root.dayText
             monthText: root.showYear ? `${root.monthText} ${DateTime.yearShort}` : root.monthText
             weekdayText: root.weekdayText
-            colDay: theme.bare
-            colMonth: theme.bareAccent
-            colChip: theme.accent
-            colOnChip: theme.onAccent
+            colDay: theme.colBare
+            colMonth: theme.colBareAccent
+            colChip: theme.colAccent
+            colOnChip: theme.colOnAccent
         }
     }
 
@@ -139,7 +139,7 @@ Item {
                 // A rounded rectangle against an organic badge. Matching the
                 // badge's curvature turns the pair into one blob at bar scale.
                 radius: Appearance.rounding.small
-                color: theme.container
+                color: theme.colContainer
 
                 anchors.right: root.vertical ? undefined : parent.right
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -166,7 +166,7 @@ Item {
                             "wght": 750
                         })
                         font.letterSpacing: 1.0
-                        color: theme.onContainer
+                        color: theme.colOnContainer
                     }
 
                     StyledText {
@@ -178,7 +178,7 @@ Item {
                             "wght": 500
                         })
                         font.letterSpacing: 1.0
-                        color: theme.onContainer
+                        color: theme.colOnContainer
                         opacity: 0.7
                     }
                 }
@@ -188,7 +188,7 @@ Item {
                 id: dayBadge
                 implicitSize: badgeRoot.badgeSize
                 shape: MaterialShape.Shape.Cookie9Sided
-                color: theme.accent
+                color: theme.colAccent
 
                 anchors.left: root.vertical ? undefined : parent.left
                 anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -207,7 +207,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.onAccent
+                    color: theme.colOnAccent
                 }
             }
         }
@@ -231,7 +231,7 @@ Item {
                     "wght": 600
                 })
                 font.letterSpacing: 1.0
-                color: theme.bare
+                color: theme.colBare
                 opacity: 0.36
             }
 
@@ -244,7 +244,7 @@ Item {
                     ? todayRow.implicitHeight + Math.round(root.thickness * 0.3)
                     : root.thickness
                 radius: Appearance.rounding.full
-                color: theme.accent
+                color: theme.colAccent
 
                 GridLayout {
                     id: todayRow
@@ -262,7 +262,7 @@ Item {
                             "wght": 700
                         })
                         font.letterSpacing: 1.0
-                        color: theme.onAccent
+                        color: theme.colOnAccent
                     }
 
                     StyledText {
@@ -277,7 +277,7 @@ Item {
                             "tnum": 1
                         })
                         font.letterSpacing: -0.6
-                        color: theme.onAccent
+                        color: theme.colOnAccent
                     }
                 }
             }
@@ -291,7 +291,7 @@ Item {
                     "wght": 600
                 })
                 font.letterSpacing: 1.0
-                color: theme.bare
+                color: theme.colBare
                 opacity: 0.36
             }
         }

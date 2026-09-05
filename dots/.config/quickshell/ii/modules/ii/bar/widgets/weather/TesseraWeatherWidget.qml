@@ -75,7 +75,7 @@ MouseArea {
             Layout.alignment: Qt.AlignCenter
             implicitSize: root.weatherTileSize
             shape: root.weatherTileShape
-            color: root.contrast ? palette.container : palette.accent
+            color: root.contrast ? palette.colContainer : palette.colAccent
 
             Image {
                 anchors.centerIn: parent
@@ -102,7 +102,7 @@ MouseArea {
                 anchors.fill: parent
                 visible: !root.bare
                 radius: Appearance.rounding.full
-                color: palette.container
+                color: palette.colContainer
             }
 
             StyledText {
@@ -117,8 +117,8 @@ MouseArea {
                     : Appearance.font.pixelSize.large
                 font.weight: Font.Bold
                 color: root.bare
-                    ? palette.bare
-                    : ColorUtils.categoryOnColor(palette.container)
+                    ? palette.colBare
+                    : ColorUtils.categoryOnColor(palette.colContainer)
             }
         }
     }

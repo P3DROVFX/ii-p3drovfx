@@ -108,8 +108,8 @@ Item {
                     // part of this widget that says something the numerals do
                     // not.
                     value: DateTime.monthProgress
-                    colPrimary: theme.accent
-                    colSecondary: ColorUtils.transparentize(theme.accent, 0.8)
+                    colPrimary: theme.colAccent
+                    colSecondary: ColorUtils.transparentize(theme.colAccent, 0.8)
                     gapAngle: 0
                 }
 
@@ -125,7 +125,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.bare
+                    color: theme.colBare
                 }
             }
 
@@ -142,7 +142,7 @@ Item {
                         "wght": 750
                     })
                     font.letterSpacing: 1.0
-                    color: theme.bare
+                    color: theme.colBare
                 }
 
                 StyledText {
@@ -154,7 +154,7 @@ Item {
                         "wght": 500
                     })
                     font.letterSpacing: 1.0
-                    color: theme.bareAccent
+                    color: theme.colBareAccent
                     opacity: 0.8
                 }
             }
@@ -181,14 +181,14 @@ Item {
                     "wdth": 85
                 })
                 font.letterSpacing: -1.0
-                color: theme.bare
+                color: theme.colBare
             }
 
             MaterialShape {
                 Layout.alignment: Qt.AlignCenter
                 implicitSize: Math.round(root.thickness * (root.vertical ? 0.78 : 0.86))
                 shape: MaterialShape.Shape.SoftBurst
-                color: theme.accent
+                color: theme.colAccent
 
                 StyledText {
                     anchors.centerIn: parent
@@ -202,7 +202,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.onAccent
+                    color: theme.colOnAccent
                 }
             }
 
@@ -217,7 +217,7 @@ Item {
                     "wdth": 85
                 })
                 font.letterSpacing: -1.0
-                color: theme.bare
+                color: theme.colBare
             }
         }
     }
@@ -231,8 +231,8 @@ Item {
             thickness: root.thickness
             dayText: root.dayText
             monthText: root.showYear ? `${root.monthText} ${DateTime.yearShort}` : root.monthText
-            colPlate: theme.accent
-            colOnPlate: theme.onAccent
+            colPlate: theme.colAccent
+            colOnPlate: theme.colOnAccent
         }
     }
 

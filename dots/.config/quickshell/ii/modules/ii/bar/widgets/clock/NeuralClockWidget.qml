@@ -90,8 +90,8 @@ Item {
                     // part of this variant that says something the digits do
                     // not, so it tracks minutes, not hours.
                     value: DateTime.minuteProgress
-                    colPrimary: theme.accent
-                    colSecondary: ColorUtils.transparentize(theme.accent, 0.8)
+                    colPrimary: theme.colAccent
+                    colSecondary: ColorUtils.transparentize(theme.colAccent, 0.8)
                     gapAngle: 0
                 }
 
@@ -107,7 +107,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.6
-                    color: theme.bare
+                    color: theme.colBare
                 }
             }
 
@@ -127,7 +127,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.4
-                    color: theme.bare
+                    color: theme.colBare
                 }
 
                 StyledText {
@@ -140,7 +140,7 @@ Item {
                         "wght": 600
                     })
                     font.letterSpacing: 1.0
-                    color: theme.bareAccent
+                    color: theme.colBareAccent
                 }
             }
         }
@@ -155,10 +155,10 @@ Item {
             thickness: root.thickness
             hoursText: root.hoursText
             minutesText: root.minutesText
-            colHours: theme.accent
-            colOnHours: theme.onAccent
-            colMinutes: theme.container
-            colOnMinutes: theme.onContainer
+            colHours: theme.colAccent
+            colOnHours: theme.colOnAccent
+            colMinutes: theme.colContainer
+            colOnMinutes: theme.colOnContainer
         }
     }
 
@@ -181,7 +181,7 @@ Item {
                     anchors.centerIn: parent
                     implicitSize: root.thickness
                     shape: MaterialShape.Shape.Cookie12Sided
-                    color: theme.container
+                    color: theme.colContainer
                 }
 
                 // Hands are rounded bars pinned at the face's centre and rotated
@@ -194,7 +194,7 @@ Item {
                     width: Math.max(2, Math.round(root.thickness * 0.075))
                     height: Math.round(root.thickness * 0.24)
                     radius: Appearance.rounding.full
-                    color: theme.onContainer
+                    color: theme.colOnContainer
                     transformOrigin: Item.Bottom
                     rotation: DateTime.hourProgress * 360
                 }
@@ -206,7 +206,7 @@ Item {
                     width: Math.max(2, Math.round(root.thickness * 0.06))
                     height: Math.round(root.thickness * 0.34)
                     radius: Appearance.rounding.full
-                    color: theme.accent
+                    color: theme.colAccent
                     transformOrigin: Item.Bottom
                     rotation: DateTime.minuteProgress * 360
                 }
@@ -228,7 +228,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.8
-                    color: theme.bare
+                    color: theme.colBare
                 }
 
                 StyledText {
@@ -243,7 +243,7 @@ Item {
                         "tnum": 1
                     })
                     font.letterSpacing: -0.8
-                    color: theme.bareAccent
+                    color: theme.colBareAccent
                 }
             }
         }

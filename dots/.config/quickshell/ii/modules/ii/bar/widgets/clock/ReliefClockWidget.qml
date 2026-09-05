@@ -72,8 +72,8 @@ Item {
             thickness: root.thickness
             hoursText: DateTime.hours
             minutesText: DateTime.minutes
-            colHours: theme.bareAccent
-            colMinutes: theme.bare
+            colHours: theme.colBareAccent
+            colMinutes: theme.colBare
         }
     }
 
@@ -86,8 +86,8 @@ Item {
             hoursText: DateTime.hours
             minutesText: DateTime.minutes
             meridiemText: root.showMeridiem ? DateTime.meridiem.toUpperCase() : ""
-            colRule: theme.accent
-            colDigits: theme.bare
+            colRule: theme.colAccent
+            colDigits: theme.colBare
         }
     }
 
@@ -99,8 +99,8 @@ Item {
             thickness: root.thickness
             hoursText: DateTime.hours
             minutesText: DateTime.minutes
-            colSolid: theme.bare
-            colHollow: theme.bareAccent
+            colSolid: theme.colBare
+            colHollow: theme.colBareAccent
         }
     }
 

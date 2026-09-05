@@ -146,7 +146,7 @@ Item {
         buttonRadius: Config.options.bar.barGroupStyle === 1
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
-        colBackground: theme.container
+        colBackground: theme.colContainer
         colBackgroundHover: Appearance.colors.colTertiaryContainerHover
         colBackgroundActive: Appearance.colors.colTertiaryContainerActive
         colRipple: Appearance.colors.colTertiaryContainerActive
@@ -167,8 +167,8 @@ Item {
                 iconSize: Appearance.font.pixelSize.normal
                 padding: 3
                 text: readout.iconName
-                color: theme.accent
-                colSymbol: theme.onAccent
+                color: theme.colAccent
+                colSymbol: theme.colOnAccent
             }
 
             Item {
@@ -186,7 +186,7 @@ Item {
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
                     font.features: ({ "tnum": 1 })
-                    color: ColorUtils.categoryOnColor(theme.container)
+                    color: ColorUtils.categoryOnColor(theme.colContainer)
                 }
             }
 
@@ -196,14 +196,14 @@ Item {
                 implicitWidth: 18
                 implicitHeight: 18
                 radius: Appearance.rounding.full
-                color: theme.accent
+                color: theme.colAccent
 
                 StyledText {
                     anchors.centerIn: parent
                     text: String(readout.badgeCount)
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Bold
-                    color: theme.onAccent
+                    color: theme.colOnAccent
                 }
             }
         }

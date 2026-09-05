@@ -32,8 +32,8 @@ QtObject {
             case "search":                 return s.search       ?? "default";
             case "date":                   return s.date         ?? "default";
             case "timer":                  return s.timer        ?? "expressive";
+            case "record_indicator":       return s.recordIndicator ?? "expressive"; // default, expressive, neural
             // Always expressive — no user config toggle
-            case "record_indicator":
             case "phone_scrcpy_indicator":
             case "mode_indicator":
                 return "expressive";

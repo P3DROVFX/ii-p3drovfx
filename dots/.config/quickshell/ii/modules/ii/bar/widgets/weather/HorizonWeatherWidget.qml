@@ -78,7 +78,7 @@ MouseArea {
                 visible: !root.minimal
                 implicitSize: root.weatherPlateSize
                 shape: root.weatherPlateShape
-                color: root.inverted ? palette.accent : palette.container
+                color: root.inverted ? palette.colAccent : palette.colContainer
             }
 
             Image {
@@ -107,7 +107,7 @@ MouseArea {
                     ? Appearance.font.pixelSize.small
                     : Appearance.font.pixelSize.large
                 font.weight: root.minimal ? Font.DemiBold : Font.Bold
-                color: root.inverted ? palette.bareAccent : palette.bare
+                color: root.inverted ? palette.colBareAccent : palette.colBare
             }
         }
 
@@ -122,7 +122,7 @@ MouseArea {
                 ? Appearance.sizes.elevationMargin / 3
                 : root.thickness * (root.minimal ? 0.34 : 0.52)
             radius: Appearance.rounding.full
-            color: root.inverted ? palette.bare : palette.bareAccent
+            color: root.inverted ? palette.colBare : palette.colBareAccent
             opacity: root.minimal ? 0.55 : 1
         }
     }

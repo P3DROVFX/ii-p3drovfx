@@ -83,8 +83,8 @@ class BarWeatherWidgetContractTest(unittest.TestCase):
         horizon = (WEATHER_DIR / "HorizonWeatherWidget.qml").read_text(encoding="utf-8")
         self.assertNotIn("RippleButton", horizon)
         self.assertIn("id: horizonRail", horizon)
-        self.assertIn("palette.bare", horizon)
-        self.assertIn("palette.bareAccent", horizon)
+        self.assertIn("palette.colBare", horizon)
+        self.assertIn("palette.colBareAccent", horizon)
 
     def test_vertical_temperature_rotates_inward_and_owns_long_axis(self):
         for filename in ("HorizonWeatherWidget.qml", "TesseraWeatherWidget.qml"):
@@ -102,10 +102,10 @@ class BarWeatherWidgetContractTest(unittest.TestCase):
         self.assertIn("root.thickness * 0.72", temperature_block)
         self.assertIn("Appearance.sizes.elevationMargin * 1.6", temperature_block)
         self.assertIn("radius: Appearance.rounding.full", temperature_block)
-        self.assertIn("color: palette.container", temperature_block)
-        self.assertIn("ColorUtils.categoryOnColor(palette.container)", temperature_block)
-        self.assertNotIn("palette.onContainer", temperature_block)
-        self.assertNotIn("palette.onAccent", temperature_block)
+        self.assertIn("color: palette.colContainer", temperature_block)
+        self.assertIn("ColorUtils.categoryOnColor(palette.colContainer)", temperature_block)
+        self.assertNotIn("palette.colOnContainer", temperature_block)
+        self.assertNotIn("palette.colOnAccent", temperature_block)
 
     def test_new_designs_keep_weather_interactions(self):
         for filename in ("HorizonWeatherWidget.qml", "TesseraWeatherWidget.qml"):
