@@ -53,7 +53,8 @@ Singleton {
             execute: () => {
                 const isSystemControl = key.startsWith("sys:");
                 const cmdKey = isSystemControl ? key.slice(4) : "";
-                const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
+                const isConfirming = isSystemControl && entry.requiresConfirmation
+                    && LauncherSearch.confirmKey !== cmdKey;
                 // Rows that switch a mode, or that explicitly ask to stay, must
                 // not take the launcher down with them.
                 const isModeSwitch = (entry.keepOverviewOpen ?? false)

@@ -36,6 +36,10 @@ QtObject {
     property bool isAlias: false
     property bool isFallback: false
     property bool keepOverviewOpen: false
+    // Session-ending actions opt into the confirmation gate. Locking and
+    // suspending are intentionally immediate, like their counterparts in the
+    // session screen.
+    property bool requiresConfirmation: false
     property var settingRef: null
     property string controlKind: ""
     property var controlValue: null

@@ -224,28 +224,32 @@ Singleton {
         {
             cmd: "lock",
             label: Translation.tr("Lock Screen"),
-            execute: () => Quickshell.execDetached(["hyprlock"]),
+            execute: () => Session.lock(),
+            requiresConfirmation: false,
             icon: "lock",
             desc: Translation.tr("Lock the current session")
         },
         {
             cmd: "poweroff",
             label: Translation.tr("Shutdown PC"),
-            execute: () => Quickshell.execDetached(["systemctl", "poweroff"]),
+            execute: () => Session.poweroff(),
+            requiresConfirmation: true,
             icon: "power_settings_new",
             desc: Translation.tr("Power off the computer")
         },
         {
             cmd: "reboot",
             label: Translation.tr("Reboot PC"),
-            execute: () => Quickshell.execDetached(["systemctl", "reboot"]),
+            execute: () => Session.reboot(),
+            requiresConfirmation: true,
             icon: "restart_alt",
             desc: Translation.tr("Restart the computer")
         },
         {
             cmd: "suspend",
             label: Translation.tr("Suspend PC"),
-            execute: () => Quickshell.execDetached(["systemctl", "suspend"]),
+            execute: () => Session.suspend(),
+            requiresConfirmation: false,
             icon: "bedtime",
             desc: Translation.tr("Put the computer to sleep")
         },
@@ -253,6 +257,7 @@ Singleton {
             cmd: "restart",
             label: Translation.tr("Restart Quickshell"),
             execute: () => Quickshell.reload(),
+            requiresConfirmation: false,
             icon: "refresh",
             desc: Translation.tr("Restart Quickshell shell seamlessly")
         }
@@ -2359,7 +2364,7 @@ Singleton {
             const sysCommands = root.systemControlDefinitions;
             const matches = sysCommands.filter(c => c.cmd.startsWith(queryClean));
             for (const match of matches) {
-                const isPendingConfirm = root.confirmKey === match.cmd;
+                const isPendingConfirm = match.requiresConfirmation && root.confirmKey === match.cmd;
                 systemControlResults.push(resultComp.createObject(null, {
                     key: "sys:" + match.cmd,
                     name: isPendingConfirm ? match.label + " (" + Translation.tr("Are you sure?") + ")" : match.label,
@@ -2368,12 +2373,14 @@ Singleton {
                     verb: isPendingConfirm ? Translation.tr("Confirm") : Translation.tr("Execute"),
                     iconName: match.icon,
                     iconType: LauncherSearchResult.IconType.Material,
+                    requiresConfirmation: match.requiresConfirmation,
                     execute: () => {
-                        if (root.confirmKey === match.cmd) {
+                        if (!match.requiresConfirmation || root.confirmKey === match.cmd) {
                             root.confirmKey = "";
                             match.execute();
                         } else {
                             root.confirmKey = match.cmd;
+                            root._scheduleResultsUpdate();
                         }
                     }
                 }));

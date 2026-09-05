@@ -856,7 +856,8 @@ RippleButton {
 
         const isSystemControl = root.entry?.key?.startsWith("sys:");
         const cmdKey = isSystemControl ? root.entry.key.slice(4) : "";
-        const isConfirming = isSystemControl && LauncherSearch.confirmKey !== cmdKey;
+        const isConfirming = isSystemControl && root.entry?.requiresConfirmation
+            && LauncherSearch.confirmKey !== cmdKey;
         const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
         if (!isConfirming && !isModeSwitch) {
