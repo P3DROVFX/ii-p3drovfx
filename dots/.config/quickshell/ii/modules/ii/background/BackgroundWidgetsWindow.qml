@@ -513,6 +513,8 @@ PanelWindow {
             antialiasing: true
             smooth: true
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
+            alignmentGridStep: 10
+            visualGridStep: 40
             // In the mode the lattice is drawn on a card, not on a screen: the
             // card is this window's own rect (the canvas sits off it by the
             // parallax offset), and its corner is the one the wallpaper's card

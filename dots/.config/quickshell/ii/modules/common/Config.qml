@@ -2600,10 +2600,8 @@ Singleton {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
-                    // Snap step for the wallpaper canvas, in pixels. 0 means "whatever the
-                    // panel family wants" — see Appearance.sizes.widgetGridStep, where a
-                    // touch-first family asks for a coarser grid than a pointer one.
-                    property int gridStep: 0
+                    // Standard snap step for the desktop wallpaper canvas is 10px.
+                    property int gridStep: 10
                     property string colorScheme: "default"
                     property bool showOnlyOnSingleMonitor: false
                     property string targetMonitor: ""

@@ -571,7 +571,7 @@ Item {
                     id: wallpaperDimLayer
                     anchors.fill: parent
                     color: Appearance.colors.colLayer0
-                    opacity: anyWidgetIsDragging ? 0.45 : 0.0
+                    opacity: anyWidgetIsDragging ? 0.2 : 0.0
                     visible: opacity > 0
 
                     Behavior on opacity {

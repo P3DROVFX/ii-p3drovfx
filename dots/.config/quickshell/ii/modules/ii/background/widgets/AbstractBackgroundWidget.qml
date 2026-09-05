@@ -335,7 +335,7 @@ AbstractWidget {
     //   required movement is ALWAYS relative to the raw position — stable.
     readonly property int _gridStep: {
         const canvas = findCanvas(root.parent);
-        return Math.max(1, canvas ? canvas.alignmentGridStep : Appearance.sizes.widgetGridStep);
+        return Math.max(1, canvas ? canvas.alignmentGridStep : 10);
     }
     property real _gridAnchorX: 0   // raw x at last grid commit
     property real _gridAnchorY: 0   // raw y at last grid commit

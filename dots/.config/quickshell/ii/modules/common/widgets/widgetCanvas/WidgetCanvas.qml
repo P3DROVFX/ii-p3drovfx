@@ -11,9 +11,12 @@ MouseArea {
     property real snapLineY: -1
     property bool draggingActive: false
     property bool gridOverlayEnabled: false
-    // Hosts may override; the default follows the family, see Appearance.sizes.widgetGridStep.
-    property int alignmentGridStep: Appearance.sizes.widgetGridStep
+    // Standard desktop alignment grid snaps to 10px regardless of monitor.
+    property int alignmentGridStep: 10
     onAlignmentGridStepChanged: dotGrid.requestPaint()
+    // Visual grid points are spaced further apart (e.g. 40px) to prevent screen pollution.
+    property int visualGridStep: 40
+    onVisualGridStepChanged: dotGrid.requestPaint()
 
     // The area the lattice belongs to, and the corner it is cut to, in canvas
     // coordinates. Edit Mode shrinks the desktop into a rounded card, and a
@@ -669,7 +672,8 @@ MouseArea {
         visible: wanted && opacity > 0.001
         opacity: wanted ? 0.55 : 0
 
-        readonly property real dotSize: 1.5
+        property real dotSize: 4.0
+        onDotSizeChanged: requestPaint()
         readonly property color dotColor: Appearance.colors.colPrimary
 
         // Uniform on purpose. A radial falloff around the dragged widget was
@@ -691,14 +695,16 @@ MouseArea {
             ctx.reset();
             ctx.fillStyle = dotGrid.dotColor;
 
-            const offset = dotGrid.dotSize / 2;
-            const step = Math.max(1, root.alignmentGridStep);
+            const dotRadius = dotGrid.dotSize / 2;
+            const step = Math.max(1, root.visualGridStep);
             const left = dotGrid.card.x;
             const top = dotGrid.card.y;
             const right = left + dotGrid.card.width;
             const bottom = top + dotGrid.card.height;
             const radius = dotGrid.cardRadius;
+            const tau = Math.PI * 2;
 
+            ctx.beginPath();
             for (let y = 0; y <= height; y += step) {
                 if (y < top || y > bottom)
                     continue;
@@ -713,9 +719,11 @@ MouseArea {
                 for (let x = 0; x <= width; x += step) {
                     if (x < rowLeft || x > rowRight)
                         continue;
-                    ctx.fillRect(x - offset, y - offset, dotGrid.dotSize, dotGrid.dotSize);
+                    ctx.moveTo(x + dotRadius, y);
+                    ctx.arc(x, y, dotRadius, 0, tau);
                 }
             }
+            ctx.fill();
         }
 
         onWidthChanged: requestPaint()
