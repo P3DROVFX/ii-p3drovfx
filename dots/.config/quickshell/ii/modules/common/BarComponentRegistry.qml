@@ -136,6 +136,11 @@ Singleton {
                     displayName: qsTr("Dock"),
                     icon: "dock_to_left",
                     value: "dock"
+                },
+                {
+                    displayName: qsTr("Index"),
+                    icon: "format_list_numbered",
+                    value: "index"
                 }
             ]
         },
@@ -443,7 +448,28 @@ Singleton {
             icon: "power_settings_new",
             title: "Power button",
             styleConfigKey: "power",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Solid"),
+                    icon: "radio_button_checked",
+                    value: "solid"
+                },
+                {
+                    displayName: qsTr("Dot"),
+                    icon: "fiber_manual_record",
+                    value: "dot"
+                }
+            ],
             pageId: "power"
         },
         {

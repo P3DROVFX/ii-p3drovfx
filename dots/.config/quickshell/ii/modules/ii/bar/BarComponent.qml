@@ -542,7 +542,7 @@ Item {
             return true;
         if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
             return true;
-        if (modelData.id === "power" && Config.options.bar.styles.power === "expressive")
+        if (modelData.id === "power" && Config.options.bar.styles.power !== "default")
             return true;
         if (modelData.id === "battery" && Config.options.bar.styles.battery === "expressive")
             return true;
@@ -721,6 +721,8 @@ Item {
                 return workspaceCompExpressive;
             if (style === "dock")
                 return workspaceCompDock;
+            if (style === "index")
+                return workspaceCompIndex;
             return workspaceComp;
         case "music_player":
             if (isExp)
@@ -795,6 +797,10 @@ Item {
                 return sportsCompExpressive;
             return sportsComp;
         case "power":
+            if (style === "solid")
+                return powerCompSolid;
+            if (style === "dot")
+                return powerCompDot;
             if (isExp)
                 return powerCompExpressive;
             return powerComp;
@@ -1273,6 +1279,12 @@ Item {
         }
     }
     Component {
+        id: workspaceCompIndex
+        IndexWorkspaces {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
         id: systemMonitorCompExpressive
         ExpressiveResources {
             vertical: rootItem.vertical
@@ -1317,6 +1329,18 @@ Item {
     Component {
         id: utilityButtonsCompSegments
         SegmentedUtilButtons {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: powerCompSolid
+        SolidPowerButton {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: powerCompDot
+        DotPowerButton {
             vertical: rootItem.vertical
         }
     }

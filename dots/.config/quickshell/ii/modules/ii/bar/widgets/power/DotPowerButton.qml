@@ -29,13 +29,21 @@ Item {
         ? Appearance.sizes.verticalBarWidth
         : Appearance.sizes.baseBarHeight) - 8
 
-    implicitWidth: root.side
-    implicitHeight: root.side
+    // The box is *not* square, unlike the other two power buttons. Those fill
+    // theirs with a plate; this one draws a dot in the middle of it, and a
+    // square's worth of emptiness around a 7px dot reads as padding — at the
+    // end of an island, which hugs its content, it reads as the island having a
+    // margin on that side. Narrow enough to sit close to the island's own edge,
+    // wide enough to still hold the symbol once it is revealed.
+    readonly property real boxLength: Math.round(root.side * 0.72)
+
+    implicitWidth: root.vertical ? root.side : root.boxLength
+    implicitHeight: root.vertical ? root.boxLength : root.side
 
     readonly property bool open: GlobalStates.sessionOpen
 
-    readonly property real dotSize: Math.max(4, Math.round(root.side * 0.22))
-    readonly property real glyphSize: Math.round(root.side * 0.6)
+    readonly property real dotSize: Math.max(5, Math.round(root.side * 0.3))
+    readonly property real glyphSize: Math.round(root.side * 0.58)
 
     // One driver for the whole reveal. Two — a dot animation and a glyph
     // animation — would let the dot still be leaving while the glyph is already

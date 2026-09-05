@@ -3485,12 +3485,12 @@ Singleton {
                     property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
                     property string utilButtons: "expressive" // default | expressive | segments
-                    property string workspaces: "default"
+                    property string workspaces: "default" // default | minimal | expressive | dock | index
                     property string weather: "expressive"
                     property string dashboard: "expressive" // default | expressive | orbs
                     property string resources: "expressive"
                     property string policies: "expressive" // default | expressive | outline
-                    property string power: "expressive"
+                    property string power: "expressive" // default | expressive | solid | dot
                     property string battery: "expressive"
                     property string systray: "expressive"
                     property string bluetooth: "expressive"
@@ -3940,6 +3940,7 @@ Singleton {
                     property bool swapPrimaryWithSecondary: false
                     property bool showPercentageInsideBattery: false
                     property string showPercentage: "off"
+                    property bool colorByPowerProfile: true
                 }
                 property string bluetoothDevicesLayout: "expressive" // Options: classic, expressive
                 property JsonObject sizes: JsonObject {

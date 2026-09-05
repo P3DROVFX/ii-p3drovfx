@@ -62,12 +62,21 @@ Item {
         ? root.activeTheme.barBackground
         : Appearance.colors.colLayer0
 
+    // The islands pad themselves by exactly the inset the full-width bar uses
+    // for its own content. That is not a coincidence to be written as a literal:
+    // `barBackground` sits `hyprlandGapsOut` inside the bar and the sections sit
+    // `hyprlandGapsOut` inside *that*, so an island anchored to a section and
+    // grown by the same number lands its outer edge precisely where the
+    // full-width pill's edge is, with the same gap to the last widget. A
+    // hardcoded 6 put both one pixel out — the bar visibly changed its side
+    // margins when you switched background style, which is the one thing
+    // switching background style should not do.
     Rectangle {
         id: leftIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
         anchors {
-            left: leftSection.left; leftMargin: -6
-            right: leftSection.right; rightMargin: -6
+            left: leftSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: leftSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -90,8 +99,8 @@ Item {
         id: middleIsland
         visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
         anchors {
-            left: middleSection.left; leftMargin: -6
-            right: middleSection.right; rightMargin: -6
+            left: middleSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: middleSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -114,8 +123,8 @@ Item {
         id: rightIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
         anchors {
-            left: rightSection.left; leftMargin: -6
-            right: rightSection.right; rightMargin: -6
+            left: rightSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: rightSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -156,7 +165,22 @@ Item {
     Item {
         id: middleSection
         anchors { top: barBackground.top; bottom: barBackground.bottom; horizontalCenter: barBackground.horizontalCenter }
-        width: middleLeft.width + centerCenter.width + middleRight.width + 8
+        // `centerCenter` is centred in here and the two side rows hang off it
+        // with a 4px margin, so the box has to be symmetric around the centre:
+        // whichever side is wider decides the slack, and both fit.
+        //
+        // The old form was `middleLeft + centerCenter + middleRight + 8`, which
+        // charged for those two margins even when the rows they belong to were
+        // empty. In `island` background style that is *always* — BarLayout
+        // forces `centerIdx` to -1 there, so every centre widget lands in
+        // `centerList` and the side rows are zero-wide. The island wraps this
+        // box, so the phantom 4px on each side became visible padding inside
+        // the pill; in every other background style the bar's own full-width
+        // surface hid it, which is why the margins only looked wrong here.
+        readonly property real sideSlack: Math.max(
+            middleLeft.width > 0 ? middleLeft.width + 4 : 0,
+            middleRight.width > 0 ? middleRight.width + 4 : 0)
+        width: centerCenter.width + middleSection.sideSlack * 2
 
         RowLayout {
             id: middleLeft

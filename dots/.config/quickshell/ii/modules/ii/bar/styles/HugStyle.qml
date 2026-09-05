@@ -157,7 +157,22 @@ Item {
     Item {
         id: middleSection
         anchors { top: parent.top; bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-        width: middleLeft.width + centerCenter.width + middleRight.width + 8
+        // `centerCenter` is centred in here and the two side rows hang off it
+        // with a 4px margin, so the box has to be symmetric around the centre:
+        // whichever side is wider decides the slack, and both fit.
+        //
+        // The old form was `middleLeft + centerCenter + middleRight + 8`, which
+        // charged for those two margins even when the rows they belong to were
+        // empty. In `island` background style that is *always* — BarLayout
+        // forces `centerIdx` to -1 there, so every centre widget lands in
+        // `centerList` and the side rows are zero-wide. The island wraps this
+        // box, so the phantom 4px on each side became visible padding inside
+        // the pill; in every other background style the bar's own full-width
+        // surface hid it, which is why the margins only looked wrong here.
+        readonly property real sideSlack: Math.max(
+            middleLeft.width > 0 ? middleLeft.width + 4 : 0,
+            middleRight.width > 0 ? middleRight.width + 4 : 0)
+        width: centerCenter.width + middleSection.sideSlack * 2
 
         RowLayout {
             id: middleLeft
