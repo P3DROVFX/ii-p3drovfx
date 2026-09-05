@@ -170,6 +170,27 @@ class SearchRaycastContractTests(unittest.TestCase):
         for term in ('id: "notes"', 'notesOpen = true', 'notes", "notas'):
             self.assertIn(term, shell_actions)
 
+    def test_system_controls_delegate_to_the_shared_session_service(self):
+        launcher = source("services/LauncherSearch.qml")
+        result_model = source("modules/common/models/LauncherSearchResult.qml")
+        item = source("modules/ii/overview/SearchItem.qml")
+        actions = source("modules/common/SearchResultActions.qml")
+        definitions = launcher.split("readonly property var systemControlDefinitions:", 1)[1].split(
+            "/**\n     * Application matching", 1
+        )[0]
+
+        for action in ("lock", "poweroff", "reboot", "suspend"):
+            self.assertIn(f"execute: () => Session.{action}()", definitions)
+
+        self.assertNotIn('execDetached(["hyprlock"])', definitions)
+        self.assertNotIn('execDetached(["systemctl"', definitions)
+        self.assertIn("requiresConfirmation: false", definitions)
+        self.assertIn("requiresConfirmation: true", definitions)
+        self.assertIn("property bool requiresConfirmation: false", result_model)
+        self.assertIn("requiresConfirmation: match.requiresConfirmation", launcher)
+        self.assertIn("root.entry?.requiresConfirmation", item)
+        self.assertIn("entry.requiresConfirmation", actions)
+
     def test_daily_sports_and_timer_panels_have_stable_empty_surfaces(self):
         sports_service = source("services/SportsService.qml")
         sports_panel = source("modules/ii/overview/SportsPanel.qml")
