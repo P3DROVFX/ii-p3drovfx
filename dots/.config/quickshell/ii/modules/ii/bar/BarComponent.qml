@@ -536,11 +536,11 @@ Item {
             return true;
         if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
             return true;
-        if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard === "expressive")
+        if (modelData.id === "dashboard_panel_button" && Config.options.bar.styles.dashboard !== "default")
             return true;
         if (modelData.id === "system_monitor" && Config.options.bar.styles.resources === "expressive")
             return true;
-        if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies === "expressive")
+        if (modelData.id === "policies_panel_button" && Config.options.bar.styles.policies !== "default")
             return true;
         if (modelData.id === "power" && Config.options.bar.styles.power === "expressive")
             return true;
@@ -773,10 +773,14 @@ Item {
                 return weatherCompTessera;
             return weatherComp;
         case "policies_panel_button":
+            if (style === "outline")
+                return policiesPanelButtonOutline;
             if (isExp)
                 return policiesPanelButtonExpressive;
             return policiesPanelButton;
         case "dashboard_panel_button":
+            if (style === "orbs")
+                return isVert ? dashboardPanelButtonOrbsVert : dashboardPanelButtonOrbs;
             if (isExp)
                 return isVert ? dashboardPanelButtonExpressiveVert : dashboardPanelButtonExpressive;
             return isVert ? dashboardPanelButtonVert : dashboardPanelButton;
@@ -1288,6 +1292,24 @@ Item {
         id: dashboardPanelButtonExpressiveVert
         ExpressiveDashboardPanelButton {
             vertical: true
+        }
+    }
+    Component {
+        id: dashboardPanelButtonOrbs
+        OrbsDashboardPanelButton {
+            vertical: false
+        }
+    }
+    Component {
+        id: dashboardPanelButtonOrbsVert
+        OrbsDashboardPanelButton {
+            vertical: true
+        }
+    }
+    Component {
+        id: policiesPanelButtonOutline
+        OutlinePoliciesPanelButton {
+            vertical: rootItem.vertical
         }
     }
     Component {

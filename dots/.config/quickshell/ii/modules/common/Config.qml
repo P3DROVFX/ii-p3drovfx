@@ -3487,9 +3487,9 @@ Singleton {
                     property string utilButtons: "expressive"
                     property string workspaces: "default"
                     property string weather: "expressive"
-                    property string dashboard: "expressive"
+                    property string dashboard: "expressive" // default | expressive | orbs
                     property string resources: "expressive"
-                    property string policies: "expressive"
+                    property string policies: "expressive" // default | expressive | outline
                     property string power: "expressive"
                     property string battery: "expressive"
                     property string systray: "expressive"
@@ -3835,6 +3835,9 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    // Orbs style: a solid disc per indicator, or a ring with the
+                    // bar showing through it.
+                    property string orbVariant: "filled" // filled | outline
                     property bool showCaffeine: true
                     property bool showVolume: false
                     property bool showMic: true

@@ -46,6 +46,46 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "palette"
+        title: Translation.tr("Design")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.dashboard
+                onSelected: newValue => Config.options.bar.styles.dashboard = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Orbs"), icon: "workspaces", value: "orbs" }
+                ]
+            }
+        }
+
+        ContentSubsection {
+            visible: Config.options.bar.styles.dashboard === "orbs"
+            title: Translation.tr("Orb treatment")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.dashboardButton.orbVariant
+                onSelected: newValue => Config.options.bar.dashboardButton.orbVariant = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Filled"), icon: "circle", value: "filled" },
+                    { displayName: Translation.tr("Outline"), icon: "radio_button_unchecked", value: "outline" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.dashboard === "orbs"
+            materialIcon: "workspaces"
+            text: Translation.tr("Orbs gives every indicator its own circle and nothing else — no container behind them. Filled discs carry the accent when the panel is open; outlined rings leave the bar showing through and thicken under the pointer. Both have the same geometry, so switching between them moves nothing.")
+        }
+    }
+
+    ContentSection {
         icon: "space_dashboard"
         title: Translation.tr("Visible Indicators")
 

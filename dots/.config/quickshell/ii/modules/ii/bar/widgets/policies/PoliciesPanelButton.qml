@@ -17,8 +17,8 @@ RippleButton {
     // No vertical variant of this one: it is only ever placed in a horizontal bar.
     readonly property real contentScale: Appearance.sizes.barContentScale
 
-    implicitWidth: Math.round(42 * root.contentScale)
-    implicitHeight: Math.round(34 * root.contentScale)
+    implicitWidth: Math.round(42 * leftSidebarButton.contentScale)
+    implicitHeight: Math.round(34 * leftSidebarButton.contentScale)
 
     property real startRadius: Appearance.rounding.full
     property real endRadius: Appearance.rounding.full
@@ -67,6 +67,10 @@ RippleButton {
     CustomIcon {
         id: distroIcon
         anchors.centerIn: parent
+        // The Material symbol below is the alternative to this icon, not an
+        // addition to it: without this guard both were drawn on top of each
+        // other whenever the option was on.
+        visible: !Config.options.bar.useMaterialSymbolForTopLeftIcon
         width: 16
         height: 16
         source: {
@@ -88,8 +92,8 @@ RippleButton {
                 bottomMargin: -2
                 rightMargin: -2
             }
-            implicitWidth: Math.round(8 * root.contentScale)
-            implicitHeight: Math.round(8 * root.contentScale)
+            implicitWidth: Math.round(8 * leftSidebarButton.contentScale)
+            implicitHeight: Math.round(8 * leftSidebarButton.contentScale)
             radius: Appearance.rounding.full
             color: Appearance.colors.colTertiary
 
@@ -104,7 +108,7 @@ RippleButton {
         anchors.centerIn: parent
         visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
         text: Config.options.bar.topLeftIcon
-        iconSize: Math.round(16 * root.contentScale)
+        iconSize: Math.round(16 * leftSidebarButton.contentScale)
         fill: 1
         color: leftSidebarButton.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
 
@@ -117,8 +121,8 @@ RippleButton {
                 bottomMargin: -2
                 rightMargin: -2
             }
-            implicitWidth: Math.round(8 * root.contentScale)
-            implicitHeight: Math.round(8 * root.contentScale)
+            implicitWidth: Math.round(8 * leftSidebarButton.contentScale)
+            implicitHeight: Math.round(8 * leftSidebarButton.contentScale)
             radius: Appearance.rounding.full
             color: Appearance.colors.colTertiary
 

@@ -25,7 +25,23 @@ Singleton {
             icon: "star",
             title: "Policies panel button",
             styleConfigKey: "policies",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Outline"),
+                    icon: "circle",
+                    value: "outline"
+                }
+            ],
             pageId: "privacy"
         },
         {
@@ -200,7 +216,23 @@ Singleton {
             icon: "notifications",
             title: "Dashboard panel button",
             styleConfigKey: "dashboard",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Orbs"),
+                    icon: "workspaces",
+                    value: "orbs"
+                }
+            ],
             configPage: "DashboardButtonConfig.qml"
         },
         {
