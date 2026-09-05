@@ -241,7 +241,14 @@ Item {
         asynchronous: true
         smooth: true
         mipmap: true
-        cache: false
+        // AnimatedImage feeds this size to QMovie before it decodes a frame.
+        // Keep the same high-quality target as the static path so the masked
+        // avatar retains its smooth edges without decoding unused source pixels.
+        sourceSize: Qt.size(Math.max(256, Math.ceil(root.width * 2)), Math.max(256, Math.ceil(root.height * 2)))
+        // AnimatedImage maps this to QMovie::CacheAll. Keeping the decoded
+        // frames avoids decoding this GIF again on every loop while preserving
+        // the same source resolution, filtering, and masked anti-aliasing.
+        cache: true
         visible: root.isAnimated && status === Image.Ready && root.imageStyle !== "expressive"
 
         layer.enabled: true

@@ -705,7 +705,7 @@ Item {
                 // USER PROFILE
                 UserProfileAvatar {
                     anchors.fill: parent
-                    active: GlobalStates.dashboardPanelOpen
+                    active: GlobalStates.dashboardPanelOpen && headerRoot.visible
                     visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                     avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     fontPixelSize: 32
@@ -995,7 +995,7 @@ Item {
 
                     UserProfileAvatar {
                         anchors.fill: parent
-                        active: GlobalStates.dashboardPanelOpen
+                        active: GlobalStates.dashboardPanelOpen && systemButtonRowRoot.visible
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                         avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
                     }
