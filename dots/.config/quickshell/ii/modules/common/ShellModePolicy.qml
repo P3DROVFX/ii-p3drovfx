@@ -32,10 +32,11 @@ QtObject {
         && Config.options.bar.cornerStyle === 3
         && !Config.options.bar.vertical
 
-    // Connect is intentionally available from Welcome even when the current
-    // bar uses an incompatible presentation. setMode("connect") normalizes
-    // only the two bar choices required by Connect before switching modes.
+    // Top and bottom Dynamic Island bars share the top-layer space Connect
+    // owns. Keep the existing bar choice intact and refuse Connect instead of
+    // silently replacing the user's Dynamic Island style.
     readonly property bool canSelectConnect: Config.ready
+        && !root.dynamicIslandHorizontal
     // Existing shell behavior keeps the Default option unavailable while the
     // current Connect session is backed by a floating Dynamic Island.
     readonly property bool canSelectDefault: Config.ready
@@ -58,7 +59,9 @@ QtObject {
         && root.effectiveMode === "connect"
         ? "Disable Floating Dynamic Island first"
         : ""
-    readonly property string connectBlockedReasonKey: ""
+    readonly property string connectBlockedReasonKey: root.dynamicIslandHorizontal
+        ? "Connect mode is unavailable while Dynamic Island is at the top or bottom."
+        : ""
     readonly property string barPositionBlockedReasonKey:
         "The bar stays at the top while Dynamic Island is centered in it."
 
@@ -67,12 +70,9 @@ QtObject {
             return false;
         if (mode === "default" && !root.canSelectDefault)
             return false;
+        if (mode === "connect" && !root.canSelectConnect)
+            return false;
         if (mode === "connect") {
-            // Dynamic Island on top/bottom cannot be used in Connect mode.
-            // Automatically switch cornerStyle to Hug (0).
-            if (Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
-                Config.options.bar.cornerStyle = 0;
-            }
             Config.options.bar.barBackgroundStyle = 1;
         }
         Config.options.sidebar.sidebarStyle = mode;

@@ -88,12 +88,7 @@ Item {
                     ConfigSelectionArray {
                         id: shellStyleSelector
                         currentValue: Config.options.sidebar.sidebarStyle
-                        onSelected: (newValue) => {
-                            if (newValue === "connect" && Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
-                                barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island at top/bottom is incompatible with Connect mode. Bar corner style was automatically set to Hug."));
-                            }
-                            ShellModePolicy.setMode(newValue);
-                        }
+                        onSelected: newValue => ShellModePolicy.setMode(newValue)
                         options: {
                             var opts = [{
                                 "displayName": Translation.tr("Default"),
@@ -131,6 +126,13 @@ Item {
                         text: Translation.tr("Go to Dynamic Island settings")
                         linkText: Translation.tr("Go there")
                     }
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: ShellModePolicy.connectBlockedReasonKey.length > 0
+                    materialIcon: "block"
+                    text: Translation.tr(ShellModePolicy.connectBlockedReasonKey)
                 }
 
                 NoticeBox {
