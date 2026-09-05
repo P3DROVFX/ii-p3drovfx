@@ -93,6 +93,25 @@ the rest of this file is careful: a pen reports position continuously whenever i
 anywhere near the tablet, and forwarding all of it would be thousands of lines a minute
 for something only a drag cares about.
 
+### When a barrel button does nothing
+
+The press has to reach Linux as `BTN_STYLUS` / `BTN_STYLUS2` on the tablet device. A
+driver can present a working tablet — pressure, tilt, the tip — and still send nothing at
+all when a barrel button is pressed, because the button is bound to something that does
+not reach the virtual tablet.
+
+`scripts/tablet/pen-buttons.py` answers which of those it is. It watches every input
+device, not only the tablet, so a driver that maps the button to a mouse click or a
+keystroke shows up too:
+
+```bash
+~/.config/quickshell/ii/scripts/tablet/pen-buttons.py 20
+```
+
+Tip events but no barrel events means the driver is not sending them, and no amount of
+shell configuration will help. Settings › Tablet › Pen says the same thing once the pen
+has been seen at least once.
+
 ### Why not OpenTabletDriver's own bindings
 
 OTD can bind a barrel button to a key combination, and the shell could then bind that

@@ -609,15 +609,27 @@ Item {
                 text: Translation.tr("Nothing needs configuring in OpenTabletDriver. It passes the barrel buttons through as ordinary stylus buttons, which the shell's own input helper already watches — so they are bound here, in one place.")
             }
 
-            // Says whether the pen is reaching the shell at all. A binding nobody can
-            // confirm is a binding nobody trusts, and the two ways this silently fails —
-            // no pen device found, and a pen whose buttons never arrive — look identical.
+            // Says whether the pen is reaching the shell at all.
+            //
+            // Two different failures look identical from here — no pen device, and a pen
+            // whose buttons never arrive — and the second one is the common one: a driver
+            // can present a perfectly good tablet and still send nothing when a barrel
+            // button is pressed. Saying "press it once to confirm" and then never
+            // changing is the same silent shrug the keyboard's auto-show used to give.
             NoticeBox {
                 Layout.fillWidth: true
                 visible: Config.options.tablet.pen.enable && OskAutoShow.deviceReportReceived
                     && OskAutoShow.penDeviceCount === 0
                 materialIcon: "stylus_note"
                 text: Translation.tr("No pen was found. Connect a tablet, and if it is running through OpenTabletDriver, check that its daemon is up.")
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Config.options.tablet.pen.enable && OskAutoShow.penDeviceCount > 0
+                    && !PenMode.penButtonsSeen
+                materialIcon: "help"
+                text: Translation.tr("The pen is being seen, but no barrel button has ever reached the shell. Those presses have to arrive as stylus buttons — some drivers send nothing unless the pen buttons are explicitly bound. Run scripts/tablet/pen-buttons.py to see what yours actually sends.")
             }
 
             ConfigSwitch {
@@ -682,7 +694,7 @@ Item {
                     title: Translation.tr("Lower button")
                     description: PenMode.penButtonsSeen
                         ? Translation.tr("Seen — the pen is reaching the shell.")
-                        : Translation.tr("Press it once to confirm the shell can see it.")
+                        : Translation.tr("Never seen. Press it once; if nothing changes, the driver is not sending it.")
                     actionId: Config.options.tablet.pen.buttons[0] ?? "none"
                     onActionSelected: newAction => {
                         if (!Config.ready)
