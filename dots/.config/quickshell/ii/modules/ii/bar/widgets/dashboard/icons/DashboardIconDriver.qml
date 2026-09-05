@@ -5,6 +5,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.models.hyprland
+import Quickshell.Services.UPower
 
 /**
  * Turns real service state into icon cues.
@@ -33,6 +34,7 @@ Item {
     property Item easyEffectsIcon: null
     property Item dnsIcon: null
     property Item gameModeIcon: null
+    property Item powerProfileIcon: null
     property Item songRecIcon: null
     property Item alarmIcon: null
     property Item countdownIcon: null
@@ -341,6 +343,27 @@ Item {
     onDnsCueChanged: {
         if (root.driverReady && root.dnsIcon)
             root.playIconCue(root.dnsIcon, root.dnsCue);
+    }
+
+    // ── Power profile ───────────────────────────────────────────────────────
+    //
+    // Three profiles, one scale. `balanced` is the resting value, so it doubles
+    // as "the user turned the special profile off" — which is why the bar hides
+    // the icon there rather than showing a needle parked in the middle.
+    readonly property string powerProfileName: {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.PowerSaver:
+            return "saver";
+        case PowerProfile.Performance:
+            return "performance";
+        default:
+            return "balanced";
+        }
+    }
+    readonly property bool powerProfileActive: root.powerProfileName !== "balanced"
+    onPowerProfileNameChanged: {
+        if (root.driverReady && root.powerProfileIcon)
+            root.playIconCue(root.powerProfileIcon, root.powerProfileName);
     }
 
     // ── Game mode ───────────────────────────────────────────────────────────

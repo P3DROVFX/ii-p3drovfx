@@ -147,6 +147,7 @@ Item {
         easyEffectsIcon: easyEffectsIcon
         dnsIcon: dnsIcon
         gameModeIcon: gameModeIcon
+        powerProfileIcon: powerProfileIcon
         songRecIcon: songRecIcon
         alarmIcon: alarmIcon
         countdownIcon: countdownIcon
@@ -370,6 +371,22 @@ Item {
                     iconSize: root.iconPixelSize
                     color: dnsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                     active: DnsOverTls.active
+                }
+            }
+        }
+        DashboardIconRevealer {
+            reveal: Config.options.bar.dashboardButton.showPowerProfile && iconDriver.powerProfileActive
+            vertical: root.vertical
+            layoutSpacing: flow.itemSpacing
+            ExpressiveIconWrapper {
+                id: powerProfileWrapper
+                vertical: root.vertical
+                PowerProfileIcon {
+                    id: powerProfileIcon
+                    anchors.centerIn: parent
+                    iconSize: root.iconPixelSize
+                    color: powerProfileWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                    profile: iconDriver.powerProfileName
                 }
             }
         }

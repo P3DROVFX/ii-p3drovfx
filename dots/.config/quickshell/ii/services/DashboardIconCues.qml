@@ -152,6 +152,16 @@ Singleton {
             ]
         },
         {
+            channel: "powerprofile",
+            title: "Power profile",
+            icon: "speed",
+            cues: [
+                { name: "saver", label: "Power saver" },
+                { name: "balanced", label: "Balanced" },
+                { name: "performance", label: "Performance" }
+            ]
+        },
+        {
             channel: "gamemode",
             title: "Game mode",
             icon: "gamepad",

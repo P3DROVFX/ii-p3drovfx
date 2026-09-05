@@ -3857,6 +3857,7 @@ Singleton {
                     property bool showEasyEffects: true
                     property bool showDns: true
                     property bool showGameMode: true
+                    property bool showPowerProfile: false
                     property bool showMusicRecognition: true
                     property bool showAlarms: true
                 }

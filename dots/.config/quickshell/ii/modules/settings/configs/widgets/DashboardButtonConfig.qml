@@ -214,6 +214,18 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "speed"
+            text: Translation.tr("Show Power profile")
+            checked: Config.options.bar.dashboardButton.showPowerProfile
+            onCheckedChanged: {
+                Config.options.bar.dashboardButton.showPowerProfile = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Shows a dial whose needle sweeps to the profile you switched to. Hidden while the profile is Balanced, so it only appears once you have actually asked for power saver or performance.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "gamepad"
             text: Translation.tr("Show Game mode")
             checked: Config.options.bar.dashboardButton.showGameMode
