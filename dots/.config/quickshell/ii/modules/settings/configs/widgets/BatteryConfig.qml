@@ -140,6 +140,16 @@ ContentPage {
                 }
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "palette"
+            text: Translation.tr("Color battery by power profile")
+            description: Translation.tr("Change battery icon color when power saver or performance mode is active")
+            checked: Config.options.bar.battery.colorByPowerProfile ?? true
+            onCheckedChanged: {
+                Config.options.bar.battery.colorByPowerProfile = checked;
+            }
+        }
     }
 
     MaterialWidgetLayoutSection {

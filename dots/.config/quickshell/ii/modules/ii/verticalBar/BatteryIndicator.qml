@@ -43,8 +43,9 @@ MouseArea {
     readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
     property color colText: Appearance.colors.colOnSurface
 
-    readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
-    readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
+    readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true
+    readonly property bool isPowerSaving: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.PowerSaver)
+    readonly property bool isPerformance: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.Performance)
 
     readonly property color fillColor: {
         if (root.isCritical && !root.isCharging)
