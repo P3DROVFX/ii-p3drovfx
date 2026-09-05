@@ -39,6 +39,59 @@ Item {
     property string currentRandomShape: "Circle"
     property real randomRotation: 0
 
+    // ── Direction arrow ───────────────────────────────────────────────────
+    // The active indicator turns into a triangle aimed the way you just moved,
+    // holds for a beat, then settles back into a circle. `ShapeCanvas` morphs
+    // between polygons on its own whenever `roundedPolygon` changes, so the
+    // whole effect is two assignments to `shapeString` — there is no tween to
+    // write here, and writing one would fight the built-in morph.
+    readonly property bool directionArrowEnabled: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
+    // Both modes need a square indicator: a triangle (or a cookie) stretched
+    // across a multi-workspace pill would be sheared rather than rotated.
+    readonly property bool squareActiveIndicator: root.directionArrowEnabled
+        || Config.options.bar.workspaces.useRandomShapeForActiveIndicator
+
+    // `ShapeCanvas`' own morph runs on the M3 expressive fast-spatial bezier,
+    // whose third control point is 1.67 — it overshoots by construction. That
+    // is right for a shape *arriving* somewhere, and wrong for a polygon morph:
+    // `progress` passes 1 and the interpolation extrapolates past the triangle,
+    // so the arrow over-sharpens and settles back. Reads as a flick rather than
+    // a turn. The arrow gets a curve with no overshoot instead, and long enough
+    // that the triangle is a shape you see rather than a frame you catch.
+    readonly property int arrowMorphDuration: Math.round(420 * Appearance.animMultiplier)
+    // Time the triangle stands still after the morph finishes. Without it the
+    // return starts the instant the arrow is fully formed and the whole gesture
+    // reads as a wobble.
+    readonly property int arrowRestDuration: Math.round(260 * Appearance.animMultiplier)
+
+    property int previousActiveWorkspaceId: -1
+    property bool arrowShown: false
+    // Material's Triangle points up, so up is 0 and the rest follow clockwise.
+    // On a vertical bar the workspaces run top to bottom, so the same "moved
+    // forward" gesture points down instead of right.
+    property real arrowRotation: 0
+
+    Timer {
+        id: arrowHoldTimer
+        // The morph in, and then the rest. Measured from the switch, so the
+        // triangle is fully formed for its whole rest.
+        interval: root.arrowMorphDuration + root.arrowRestDuration
+        repeat: false
+        onTriggered: root.arrowShown = false
+    }
+
+    function showDirectionArrow(previousId, nextId) {
+        if (!root.directionArrowEnabled || previousId < 0 || previousId === nextId)
+            return;
+        const forward = nextId > previousId;
+        if (root.vertical)
+            root.arrowRotation = forward ? 180 : 0;
+        else
+            root.arrowRotation = forward ? 90 : 270;
+        root.arrowShown = true;
+        arrowHoldTimer.restart();
+    }
+
 
     function updateRandomShape() {
         if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
@@ -56,7 +109,13 @@ Item {
 
     onEffectiveActiveWorkspaceIdChanged: {
         updateRandomShape();
+        // The change handler is the only place that still knows both ends of
+        // the move: `effectiveActiveWorkspaceId` is a binding and carries no
+        // history of its own.
+        root.showDirectionArrow(root.previousActiveWorkspaceId, root.effectiveActiveWorkspaceId);
+        root.previousActiveWorkspaceId = root.effectiveActiveWorkspaceId;
     }
+
 
     readonly property int workspacesShown: {
         if (useWorkspaceMap && workspaceMap.length > monitorIndex) {
@@ -205,6 +264,10 @@ Item {
     // Occupied workspace updates
     Component.onCompleted: {
         updateWorkspaceOccupied();
+        // Seeded, not left at -1: the first switch after startup should draw an
+        // arrow like any other, and `showDirectionArrow` refuses a negative
+        // previous id precisely so a cold start does not.
+        root.previousActiveWorkspaceId = root.effectiveActiveWorkspaceId;
     }
     Connections {
         target: Hyprland.workspaces
@@ -325,10 +388,10 @@ Item {
         property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset
         property real indicatorLength: baseIndicatorLength + currentItemOffset - visualInset * 2
 
-        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
-        x: root.vertical ? 0 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition)
-        width: root.vertical ? individualIconBoxHeight : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength)
-        height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? individualIconBoxHeight : indicatorLength) : individualIconBoxHeight
+        y: root.vertical ? (root.squareActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
+        x: root.vertical ? 0 : (root.squareActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition)
+        width: root.vertical ? individualIconBoxHeight : (root.squareActiveIndicator ? individualIconBoxHeight : indicatorLength)
+        height: root.vertical ? (root.squareActiveIndicator ? individualIconBoxHeight : indicatorLength) : individualIconBoxHeight
 
         opacity: root.scratchpadOpen || root.workspaceIndexInGroup < 0 ? 0.0 : 1.0
         Behavior on opacity {
@@ -339,7 +402,7 @@ Item {
             }
         }
 
-        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator) ? materialShapeComponent : rectangleComponent
+        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || root.squareActiveIndicator) ? materialShapeComponent : rectangleComponent
 
         Component {
             id: rectangleComponent
@@ -355,11 +418,41 @@ Item {
             MaterialShape {
                 anchors.fill: parent
                 transformOrigin: Item.Center
-                shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.currentRandomShape : Config.options.bar.workspaces.activeIndicatorShape
+                shapeString: {
+                    // The arrow outranks the random shape: a triangle that only
+                    // sometimes points the right way is worse than no arrow.
+                    if (root.directionArrowEnabled)
+                        return root.arrowShown ? "Triangle" : "Circle";
+                    if (Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
+                        return root.currentRandomShape;
+                    return Config.options.bar.workspaces.activeIndicatorShape;
+                }
                 color: Appearance.colors.colPrimary
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
+
+                // Replaces the one ShapeCanvas ships with. Only the arrow wants
+                // a settling curve; the random shape is a shape *landing*, and
+                // the overshoot is what gives that its snap.
+                animation: NumberAnimation {
+                    duration: root.directionArrowEnabled
+                        ? root.arrowMorphDuration
+                        : Math.round(350 * Appearance.animMultiplier)
+                    easing.type: root.directionArrowEnabled ? Easing.InOutCubic : Easing.BezierSpline
+                    easing.bezierCurve: [0.42, 1.67, 0.21, 0.90, 1, 1]
+                }
+
+                rotation: {
+                    if (root.directionArrowEnabled)
+                        return root.arrowRotation;
+                    return Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0;
+                }
                 Behavior on rotation {
+                    // Off in arrow mode on purpose. The triangle has to be
+                    // aimed before it appears; animating the angle would spin
+                    // it into place — and `Clockwise` would take the long way
+                    // round on a backwards switch, pointing every wrong
+                    // direction on the way there.
+                    enabled: !root.directionArrowEnabled
                     RotationAnimation {
                         duration: 350
                         direction: RotationAnimation.Clockwise

@@ -3508,6 +3508,7 @@ Singleton {
                     property bool fixedSize: false
                     property int customSize: 225
                     property bool showOnAllMonitors: false
+                    property bool animateTransition: true
                 }
 
                 property JsonObject weatherWidget: JsonObject {
@@ -3800,6 +3801,10 @@ Singleton {
                     property bool dynamicWorkspaces: false
                     property bool useMaterialShapeForActiveIndicator: false
                     property bool useRandomShapeForActiveIndicator: true
+                    // The active indicator becomes a triangle pointing the way
+                    // you just moved, then settles back into a circle. Takes
+                    // precedence over the random shape while it is on.
+                    property bool useDirectionArrowForActiveIndicator: false
                     property string activeIndicatorShape: "Pentagon"
                     property bool dockShowActiveIndicator: true
                     property bool dockShowWindowDots: true
