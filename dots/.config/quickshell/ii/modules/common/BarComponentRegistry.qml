@@ -379,7 +379,23 @@ Singleton {
             icon: "build",
             title: "Utility buttons",
             styleConfigKey: "utilButtons",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Segments"),
+                    icon: "view_week",
+                    value: "segments"
+                }
+            ],
             configPage: "UtilButtonsConfig.qml"
         },
         {

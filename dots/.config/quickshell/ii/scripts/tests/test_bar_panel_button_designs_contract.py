@@ -1,4 +1,4 @@
-"""Contract tests for the Outline and Orbs panel-button designs.
+"""Contract tests for the Outline, Orbs and Segments bar designs.
 
 Both are single new designs added beside the existing default/expressive pair,
 so the checks here are mostly about the wiring staying complete and about the
@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 OUTLINE = ROOT / "modules/ii/bar/widgets/policies/OutlinePoliciesPanelButton.qml"
 ORBS = ROOT / "modules/ii/bar/widgets/dashboard/OrbsDashboardPanelButton.qml"
 ORB = ROOT / "modules/ii/bar/widgets/dashboard/OrbIconWrapper.qml"
-EVERY = (OUTLINE, ORBS, ORB)
+SEGMENTS = ROOT / "modules/ii/bar/widgets/utilButtons/SegmentedUtilButtons.qml"
+SEGMENT = ROOT / "modules/ii/bar/widgets/utilButtons/UtilSegment.qml"
+EVERY = (OUTLINE, ORBS, ORB, SEGMENTS, SEGMENT)
 # The two files where drawing with a stroke is sanctioned, because "a ring with
 # no background" is the request and a fill would be the other design.
 STROKE_ALLOWED = (OUTLINE, ORB)
@@ -38,16 +40,24 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         for style in ("default", "expressive", "orbs"):
             self.assertIn(f'value: "{style}"', dashboard)
 
+        util = registry.split('id: "utility_buttons"', 1)[1].split("\n        {", 1)[0]
+        self.assertIn('styleConfigKey: "utilButtons"', util)
+        for style in ("default", "expressive", "segments"):
+            self.assertIn(f'value: "{style}"', util)
+
     def test_the_router_reaches_both_designs(self):
         router = self.read("modules/ii/bar/BarComponent.qml")
         self.assertIn('if (style === "outline")', router)
         self.assertIn('if (style === "orbs")', router)
+        self.assertIn('if (style === "segments")', router)
         self.assertIn("OutlinePoliciesPanelButton {", router)
         self.assertIn("OrbsDashboardPanelButton {", router)
+        self.assertIn("SegmentedUtilButtons {", router)
         # Both draw their own surface, so no style but `default` may get a chip
         # painted behind it.
         self.assertIn('Config.options.bar.styles.policies !== "default"', router)
         self.assertIn('Config.options.bar.styles.dashboard !== "default"', router)
+        self.assertIn('Config.options.bar.styles.utilButtons !== "default"', router)
 
     def test_the_dashboard_page_can_switch_style_too(self):
         page = self.read("modules/settings/configs/widgets/DashboardButtonConfig.qml")
@@ -57,6 +67,32 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         self.assertIn("Config.options.bar.dashboardButton.orbVariant", page)
         self.assertIn('value: "filled"', page)
         self.assertIn('value: "outline"', page)
+
+    def test_the_util_buttons_page_can_switch_style_too(self):
+        page = self.read("modules/settings/configs/widgets/UtilButtonsConfig.qml")
+        self.assertIn("Config.options.bar.styles.utilButtons", page)
+        self.assertIn('value: "segments"', page)
+
+    def test_segments_carry_every_state_on_the_corner_radius(self):
+        segment = SEGMENT.read_text(encoding="utf-8")
+        # One number for three readings: part of the track, lifting under the
+        # pointer, popped out because the toggle is on.
+        self.assertIn("readonly property real popTarget", segment)
+        self.assertEqual(segment.count("Behavior on pop"), 1)
+        self.assertIn("root.active ? 1.0 : (root.hovered ? 0.55 : 0.0)", segment)
+        # The ends of the group are the outline of the track, not a seam.
+        self.assertIn("root.first ? root.fullRadius : root.innerRadius", segment)
+        self.assertIn("root.last ? root.fullRadius : root.innerRadius", segment)
+
+    def test_only_the_buttons_that_latch_report_an_active_state(self):
+        # A snip is over the moment it starts; lighting its segment would say
+        # something untrue.
+        body = SEGMENTS.read_text(encoding="utf-8")
+        active = body.split("function activeFor(key)", 1)[1].split("function invoke", 1)[0]
+        for key in ("record", "keyboard", "wallpaper", "mic", "darkMode", "performance"):
+            self.assertIn(f'case "{key}":', active)
+        for key in ("snip", "colorPicker"):
+            self.assertNotIn(f'case "{key}":', active)
 
     def test_each_design_answers_to_hover_and_to_toggle(self):
         outline = OUTLINE.read_text(encoding="utf-8")
@@ -70,6 +106,10 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         self.assertIn("GlobalStates.sidebarRightOpen", orbs)
         for body, name in ((outline, "outline"), (orbs, "orbs")):
             self.assertIn("root.open", body, name)
+
+        segment = SEGMENT.read_text(encoding="utf-8")
+        self.assertIn("mouseArea.containsMouse", segment)
+        self.assertIn("property bool active", segment)
 
     def test_the_toggled_state_does_not_rely_on_hue_alone(self):
         # The palette comes from the wallpaper, and a monochrome one can put two
@@ -97,11 +137,15 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         self.assertEqual(orbs.count("Behavior on implicitWidth"), 0)
         self.assertEqual(orbs.count("Behavior on implicitHeight"), 0)
 
+        segment = SEGMENT.read_text(encoding="utf-8")
+        self.assertEqual(segment.count("Behavior on implicitWidth"), 0)
+        self.assertEqual(segment.count("Behavior on implicitHeight"), 0)
+
     def test_neither_design_reflows_the_bar_on_hover(self):
         # A hover that changes the widget's length pushes every neighbour along
         # with it. Both designs keep their bounding box and change what is
         # drawn inside it.
-        for path in (OUTLINE, ORBS):
+        for path in (OUTLINE, ORBS, SEGMENTS, SEGMENT):
             body = path.read_text(encoding="utf-8")
             implicit = "\n".join(line for line in body.splitlines()
                                  if "implicitWidth:" in line or "implicitHeight:" in line)
@@ -119,7 +163,7 @@ class BarPanelButtonDesignsContractTest(unittest.TestCase):
         for path in EVERY:
             body = path.read_text(encoding="utf-8")
             self.assertIn("property bool vertical", body, path.name)
-        for path in (OUTLINE, ORBS):
+        for path in (OUTLINE, ORBS, SEGMENTS):
             body = path.read_text(encoding="utf-8")
             self.assertIn("Appearance.sizes.verticalBarWidth", body, path.name)
             self.assertIn("Appearance.sizes.baseBarHeight", body, path.name)

@@ -532,7 +532,7 @@ Item {
             return true;
         if (modelData.id === "workspaces" && Config.options.bar.styles.workspaces === "expressive")
             return true;
-        if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons === "expressive")
+        if (modelData.id === "utility_buttons" && Config.options.bar.styles.utilButtons !== "default")
             return true;
         if (modelData.id === "weather" && (Config.options.bar.styles.weather === "expressive" || Config.options.bar.styles.weather === "horizon" || Config.options.bar.styles.weather === "tessera"))
             return true;
@@ -753,6 +753,8 @@ Item {
                 return keyboardCompExpressive;
             return isVert ? keyboardCompVert : keyboardComp;
         case "utility_buttons":
+            if (style === "segments")
+                return utilityButtonsCompSegments;
             if (isExp)
                 return utilityButtonsCompExpressive;
             return utilityButtonsComp;
@@ -1309,6 +1311,12 @@ Item {
     Component {
         id: policiesPanelButtonOutline
         OutlinePoliciesPanelButton {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: utilityButtonsCompSegments
+        SegmentedUtilButtons {
             vertical: rootItem.vertical
         }
     }

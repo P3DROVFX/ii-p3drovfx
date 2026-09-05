@@ -43,6 +43,32 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "palette"
+        title: Translation.tr("Design")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.utilButtons
+                onSelected: newValue => Config.options.bar.styles.utilButtons = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Segments"), icon: "view_week", value: "segments" }
+                ]
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: Config.options.bar.styles.utilButtons === "segments"
+            materialIcon: "view_week"
+            text: Translation.tr("Segments joins the buttons into one track and lets the corners carry the state: square while they are part of the strip, lifting under the pointer, fully round and filled once a toggle is on. Nothing changes width, so the bar never shifts as you move across it.")
+        }
+    }
+
+    ContentSection {
         icon: "widgets"
         title: Translation.tr("Utility Buttons")
 

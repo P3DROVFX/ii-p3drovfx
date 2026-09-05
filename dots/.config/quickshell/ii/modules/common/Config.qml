@@ -3484,7 +3484,7 @@ Singleton {
                     property string clock: "expressive" // default, material, expressive, neural, relief
                     property string media: "default" // default | expressive | neural | ring | tonal
                     property string notification: "default"
-                    property string utilButtons: "expressive"
+                    property string utilButtons: "expressive" // default | expressive | segments
                     property string workspaces: "default"
                     property string weather: "expressive"
                     property string dashboard: "expressive" // default | expressive | orbs
