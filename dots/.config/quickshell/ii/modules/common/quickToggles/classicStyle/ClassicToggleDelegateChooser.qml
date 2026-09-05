@@ -160,4 +160,14 @@ DelegateChooser {
             onEditClicked: root.editRequested("keyboardBacklight")
         }
     }
+    DelegateChoice {
+        roleValue: "laptopKeyboard"
+        LaptopKeyboardToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "laptopKeyboard"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("laptopKeyboard")
+        }
+    }
 }

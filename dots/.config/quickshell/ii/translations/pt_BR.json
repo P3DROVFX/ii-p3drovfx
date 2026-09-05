@@ -1,4 +1,9 @@
 {
+    "Laptop Keyboard": "Teclado do Laptop",
+    "Disable built-in laptop keyboard": "Desativar teclado integrado do laptop",
+    "Built-in keyboard disabled | Click to enable": "Teclado integrado desativado | Clique para ativar",
+    "Built-in keyboard disabled (keyd active, stop keyd to take effect)": "Teclado integrado desativado (keyd ativo, pare o keyd para surtir efeito)",
+    "Disable built-in laptop keyboard (incompatible with keyd daemon)": "Desativar teclado integrado do laptop (incompatível com o daemon keyd)",
     "Undo": "Desfazer",
     "Redo": "Refazer",
     "Cut": "Cortar",

@@ -1,4 +1,9 @@
 {
+    "Laptop Keyboard": "Laptop Keyboard",
+    "Disable built-in laptop keyboard": "Disable built-in laptop keyboard",
+    "Built-in keyboard disabled | Click to enable": "Built-in keyboard disabled | Click to enable",
+    "Built-in keyboard disabled (keyd active, stop keyd to take effect)": "Built-in keyboard disabled (keyd active, stop keyd to take effect)",
+    "Disable built-in laptop keyboard (incompatible with keyd daemon)": "Disable built-in laptop keyboard (incompatible with keyd daemon)",
     "Undo": "Undo",
     "Redo": "Redo",
     "Cut": "Cut",

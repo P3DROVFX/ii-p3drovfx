@@ -38,6 +38,7 @@ Singleton {
         { id: "systemSounds", model: systemSoundsToggle, keywords: ["system sounds", "sons", "sistema"] },
         { id: "localSend", model: localSendToggle, keywords: ["localsend", "send", "enviar"] },
         { id: "keyboardBacklight", model: keyboardBacklightToggle, keywords: ["backlight", "keyboard", "teclado"] },
+        { id: "laptopKeyboard", model: laptopKeyboardToggle, keywords: ["laptop", "keyboard", "teclado", "builtin", "internal"] },
         { id: "modes", model: modesToggle, keywords: ["modes", "routines", "rotinas"] }
     ]
 
@@ -72,5 +73,6 @@ Singleton {
     SystemSoundsToggle { id: systemSoundsToggle }
     LocalSendToggle { id: localSendToggle }
     KeyboardBacklightToggle { id: keyboardBacklightToggle }
+    LaptopKeyboardToggle { id: laptopKeyboardToggle }
     ModesToggle { id: modesToggle }
 }

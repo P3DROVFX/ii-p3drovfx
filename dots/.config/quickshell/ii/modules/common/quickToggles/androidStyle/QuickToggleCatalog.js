@@ -34,6 +34,7 @@ var TOGGLE_TYPES = {
     systemSounds: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     localSend: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     keyboardBacklight: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    laptopKeyboard: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     modes: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
     volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },

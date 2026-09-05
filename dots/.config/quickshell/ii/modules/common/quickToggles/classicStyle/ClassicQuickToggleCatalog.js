@@ -16,7 +16,8 @@ var TOGGLE_TYPES = [
     "easyEffects",
     "cloudflareWarp",
     "keyboardBacklight",
-    "keypressDisplay"
+    "keypressDisplay",
+    "laptopKeyboard"
 ];
 
 function allTypes() {

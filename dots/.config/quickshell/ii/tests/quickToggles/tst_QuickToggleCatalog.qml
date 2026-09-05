@@ -16,6 +16,7 @@ TestCase {
         verify(Catalog.hasType("timerWidget"));
         verify(Catalog.hasType("countdownWidget"));
         verify(Catalog.hasType("pomodoroWidget"));
+        verify(Catalog.hasType("laptopKeyboard"));
         verify(!Catalog.hasType("doesNotExist"));
     }
 
