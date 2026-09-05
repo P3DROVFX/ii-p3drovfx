@@ -5,7 +5,9 @@
 //! which device caused it, so the QML side correlates an `activate` line with the
 //! most recent `touch`/`pen` line to decide whether to raise the keyboard.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -85,7 +87,66 @@ fn classify(dev: &Device) -> Option<Role> {
 /// from the outside and have completely different fixes: no touchscreen on this machine
 /// (nothing to do), and /dev/input not readable by this user (join the input group). So
 /// both are reported rather than inferred.
-pub fn spawn_watchers() {
+pub fn spawn_watchers() -> usize {
+    let mut watched = HashSet::new();
+    let counts = scan(&mut watched);
+    emit(&counts.line());
+    let total = counts.total();
+
+    // Devices appear after we start, and not only when someone plugs a tablet in: a
+    // driver restarting takes its virtual device away and creates a *new* node for it,
+    // and OpenTabletDriver's own daemon may well come up after the shell does. The first
+    // version enumerated once and never looked again, so any of those left the pen
+    // invisible until the shell was restarted — with nothing saying so.
+    //
+    // The inventory is re-announced on a slow tick as well as on change, because the
+    // shell that reads it can be rebuilt at any moment by a config reload, and a report
+    // sent once is a report a reloaded consumer never hears.
+    thread::spawn(move || {
+        let mut ticks_since_report = 0;
+        loop {
+            thread::sleep(Duration::from_secs(5));
+            let fresh = scan(&mut watched);
+            ticks_since_report += 1;
+            if fresh != counts_snapshot(&fresh) || ticks_since_report >= 6 {
+                ticks_since_report = 0;
+                emit(&fresh.line());
+            }
+        }
+    });
+
+    total
+}
+
+/// What one pass over /dev/input found.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Inventory {
+    touch: usize,
+    pen: usize,
+    mouse: usize,
+    denied: bool,
+}
+
+impl Inventory {
+    fn line(&self) -> String {
+        format!("devices {} {} {}", self.touch, self.pen, self.mouse)
+    }
+    fn total(&self) -> usize {
+        self.touch + self.pen + self.mouse
+    }
+}
+
+/// The previous inventory, so a rescan can tell "nothing changed" from "something did".
+fn counts_snapshot(current: &Inventory) -> Inventory {
+    static LAST: Mutex<Option<Inventory>> = Mutex::new(None);
+    let mut guard = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let previous = guard.unwrap_or(Inventory { touch: usize::MAX, pen: 0, mouse: 0, denied: false });
+    *guard = Some(*current);
+    previous
+}
+
+/// One pass over the input devices, spawning a watcher for each one not already watched.
+fn scan(watched: &mut HashSet<PathBuf>) -> Inventory {
     let mut touch = 0;
     let mut pen = 0;
     let mut mouse = 0;
@@ -122,6 +183,12 @@ pub fn spawn_watchers() {
             }
         }
 
+        // Counted every pass, but watched only once: a rescan must not stack a second
+        // reader on a device that already has one.
+        if !watched.insert(path.clone()) {
+            continue;
+        }
+
         thread::spawn(move || loop {
             if watch(&path, role).is_err() {
                 // Device disappeared (suspend, unplug). Back off and retry so a
@@ -134,7 +201,8 @@ pub fn spawn_watchers() {
     if denied {
         emit("denied");
     }
-    emit(&format!("devices {touch} {pen} {mouse}"));
+
+    Inventory { touch, pen, mouse, denied }
 }
 
 fn axis_range(dev: &Device, axis: AbsoluteAxisCode) -> Option<AbsInfo> {

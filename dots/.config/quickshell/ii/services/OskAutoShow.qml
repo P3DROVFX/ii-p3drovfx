@@ -309,10 +309,32 @@ Singleton {
         Qt.callLater(() => root._restarting = false);
     }
 
+    /**
+     * Brings the daemon back after it stops on its own.
+     *
+     * `Process.running` is a binding, and a binding is not re-evaluated because the
+     * process behind it died — so a daemon that exited stayed exited for the life of the
+     * shell, and the pen and the touchscreen went quiet with nothing on screen saying
+     * why. It exits for real reasons: losing the input-method seat used to kill it
+     * outright, and a device disappearing mid-read can still take it down.
+     *
+     * The delay is what keeps a binary that cannot start from becoming a spawn loop.
+     */
+    readonly property Timer _respawnTimer: Timer {
+        interval: 1500
+        repeat: false
+        onTriggered: root.restartHelper()
+    }
+
     Process {
         id: helper
         running: root.enabled && !GlobalStates.screenLocked && !root._restarting
         command: [root.binaryPath]
+
+        onExited: {
+            if (root.enabled && !root._restarting)
+                root._respawnTimer.restart();
+        }
 
         stdout: SplitParser {
             onRead: data => root.handleLine(data)

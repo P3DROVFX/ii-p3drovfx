@@ -7,6 +7,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 
 import qs
+import qs.services
 import qs.modules.common
 
 /**
@@ -296,6 +297,8 @@ Singleton {
 
         function status(): string {
             return `enabled=${root.enabled}`
+                + ` penDevices=${OskAutoShow.penDeviceCount}`
+                + ` daemon=${OskAutoShow.binaryExists ? "built" : "missing"}`
                 + ` cursor=${root.wantsPenCursor ? (root.penThemeName || "pending") : "off"}`
                 + ` parentTheme=${root.parentTheme}`
                 + ` buttons=[${root.buttonActions.join(", ")}]`

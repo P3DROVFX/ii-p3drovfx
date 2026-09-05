@@ -33,6 +33,9 @@ struct App {
     manager: Option<ZwpInputMethodManagerV2>,
     /// Applied state, mirroring what the compositor last committed.
     active: bool,
+    /// Another client holds the input method. The keyboard half is over; the evdev half
+    /// is not, and they are unrelated.
+    unavailable: bool,
     /// Staged state; `activate`/`deactivate` only take effect on `done`.
     pending_active: bool,
 }
@@ -84,7 +87,7 @@ impl Dispatch<ZwpInputMethodV2, ()> for App {
 
             zwp_input_method_v2::Event::Unavailable => {
                 emit("unavailable");
-                std::process::exit(0);
+                state.unavailable = true;
             }
             _ => {}
         }
@@ -94,8 +97,31 @@ impl Dispatch<ZwpInputMethodV2, ()> for App {
 delegate_noop!(App: ignore wl_seat::WlSeat);
 delegate_noop!(App: ignore ZwpInputMethodManagerV2);
 
+/// Asks the kernel to kill this process when its parent goes.
+///
+/// The shell owns this daemon, and a shell that dies without cleaning up — a crash, a
+/// `kill -9` — must not leave it behind. An orphan keeps holding `zwp_input_method_v2`,
+/// and every instance started afterwards finds the seat taken and stands down, so the
+/// pen and the touchscreen stop reaching the shell with nothing on screen saying why.
+/// The orphan meanwhile reads them perfectly and writes to a pipe nobody is holding.
+///
+/// PDEATHSIG is cleared across `exec`, so it has to be set here rather than by the
+/// parent, and it is inherited from the *thread* that called it — hence the very first
+/// thing in main, before any thread is spawned.
+fn die_with_parent() {
+    unsafe {
+        libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM);
+    }
+    // A parent that died between the fork and this call leaves no signal to deliver.
+    if unsafe { libc::getppid() } == 1 {
+        std::process::exit(0);
+    }
+}
+
 fn main() {
-    input::spawn_watchers();
+    die_with_parent();
+
+    let watching = input::spawn_watchers();
 
     let conn = Connection::connect_to_env().expect("no Wayland display");
     let mut queue = conn.new_event_queue();
@@ -110,5 +136,23 @@ fn main() {
     // Held for the process lifetime; dropping it would release the input method.
     let _input_method = manager.get_input_method(&seat, &qh, ());
 
-    while queue.blocking_dispatch(&mut app).is_ok() {}
+    while queue.blocking_dispatch(&mut app).is_ok() {
+        if app.unavailable {
+            break;
+        }
+    }
+
+    // The Wayland half is finished — another input method holds the seat, or the
+    // connection went away. That says nothing about the evdev watchers, which are the
+    // only source of pen buttons, touch reports and the device inventory, and which run
+    // on their own threads.
+    //
+    // Exiting here is what used to take them down with it: losing a race for the keyboard
+    // seat silently cost the shell its pen buttons too, and which client won that race
+    // depends on start order, so it changed from one boot to the next.
+    if watching > 0 {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    }
 }
