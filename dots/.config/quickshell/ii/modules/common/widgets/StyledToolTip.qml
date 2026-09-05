@@ -16,7 +16,10 @@ ToolTip {
 
     readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode
     readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
-        && ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        // Both reads have to be guarded. `parent?.hovered` was, `parent.hovered` was not,
+        // so a tooltip evaluated while it has no parent — during the frame a delegate is
+        // being rebuilt, for instance — threw instead of simply staying hidden.
+        && ((extraVisibleCondition && (parent?.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
         && (!requireOverlay || sidebarOpen)
     verticalPadding: 5
     horizontalPadding: 10

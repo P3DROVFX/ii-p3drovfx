@@ -17,6 +17,11 @@ Item {
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : Appearance.sizes.baseBarHeight - 8
     implicitHeight: vertical ? Appearance.sizes.verticalBarWidth - 8 : Appearance.sizes.baseBarHeight - 8
 
+    // The shape, the symbol and the ping badge all follow the bar with the plate.
+    readonly property real contentScale: root.vertical
+        ? Appearance.sizes.verticalBarContentScale
+        : Appearance.sizes.barContentScale
+
     Connections {
         target: Ai
         function onResponseFinished() {
@@ -86,7 +91,7 @@ Item {
         MaterialShape {
             id: shapeContainer
             anchors.centerIn: parent
-            implicitSize: root.vertical ? 28 : 22
+            implicitSize: Math.round((root.vertical ? 28 : 22) * root.contentScale)
 
             // Morph shape based on panel state
             shape: GlobalStates.sidebarLeftOpen ? MaterialShape.Shape.Clover4Leaf : MaterialShape.Shape.Cookie9Sided
@@ -129,7 +134,7 @@ Item {
                 anchors.centerIn: parent
                 visible: Config.options.bar.useMaterialSymbolForTopLeftIcon
                 text: Config.options.bar.topLeftIcon
-                iconSize: root.vertical ? 18 : 16
+                iconSize: Math.round((root.vertical ? 18 : 16) * root.contentScale)
                 fill: 1
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer
@@ -149,11 +154,11 @@ Item {
                     bottomMargin: -1
                     rightMargin: -1
                 }
-                implicitWidth: 8
-                implicitHeight: 8
+                implicitWidth: Math.round(8 * root.contentScale)
+                implicitHeight: Math.round(8 * root.contentScale)
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colError
-                border.width: 1.5
+                border.width: 1.5 * root.contentScale
                 border.color: root.phoneIntegrationActive
                     ? Appearance.colors.colOnErrorContainer
                     : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)

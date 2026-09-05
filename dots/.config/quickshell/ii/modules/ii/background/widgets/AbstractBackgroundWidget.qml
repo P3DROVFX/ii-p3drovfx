@@ -323,7 +323,7 @@ AbstractWidget {
     property bool _ctrlHeld: false
 
     // ── Grid anchor state ─────────────────────────────────────────────────────
-    // Grid cells are 10px wide. The anchor stores the raw pointer position at the
+    // The anchor stores the raw pointer position at the
     // time of the last cell commit. A new cell is committed only when raw has
     // moved >= _gridStep from the anchor. The anchor then updates to rawX so the
     // NEXT jump again requires a full _gridStep of mouse movement.
@@ -335,7 +335,7 @@ AbstractWidget {
     //   required movement is ALWAYS relative to the raw position — stable.
     readonly property int _gridStep: {
         const canvas = findCanvas(root.parent);
-        return Math.max(1, canvas ? canvas.alignmentGridStep : 10);
+        return Math.max(1, canvas ? canvas.alignmentGridStep : Appearance.sizes.widgetGridStep);
     }
     property real _gridAnchorX: 0   // raw x at last grid commit
     property real _gridAnchorY: 0   // raw y at last grid commit

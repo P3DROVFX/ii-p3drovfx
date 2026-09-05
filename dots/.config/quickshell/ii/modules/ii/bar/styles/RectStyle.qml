@@ -48,7 +48,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
     }

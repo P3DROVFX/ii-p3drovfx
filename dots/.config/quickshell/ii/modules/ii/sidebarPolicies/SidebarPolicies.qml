@@ -34,10 +34,10 @@ Scope { // Scope
 
     readonly property string policyMonitorName: isOnLeft ? GlobalStates.effectiveLeftMonitor : GlobalStates.effectiveRightMonitor
     readonly property real sidebarWidth: GlobalStates.policiesWidth
-    readonly property real topBarOffset: !Config.options.bar.vertical && !Config.options.bar.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
-    readonly property real bottomBarOffset: !Config.options.bar.vertical && Config.options.bar.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
-    readonly property real leftBarOffset: Config.options.bar.vertical && !Config.options.bar.bottom && isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
-    readonly property real rightBarOffset: Config.options.bar.vertical && Config.options.bar.bottom && !isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real topBarOffset: !BarPlacement.vertical && !BarPlacement.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
+    readonly property real bottomBarOffset: !BarPlacement.vertical && BarPlacement.bottom && GlobalStates.barOpen ? Appearance.sizes.barHeight : 0
+    readonly property real leftBarOffset: BarPlacement.vertical && !BarPlacement.bottom && isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
+    readonly property real rightBarOffset: BarPlacement.vertical && BarPlacement.bottom && !isOnLeft && GlobalStates.barOpen ? Appearance.sizes.verticalBarWindowWidth : 0
 
     function togglePoliciesExtended() {
         GlobalStates.policiesExtended = !GlobalStates.policiesExtended;

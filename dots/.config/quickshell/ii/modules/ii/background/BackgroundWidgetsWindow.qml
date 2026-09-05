@@ -28,6 +28,19 @@ PanelWindow {
     required property var modelData
     required property var widgetStateManager
 
+    /**
+     * Extra content for the widget canvas, supplied by the panel family.
+     *
+     * This surface owns the whole screen's input region on the Bottom layer, so a second
+     * desktop surface underneath it can render but can never be touched. Anything else that
+     * belongs *on the desktop* — the tablet family's home-screen app icons — therefore has
+     * to live on this canvas rather than beside it. Loaded inside the canvas, so it shares
+     * the same coordinate space, parallax and lock choreography as the widgets do.
+     *
+     * Null for the ii family, which puts nothing else on the desktop.
+     */
+    property Component canvasOverlay: null
+
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
@@ -162,6 +175,8 @@ PanelWindow {
         // Edit Mode needs the surface up even over an empty desktop: the
         // marquee, and later the drop targets, live on it.
         if (GlobalStates.editMode)
+            return true;
+        if (bgWidgetsWindow.canvasOverlay !== null)
             return true;
         if (!hasWidgets)
             return false;
@@ -526,9 +541,11 @@ PanelWindow {
                 const p = widgetCanvas.mapToItem(null, atX, atY);
                 GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
             }
-            // A touch screen's long press on the wallpaper: into the mode,
-            // on this screen.
-            onCanvasLongPressed: GlobalStates.openEditMode(bgWidgetsWindow.editScreenName)
+            // A long press on the wallpaper/canvas: opens the desktop menu at the touch position.
+            onCanvasLongPressed: (atX, atY) => {
+                const p = widgetCanvas.mapToItem(null, atX, atY);
+                GlobalStates.openDesktopMenu(bgWidgetsWindow.editScreenName, p.x, p.y);
+            }
 
             // The selection's toolbar, over whatever is picked. A child of the
             // canvas so it shares the widgets' coordinate space and follows a
@@ -631,6 +648,18 @@ PanelWindow {
                     duration: 600
                     easing.type: Easing.OutCubic
                 }
+            }
+
+            // Declared before the widget Repeater, so widgets stack above the overlay and a
+            // desktop icon never covers one the user placed.
+            //
+            // No negative z: the canvas is itself a MouseArea, and a child behind its parent
+            // loses the press to that parent, so a z of -1 left the overlay visible but
+            // completely untouchable.
+            Loader {
+                anchors.fill: parent
+                active: bgWidgetsWindow.canvasOverlay !== null
+                sourceComponent: bgWidgetsWindow.canvasOverlay
             }
 
             Repeater {

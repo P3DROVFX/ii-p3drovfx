@@ -643,14 +643,12 @@ PanelWindow {
                 GlobalStates.openDesktopMenu(bgRoot.editScreenName, mouse.x, mouse.y);
             }
 
-            // A touch screen's long press: the same way in as the widget
-            // canvas offers when it is mapped.
+            // A long press on the wallpaper: opens the desktop menu at the touch position.
             TapHandler {
-                acceptedDevices: PointerDevice.TouchScreen
+                id: bgRootLongPress
                 gesturePolicy: TapHandler.WithinBounds
                 onLongPressed: {
-                    if (!GlobalStates.editMode)
-                        GlobalStates.openEditMode(bgRoot.editScreenName);
+                    GlobalStates.openDesktopMenu(bgRoot.editScreenName, bgRootLongPress.point.position.x, bgRootLongPress.point.position.y);
                 }
             }
         }

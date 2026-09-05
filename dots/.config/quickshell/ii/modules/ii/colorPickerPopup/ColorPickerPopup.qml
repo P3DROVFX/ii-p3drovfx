@@ -94,35 +94,35 @@ Scope {
             exclusiveZone: 0
 
             anchors {
-                top: Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom)
-                bottom: !Config.options.bar.vertical && Config.options.bar.bottom
-                left: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : root.notifIsRight
-                right: Config.options.bar.vertical ? (Config.options.bar.bottom ? true : false) : root.notifIsLeft
+                top: BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom)
+                bottom: !BarPlacement.vertical && BarPlacement.bottom
+                left: BarPlacement.vertical ? (BarPlacement.bottom ? false : true) : root.notifIsRight
+                right: BarPlacement.vertical ? (BarPlacement.bottom ? true : false) : root.notifIsLeft
             }
 
             readonly property int frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
-            readonly property int topFrameThickness: (Config.options.bar.vertical || Config.options.bar.bottom) ? frameThickness : 0
-            readonly property int bottomFrameThickness: (Config.options.bar.vertical || !Config.options.bar.bottom) ? frameThickness : 0
-            readonly property int leftFrameThickness: (!Config.options.bar.vertical || Config.options.bar.bottom) ? frameThickness : 0
-            readonly property int rightFrameThickness: (!Config.options.bar.vertical || !Config.options.bar.bottom) ? frameThickness : 0
-            readonly property int barGaps: (Config.options.bar.cornerStyle !== 0) ? Appearance.sizes.hyprlandGapsOut : 0
+            readonly property int topFrameThickness: (BarPlacement.vertical || BarPlacement.bottom) ? frameThickness : 0
+            readonly property int bottomFrameThickness: (BarPlacement.vertical || !BarPlacement.bottom) ? frameThickness : 0
+            readonly property int leftFrameThickness: (!BarPlacement.vertical || BarPlacement.bottom) ? frameThickness : 0
+            readonly property int rightFrameThickness: (!BarPlacement.vertical || !BarPlacement.bottom) ? frameThickness : 0
+            readonly property int barGaps: (BarInteraction.cornerStyle !== 0) ? Appearance.sizes.hyprlandGapsOut : 0
 
             margins {
                 top: {
-                    if (Config.options.bar.vertical) {
+                    if (BarPlacement.vertical) {
                         return topFrameThickness;
                     }
-                    return Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight + topFrameThickness;
+                    return BarPlacement.bottom ? 0 : Appearance.sizes.barHeight + topFrameThickness;
                 }
                 bottom: {
-                    if (Config.options.bar.vertical) {
+                    if (BarPlacement.vertical) {
                         return bottomFrameThickness;
                     }
-                    return Config.options.bar.bottom ? Appearance.sizes.barHeight + bottomFrameThickness : 0;
+                    return BarPlacement.bottom ? Appearance.sizes.barHeight + bottomFrameThickness : 0;
                 }
                 left: {
-                    if (Config.options.bar.vertical) {
-                        return (Config.options.bar.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
+                    if (BarPlacement.vertical) {
+                        return (BarPlacement.bottom ? leftFrameThickness : Appearance.sizes.verticalBarWindowWidth + leftFrameThickness) + popupWindow.sidebarPush;
                     }
                     if (root.notifIsRight) {
                         return barGaps + 4 + leftFrameThickness + popupWindow.sidebarPush;
@@ -130,8 +130,8 @@ Scope {
                     return leftFrameThickness + popupWindow.sidebarPush;
                 }
                 right: {
-                    if (Config.options.bar.vertical) {
-                        return (Config.options.bar.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
+                    if (BarPlacement.vertical) {
+                        return (BarPlacement.bottom ? Appearance.sizes.verticalBarWindowWidth + rightFrameThickness : rightFrameThickness) + popupWindow.sidebarPush;
                     }
                     if (root.notifIsLeft) {
                         return barGaps + 4 + rightFrameThickness + popupWindow.sidebarPush;

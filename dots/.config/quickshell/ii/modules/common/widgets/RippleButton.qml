@@ -314,6 +314,9 @@ Button {
                 return;
             }
             root.down = true;
+            longPressTimer.fired = false;
+            if (root.altAction && PanelFamily.touchFirst)
+                longPressTimer.restart();
             if (root.pressedAction)
                 root.pressedAction(event);
             if (root.downAction)
@@ -328,8 +331,22 @@ Button {
         }
         onReleased: event => {
             root.down = false;
+            longPressTimer.stop();
             if (event.button != Qt.LeftButton)
                 return;
+            // The long press already did the alt action; the release that ends it must not
+            // also fire the primary one, or opening a quick toggle's settings would toggle
+            // it on the way in.
+            if (longPressTimer.fired) {
+                // Run the alt action on release, not when the timer fires. Opening a dialog
+                // while the finger is still down put its scrim under that finger, and the
+                // release then dismissed what had just opened.
+                if (root.altAction)
+                    root.altAction();
+                if (root.rippleEnabled)
+                    rippleFadeAnim.restart();
+                return;
+            }
             if (root.releaseAction)
                 root.releaseAction();
             root.click();
@@ -337,6 +354,23 @@ Button {
                 return;
             rippleFadeAnim.restart();
         }
+        // A finger has no right button. Everywhere the desktop shell says "right-click to
+        // configure" — a quick toggle's settings dialog, most of all — a touch-first family
+        // has no way in at all, so the same action is reachable by holding, which is what
+        // Android uses for exactly this. Armed only when there IS an alt action, so nothing
+        // else grows a hidden gesture.
+        Timer {
+            id: longPressTimer
+            property bool fired: false
+            interval: 500
+            onTriggered: {
+                // Only arms the release. The press visual drops so the hold reads as
+                // "something happened" even though the action waits for the finger to lift.
+                longPressTimer.fired = true;
+                root.down = false;
+            }
+        }
+
         // The MouseArea replaces Button's built-in pointer handling, so its
         // double-click must be forwarded explicitly just like clicked above.
         onDoubleClicked: event => {
@@ -349,6 +383,7 @@ Button {
         }
         onCanceled: event => {
             root.down = false;
+            longPressTimer.stop();
             if (root.canceledAction)
                 root.canceledAction(event);
             if (!root.rippleEnabled)

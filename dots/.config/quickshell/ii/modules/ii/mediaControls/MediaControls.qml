@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.media
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
@@ -134,7 +135,7 @@ Scope {
 
             readonly property var rect: GlobalStates.mediaPopupRect
             readonly property real barThickness: {
-                if (Config.options.bar.vertical) {
+                if (BarPlacement.vertical) {
                     return Appearance.sizes.verticalBarWidth;
                 } else {
                     return Appearance.sizes.barHeight;
@@ -158,18 +159,18 @@ Scope {
             }
             anchors {
                 top: true
-                left: !Config.options.bar.vertical || !Config.options.bar.bottom
-                right: Config.options.bar.vertical && Config.options.bar.bottom
+                left: !BarPlacement.vertical || !BarPlacement.bottom
+                right: BarPlacement.vertical && BarPlacement.bottom
             }
             margins {
                 top: {
-                    if (Config.options.bar.vertical) {
+                    if (BarPlacement.vertical) {
                         if (rect.height === 0)
                             return Math.max(0, (screen.height - panelWindow.implicitHeight) / 2);
                         let targetY = rect.y + (rect.height / 2) - (panelWindow.implicitHeight / 2);
                         return Math.max(0, Math.min(targetY, screen.height - panelWindow.implicitHeight));
                     } else {
-                        if (!Config.options.bar.bottom) {
+                        if (!BarPlacement.bottom) {
                             return barThickness + 2;
                         } else {
                             return screen.height - barThickness - panelWindow.implicitHeight - 2;
@@ -177,8 +178,8 @@ Scope {
                     }
                 }
                 left: {
-                    if (Config.options.bar.vertical) {
-                        if (!Config.options.bar.bottom) {
+                    if (BarPlacement.vertical) {
+                        if (!BarPlacement.bottom) {
                             return barThickness + 2;
                         }
                         return 0;
@@ -190,7 +191,7 @@ Scope {
                     }
                 }
                 right: {
-                    if (Config.options.bar.vertical && Config.options.bar.bottom) {
+                    if (BarPlacement.vertical && BarPlacement.bottom) {
                         return barThickness + 2;
                     }
                     return 0;

@@ -15,8 +15,8 @@ Item {
     id: wrappedFrame
 
     property int frameThickness: Config.options.appearance.wrappedFrameThickness
-    property bool barVertical: Config.options.bar.vertical
-    property bool barBottom: Config.options.bar.bottom
+    property bool barVertical: BarPlacement.vertical
+    property bool barBottom: BarPlacement.bottom
 
     BarThemes {
         id: barThemes

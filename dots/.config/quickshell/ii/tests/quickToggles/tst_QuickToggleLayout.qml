@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleLayout.js" as Layout
+import "../../modules/common/quickToggles/androidStyle/QuickToggleLayout.js" as Layout
 
 TestCase {
     name: "QuickToggleLayout"

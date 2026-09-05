@@ -13,7 +13,10 @@ class BarTimerWidgetContractTest(unittest.TestCase):
     def test_countdown_uses_the_shared_service_state_and_display_clock(self):
         state = self.read("modules/ii/bar/widgets/timer/TimerBarState.qml")
         service = self.read("services/TimerService.qml")
-        sidebar = self.read("modules/ii/sidebarDashboard/pomodoro/CountdownTimer.qml")
+        # The dashboard's timer widgets moved to modules/common/dashboardWidgets in
+        # e24b18ccb so the tablet family could use them without importing ii. The
+        # contract is unchanged; only the address is.
+        sidebar = self.read("modules/common/dashboardWidgets/timer/CountdownTimer.qml")
 
         self.assertIn("TimerService.countdowns", state)
         self.assertIn("TimerService.countdownSecondsLeft", state)

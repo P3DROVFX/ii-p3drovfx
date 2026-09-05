@@ -16,6 +16,9 @@ Loader {
     required property string shownPropertyString
     property Item focusTarget: null
     property real dialogRadius: -1
+    // Hosts on a full-screen surface (tablet shade) widen the dialog; -1 leaves the
+    // dialog's own width alone, which is what the ii sidebar wants.
+    property real dialogWidth: -1
     property bool closing: false
     property alias dialog: root.sourceComponent
 
@@ -67,6 +70,13 @@ Loader {
         property: "radius"
         value: root.dialogRadius
         when: root.dialogRadius >= 0 && root.item && root.item.hasOwnProperty("radius")
+    }
+
+    Binding {
+        target: root.item
+        property: "preferredDialogWidth"
+        value: root.dialogWidth
+        when: root.dialogWidth >= 0 && root.item && root.item.hasOwnProperty("preferredDialogWidth")
     }
 
     Connections {

@@ -22,7 +22,7 @@ MouseArea {
     Layout.fillHeight: vertical
     // With click-to-show popups the popup opens off containsMouse turning true on press,
     // so hover must stay off — otherwise the popup shows on hover like every other mode.
-    readonly property bool clickToShowPopup: Config.options.bar.tooltips.clickToShow
+    readonly property bool clickToShowPopup: BarInteraction.clickToShow
     // containsMouse still flips on press with hover off, so keep the stop-morph out of that mode.
     readonly property bool showHoverState: containsMouse && !clickToShowPopup
     hoverEnabled: !clickToShowPopup

@@ -13,7 +13,7 @@ MouseArea {
 
     implicitWidth: Appearance.sizes.verticalBarWidth
     implicitHeight: mainCol.implicitHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     readonly property color capsuleColor: {
         try {

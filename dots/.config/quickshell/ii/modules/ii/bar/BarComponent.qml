@@ -317,7 +317,14 @@ Item {
         && rootItem.editController !== null && !rootItem.loadedItemVisible
     readonly property bool hasLayoutContent: rootItem.selfVisibleOrEditing
         && (rootItem.loadedItemVisible || rootItem.editPlaceholderShown)
-    readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0) ? wrapper.implicitWidth : 0
+    // A finger cannot reliably hit a 24px-wide indicator. Narrow widgets are padded out
+    // to the minimum touch target on a touch-first family; wide ones are untouched, and a
+    // widget with no content stays at zero so it still collapses out of the layout
+    // entirely instead of leaving a 48px hole.
+    readonly property real touchMinimumWidth: (PanelFamily.touchFirst && !rootItem.vertical)
+        ? Appearance.sizes.minimumTouchTarget : 0
+    readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0)
+        ? Math.max(wrapper.implicitWidth, rootItem.touchMinimumWidth) : 0
     readonly property bool hasActiveLayoutContent: targetWidth > 0
 
     // Radius boundaries must follow delegates that currently render content,

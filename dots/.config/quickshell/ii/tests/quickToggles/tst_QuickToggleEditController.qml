@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard/quickToggles/androidStyle" as QuickToggleStyle
+import "../../modules/common/quickToggles/androidStyle" as QuickToggleStyle
 
 TestCase {
     name: "QuickToggleEditController"

@@ -61,6 +61,11 @@ Item {
     signal drawerBarDropRequested(string componentId, real x, real y)
     signal drawerBarDragCancelled()
     signal drawerDockToggleRequested(string appId)
+    signal drawerAddAppRequested(string appId, real dropX, real dropY)
+    signal drawerToggleAppRequested(string appId)
+    signal drawerAddAppPairRequested(string firstAppId, string secondAppId, string name)
+    signal drawerAddFolderRequested(string folderName, var appsList)
+    signal drawerClearHomeScreenAppsRequested()
     signal drawerLockLayoutResetRequested()
     // "widgets", "bar", "dock" or "lockIslands": that surface back to the
     // shell's defaults, as one history entry.
@@ -260,6 +265,13 @@ Item {
                 spacing: 2
 
                 SectionChip {
+                    visible: PanelFamily.touchFirst && !GlobalStates.editLockPreview
+                    section: "apps"
+                    iconText: "apps"
+                    text: Translation.tr("Apps")
+                    tooltip: Translation.tr("Add apps to home screen")
+                }
+                SectionChip {
                     section: "widgets"
                     iconText: "widgets"
                     text: Translation.tr("Widgets")
@@ -279,9 +291,11 @@ Item {
                     visible: !GlobalStates.editLockPreview
                     section: "dock"
                     page: "appearance"
-                    iconText: "dock"
-                    text: Translation.tr("Dock")
-                    tooltip: Translation.tr("Dock appearance and apps")
+                    iconText: PanelFamily.touchFirst ? "dock_to_bottom" : "dock"
+                    text: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
+                    tooltip: PanelFamily.touchFirst
+                        ? Translation.tr("Taskbar appearance and apps")
+                        : Translation.tr("Dock appearance and apps")
                 }
                 SectionChip {
                     visible: GlobalStates.editLockPreview
@@ -449,6 +463,11 @@ Item {
             onBarDropRequested: (componentId, x, y) => root.drawerBarDropRequested(componentId, x, y)
             onBarDragCancelled: root.drawerBarDragCancelled()
             onDockToggleRequested: appId => root.drawerDockToggleRequested(appId)
+            onAddAppRequested: (appId, dropX, dropY) => root.drawerAddAppRequested(appId, dropX, dropY)
+            onToggleAppOnHomeScreenRequested: appId => root.drawerToggleAppRequested(appId)
+            onAddAppPairRequested: (firstAppId, secondAppId, name) => root.drawerAddAppPairRequested(firstAppId, secondAppId, name)
+            onAddFolderRequested: (folderName, appsList) => root.drawerAddFolderRequested(folderName, appsList)
+            onClearHomeScreenAppsRequested: root.drawerClearHomeScreenAppsRequested()
         }
     }
 }

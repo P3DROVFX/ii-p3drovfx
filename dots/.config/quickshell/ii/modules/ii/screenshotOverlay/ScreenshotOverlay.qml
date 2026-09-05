@@ -40,14 +40,14 @@ Scope {
 
             anchors {
                 bottom: true
-                left: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : true
+                left: BarPlacement.vertical ? (BarPlacement.bottom ? false : true) : true
                 right: false
                 top: false
             }
 
             margins {
-                bottom: Config.options.bar.vertical ? Appearance.sizes.hyprlandGapsOut : (Config.options.bar.bottom ? Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut : Appearance.sizes.hyprlandGapsOut)
-                left: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.hyprlandGapsOut
+                bottom: BarPlacement.vertical ? Appearance.sizes.hyprlandGapsOut : (BarPlacement.bottom ? Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut : Appearance.sizes.hyprlandGapsOut)
+                left: BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.hyprlandGapsOut
                 top: 0
                 right: 0
             }

@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as Catalog
+import "../../modules/common/quickToggles/androidStyle/QuickToggleCatalog.js" as Catalog
 
 TestCase {
     name: "QuickToggleCatalog"
@@ -11,6 +11,11 @@ TestCase {
         verify(Catalog.hasType("network"));
         verify(Catalog.hasType("volumeSlider"));
         verify(Catalog.hasType("mediaWidget"));
+        verify(Catalog.hasType("calendarWidget"));
+        verify(Catalog.hasType("tasksWidget"));
+        verify(Catalog.hasType("timerWidget"));
+        verify(Catalog.hasType("countdownWidget"));
+        verify(Catalog.hasType("pomodoroWidget"));
         verify(!Catalog.hasType("doesNotExist"));
     }
 
@@ -37,6 +42,22 @@ TestCase {
         compare(Catalog.normalizeSize("mediaWidget", 2, 2, 1), [1, 1]);
         verify(Catalog.isSizeAllowed("mediaWidget", 4, 2, 4));
         verify(!Catalog.isSizeAllowed("mediaWidget", 4, 1, 4));
+    }
+
+    function test_dashboard_widgets_have_a_fixed_tablet_square_footprint() {
+        var types = ["calendarWidget", "tasksWidget", "timerWidget", "countdownWidget", "pomodoroWidget"];
+        for (var index = 0; index < types.length; index++) {
+            var type = types[index];
+            compare(Catalog.defaultSize(type), [1, 2]);
+            compare(Catalog.normalizeSize(type, 4, 7, 4), [1, 2]);
+            verify(Catalog.isSizeAllowed(type, 1, 2, 4));
+            verify(!Catalog.isSizeAllowed(type, 2, 2, 4));
+            verify(!Catalog.isResizable(type, 4));
+            verify(Catalog.availableForFamily(type, "tablet"));
+            verify(!Catalog.availableForFamily(type, "ii"));
+        }
+        verify(Catalog.availableForFamily("network", "ii"));
+        verify(Catalog.isResizable("network", 4));
     }
 
     function test_normalize_pages_migrates_legacy_shape() {

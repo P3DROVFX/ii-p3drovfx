@@ -12,7 +12,7 @@ import Quickshell.Services.UPower
 Item {
     id: root
     property bool borderless: Config.options.bar.borderless
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     property bool isMaterial: true
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth

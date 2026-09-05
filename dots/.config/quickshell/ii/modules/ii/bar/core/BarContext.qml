@@ -23,7 +23,7 @@ QtObject {
     }
 
     // ── Bar style ─────────────────────────────────────────────────────────────
-    readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3
 
     // ── Search ────────────────────────────────────────────────────────────────
     readonly property bool isSearchActiveHere: {

@@ -15,7 +15,7 @@ MouseArea {
         && (!(Config.options.bar.aiPlanUsage.hideWhenUnavailable ?? false) || root.hasVisibleQuota)
 
     visible: root.shown
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
     implicitWidth: !root.shown ? 0 : (root.vertical
         ? Appearance.sizes.verticalBarWidth
         : quotaContent.implicitWidth + 12)

@@ -51,6 +51,10 @@ Item {
 
     property color colorBolt: colorFillNormal
 
+    // Hosts that render the pill large (tablet shade) want a lighter number than the bar's.
+    property int textWeightEmpty: Font.Bold
+    property int textWeightFilled: Font.Black
+
     property real batteryWidth: root.height * batteryWidthScale
     property real batteryHeight: root.height * batteryHeightScale
 
@@ -97,7 +101,7 @@ Item {
                     text: root.boundedBatteryLevel
                     font.family: Appearance.font.family.main
                     font.pixelSize: Math.round(parent.height * textSizeScale)
-                    font.bold: true
+                    font.weight: root.textWeightEmpty
                     color: root.colorTextEmpty
                     verticalAlignment: Text.AlignTop
                     horizontalAlignment: Text.AlignHCenter
@@ -127,7 +131,7 @@ Item {
 
                     font.pixelSize: Math.round(batteryBase.height * textSizeScale)
                     font.family: Appearance.font.family.title
-                    font.weight: Font.Black
+                    font.weight: root.textWeightFilled
                     color: root.colorTextFilled
                     verticalAlignment: Text.AlignTop
                     horizontalAlignment: Text.AlignHCenter

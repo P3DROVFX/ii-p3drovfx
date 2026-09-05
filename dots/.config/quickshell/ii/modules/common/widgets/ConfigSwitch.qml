@@ -22,7 +22,11 @@ RippleButton {
     signal openSubPage
 
     Layout.fillWidth: true
-    implicitHeight: contentLayout.implicitHeight + 20
+    // A settings row is one tap target. Floor it at the Material minimum on a
+    // touch-first family rather than fixing the height, so rows that are already
+    // taller keep their size.
+    implicitHeight: Math.max(contentLayout.implicitHeight + 20,
+        PanelFamily.touchFirst ? Appearance.sizes.minimumTouchTarget + 12 : 0)
     font.pixelSize: Appearance.font.pixelSize.small
     property bool forceUniformRadius: false
     useDynamicRadius: true

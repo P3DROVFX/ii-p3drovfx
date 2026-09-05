@@ -14,7 +14,7 @@ Item {
     readonly property string screenName: QsWindow.window?.screen?.name ?? ""
     property bool borderless: Config.options.bar.borderless
     property bool showDate: Config.options.bar.verbose
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     property bool isMaterial: true // Forced expressive
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth

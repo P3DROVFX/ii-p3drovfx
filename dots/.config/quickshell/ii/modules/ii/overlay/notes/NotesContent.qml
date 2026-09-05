@@ -42,6 +42,20 @@ OverlayBackground {
 
     property var tabsData: NotesService.tabsData
 
+    /**
+     * Whether the sketch editor is covering the note.
+     *
+     * Notes could already hold a drawing — the tablet's live-draw sheet files into one —
+     * but the only way to make one was to draw over the whole screen first. This is the
+     * other direction: open a note and draw in it.
+     */
+    property bool sketchEditorOpen: false
+
+    readonly property string currentSketch: {
+        const tab = root.tabsData.tabs[root.currentTabIndex];
+        return String(tab?.sketch ?? "");
+    }
+
     property var tabOptions: root.tabsData.tabs.map((tab, index) => ({
         displayName: tab.title,
         icon: tab.icon,
@@ -305,6 +319,12 @@ OverlayBackground {
                             icon: "delete",
                             value: 2,
                             releaseAction: (() => root.deleteCurrentTab())
+                        },
+                        {
+                            displayName: "",
+                            icon: "draw",
+                            value: 3,
+                            releaseAction: (() => root.sketchEditorOpen = true)
                         }
                     ]
                 }
@@ -333,6 +353,64 @@ OverlayBackground {
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
                 root.deleteCurrentTab();
+            }
+        }
+
+        /**
+         * The drawing, when the note is one.
+         *
+         * A sketch note carries a path rather than pixels — notes.json is rewritten on
+         * every keystroke and a base64 PNG inside it would travel through that loop for
+         * every character typed in an unrelated tab. So the note shows the file, and the
+         * text field underneath stays exactly what it was, for anything the drawing needs
+         * said about it.
+         */
+        Loader {
+            id: sketchLoader
+            readonly property string sketchPath: root.currentSketch
+            Layout.fillWidth: true
+            Layout.maximumHeight: root.height * 0.55
+            active: sketchLoader.sketchPath.length > 0
+
+            sourceComponent: Rectangle {
+                implicitHeight: Math.min(sketchImage.implicitHeight + 20,
+                                         sketchLoader.Layout.maximumHeight)
+                radius: Appearance.rounding.normal
+                color: Appearance.colors.colLayer2
+
+                Image {
+                    id: sketchImage
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    source: `file://${sketchLoader.sketchPath}`
+                    fillMode: Image.PreserveAspectFit
+                    // Drawn on a surface of our own rather than on the wallpaper it was
+                    // made over, so the ink needs somewhere with contrast to sit.
+                    smooth: true
+                    asynchronous: true
+                }
+
+                // A file someone moved or deleted: the note still exists and still says
+                // what it is, instead of showing an empty box.
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: sketchImage.status === Image.Error
+                    text: Translation.tr("This drawing's file is missing.")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
+
+                // Tap the drawing to carry on with it. The alternative — hunting for the
+                // pencil in the tab row — treats the picture as decoration rather than as
+                // the part of the note you came back to work on.
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.sketchEditorOpen = true
+                    StyledToolTip {
+                        text: Translation.tr("Tap to keep drawing")
+                    }
+                }
             }
         }
 
@@ -500,6 +578,28 @@ OverlayBackground {
 
     }
 
+
+    /**
+     * The sketch editor, over the note it belongs to.
+     *
+     * A Loader so a note nobody is drawing in costs nothing: the editor carries two
+     * canvases and an image, and the notes panel is small and often open.
+     */
+    Loader {
+        anchors.fill: parent
+        active: root.sketchEditorOpen
+        z: 100
+
+        sourceComponent: NotesSketchEditor {
+            existingSketch: root.currentSketch
+
+            onSaved: path => {
+                NotesService.setSketch(root.currentTabIndex, path);
+                root.sketchEditorOpen = false;
+            }
+            onCancelled: root.sketchEditorOpen = false
+        }
+    }
 
     component EditInput: MaterialTextArea {
         property int textAreaPadding: 6

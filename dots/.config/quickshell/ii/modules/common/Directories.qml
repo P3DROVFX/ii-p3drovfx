@@ -65,6 +65,9 @@ Singleton {
     property string keybindImporterPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/keybinds/import_keybinds.py`)
     property string keybindAiCategorizerPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/keybinds/ai_categorize.py`)
     property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.json`)
+    /// Where a note's drawing is written. Beside notes.json rather than in Pictures: a
+    /// sketch here is part of a note, not a file the user filed anywhere.
+    property string noteSketchesDir: FileUtils.trimFileProtocol(`${Directories.state}/user/note_sketches`)
     property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
     property string lyricsPath: FileUtils.trimFileProtocol(`${Directories.cache}/lyrics/lyrics.json`)

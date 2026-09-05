@@ -6,7 +6,7 @@ import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common.functions
-import "../ii/sidebarDashboard/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
+import "quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 
 Singleton {
     id: root
@@ -823,7 +823,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 16
+    readonly property int currentConfigVersion: 18
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1240,6 +1240,28 @@ Singleton {
             console.log("[Config] Added Now playing search result group");
         }
 
+        // v16 -> v17: the tablet taskbar stopped hiding its app row on an occupied
+        // workspace. The old default was `true`, so every file written before this
+        // carries it explicitly — and a stored value always wins over a changed
+        // default, which would have left the fix invisible to exactly the people who
+        // reported the dock going blank. The reference product's taskbar is
+        // persistent; anyone who wants the old behaviour turns it back on in Settings.
+        if (from < 17 && raw.tablet?.dock?.autoHideOnOccupiedWorkspace === true) {
+            raw.tablet.dock.autoHideOnOccupiedWorkspace = false;
+            console.log("[Config] Migrated tablet.dock.autoHideOnOccupiedWorkspace -> false (persistent taskbar)");
+        }
+
+        // v17 -> v18: live draw joined the floating bubble's sheet. The action list is a
+        // stored user ordering, so a new default reaches nobody who already has a config
+        // — and the bubble is the only place this feature is discoverable from.
+        if (from < 18 && Array.isArray(raw.tablet?.bubble?.actions)) {
+            const actions = raw.tablet.bubble.actions;
+            if (!actions.some(entry => String(entry ?? "") === "liveDraw")) {
+                actions.unshift("liveDraw");
+                console.log("[Config] Added liveDraw to the tablet bubble's actions");
+            }
+        }
+
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
         return true;
@@ -1340,7 +1362,7 @@ Singleton {
     // (background widget placementStrategy, which also accepts undocumented
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
-            "panelFamily": ["ii", "waffle"],
+            "panelFamily": ["ii", "tablet", "waffle"],
             "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
@@ -1365,6 +1387,15 @@ Singleton {
             "cheatsheet.aminoAcidScheme": ["five", "seven", "four"],
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
             "lock.centerAlignment": ["vertical", "horizontal"],
+            "lock.touchKeyboard.show": ["auto", "always", "never"],
+            "tablet.gestures.sideEdges": ["back", "policies", "none"],
+            "tablet.gestures.bottomEdge": ["android", "drawer"],
+            "tablet.dock.backgroundStyle": ["none", "translucent", "solid"],
+            "tablet.dock.appTapAction": ["focus", "launch"],
+            "tablet.recents.layout": ["list", "grid"],
+            "tablet.navigation.backKey": ["alt_left", "escape", "backspace", "browser_back", "custom"],
+            "tablet.windows.floatMode": ["off", "all", "keepDialogs"],
+            "lock.touchKeyboard.mode": ["text", "pin"],
             "lock.notifications.position": ["top_left", "top_right", "bottom_left", "bottom_right"],
             "lock.notifications.privacy": ["full", "redacted", "countOnly"],
             "lock.notifications.defaultPolicy": ["show", "hide"],
@@ -1678,7 +1709,365 @@ Singleton {
             // migrateRaw(). Never default this to currentConfigVersion.
             property int configVersion: 0
 
-            property string panelFamily: "ii" // "ii", "waffle"
+            property string panelFamily: "ii" // "ii", "tablet", "waffle"
+
+            // Preferences for surfaces that exist only in the tablet family. Keeping these
+            // apart from `dock` lets the ii dock retain its desktop defaults while the two
+            // families still share the user's pinned apps and adaptive-icon treatment.
+            property JsonObject tablet: JsonObject {
+                /**
+                 * The workspace the Home button lands on. 0 means the lowest ordinary
+                 * workspace of whichever monitor Home was pressed on.
+                 *
+                 * Home has to be the same place every time: the home screen's icons are
+                 * stored per workspace, so "any empty workspace" shows a blank screen and
+                 * leaves the arrangement on the workspace it was made on.
+                 */
+                property int homeWorkspace: 0
+
+                property JsonObject dock: JsonObject {
+                    // The taskbar is a real layer-shell reservation by default. It can be
+                    // released only when the user deliberately prefers overlay behaviour.
+                    property bool reserveSpace: true
+                    property int height: 96
+                    property int iconSize: 48
+                    property bool showAppRow: true
+                    /**
+                     * Whether the launcher row gets out of the way once the workspace
+                     * has a window on it.
+                     *
+                     * Off by default, because the reference product's taskbar is
+                     * persistent: on a Pixel Tablet the row of apps is there whether or
+                     * not something is open, and it is how you switch apps without going
+                     * through Recents. Hiding it made the dock look broken instead of
+                     * calm — the icons and the drawer button simply stopped existing the
+                     * moment anything was running, with nothing on screen saying why.
+                     * It stays available for people who want the home screen bare.
+                     */
+                    property bool autoHideOnOccupiedWorkspace: false
+                    property bool keepNavigationVisible: true
+                    property bool showNavigation: true
+                    property list<string> navigationOrder: ["back", "home", "recents"]
+                    property bool showRunningApps: true
+                    /// How many running apps the dock shows beside the pinned ones. 0 fits
+                    /// as many as the free space between the search pill and the navigation
+                    /// pill allows, which is what a dock on a wide screen should do.
+                    property int maximumRecents: 0
+                    property bool showAppDrawerButton: true
+                    // A search pill on the left of the dock, styled like the desktop's
+                    // Android search widget. It opens the app drawer with the field already
+                    // focused rather than searching anything itself.
+                    property bool showSearchBar: true
+                    property int searchBarWidth: 320
+                    // "extended" is the Android pill; "compact" collapses it to a single
+                    // circular button the size of a dock icon, for people who want the row
+                    // to be apps and nothing else.
+                    property string searchBarStyle: "extended"
+                    // Either end of the pill is a button the user picks. "none" hides it,
+                    // "search" and "apps" open the drawer on its search and its grid, and
+                    // "tool:<id>" opens the drawer straight into one of the search panels
+                    // (see SearchPanelRegistry) — "tool:clipboard" being the obvious one.
+                    property string searchLeadingAction: "search"
+                    property string searchTrailingAction: "apps"
+                    /// Empty means the translated default, "Search".
+                    property string searchPlaceholder: ""
+                    property bool showAppDividers: true
+                    // Circular arrows at either end of the dock, for moving between home
+                    // screens without a swipe. On a laptop with a touchscreen the swipe is
+                    // the only way there, and it needs bare wallpaper to start on.
+                    property bool showWorkspaceArrows: true
+                    property bool showPageCounter: true
+                    property bool hidePageCounterOnOccupiedWorkspace: true
+                    property bool compactWhenPageCounterHidden: true
+
+                    /**
+                     * Whether the dock has a surface of its own.
+                     *
+                     * "none"        — Android's home screen: icons straight on the wallpaper,
+                     *                 outlined so they read against whatever is behind them.
+                     * "translucent" — a shelf, dimmed by `backgroundOpacity`.
+                     * "solid"       — an opaque shelf, like a Windows taskbar. Opaque even
+                     *                 when the theme's own layer 0 is translucent, since a
+                     *                 solid bar is the whole point of choosing this.
+                     *
+                     * The glyph outlines go with the surface: on a colour we chose they are
+                     * a halo, so the two are decided together rather than mixed.
+                     */
+                    property string backgroundStyle: "none"
+                    /// An inset rounded slab rather than a bar reaching the screen edges.
+                    property bool backgroundFloating: false
+                    /// Percent. Only read by "translucent".
+                    property int backgroundOpacity: 75
+
+                    /**
+                     * What tapping an app that is already running does.
+                     *
+                     * "focus"  — raise the window, and switch to its workspace if it is on
+                     *            another one. This is what a taskbar does everywhere, and
+                     *            what the running dot under the icon promises.
+                     * "launch" — always start another copy, which is what this dock used to
+                     *            do unconditionally.
+                     *
+                     * With "focus", a second app window is still one gesture away: a double
+                     * tap launches, and so does the long-press menu's "Open".
+                     */
+                    property string appTapAction: "focus"
+                    /// Milliseconds within which a second tap on a dock icon means "another
+                    /// window", not "focus again". 0 turns the double tap off entirely.
+                    property int doubleTapLaunchMs: 320
+                }
+
+                /**
+                 * The Recents surface — what was I just doing.
+                 *
+                 * "list" is a continuous row of cards you scrub sideways, which is what
+                 * Android does and what this surface is. "grid" pages through four windows
+                 * at a time: a genuinely better answer on a very large screen, but the wrong
+                 * default, because a page is a unit the user has to reason about and Recents
+                 * has no units — it has an order.
+                 */
+                property JsonObject recents: JsonObject {
+                    property string layout: "list"
+                    property int gridColumns: 2
+                    property int gridRows: 2
+                    /// Screenshot and Split under the card in the middle of the view, as
+                    /// Android shows them. Off reclaims the strip for taller cards; the same
+                    /// actions stay in the card's own menu either way.
+                    property bool showCardActions: true
+                    /// How opaque the backdrop behind the cards is, in percent, over an
+                    /// opaque base — so the number means what it says. The windows
+                    /// underneath stay faintly part of the transition rather than being
+                    /// replaced by a flat colour, which is why this is not simply 100.
+                    property int backdropOpacity: 82
+                }
+
+                /**
+                 * What the Back button and the back gesture do once no shell surface is left
+                 * to close.
+                 *
+                 * Android's Back is a key the focused application interprets. There is no
+                 * such key on a Linux desktop, so the closest equivalent is sent instead —
+                 * Alt+Left is browser and file-manager back, and it is what most toolkits
+                 * map their own back action to.
+                 */
+                property JsonObject navigation: JsonObject {
+                    /// Send the key at all. Off keeps Back inert on a bare home screen.
+                    property bool sendBackKeyToApps: true
+                    /// "alt_left" | "escape" | "backspace" | "browser_back" | "custom".
+                    property string backKey: "alt_left"
+                    /// Only read by "custom": Hyprland mods and key, e.g. "CTRL" / "bracketleft".
+                    property string customBackMods: ""
+                    property string customBackKey: ""
+                }
+
+                /**
+                 * Windows as a tablet expects them: floating by default, with touch handles
+                 * to move and resize them, because Hyprland's own move and resize are
+                 * pointer-drag bindings a finger cannot reach.
+                 */
+                property JsonObject windows: JsonObject {
+                    /// "off" | "all" | "keepDialogs". "keepDialogs" leaves anything the
+                    /// compositor already floated where it put itself — an application's own
+                    /// dialog knows its size and position better than a placement rule does.
+                    property string floatMode: "off"
+                    /// Percent of the monitor's usable area a newly floated window takes.
+                    property int floatWidthPercent: 62
+                    property int floatHeightPercent: 68
+                    /// Cascade each new window down and right of the last, so a second window
+                    /// does not land exactly on the first.
+                    property bool cascade: true
+                    /// App IDs that keep the compositor's own behaviour. Matched
+                    /// case-insensitively against the Hyprland class.
+                    property list<string> exclusions: ["quickshell"]
+                    /// A title bar over the focused floating window with drag, resize,
+                    /// fullscreen and close targets sized for a finger.
+                    property bool touchControls: true
+                    property int touchControlsHeight: 40
+                }
+
+                /**
+                 * A small always-present circle, draggable anywhere, that opens a sheet of
+                 * large quick actions.
+                 *
+                 * The gap it fills: a tablet held in two hands can reach one thing reliably,
+                 * and everything this shell can do is otherwise behind an edge gesture, a
+                 * keybind or a surface that first has to be summoned. Several of those —
+                 * float this window, make it fullscreen, bring up the keyboard — are one tap
+                 * on Android and a keyboard shortcut here. The bubble is the one control
+                 * that is always where the user left it, including over a fullscreen app,
+                 * which is exactly when the edge gestures are least reachable.
+                 */
+                property JsonObject bubble: JsonObject {
+                    property bool enable: true
+                    /// Stay on top of fullscreen windows. Off puts it below them, which is
+                    /// what a normal overlay does and what a video player would prefer.
+                    property bool showOverFullscreen: true
+                    /// Diameter, px.
+                    property int size: 56
+                    /// Percent, when the sheet is closed and nothing has touched it lately.
+                    property int idleOpacity: 65
+                    /// Seconds of no interaction before it fades to idleOpacity. 0 never fades.
+                    property int idleAfterSeconds: 4
+                    /// Snap to the nearest side edge when released, as a chat head does.
+                    property bool snapToEdge: true
+                    /**
+                     * Which actions the sheet offers, in order.
+                     *
+                     * Ids come from `ShellActionRegistry` — the same catalogue the gesture
+                     * bindings and the search use — so the bubble adds a way to reach the
+                     * shell's actions rather than a second list of them to keep in step.
+                     * "none" leaves the slot empty.
+                     */
+                    property list<string> actions: [
+                        // Live draw leads: it is marked prominent in the registry, so it
+                        // is the wide bar at the top of the sheet rather than one square
+                        // among eight. A pen comes out mid-thought and the control for it
+                        // has to be the one that cannot be missed.
+                        "liveDraw",
+                        "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot",
+                        "sidebarRight", "recents", "appDrawer"
+                    ]
+                }
+
+                /**
+                 * The shell behaving as though a pen, not a mouse, is the pointer.
+                 *
+                 * Off by default: it changes the system cursor for the whole session,
+                 * which is not something to do to somebody who never asked.
+                 *
+                 * No OpenTabletDriver configuration is involved, and that is deliberate.
+                 * OTD passes the barrel buttons through as ordinary `BTN_STYLUS` and
+                 * `BTN_STYLUS2` on the tablet device, which the keyboard's helper daemon
+                 * already watches — so the buttons are bound here, in one place, rather
+                 * than by writing key combinations into OTD's settings and binding those
+                 * combinations again in Hyprland. Three files that have to agree is three
+                 * files that can disagree, and opening OTD's own UI would break it.
+                 */
+                property JsonObject pen: JsonObject {
+                    property bool enable: false
+                    /// Swap the pointer for the current cursor theme's own pencil.
+                    property bool cursor: true
+                    /// Blank means "whatever XCURSOR_THEME says".
+                    property string cursorTheme: ""
+                    /// Smaller than a normal pointer, because a nib is a point.
+                    property int cursorSize: 20
+                    /**
+                     * What each barrel button does, in order, as action ids from
+                     * ShellActionRegistry — plus "dragWindow", which is handled by pen
+                     * mode itself because it means something for as long as the button is
+                     * held rather than once when it is pressed.
+                     */
+                    property list<string> buttons: ["dragWindow", "back"]
+                }
+
+                /**
+                 * Drawing on the screen with a pen, over whatever is on it.
+                 *
+                 * The palette is a list of colours rather than theme tokens on purpose,
+                 * and it is the one place in this shell where a literal colour is the
+                 * right answer: these are pigment, not chrome. Ink that recoloured itself
+                 * when the wallpaper changed would be ink you could not rely on, and a
+                 * drawing done in red is a drawing done in red.
+                 */
+                property JsonObject liveDraw: JsonObject {
+                    property bool enable: true
+                    /// Nominal stroke width in px, before pressure scales it.
+                    property int width: 4
+                    /// Whether a stylus's pressure varies the stroke width. Ignored by
+                    /// devices that do not report it — a finger draws an even line.
+                    property bool pressure: true
+                    /// How much the input filter smooths, 0–95. Higher is steadier and
+                    /// lags further behind the tip; 0 draws the raw samples, tremble and
+                    /// all.
+                    property int smoothing: 55
+                    property list<string> palette: [
+                        "#ffffff", "#111111", "#e53935", "#fb8c00",
+                        "#fdd835", "#43a047", "#1e88e5", "#8e24aa"
+                    ]
+                    /**
+                     * Whether the ink slides with the workspace it belongs to.
+                     *
+                     * The sheets are per workspace, so switching already swaps which one
+                     * is painted — this is about *how*. With it on, the outgoing sheet
+                     * leaves and the incoming one arrives alongside the windows, but
+                     * travelling slightly less far, so the ink reads as sitting a little
+                     * behind the glass rather than being stuck to it.
+                     *
+                     * Costs one extra canvas for the length of the transition, and only
+                     * when at least one of the two sheets has something on it.
+                     */
+                    property bool workspaceParallax: true
+                }
+
+                /**
+                 * What the tablet becomes when it is charging and nobody is using it: an
+                 * ambient clock, weather and now-playing display, readable across a room.
+                 *
+                 * The Pixel Tablet does this when docked. "Docked" is not something this
+                 * shell can know, so charging is the proxy — it is the state where the
+                 * device is parked rather than in your hands.
+                 */
+                property JsonObject hubMode: JsonObject {
+                    property bool enable: false
+                    property bool requireCharging: true
+                    /// Seconds of no input before it takes over.
+                    property int idleSeconds: 120
+                    /// Never interrupt something being watched.
+                    property bool pauseWhilePlaying: true
+                }
+
+                property JsonObject gestures: JsonObject {
+                    /**
+                     * What swiping in from the left and right edges does.
+                     *
+                     * "back"     — both edges go back, as on Android, where it is the most
+                     *              used gesture after Home.
+                     * "policies" — the left edge opens the first policies app instead, which
+                     *              is what it did before; the right edge still goes back.
+                     * "none"     — neither edge is claimed, so both fall through to whatever
+                     *              is bound under Edge and corner bindings.
+                     */
+                    property string sideEdges: "back"
+
+                    /**
+                     * What swiping up from the bottom edge does.
+                     *
+                     * "android" — up is Home; up from the home screen opens the app drawer,
+                     *             following the finger; up and hold opens Recents.
+                     * "drawer"  — the edge only ever opens the drawer, as it did before.
+                     *             Keeps the old muscle memory, at the cost of Home and
+                     *             Recents having no gesture at all.
+                     */
+                    property string bottomEdge: "android"
+                }
+
+                property JsonObject appDrawer: JsonObject {
+                    // "name" | "nameDesc" | "category" | "usage". Only the unsearched grid
+                    // is sorted: with a query, relevance is the order, and re-sorting it
+                    // would discard the ranking the user is typing towards.
+                    property string sortMode: "name"
+                    /// How tall the bottom-edge strip that starts a pull-up drag is. Same
+                    /// idea as the shade's pull-down edge, and the same default.
+                    property int edgeDragHeight: 8
+                    property bool showSortButton: true
+                    property bool showCategoryFilter: true
+                    /// Long-press opens an Android-style menu on the tile. Off restores the
+                    /// old behaviour, where a long-press dropped the app on the home screen.
+                    property bool longPressMenu: true
+                    /// A predicted row above the grid, from the same launch history the
+                    /// "Most used" sort reads. Hidden automatically when that sort is on.
+                    property bool showSuggestions: true
+                    /// The shell's own panels — clipboard, emoji, translator, downloader —
+                    /// offered as a row instead of only when their name is typed.
+                    property bool showToolShelf: true
+                    property bool showClipboardResults: true
+                    property bool showFileResults: true
+                    property int sideResultLimit: 6
+                    /// 0 derives the tile from the screen, which is what a tablet wants.
+                    property int tileWidth: 0
+                    property int iconSize: 0
+                }
+            }
 
             property JsonObject policies: JsonObject {
                 property int ai: 1 // 0: No | 1: Yes | 2: Local
@@ -2211,6 +2600,10 @@ Singleton {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
                 property JsonObject widgets: JsonObject {
+                    // Snap step for the wallpaper canvas, in pixels. 0 means "whatever the
+                    // panel family wants" — see Appearance.sizes.widgetGridStep, where a
+                    // touch-first family asks for a coarser grid than a pointer one.
+                    property int gridStep: 0
                     property string colorScheme: "default"
                     property bool showOnlyOnSingleMonitor: false
                     property string targetMonitor: ""
@@ -3838,6 +4231,27 @@ Singleton {
                     property bool disableInFullscreen: false
                     property bool disableInMediaMode: true
 
+                    /**
+                     * Whole-hand swipes anywhere on the screen, the touchpad gestures'
+                     * counterpart for a touchscreen.
+                     *
+                     * A tablet has no touchpad, so the compositor's three-finger bindings
+                     * are unreachable there — and the two they ship with, scratchpad in and
+                     * out, are a desktop window-management idea that a tablet has no use
+                     * for. These defaults put the same fingers on the things a phone puts
+                     * them on instead.
+                     */
+                    property JsonObject multiFinger: JsonObject {
+                        property bool enable: true
+                        property int fingers: 3
+                        /// How far the hand travels before the swipe commits.
+                        property int distance: 90
+                        property string swipeLeft: "workspaceNext"
+                        property string swipeRight: "workspacePrev"
+                        property string swipeUp: "appDrawer"
+                        property string swipeDown: "sidebarRight"
+                    }
+
                     property JsonObject bindings: JsonObject {
                         property string leftEdge: "sidebarLeft"
                         property string rightEdge: "sidebarRight"
@@ -3946,6 +4360,21 @@ Singleton {
                         property list<var> labels: []
                     }
                 }
+                /**
+                 * A keyboard drawn inside the lock surface itself.
+                 *
+                 * The regular on-screen keyboard is a layer-shell surface and the session
+                 * lock protocol covers every layer, so it cannot appear here. Without this,
+                 * a device with no physical keyboard cannot be unlocked at all — which is
+                 * why "auto" turns it on for touch-first families rather than leaving it to
+                 * be discovered.
+                 */
+                property JsonObject touchKeyboard: JsonObject {
+                    // "auto" | "always" | "never". Auto = on in a touch-first family.
+                    property string show: "auto"
+                    // "text" (qwerty) or "pin" (numeric pad), for a numeric password.
+                    property string mode: "text"
+                }
                 property bool materialShapeChars: true
                 property bool rippleEffect: true
                 property bool nowPlaying: true
@@ -4051,13 +4480,39 @@ Singleton {
                 // The small shift and AltGr glyphs in the corners of a deck key.
                 property bool secondaryGlyphs: true
                 property bool pinnedOnStartup: false
+                /**
+                 * Pushes the two halves apart with an empty middle, for typing with thumbs
+                 * while holding the device. On a tablet held in two hands the middle columns
+                 * of a full-width keyboard are out of reach of either thumb.
+                 */
+                property bool split: false
 
                 // Raises the keyboard when a text field is focused by finger or pen.
                 // Requires the osk_autoshow helper (see scripts/osk/README.md).
+                //
+                // On by default, and safe to be: the helper only reports focus that a touch
+                // or pen caused, so a machine with neither never raises anything, and the
+                // service does not even spawn the helper unless the binary is there. Off by
+                // default meant a tablet — where tapping a text field is the whole way in —
+                // did nothing until the user found a switch they had no reason to look for.
                 property JsonObject autoShow: JsonObject {
-                    property bool enable: false
+                    property bool enable: true
                     property bool allowTouch: true
                     property bool allowPen: true
+                    /**
+                     * Whether a left click also raises the keyboard.
+                     *
+                     * Off, and it should stay off on any device that has a touchscreen:
+                     * someone with a mouse has a keyboard, and a keyboard drawn over
+                     * their text field is a nuisance rather than a feature.
+                     *
+                     * It exists because the alternative is a feature nobody can try. On a
+                     * machine with no touch panel every other switch here is inert, and
+                     * "I turned it on and nothing ever happened" is indistinguishable
+                     * from a bug. This makes the pipeline demonstrable on the hardware
+                     * people develop on.
+                     */
+                    property bool allowMouse: false
                     // How long after a touch a text field may claim focus and still count as touch-driven.
                     property int touchWindowMs: 1200
                     property bool hideOnPhysicalKey: true
@@ -4674,6 +5129,16 @@ Singleton {
                 }
                 property string position: "default"
                 property string sidebarStyle: "default" // "default" | "connect"
+                property JsonObject tabletShade: JsonObject {
+                    // Height of the strip at the very top that starts the pull-down. It sits
+                    // above the bar on the Overlay layer, so whatever it covers stops being
+                    // clickable — raise it for an easier grab, lower it to keep the bar usable.
+                    property int edgeDragHeight: 8
+                    // The tablet shade blurs a screencopy of the desktop so the blur can ramp
+                    // with the drag. Off = one frozen frame per open (cheap, no feedback);
+                    // on = continuous capture, which also re-captures the shade's own output.
+                    property bool liveBackdrop: false
+                }
                 property bool keepRightSidebarLoaded: true
                 property bool keepLeftSidebarLoaded: true
                 property bool dashboardEntranceAnimations: false
@@ -4738,6 +5203,30 @@ Singleton {
                     property JsonObject classic: JsonObject {
                         // Order matters: it is the order the toggles appear in.
                         property list<var> toggles: ["network", "bluetooth", "vpn", "tailscale", "nightLight", "gameMode", "idleInhibitor", "modes", "easyEffects", "cloudflareWarp", "keyboardBacklight"]
+                    }
+                    /**
+                     * The quick-toggle layout the *tablet* family draws and edits.
+                     *
+                     * A separate object, because the two families have different screens
+                     * to fit the grid on: a four-column block tuned for a 460px sidebar
+                     * is not the arrangement anyone wants on a tablet's full-width shade,
+                     * and before this, adapting one silently rearranged the other.
+                     *
+                     * Empty `pages` means "never edited here". While it is empty the
+                     * tablet draws the desktop's layout — see PanelFamily.quickTogglePages
+                     * — so a new tablet user starts from something known-good rather than
+                     * from a blank grid, and an existing one keeps the arrangement they
+                     * already had. The first edit on the tablet writes a whole normalized
+                     * set here, and from then on the two are independent.
+                     *
+                     * Empty rather than a copy of the list below on purpose: two copies of
+                     * one default are two things to keep in step, and the fallback says
+                     * "the same, until you say otherwise" without either drifting.
+                     */
+                    property JsonObject androidTablet: JsonObject {
+                        property int columns: 4
+                        property int layoutVersion: 2
+                        property list<var> pages: []
                     }
                     property JsonObject android: JsonObject {
                         property int columns: 4

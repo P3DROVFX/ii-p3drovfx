@@ -36,7 +36,7 @@ MouseArea {
     implicitWidth: hasDevices ? Appearance.sizes.baseVerticalBarWidth : 0
     implicitHeight: hasDevices ? chip.implicitHeight : 0
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     // Cycle through devices on click
     onClicked: {

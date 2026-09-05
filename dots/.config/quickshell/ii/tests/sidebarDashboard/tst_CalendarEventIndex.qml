@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../modules/ii/sidebarDashboard/calendar/CalendarEventIndex.js" as CalendarEventIndex
+import "../../modules/common/dashboardWidgets/calendar/CalendarEventIndex.js" as CalendarEventIndex
 
 TestCase {
     name: "CalendarEventIndex"

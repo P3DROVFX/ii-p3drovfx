@@ -22,7 +22,7 @@ MouseArea {
     implicitWidth: visible ? Appearance.sizes.baseVerticalBarWidth : 0
     implicitHeight: visible ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + (root.isMaterial ? 0 : 12)) : 0
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode)

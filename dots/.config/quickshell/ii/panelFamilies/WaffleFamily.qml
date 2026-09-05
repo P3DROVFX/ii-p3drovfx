@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 
 import qs.modules.common
+import qs.modules.common.panels.shellSwitcher
 import qs.modules.waffle.actionCenter
 import qs.modules.waffle.background
 import qs.modules.waffle.bar
@@ -21,7 +22,7 @@ import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.oledSaver
 import qs.modules.ii.keypressDisplay
-import qs.modules.ii.onScreenKeyboard
+import qs.modules.common.onScreenKeyboard
 import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.usage
@@ -42,6 +43,8 @@ Scope {
     PanelLoader { component: WScreenSnip {} }
     PanelLoader { component: WaffleStartMenu {} }
     PanelLoader { component: WaffleSessionScreen {} }
+    // See TabletFamily: the chooser is loaded by every family on purpose.
+    PanelLoader { component: ShellSwitcher {} }
     PanelLoader { component: WaffleTaskView {} }
 
     PanelLoader { component: BluetoothPairing {} }

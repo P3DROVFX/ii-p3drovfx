@@ -302,16 +302,30 @@ FloatingWindow {
 
     // ── Flat page list, derived from SettingsPageRegistry ────────────────
     // Pages are addressed by stable `id`, not index — use pageIndexById().
+    // A page a restricted family has no surface for is treated exactly like a hidden
+    // page: absent from the sidebar and skipped by cycling. Its index in this array is
+    // still its index, so deep links and pageIndexById() do not move between families.
     property var pages: SettingsPageRegistry.pages.map(p => ({
                 id: p.id,
                 name: Translation.tr(p.name),
                 icon: p.icon,
                 component: p.component,
                 hidden: p.hidden === true
+                    || !SettingsPageRegistry.availableForFamily(p, PanelFamily.current)
             }))
 
-    // Hidden pages sit at the end of the list; nav pages come first.
+    // Hidden pages sit at the end of the list; nav pages come first. A family-restricted
+    // page can sit anywhere, so cycling walks the visible indices rather than counting them.
     readonly property int navPageCount: pages.filter(p => !p.hidden).length
+
+    readonly property var navPageIndices: {
+        const visible = [];
+        for (let i = 0; i < root.pages.length; i++) {
+            if (!root.pages[i].hidden)
+                visible.push(i);
+        }
+        return visible;
+    }
 
     function pageIndexById(id) {
         return SettingsPageRegistry.pageIndexById(id);
@@ -384,27 +398,46 @@ FloatingWindow {
         }
     }
 
-    function cycleNavPage(delta) {
-        if (root.currentPage >= root.navPageCount) {
-            root.currentPage = delta > 0 ? 0 : root.navPageCount - 1;
+    /// Ctrl+PageUp/PageDown: same visible order as cycling, but stops at the ends.
+    function stepNavPage(delta) {
+        const visible = root.navPageIndices;
+        if (visible.length === 0)
+            return;
+        const at = visible.indexOf(root.currentPage);
+        if (at === -1) {
+            root.currentPage = delta > 0 ? visible[0] : visible[visible.length - 1];
             return;
         }
-        root.currentPage = (root.currentPage + delta + root.navPageCount) % root.navPageCount;
+        root.currentPage = visible[Math.max(0, Math.min(visible.length - 1, at + delta))];
+    }
+
+    function cycleNavPage(delta) {
+        const visible = root.navPageIndices;
+        if (visible.length === 0)
+            return;
+        const at = visible.indexOf(root.currentPage);
+        if (at === -1) {
+            root.currentPage = delta > 0 ? visible[0] : visible[visible.length - 1];
+            return;
+        }
+        root.currentPage = visible[(at + delta + visible.length) % visible.length];
     }
 
     // ── Grouped page list for Sidebar ────────────────────────────────────
+    // A group whose every page is unavailable to this family would render as a header
+    // over nothing, so it drops out too.
     property var pageGroups: SettingsPageRegistry.groups.map(g => ({
                 id: g.id,
                 name: Translation.tr(g.name),
-                pages: g.pageIds.map(id => {
-                    const i = SettingsPageRegistry.pageIndexById(id);
-                    return {
+                pages: g.pageIds
+                    .map(id => SettingsPageRegistry.pageIndexById(id))
+                    .filter(i => i !== -1 && !root.pages[i].hidden)
+                    .map(i => ({
                         name: Translation.tr(SettingsPageRegistry.pages[i].name),
                         icon: SettingsPageRegistry.pages[i].icon,
                         pageIndex: i
-                    };
-                })
-            }))
+                    }))
+            })).filter(g => g.pages.length > 0)
 
     title: "illogical-impulse Settings"
     implicitWidth: 1100
@@ -556,10 +589,10 @@ FloatingWindow {
             // results) are reachable through their own entry points.
             if (event.modifiers === Qt.ControlModifier) {
                 if (event.key === Qt.Key_PageDown) {
-                    root.currentPage = Math.min(root.currentPage + 1, root.navPageCount - 1);
+                    root.stepNavPage(1);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_PageUp) {
-                    root.currentPage = Math.max(Math.min(root.currentPage, root.navPageCount) - 1, 0);
+                    root.stepNavPage(-1);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Tab) {
                     root.cycleNavPage(1);

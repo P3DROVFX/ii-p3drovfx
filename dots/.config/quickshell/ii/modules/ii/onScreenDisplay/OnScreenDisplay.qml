@@ -832,6 +832,10 @@ Scope {
                                                  hoverTarget: outputDevicesBtn
                                                  keyboardFocus: WlrKeyboardFocus.Click
                                                  forceClick: true
+                                                 // The button's own onClicked toggles this
+                                                 // popup; a second trigger on the press
+                                                 // would open it and then close it again.
+                                                 touchToggle: false
                                                  customPosition: true
                                                  anchorRight: true
                                                  anchorTop: true

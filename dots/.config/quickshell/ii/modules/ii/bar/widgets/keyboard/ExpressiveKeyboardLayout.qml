@@ -19,7 +19,7 @@ MouseArea {
     implicitWidth: visible ? (vertical ? Appearance.sizes.verticalBarWidth - 8 : ((rowLoader.item ? rowLoader.item.implicitWidth : 0) + 28)) : 0
     implicitHeight: visible ? (vertical ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + 12) : Appearance.sizes.baseBarHeight - 8) : 0
     
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode) return "";

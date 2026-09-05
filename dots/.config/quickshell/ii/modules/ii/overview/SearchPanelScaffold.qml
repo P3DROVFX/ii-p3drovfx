@@ -15,6 +15,18 @@ Item {
     property var primaryHint: ({})
     property var hints: []
     property var onBack: null
+
+    /**
+     * Whether the keyboard-shortcut footer is drawn.
+     *
+     * The stored preference is honoured everywhere it means anything, and it means nothing
+     * in a family whose whole premise is that there is no keyboard: a strip reading
+     * "Actions Ctrl K · Back Backspace" under a panel driven by a finger is instructions for
+     * hardware that is not there. Read as a capability rather than as a family name, per the
+     * plan's rule — `touchFirst` still says the right thing when a fourth family appears.
+     */
+    readonly property bool showKeyHintFooter: Config.options.search.appearance.showKeyHintBar
+        && !PanelFamily.touchFirst
     // Panels are selected by the Search field, so repeating their icon and
     // title immediately below it wastes the most valuable vertical space.
     // Keep these opt-in for the rare panel that truly needs in-panel context.
@@ -79,7 +91,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             visible: (root.showStatus && root.statusText.length > 0)
-                || (Config.options.search.appearance.showKeyHintBar
+                || (root.showKeyHintFooter
                     && (root.hints.length > 0 || Object.keys(root.primaryHint).length > 0))
 
             StyledText {
@@ -97,7 +109,7 @@ Item {
             }
 
             KeyHintBar {
-                visible: Config.options.search.appearance.showKeyHintBar
+                visible: root.showKeyHintFooter
                 hints: root.primaryHint.label ? [root.primaryHint].concat(root.hints) : root.hints
                 showKeys: Config.options.search.appearance.showKeyHints
                 surface: root.accent ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh

@@ -37,17 +37,17 @@ Scope {
             exclusiveZone: 0
 
             anchors {
-                top: !Config.options.bar.vertical && !Config.options.bar.bottom
-                bottom: !Config.options.bar.vertical && Config.options.bar.bottom
-                left: Config.options.bar.vertical ? (Config.options.bar.bottom ? false : true) : root.notifIsRight
-                right: Config.options.bar.vertical ? (Config.options.bar.bottom ? true : false) : root.notifIsLeft
+                top: !BarPlacement.vertical && !BarPlacement.bottom
+                bottom: !BarPlacement.vertical && BarPlacement.bottom
+                left: BarPlacement.vertical ? (BarPlacement.bottom ? false : true) : root.notifIsRight
+                right: BarPlacement.vertical ? (BarPlacement.bottom ? true : false) : root.notifIsLeft
             }
 
             margins {
-                top: Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight
-                bottom: Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight
-                left: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsRight ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
-                right: Config.options.bar.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsLeft ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
+                top: BarPlacement.vertical ? 0 : Appearance.sizes.barHeight
+                bottom: BarPlacement.vertical ? 0 : Appearance.sizes.barHeight
+                left: BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsRight ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
+                right: BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : (root.notifIsLeft ? Appearance.sizes.hyprlandGapsOut + 4 : 0)
             }
 
             implicitWidth: popupContent.implicitWidth

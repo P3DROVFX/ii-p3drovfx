@@ -7,6 +7,15 @@ hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_
 hl.window_rule({match = {class = "^(?!(kitty|code|code-url-handler|vscodium|antigravity-ide)).*" }, no_blur = true })
 
 -- Floating
+-- Tablet Family shell tools are regular xdg toplevels, so they behave like apps on the
+-- empty workspace selected by GlobalStates rather than like layer-shell overlays.
+--
+-- Deliberately NOT floated: they were, and the result was a shell tool sitting in a
+-- centred box on an otherwise empty workspace while every real application on the same
+-- workspace fills it. Tiled, they take the whole work area — which is what "open the
+-- Keybinds app" should look like — and they still respect the bar's and the dock's
+-- reserved edges, which a maximised floating window would have to be told about.
+
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      center = true})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  center = true})
@@ -188,6 +197,15 @@ hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
+-- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
+-- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
+-- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.
+hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true})
+-- App drawer, same reasoning: the shell's `ignore_alpha` rule makes compositor blur a
+-- threshold, so it snapped in part-way through the open animation instead of ramping. The
+-- drawer blurs its own frozen screencopy so the strength can follow the gesture.
+hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

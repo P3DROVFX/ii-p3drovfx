@@ -35,7 +35,7 @@ Item {
     }
 
     readonly property real sidebarOffsetX: {
-        if (wallpaperIsVideo || !Config.options.background.parallax.enableSidebar)
+        if (PanelFamily.nativeAppWindows || wallpaperIsVideo || !Config.options.background.parallax.enableSidebar)
             return 0;
         return (0.15 * GlobalStates.effectiveRightOpen - 0.15 * GlobalStates.effectiveLeftOpen);
     }

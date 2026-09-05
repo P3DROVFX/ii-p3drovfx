@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
@@ -13,22 +14,22 @@ import Quickshell.Bluetooth
 import Quickshell.Hyprland
 import Qt5Compat.GraphicalEffects
 
-import qs.modules.ii.sidebarDashboard.quickToggles
-import qs.modules.ii.sidebarDashboard.quickToggles.classicStyle
+import qs.modules.common.quickToggles
+import qs.modules.common.quickToggles.classicStyle
 
-import qs.modules.ii.sidebarDashboard.bluetoothDevices
-import qs.modules.ii.sidebarDashboard.nightLight
-import qs.modules.ii.sidebarDashboard.volumeMixer
-import qs.modules.ii.sidebarDashboard.wifiNetworks
-import qs.modules.ii.sidebarDashboard.darkMode
-import qs.modules.ii.sidebarDashboard.localSend
-import qs.modules.ii.sidebarDashboard.vpn
-import qs.modules.ii.sidebarDashboard.tailscale
-import qs.modules.ii.sidebarDashboard.dnsOverTls
-import qs.modules.ii.sidebarDashboard.idleInhibitor
-import qs.modules.ii.sidebarDashboard.screenShader
+import qs.modules.common.quickToggleDialogs.bluetoothDevices
+import qs.modules.common.quickToggleDialogs.nightLight
+import qs.modules.common.quickToggleDialogs.volumeMixer
+import qs.modules.common.quickToggleDialogs.wifiNetworks
+import qs.modules.common.quickToggleDialogs.darkMode
+import qs.modules.common.quickToggleDialogs.localSend
+import qs.modules.common.quickToggleDialogs.vpn
+import qs.modules.common.quickToggleDialogs.tailscale
+import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.idleInhibitor
+import qs.modules.common.quickToggleDialogs.screenShader
 import qs.modules.ii.sidebarDashboard.modes
-import "SidebarSpaceArbitration.js" as SpaceArbitration
+import "../../common/functions/SpaceArbitration.js" as SpaceArbitration
 import "SidebarPerformancePolicy.js" as PerformancePolicy
 
 Item {
@@ -154,8 +155,8 @@ Item {
         }
     }
 
-    readonly property bool isDynamicIslandTop: !Config.options.bar.vertical && !Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
-    readonly property bool isDynamicIslandBottom: !Config.options.bar.vertical && Config.options.bar.bottom && Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIslandTop: !BarPlacement.vertical && !BarPlacement.bottom && BarInteraction.cornerStyle === 3
+    readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && BarInteraction.cornerStyle === 3
 
     Component.onCompleted: {
         if (GlobalStates.requestVolumeDialog) {

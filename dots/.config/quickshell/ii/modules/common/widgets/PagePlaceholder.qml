@@ -16,6 +16,8 @@ Item {
     property alias shape: shapeWidget.shape
     property alias descriptionHorizontalAlignment: widgetDescriptionText.horizontalAlignment
     property bool animateIconOnShow: false
+    // Touch hosts render the same placeholder larger without forking it.
+    property real sizeScale: 1.0
     property real titlePixelSize: Appearance.font.pixelSize.larger
     property real descriptionPixelSize: Appearance.font.pixelSize.small
 
@@ -228,7 +230,7 @@ Item {
                 id: shapeWidget
                 anchors.centerIn: parent
                 padding: 12
-                iconSize: 56
+                iconSize: Math.round(56 * root.sizeScale)
                 rotation: -30 * (1 - root.opacity)
                 
                 // Value holder for the entrance animation. This used to be a
@@ -270,7 +272,7 @@ Item {
                 anchors.fill: parent
                 font {
                     family: Appearance.font.family.title
-                    pixelSize: root.titlePixelSize
+                    pixelSize: Math.round(root.titlePixelSize * root.sizeScale)
                     variableAxes: Appearance.font.variableAxes.title
                 }
                 color: Appearance.m3colors.m3outline
@@ -288,7 +290,7 @@ Item {
             visible: description !== ""
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
-            font.pixelSize: root.descriptionPixelSize
+            font.pixelSize: Math.round(root.descriptionPixelSize * root.sizeScale)
             color: Appearance.m3colors.m3outline
             horizontalAlignment: root.descriptionHorizontalAlignment ?? Text.AlignHCenter
             wrapMode: Text.Wrap

@@ -29,7 +29,7 @@ Item {
         shadowColor: Qt.rgba(0, 0, 0, 0.28)
         shadowBlur: 1.0
         shadowHorizontalOffset: 0
-        shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+        shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
         // The silhouette already reaches every screen edge; padding would only grow
         // the effect item past the window for a shadow nobody can see.
         autoPaddingEnabled: false
@@ -53,8 +53,8 @@ Item {
 
     property int baseFrameThickness: Config.options.appearance.wrappedFrameThickness
     property real frameThickness: baseFrameThickness * visualsRoot.retract
-    property bool barVertical: Config.options.bar.vertical
-    property bool barBottom: Config.options.bar.bottom
+    property bool barVertical: BarPlacement.vertical
+    property bool barBottom: BarPlacement.bottom
     property bool showBarBackground: false
     property real hBarHiddenAmount: 0
     property real vBarHiddenAmount: 0
@@ -93,7 +93,7 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(visualsRoot)
     }
 
-    readonly property bool isFloatingOrIsland: Config.options.bar.cornerStyle === 1 || Config.options.bar.cornerStyle === 3
+    readonly property bool isFloatingOrIsland: BarInteraction.cornerStyle === 1 || BarInteraction.cornerStyle === 3
 
     property bool hasTopFrame: isFloatingOrIsland || !(!barVertical && !barBottom)
     property bool hasBottomFrame: isFloatingOrIsland || !(!barVertical && barBottom)

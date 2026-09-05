@@ -13,15 +13,34 @@ Singleton {
     readonly property var actions: [
         // Navigation & Core Shell
         { id: "none", name: "None", icon: "block" },
-        { id: "overview", name: "Overview / Search", icon: "grid_view" },
-        { id: "overviewClipboard", name: "Clipboard History", icon: "content_paste" },
-        { id: "overviewEmoji", name: "Emoji Picker", icon: "mood" },
-        { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open" },
+        { id: "overview", name: "Overview / Search", icon: "grid_view", families: ["ii", "waffle"] },
+        { id: "overviewClipboard", name: "Clipboard History", icon: "content_paste", families: ["ii", "waffle"] },
+        { id: "overviewEmoji", name: "Emoji Picker", icon: "mood", families: ["ii", "waffle"] },
+        { id: "sidebarLeft", name: "Left Sidebar", icon: "left_panel_open", families: ["ii", "waffle"] },
         { id: "sidebarRight", name: "Right Sidebar", icon: "right_panel_open" },
+        { id: "back", name: "Back", icon: "arrow_back", families: ["tablet"] },
+        { id: "appDrawer", name: "App Drawer", icon: "apps", families: ["tablet"] },
+        { id: "recents", name: "Recent Apps", icon: "overview", families: ["tablet"] },
+        { id: "home", name: "Home Screen", icon: "home", families: ["tablet"] },
+        // Shows hub mode on demand instead of waiting for the charge-and-idle trigger,
+        // which is the only way anyone can see what the preference does before choosing
+        // it. See GlobalStates.hubModePreview.
+        { id: "hubMode", name: "Hub Mode (Display)", icon: "dock", families: ["tablet"] },
+        // Marked prominent: the bubble draws it as the wide tile at the top of its sheet.
+        // A pen comes out mid-thought and the control for it has to be the one you cannot
+        // miss, not the fourth icon in a grid.
+        { id: "liveDraw", name: "Draw on Screen", icon: "draw", families: ["tablet"], prominent: true },
+        // Pen mode only: it means something for as long as a barrel button is held, which
+        // no gesture or bubble tile can express. Listed so the binding UI can offer it.
+        { id: "dragWindow", name: "Drag Window (hold)", icon: "drag_pan", families: ["tablet"], penOnly: true },
+        { id: "workspaceNext", name: "Next Workspace", icon: "chevron_right" },
+        { id: "workspacePrev", name: "Previous Workspace", icon: "chevron_left" },
         { id: "cheatsheet", name: "Cheat Sheet", icon: "keyboard" },
         { id: "osk", name: "On-screen Keyboard", icon: "keyboard_alt" },
-        { id: "overlay", name: "Game / Widget Overlay", icon: "layers" },
+        // Tablet: the game/widget overlay is a desktop surface, permanently out.
+        { id: "overlay", name: "Game / Widget Overlay", icon: "layers" , families: ["ii", "waffle"] },
         { id: "session", name: "Session / Power Menu", icon: "power_settings_new" },
+        { id: "shellSwitcher", name: "Switch Shell", icon: "swap_horiz" },
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
         { id: "usage", name: "App Usage Stats", icon: "query_stats" },
@@ -36,7 +55,8 @@ Singleton {
         { id: "regionSearch", name: "Google Lens (Search Image)", icon: "image_search" },
         { id: "regionOcr", name: "Character Recognition (OCR)", icon: "document_scanner" },
         { id: "screenTranslate", name: "Translate Screen Content", icon: "g_translate" },
-        { id: "colorPicker", name: "Color Picker (#HEX)", icon: "colorize" },
+        // Tablet: a desktop utility, permanently out.
+        { id: "colorPicker", name: "Color Picker (#HEX)", icon: "colorize" , families: ["ii", "waffle"] },
         { id: "regionRecord", name: "Record Region", icon: "videocam" },
         { id: "regionRecordWithSound", name: "Record Region (with Sound)", icon: "video_camera_front" },
 
@@ -56,11 +76,41 @@ Singleton {
         { id: "toggleLightDark", name: "Toggle Light / Dark", icon: "dark_mode" },
 
         // Window & Workspace Management
-        { id: "scratchpad", name: "Toggle Scratchpad", icon: "inventory_2" },
+        // Tablet: desktop window management. Returns as an app window in Fase 5.
+        { id: "scratchpad", name: "Toggle Scratchpad", icon: "inventory_2" , families: ["ii", "waffle"] },
         { id: "closeWindow", name: "Close Active Window", icon: "close" },
         { id: "toggleFullscreen", name: "Toggle Window Fullscreen", icon: "fullscreen" },
         { id: "toggleFloating", name: "Toggle Window Floating", icon: "picture_in_picture" }
     ]
+
+    /**
+     * Whether the running family can actually perform this action.
+     *
+     * A binding pointing at a surface the family does not load is worse than an unbound
+     * gesture: the swipe is recognised, it commits, and nothing happens — which reads as
+     * the touchscreen being broken rather than as a setting being wrong. Actions without
+     * a `families` field work everywhere, which is nearly all of them.
+     */
+    function availableForFamily(action, family) {
+        if (!action)
+            return false;
+        if (!action.families)
+            return true;
+        return action.families.indexOf(family ?? "ii") !== -1;
+    }
+
+    /**
+     * Actions a family can perform, for a binding UI to offer.
+     *
+     * `penOnly` actions are left out unless asked for. "Drag window" means something for
+     * as long as a stylus barrel button is held, and a swipe or a bubble tile has no way
+     * to express a hold — offering it there would produce a binding that recognises the
+     * gesture and then does nothing.
+     */
+    function availableActionsForFamily(family, includePenOnly) {
+        return root.actions.filter(a => root.availableForFamily(a, family)
+            && (includePenOnly === true || a.penOnly !== true));
+    }
 
     function actionById(actionId) {
         return actions.find(action => action.id === actionId)
@@ -86,6 +136,53 @@ Singleton {
                 GlobalStates.overviewOpen = false;
             else
                 GlobalStates.openSearch(screenName);
+            break;
+
+        case "back":
+            // The family installs what back means here; shared code cannot import one to
+            // ask. Doing nothing is correct on a family that never installed a handler.
+            if (GlobalStates.navigateBackHandler)
+                GlobalStates.navigateBackHandler();
+            break;
+
+        case "appDrawer":
+            GlobalStates.toggleAppDrawer(screenName);
+            break;
+
+        case "hubMode":
+            GlobalStates.toggleHubModePreview();
+            break;
+
+        case "liveDraw":
+            // The family owns the ink; shared code cannot import the store to reach it.
+            // Doing nothing is correct on a family that installed no handler.
+            if (GlobalStates.liveDrawHandler)
+                GlobalStates.liveDrawHandler();
+            break;
+
+        case "recents":
+            GlobalStates.toggleRecents(screenName);
+            break;
+
+        case "home":
+            // Which workspace is "home" is the family's to answer — the icons on it are
+            // stored per workspace, so landing on any free one shows a blank screen and
+            // strands the arrangement. Falling back to an empty workspace keeps a family
+            // that installed no handler behaving as it did.
+            GlobalStates.appDrawerOpen = false;
+            GlobalStates.recentsOpen = false;
+            if (GlobalStates.navigateHomeHandler)
+                GlobalStates.navigateHomeHandler(screenName);
+            else
+                Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+            break;
+
+        case "workspaceNext":
+            Hyprland.dispatch("hl.dsp.focus({ workspace = 'r+1' })");
+            break;
+
+        case "workspacePrev":
+            Hyprland.dispatch("hl.dsp.focus({ workspace = 'r-1' })");
             break;
 
         case "overviewClipboard":
@@ -126,6 +223,10 @@ Singleton {
             GlobalStates.sessionOpen = !GlobalStates.sessionOpen;
             break;
 
+        case "shellSwitcher":
+            GlobalStates.shellSwitcherOpen = !GlobalStates.shellSwitcherOpen;
+            break;
+
         case "settings":
             GlobalStates.toggleSettings();
             break;
@@ -135,11 +236,17 @@ Singleton {
             break;
 
         case "usage":
-            GlobalStates.usageOpen = !GlobalStates.usageOpen;
+            if (PanelFamily.nativeAppWindows)
+                GlobalStates.toggleTabletApp("usage");
+            else
+                GlobalStates.usageOpen = !GlobalStates.usageOpen;
             break;
 
         case "modes":
-            GlobalStates.modesOpen = !GlobalStates.modesOpen;
+            if (PanelFamily.nativeAppWindows)
+                GlobalStates.toggleTabletApp("modes");
+            else
+                GlobalStates.modesOpen = !GlobalStates.modesOpen;
             break;
 
         case "barToggle":

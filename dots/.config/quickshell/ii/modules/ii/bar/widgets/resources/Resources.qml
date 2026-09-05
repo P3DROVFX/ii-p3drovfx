@@ -15,7 +15,7 @@ MouseArea {
 
     implicitWidth: mainRow.implicitWidth
     implicitHeight: Appearance.sizes.baseBarHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     readonly property color capsuleColor: root.groupBgColor
 

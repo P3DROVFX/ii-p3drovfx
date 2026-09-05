@@ -130,7 +130,7 @@ Scope {
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
-    readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom && hasBarOnThisMonitor
+    readonly property bool hasTopBar: GlobalStates.barOpen && !BarPlacement.vertical && !BarPlacement.bottom && hasBarOnThisMonitor
 
     BarThemes {
         id: barThemes

@@ -31,7 +31,7 @@ Scope {
 
             anchors.top: true
             margins {
-                top: Config?.options.bar.vertical ? Appearance.sizes.hyprlandGapsOut : Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut
+                top: BarPlacement.vertical ? Appearance.sizes.hyprlandGapsOut : Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut
             }
 
             mask: Region {

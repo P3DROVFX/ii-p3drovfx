@@ -19,6 +19,12 @@ import Quickshell
  *  - aliases:    extra untranslated search terms (old page names etc.)
  *  - hidden:     not shown in the sidebar, excluded from keyboard cycling.
  *                Hidden pages must stay at the END of the list.
+ *  - families:   panel families this page applies to. Absent means every family.
+ *                A restricted family (tablet) does not render some surfaces at all,
+ *                and a settings page for a surface that cannot exist is worse than
+ *                no page: every switch on it is inert. Filtering happens in the
+ *                sidebar and in keyboard cycling; the flat `pages` array keeps every
+ *                entry so page indices stay stable across families.
  *  - searchable: set false to skip the file during search indexing
  */
 Singleton {
@@ -63,7 +69,7 @@ Singleton {
             "icon": "font_download",
             "component": "modules/settings/configs/InterfaceFontsConfig.qml",
             "subPages": ["widgets/CustomFontsConfig.qml"],
-            "aliases": ["Base Icon Themes", "Decorative Options"]
+            "aliases": ["Base Icon Themes", "Decorative Options", "Shell family", "Panel family", "Tablet mode", "Waffle", "illogical-impulse", "Switch shell"]
         },
         {
             "id": "presets",
@@ -79,6 +85,16 @@ Singleton {
             "aliases": []
         },
         {
+            "id": "tablet",
+            "name": "Tablet",
+            "icon": "tablet_android",
+            "component": "modules/settings/configs/TabletConfig.qml",
+            // Only for the family it configures. Everything on it is inert elsewhere.
+            "families": ["tablet"],
+            "subPages": [],
+            "aliases": ["Shade", "Home screen", "Dock", "App drawer", "Gestures", "Android"]
+        },
+        {
             "id": "sidebars",
             "name": "Sidebars",
             "icon": "side_navigation",
@@ -88,6 +104,8 @@ Singleton {
         },
         {
             "id": "dock",
+            // The tablet family draws no ii dock; an Android-style dock replaces it.
+            "families": ["ii", "waffle"],
             "name": "Dock",
             "icon": "dock_to_bottom",
             "component": "modules/settings/configs/DockConfig.qml",
@@ -126,6 +144,8 @@ Singleton {
         },
         {
             "id": "dynamicIsland",
+            // No notch on a fixed tablet status bar.
+            "families": ["ii", "waffle"],
             "name": "Dynamic Island",
             "icon": "water_drop",
             "component": "modules/settings/configs/DynamicIslandConfig.qml",
@@ -149,6 +169,8 @@ Singleton {
         },
         {
             "id": "modes",
+            // Desktop automation; the tablet family loads no modes overlay.
+            "families": ["ii", "waffle"],
             "name": "Modes & Routines",
             "icon": "tune",
             "component": "modules/settings/configs/ModesConfig.qml",
@@ -202,6 +224,8 @@ Singleton {
         },
         {
             "id": "cheatSheet",
+            // A keyboard-shortcut reference, on a device with no keyboard.
+            "families": ["ii", "waffle"],
             "name": "Cheat Sheet",
             "icon": "help",
             "component": "modules/settings/configs/CheatSheetConfig.qml",
@@ -223,6 +247,8 @@ Singleton {
         },
         {
             "id": "tiling",
+            // Dragging windows into a tiling grid needs a pointer.
+            "families": ["ii", "waffle"],
             "name": "Window Tiling",
             "icon": "view_quilt",
             "component": "modules/settings/configs/TilingConfig.qml",
@@ -410,6 +436,14 @@ Singleton {
             "searchable": false
         }
     ]
+    /// Whether a page applies to the running panel family. Pages without a `families`
+    /// field apply everywhere, which is the overwhelming majority.
+    function availableForFamily(page, family) {
+        if (!page || !page.families)
+            return true;
+        return page.families.indexOf(family ?? "ii") !== -1;
+    }
+
     readonly property var groups: [
         {
             "id": "lookAndFeel",
@@ -419,7 +453,7 @@ Singleton {
         {
             "id": "modules",
             "name": "Modules",
-            "pageIds": ["sidebars", "dock", "dynamicIsland"]
+            "pageIds": ["tablet", "sidebars", "dock", "dynamicIsland"]
         },
         {
             "id": "desktopWindows",

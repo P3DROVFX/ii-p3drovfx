@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 import qs.modules.common
+import qs.services
 
 /**
  * The single owner of notes.json.
@@ -40,7 +41,11 @@ Singleton {
         return source.map(tab => ({
             title: String(tab?.title ?? "Tab"),
             icon: String(tab?.icon ?? "article"),
-            content: String(tab?.content ?? "")
+            content: String(tab?.content ?? ""),
+            // Absolute path to a drawing, or "" for a note that is only text. Carried
+            // through every clone so an edit to a sketch note's text does not silently
+            // drop the picture — which is what an unlisted key does here.
+            sketch: String(tab?.sketch ?? "")
         }));
     }
 
@@ -175,6 +180,81 @@ Singleton {
         };
     }
 
+    // ── Sketches ────────────────────────────────────────────────────────────
+    /**
+     * Where the next drawing goes.
+     *
+     * Timestamped rather than numbered: the name is the only thing distinguishing two
+     * sketches on disk, and a counter that resets when the shell restarts overwrites the
+     * drawing someone made yesterday.
+     */
+    function newSketchPath(): string {
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        return `${Directories.noteSketchesDir}/sketch-${stamp}.png`;
+    }
+
+    /**
+     * Files a drawing that has already been written to `path` as a new note.
+     *
+     * The path, not the pixels: notes.json is read and rewritten whole on every keystroke
+     * in the notes overlay, and a base64 PNG inside it would be megabytes travelling
+     * through that loop for every character typed in an unrelated tab.
+     */
+    // `title` is deliberately untyped. A `string`-typed QML parameter coerces a missing
+    // argument to the literal text "undefined", so the optional title would have arrived
+    // as a four-syllable note name rather than as nothing to fall back from.
+    function createSketch(path: string, title): var {
+        const file = String(path ?? "").trim();
+        if (file.length === 0)
+            return { ok: false, error: "emptyPath" };
+        const noteTitle = String(title ?? "").trim()
+            || Translation.tr("Sketch %1").arg(Qt.formatDateTime(new Date(), "d MMM, HH:mm"));
+        const tabs = root.cloneTabs(root.tabsData);
+        const tab = { title: noteTitle.slice(0, 120), icon: "draw", content: "", sketch: file };
+        tabs.push(tab);
+        if (!root.scheduleWrite({ tabs: tabs }))
+            return { ok: false, error: "notReady" };
+        return { ok: true, index: tabs.length - 1, title: tab.title, sketch: file };
+    }
+
+    /**
+     * Attaches a drawing to an existing note, replacing whatever it had.
+     *
+     * Separate from `createSketch`, which makes a new note: drawing *into* the note you
+     * are looking at is the common case once notes can be drawn in at all, and creating a
+     * second note every time somebody added a line would be its own bug.
+     *
+     * The previous file is left on disk. Deleting it here would be right up until the
+     * moment two notes shared a path — which nothing prevents, since a path is just a
+     * string in a JSON file — and an orphaned PNG is a much smaller problem than a note
+     * whose picture vanished.
+     */
+    function setSketch(index: int, path: string): bool {
+        const tabs = root.cloneTabs(root.tabsData);
+        if (index < 0 || index >= tabs.length)
+            return false;
+        tabs[index].sketch = String(path ?? "");
+        if (tabs[index].icon === "article" && tabs[index].sketch.length > 0)
+            tabs[index].icon = "draw";
+        return root.scheduleWrite({ tabs: tabs });
+    }
+
+    function clearSketch(index: int): bool {
+        return root.setSketch(index, "");
+    }
+
+    /// Makes sure the sketch directory exists. Called before the first write rather than
+    /// at startup: a shell that never draws anything should not create the folder.
+    function ensureSketchDir(): void {
+        sketchDirMaker.running = false;
+        Qt.callLater(() => sketchDirMaker.running = true);
+    }
+
+    Process {
+        id: sketchDirMaker
+        command: ["mkdir", "-p", Directories.noteSketchesDir]
+    }
+
     function deleteTab(index: int): bool {
         const tabs = root.cloneTabs(root.tabsData);
         if (index < 0 || index >= tabs.length)
@@ -255,5 +335,8 @@ Singleton {
         }
     }
 
-    Component.onCompleted: root.reload()
+    Component.onCompleted: {
+        root.reload();
+        root.ensureSketchDir();
+    }
 }

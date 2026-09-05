@@ -784,8 +784,48 @@ Singleton {
     }
 
     sizes: QtObject {
-        property real baseBarHeight: Config.options.bar.sizes.height
-        property real barHeight: Config.options.bar.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // A finger needs a bigger target than a cursor. A touch-first family raises the
+        // bar's FLOOR rather than replacing the value: a bar the user configured taller
+        // than this stays taller, and the stored preference is never rewritten.
+        //
+        // This is deliberately here and not a per-window scale. Scaling the bar window was
+        // tried and reverted — every widget inside sizes itself off barHeight, so the window
+        // grew while the content did not, and backgrounds, hit targets and popup anchors all
+        // measured against a bar that was not the one on screen.
+        // Material's minimum touch target, and the Pixel Tablet's status bar height.
+        property real minimumTouchTarget: 48
+
+        // Snap step for desktop widgets and icons on the wallpaper canvas.
+        //
+        // Ten pixels is a fine-positioning aid for a mouse: it takes the jitter out of a
+        // drag without really constraining where something lands. A finger cannot place
+        // anything that precisely, and a home screen is supposed to look laid out on a
+        // grid rather than merely tidy — so a touch-first family snaps to a step coarse
+        // enough to read as cells, the way Android's home screen does.
+        // What this family wants when nothing is configured. Kept separate from the
+        // resolved value below so a settings control can offer it as the fallback without
+        // reading a property that depends on the very key it writes — that was a binding
+        // loop, and the page it was on rendered empty.
+        readonly property real familyWidgetGridStep: PanelFamily.touchFirst ? 40 : 10
+
+        property real widgetGridStep: {
+            const configured = Config.options?.background?.widgets?.gridStep ?? 0;
+            return configured > 0 ? configured : root.sizes.familyWidgetGridStep;
+        }
+        property real baseBarHeight: PanelFamily.touchFirst
+            ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
+            : Config.options.bar.sizes.height
+        property real barHeight: BarInteraction.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // Bar widgets were drawn against a 40px horizontal bar and a 44px vertical one, and
+        // most of them size their outer plate off the bar while leaving the glyph inside at
+        // the number it was drawn with. On a touch-first family the bar is taller than that
+        // by definition, so those widgets became big plates around small icons. Scaling the
+        // insides by the same ratio is a no-op at the default and correct everywhere else.
+        readonly property real barReferenceHeight: 40
+        readonly property real barReferenceWidth: 44
+        readonly property real barContentScale: root.sizes.baseBarHeight / root.sizes.barReferenceHeight
+        readonly property real verticalBarContentScale: root.sizes.verticalBarWidth / root.sizes.barReferenceWidth
+
         property real barCenterSideModuleWidth: Config.options?.bar.verbose ? 360 : 140
         property real barCenterSideModuleWidthShortened: 280
         property real barCenterSideModuleWidthHellaShortened: 190
@@ -814,7 +854,7 @@ Singleton {
         property real sidebarWidthExtended: 750
         property real baseVerticalBarWidth: Config.options.bar.sizes.width
         property real verticalBarWidth: baseVerticalBarWidth
-        property real verticalBarWindowWidth: Config.options.bar.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
+        property real verticalBarWindowWidth: BarInteraction.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
         property real wallpaperSelectorWidth: 1200
         property real wallpaperSelectorHeight: 690
         property real wallpaperSelectorSidebarWidth: 180

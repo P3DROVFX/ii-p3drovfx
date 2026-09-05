@@ -42,7 +42,7 @@ MouseArea {
     }
 
     Layout.fillHeight: vertical
-    readonly property bool clickToShowPopup: Config.options.bar.tooltips.clickToShow
+    readonly property bool clickToShowPopup: BarInteraction.clickToShow
     readonly property bool showHoverState: containsMouse && !clickToShowPopup
     hoverEnabled: !clickToShowPopup
     cursorShape: Qt.PointingHandCursor

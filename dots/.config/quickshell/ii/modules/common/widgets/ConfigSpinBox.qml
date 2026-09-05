@@ -16,7 +16,11 @@ Rectangle {
     property string badgeText: ""
 
     Layout.fillWidth: true
-    implicitHeight: rowLayout.implicitHeight + 32
+    // A settings row is one tap target. Floor it at the Material minimum on a
+    // touch-first family rather than fixing the height, so rows that are already
+    // taller keep their size.
+    implicitHeight: Math.max(rowLayout.implicitHeight + 32,
+        PanelFamily.touchFirst ? Appearance.sizes.minimumTouchTarget + 12 : 0)
 
     color: Appearance.colors.colLayer2
 

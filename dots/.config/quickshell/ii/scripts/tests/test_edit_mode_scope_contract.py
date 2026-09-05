@@ -94,6 +94,25 @@ PREFERENCE_PATHS = {
     "dock.showTrashButton",
     "dock.showNotificationBadges",
     "dock.showDividers",
+    # The tablet dock's face and items.
+    "tablet.dock.height",
+    "tablet.dock.iconSize",
+    "tablet.dock.reserveSpace",
+    "tablet.dock.showAppRow",
+    "tablet.dock.autoHideOnOccupiedWorkspace",
+    "tablet.dock.showSearchBar",
+    "tablet.dock.searchBarStyle",
+    "tablet.dock.searchBarWidth",
+    "tablet.dock.showNavigation",
+    "tablet.dock.keepNavigationVisible",
+    "tablet.dock.showRunningApps",
+    "tablet.dock.maximumRecents",
+    "tablet.dock.showAppDrawerButton",
+    "tablet.dock.showAppDividers",
+    "tablet.dock.showWorkspaceArrows",
+    "tablet.dock.showPageCounter",
+    "tablet.dock.hidePageCounterOnOccupiedWorkspace",
+    "tablet.dock.compactWhenPageCounterHidden",
 }
 
 # What the Style catalogue may choose. The wallpaper paths themselves are

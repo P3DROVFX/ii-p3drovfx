@@ -24,7 +24,7 @@ LazyLoader {
         if (screenHeight <= 0 || !root.contentItem)
             return 1.0;
         var baseScale = Math.max(0.75, Math.min(1.5, screenHeight / 1080.0));
-        var barSpace = Config.options.bar.vertical ? 0 : Appearance.sizes.barHeight;
+        var barSpace = BarPlacement.vertical ? 0 : Appearance.sizes.barHeight;
         var maxAllowedHeight = screenHeight - barSpace - Appearance.sizes.elevationMargin * 2 - 40;
         var maxAllowedWidth = (screenWidth > 0 ? screenWidth : 1920) * 0.9;
         
@@ -75,7 +75,7 @@ LazyLoader {
     property bool _isClosing: false
     property bool _reopenPending: false
 
-    readonly property bool _computedActive: Config.options.bar.tooltips.enablePopups && ((Config.options.bar.tooltips.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
+    readonly property bool _computedActive: BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
 
     property bool _openDebounced: false
 
@@ -112,6 +112,68 @@ LazyLoader {
                 root._stickyActive = false;
             }
         }
+    }
+
+    // ── Touch ───────────────────────────────────────────────────────────────
+    /**
+     * Opening from a real press, not from hover.
+     *
+     * Click-to-show was still driven entirely by `containsMouse`: a mouse press happens to
+     * set that flag on the way in, so a click looked like it worked. A finger does not.
+     * There is no hover to synthesise on a touchscreen, and the widgets set
+     * `hoverEnabled: !BarInteraction.clickToShow`, so on the touch-first family — the one
+     * family where click-to-show is *forced on* — nothing ever set `_clickActive` and the
+     * popups simply never appeared.
+     *
+     * The target's own press signal is the honest trigger, and it fires for a mouse, a
+     * finger and a stylus alike. MouseArea and RippleButton both have one; anything else
+     * keeps the old behaviour, since `ignoreUnknownSignals` makes an absent signal a no-op
+     * rather than an error.
+     */
+    property real _lastDismissMs: -Infinity
+    readonly property int _dismissGuardMs: 350
+
+    /// Off where the host already drives `_clickActive` from its own click handler. Two
+    /// things toggling the same flag on one gesture cancel out: the press opens the popup
+    /// and the release the host handles closes it again, so it never appears.
+    property bool touchToggle: true
+
+    property Connections _touchTrigger: Connections {
+        target: (root.touchToggle && (BarInteraction.clickToShow || root.forceClick))
+            ? root.hoverTarget : null
+        ignoreUnknownSignals: true
+        // MouseArea raises `pressed`. RippleButton replaces Control's own pointer handling
+        // with an inner MouseArea and only drives `down`, so Control's `pressed` signal
+        // never fires there — the two together cover every target the bar actually uses,
+        // and ignoreUnknownSignals makes the one a given target lacks a no-op.
+        function onPressed() { root.toggleFromPress(); }
+        function onDownChanged() {
+            if (root.hoverTarget?.down)
+                root.toggleFromPress();
+        }
+    }
+
+    /**
+     * A press on the widget: open it, or close it if this press is what dismissed it.
+     *
+     * The focus grab clears on a press outside the popup, and the bar is outside the popup,
+     * so tapping the widget while its popup is up arrives here as "closed already". Without
+     * the guard this would read that as "closed, so open it" and the popup would never shut
+     * from its own button — the one control a finger is certain to find.
+     */
+    function toggleFromPress() {
+        if (Date.now() - root._lastDismissMs < root._dismissGuardMs)
+            return;
+        if (root._clickActive) {
+            root.close();
+            root._lastDismissMs = Date.now();
+            return;
+        }
+        if (root._isClosing) {
+            root._reopenPending = true;
+            return;
+        }
+        root._clickActive = true;
     }
 
     // Dismiss the popup regardless of which mode opened it (click, sticky hover or plain hover).
@@ -163,13 +225,13 @@ LazyLoader {
             _reopenPending = false;
         }
 
-        if (Config.options.bar.tooltips.clickToShow || forceClick) {
-            if (_targetHovered && !root._clickActive && !root._isClosing) {
-                root._clickActive = true;
-            }
-        } else {
+        // Deliberately not opening from hover in click mode. A mouse press happens to set
+        // containsMouse on its way in, which is the only reason opening from hover ever
+        // looked like clicking — and it fires *before* the press signal, so leaving it here
+        // made the press arrive at an already-open popup and shut it again. One trigger:
+        // toggleFromPress.
+        if (!(BarInteraction.clickToShow || forceClick))
             _evaluateStickyState();
-        }
     }
 
     onActiveChanged: {
@@ -190,10 +252,10 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
-        anchors.left: root.customPosition ? root.anchorLeft : (!Config.options.bar.vertical || (Config.options.bar.vertical && !Config.options.bar.bottom))
-        anchors.right: root.customPosition ? root.anchorRight : (Config.options.bar.vertical && Config.options.bar.bottom)
-        anchors.top: root.customPosition ? root.anchorTop : (Config.options.bar.vertical || (!Config.options.bar.vertical && !Config.options.bar.bottom))
-        anchors.bottom: root.customPosition ? root.anchorBottom : (!Config.options.bar.vertical && Config.options.bar.bottom)
+        anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
+        anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
+        anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
+        anchors.bottom: root.customPosition ? root.anchorBottom : (!BarPlacement.vertical && BarPlacement.bottom)
 
         implicitWidth: popupBackground.targetWidth + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
         implicitHeight: popupBackground._windowHeight + Appearance.sizes.elevationMargin * 2 + root.popupBackgroundMargin
@@ -222,7 +284,7 @@ LazyLoader {
                 if (root.customPosition) {
                     return root.customMarginLeft;
                 }
-                if (!Config.options.bar.vertical) {
+                if (!BarPlacement.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
                         return 0;
                     var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
@@ -238,7 +300,7 @@ LazyLoader {
                 if (root.customPosition) {
                     return root.customMarginTop;
                 }
-                if (!Config.options.bar.vertical) {
+                if (!BarPlacement.vertical) {
                     return Appearance.sizes.barHeight;
                 }
                 if (!root.hoverTarget || !root.QsWindow)
@@ -262,8 +324,11 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: root.selfDismiss && (Config.options.bar.tooltips.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
+            active: root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
             onCleared: () => {
+                // Stamped so a press on the widget that caused this clear is understood as
+                // the dismissal it was, instead of reopening what it just closed.
+                root._lastDismissMs = Date.now();
                 root._clickActive = false;
             }
         }
@@ -275,7 +340,7 @@ LazyLoader {
         // open — the same mechanism BarWindow.qml already uses for the bar itself.
         // Click-to-show popups are excluded: they run their own dismissGrab above.
         readonly property bool joinsSharedGrab: !(root.selfDismiss
-            && (Config.options.bar.tooltips.clickToShow || root.forceClick))
+            && (BarInteraction.clickToShow || root.forceClick))
 
         function updateSharedGrabMembership() {
             if (popupWindow.joinsSharedGrab && root.active)
@@ -297,8 +362,8 @@ LazyLoader {
             // directly using the root.active property, matching HourlyForecast's pattern.
         }
 
-        readonly property bool isBarVertical: Config.options.bar.vertical
-        readonly property bool isBarBottom: Config.options.bar.bottom
+        readonly property bool isBarVertical: BarPlacement.vertical
+        readonly property bool isBarBottom: BarPlacement.bottom
         readonly property real slideOffset: 35
 
         readonly property real slideX: {
@@ -373,8 +438,8 @@ LazyLoader {
                     return;
 
                 root._reopenPending = false;
-                if (root._targetHovered || Config.options.bar.tooltips.clickToShow || root.forceClick) {
-                    if (Config.options.bar.tooltips.clickToShow || root.forceClick)
+                if (root._targetHovered || BarInteraction.clickToShow || root.forceClick) {
+                    if (BarInteraction.clickToShow || root.forceClick)
                         root._clickActive = true;
                     else if (root.stickyHover)
                         root._stickyActive = true;
@@ -419,7 +484,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (root.selfDismiss && Config.options.bar.tooltips.clickToShow) {
+            if (root.selfDismiss && BarInteraction.clickToShow) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;
@@ -458,8 +523,8 @@ LazyLoader {
                 readonly property real targetWidth: ((root.contentItem?.implicitWidth ?? 0) + margin * 2) * root.layoutScale
                 readonly property real targetHeight: ((root.contentItem?.implicitHeight ?? 0) + margin * 2) * root.layoutScale
 
-                property bool isVertical: Config.options.bar.vertical
-                property bool isBottom: Config.options.bar.bottom
+                property bool isVertical: BarPlacement.vertical
+                property bool isBottom: BarPlacement.bottom
                 property int elevation: Appearance.sizes.elevationMargin
 
                 property real _commitHeight: 0

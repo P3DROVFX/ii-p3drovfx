@@ -1,0 +1,324 @@
+import QtQuick
+import QtQuick.Effects
+import Quickshell
+import Quickshell.Wayland
+
+import qs
+import qs.services
+import qs.modules.common
+
+/**
+ * The full-screen surface the app drawer is drawn on, one per monitor.
+ *
+ * The backdrop blurs a frozen screencopy rather than letting Hyprland blur the layer. A
+ * layer rule can only switch blur on or off; its strength is the surface's own alpha, and
+ * the shell's `ignore_alpha` rule turns even that into a threshold. So compositor blur
+ * arrived as a step part-way through the animation instead of ramping with it. Blurring a
+ * snapshot here is the only way the strength can follow the finger, and it is the same
+ * thing TabletShadeWindow does for the same reason.
+ *
+ * With `appearance.transparency` off there is no capture and no blur at all: the drawer
+ * sits on a solid surface colour, which is what that setting means everywhere else.
+ */
+PanelWindow {
+    id: root
+
+    required property Component contentComponent
+
+    /// Forwarded from the drawer's content; see TabletAppDrawer.
+    signal appHeld(string appId)
+
+    readonly property string screenName: root.screen?.name ?? ""
+    readonly property bool wantOpen: GlobalStates.appDrawerOpen
+        && (GlobalStates.activeAppDrawerMonitor === "" || GlobalStates.activeAppDrawerMonitor === root.screenName)
+
+    /// This screen is the one the drawer belongs to. The controller tracks a single drag,
+    /// so only the screen it started on may show progress.
+    readonly property bool isTargetScreen: TabletAppDrawerGestureController.activeScreenName === ""
+        || TabletAppDrawerGestureController.activeScreenName === root.screenName
+
+    // 0 closed, 1 open. Everything visual reads this so the whole surface animates as one —
+    // and the dock reads the same controller, so the two move as one sheet instead of each
+    // animating its own copy of the same boolean and drifting apart. That drift is why the
+    // dock used to be gone before the drawer was anywhere near the top.
+    //
+    // No Behavior here: while a finger is on the screen the value IS the finger's position,
+    // and easing it would add lag to a direct manipulation. The controller runs its own
+    // settle animation on release.
+    readonly property real openProgress: root.isTargetScreen
+        ? TabletAppDrawerGestureController.progress : 0
+
+    readonly property bool useBlur: Config.options?.appearance?.transparency?.enable ?? false
+
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+    }
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+
+    WlrLayershell.namespace: "quickshell:tabletAppDrawer"
+    WlrLayershell.layer: WlrLayer.Overlay
+    // Typing has to reach the search field the moment the drawer is up, but taking focus
+    // while it is still animating steals keys from whatever the user was doing.
+    WlrLayershell.keyboardFocus: root.openProgress > 0.99 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+    // Open, or being dragged open — but deliberately NOT while closing. A sheet being
+    // pulled up must accept the finger pulling it; a sheet on its way out must hand input
+    // straight back, or it stays the topmost target after the dock button has reappeared
+    // and swallows the next tap on Apps.
+    readonly property bool holdsInput: root.wantOpen || TabletAppDrawerGestureController.tracking
+
+    Item {
+        id: inputRegion
+        anchors.fill: parent
+    }
+    mask: Region {
+        // Anything but "open or being opened" leaves just the edge strip interactive, so
+        // the closing overlay hands the rest of the screen back in the same frame.
+        item: root.holdsInput ? inputRegion : bottomEdgeCaptureStrip
+    }
+
+    // Keep the layer mapped while idle. A layer surface that is first mapped in the same
+    // turn as its progress changes gives the compositor only the settled buffer, so the
+    // sheet appears to pop in. Its closed mask is empty, therefore this transparent layer
+    // never takes pointer input from the application below.
+    visible: !GlobalStates.screenLocked
+
+    onWantOpenChanged: {
+        if (root.wantOpen) {
+            contentLoader.item?.reset();
+            root.applyRequestedTool();
+            GlobalFocusGrab.addDismissable(root);
+        } else {
+            GlobalFocusGrab.removeDismissable(root);
+        }
+    }
+
+    /// reset() clears any panel, so the requested one is applied after it, not before.
+    function applyRequestedTool() {
+        if (GlobalStates.appDrawerTool.length > 0)
+            contentLoader.item?.openToolById(GlobalStates.appDrawerTool);
+    }
+
+    // Asking for a panel while the drawer is already up changes no boolean, so
+    // onWantOpenChanged never runs. Both entry points are covered, and neither can fire
+    // twice for one request because reset() is what clears the panel.
+    Connections {
+        target: GlobalStates
+        function onAppDrawerToolChanged() {
+            if (root.wantOpen)
+                root.applyRequestedTool();
+        }
+    }
+
+    Component.onDestruction: {
+        GlobalFocusGrab.removeDismissable(root);
+        GlobalStates.setTabletOverlayOnScreen(root.overlayName, false);
+    }
+
+    /// GlobalFocusGrab dismisses by calling this on the registered window.
+    function dismiss() {
+        GlobalStates.appDrawerOpen = false;
+    }
+
+    /**
+     * The backdrop is rebuilt for every open, not refreshed.
+     *
+     * A ScreencopyView keeps the last frame it captured, and asking an existing one for
+     * another frame does not reliably replace it: the drawer was opening onto a photograph
+     * of a window that had been closed for minutes, and — before the two surfaces were made
+     * mutually exclusive — onto a photograph of Recents. Chasing that with a latch and a
+     * retry timer only added state that could itself get stuck. A view created when the
+     * surface starts opening has nothing to keep, so there is no stale frame to serve, and
+     * `hasContent` says exactly what it means: a picture of *this* open has arrived.
+     *
+     * The Loader also waits for any other full-screen tablet overlay to leave the screen —
+     * a plain binding, so it activates the moment the other one unmaps. Closing is a
+     * transition, so "the other one is closed" and "the other one is gone" are not the same
+     * instant, and capturing between them is what froze Recents into the drawer.
+     */
+    readonly property string overlayName: "appDrawer"
+
+    readonly property bool wantsBackdrop: root.useBlur
+        && (root.wantOpen || TabletAppDrawerGestureController.tracking || root.openProgress > 0.001)
+
+    // This surface stays mapped while idle, so "on screen" is about painting, not mapping.
+    readonly property bool paintsBackdrop: root.openProgress > 0.001
+    onPaintsBackdropChanged: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
+    Component.onCompleted: GlobalStates.setTabletOverlayOnScreen(root.overlayName, root.paintsBackdrop)
+
+    onOpenProgressChanged: {
+        // The field is focused only once the drawer has settled, for the same reason the
+        // surface takes keyboard focus only then.
+        if (root.openProgress > 0.99)
+            contentLoader.item?.focusSearch();
+    }
+
+    Item {
+        id: backdrop
+        anchors.fill: parent
+        visible: root.useBlur && root.openProgress > 0.001 && (backdropLoader.item?.hasContent ?? false)
+        layer.enabled: backdrop.visible
+        layer.effect: MultiEffect {
+            // Auto padding grows the effect item past its source and shifts the whole
+            // capture, which shows up as a sharp band along one edge.
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 64
+            blurMultiplier: 1.2
+            // Reaches full strength slightly before the sheet lands, so the last few
+            // frames are the drawer settling rather than the background still resolving.
+            blur: Math.min(1.0, root.openProgress * 1.15)
+        }
+
+        Loader {
+            id: backdropLoader
+            anchors.fill: parent
+            active: root.wantsBackdrop && !GlobalStates.otherTabletOverlayOnScreen(root.overlayName)
+
+            sourceComponent: ScreencopyView {
+                anchors.fill: parent
+                captureSource: root.screen
+                // A live capture would see this surface's own blurred output and smear.
+                live: false
+                // Taken the moment the view exists, which is the moment the drawer starts
+                // opening — before it has painted anything of its own.
+                Component.onCompleted: captureFrame()
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: Appearance.colors.colLayer0
+        // Blurred: a wash over the snapshot, never opaque — the current app stays part of
+        // the transition, just as it does below Android's app drawer. Unblurred: the same
+        // colour, but solid by the time the sheet lands, because that is what turning
+        // transparency off asks for.
+        opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress
+
+        MouseArea {
+            anchors.fill: parent
+            // Tapping the backdrop closes, the way tapping outside any Android sheet does.
+            enabled: root.wantOpen
+            onClicked: root.dismiss()
+        }
+    }
+
+    /**
+     * The bottom edge, as a pointer target.
+     *
+     * TouchGestureService reads evdev directly and only accepts devices it classifies as
+     * touchscreens, so a pen on a graphics tablet — which arrives as a pointer, not as a
+     * touch contact — never reached the drag registry and the swipe simply did nothing.
+     * The shade has had a pointer strip on the top edge from the start, which is exactly
+     * why dragging it down works with the same pen. This is that strip, upside down.
+     *
+     * Touch still goes through the registry: the two paths drive the same controller, and
+     * only one of them can be in a drag at a time because the controller latches on
+     * `tracking`.
+     *
+     * Outside the sliding viewport on purpose — an area that moves with the sheet would
+     * read its own coordinate shift as pointer movement and feed the gesture back into
+     * itself.
+     */
+    Item {
+        id: bottomEdgeCaptureStrip
+        anchors {
+            bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+        }
+        height: Math.max(2, Config.options?.tablet?.appDrawer?.edgeDragHeight ?? 8)
+        z: 9999
+
+        MouseArea {
+            id: bottomMouseDragArea
+            anchors.fill: parent
+            preventStealing: true
+            // Only owns the edge while the drawer is mostly closed, latched on isTracking so
+            // a drag that crosses the halfway point does not lose its own grab.
+            enabled: TabletAppDrawerGestureController.progress < 0.5 || bottomMouseDragArea.isTracking
+
+            property real startY: 0
+            property real lastY: 0
+            property real lastTime: 0
+            property real calculatedVelocity: 0
+            property bool isTracking: false
+
+            onPressed: mouse => {
+                if (TabletAppDrawerGestureController.isSettledOpen)
+                    return;
+                bottomMouseDragArea.startY = mouse.y;
+                bottomMouseDragArea.lastY = mouse.y;
+                bottomMouseDragArea.lastTime = Date.now();
+                bottomMouseDragArea.calculatedVelocity = 0;
+                bottomMouseDragArea.isTracking = true;
+                TabletAppDrawerGestureController.startTracking(root.screenName);
+            }
+
+            onPositionChanged: mouse => {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                const now = Date.now();
+                const dt = Math.max(1, now - bottomMouseDragArea.lastTime);
+                // Upwards is opening, so the sign is flipped against the shade's: the
+                // controller reads a positive velocity as "towards open" either way.
+                bottomMouseDragArea.calculatedVelocity = ((bottomMouseDragArea.lastY - mouse.y) / dt) * 1000.0;
+                bottomMouseDragArea.lastY = mouse.y;
+                bottomMouseDragArea.lastTime = now;
+
+                const travel = bottomMouseDragArea.startY - mouse.y;
+                const p = Math.max(0.0, Math.min(1.0,
+                    travel / TabletAppDrawerGestureController.dragDistance(root.height)));
+                TabletAppDrawerGestureController.updateProgress(p, bottomMouseDragArea.calculatedVelocity);
+            }
+
+            onReleased: {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                bottomMouseDragArea.isTracking = false;
+                TabletAppDrawerGestureController.endTracking(bottomMouseDragArea.calculatedVelocity, 0);
+            }
+
+            onCanceled: {
+                if (!bottomMouseDragArea.isTracking)
+                    return;
+                bottomMouseDragArea.isTracking = false;
+                TabletAppDrawerGestureController.cancelTracking();
+            }
+        }
+    }
+
+    // A viewport makes the drawer a sheet that rises from the bottom. The progress is also
+    // the clock for the wash above and the stagger inside the content, so the transition
+    // cannot split into independent, visibly out-of-sync animations.
+    Item {
+        id: drawerViewport
+        anchors.fill: parent
+        clip: true
+
+        Loader {
+            id: contentLoader
+            anchors.fill: parent
+            active: root.visible
+            sourceComponent: root.contentComponent
+            transform: Translate {
+                y: (1 - root.openProgress) * root.height
+            }
+
+            onLoaded: {
+                if (!contentLoader.item)
+                    return;
+                contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
+                contentLoader.item.dismissRequested.connect(root.dismiss);
+                contentLoader.item.appHeld.connect(root.appHeld);
+                if (root.wantOpen)
+                    contentLoader.item.reset();
+            }
+        }
+    }
+}

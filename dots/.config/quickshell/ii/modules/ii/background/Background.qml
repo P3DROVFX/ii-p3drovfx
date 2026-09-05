@@ -1,12 +1,16 @@
 pragma ComponentBehavior: Bound
 
 import qs
+import QtQuick
 import Quickshell
 import qs.modules.ii.background.widgets
 import qs.modules.ii.background.compositor
 
 Scope {
     id: backgroundScope
+
+    /// Passed to every screen's widget surface; see BackgroundWidgetsWindow.canvasOverlay.
+    property Component widgetCanvasOverlay: null
 
     WidgetStateManager {
         id: widgetState
@@ -30,6 +34,7 @@ Scope {
 
         BackgroundWidgetsWindow {
             widgetStateManager: widgetState
+            canvasOverlay: backgroundScope.widgetCanvasOverlay
         }
     }
 

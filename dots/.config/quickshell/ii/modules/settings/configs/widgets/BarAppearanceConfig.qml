@@ -92,6 +92,10 @@ Item {
                                 opts[2].enabled = false;
                                 opts[3].enabled = false;
                             }
+                            // The tablet family renders no dynamic island at all, so the
+                            // style is not merely disabled here — it is not on offer.
+                            if (PanelFamily.isTablet)
+                                return opts.slice(0, 3);
                             return opts;
                         }
                     }
@@ -112,14 +116,14 @@ Item {
 
                 ContentSubsectionLabel {
                     text: Translation.tr("Dynamic Island behavior")
-                    visible: Config.options.bar.cornerStyle === 3
+                    visible: !PanelFamily.isTablet && Config.options.bar.cornerStyle === 3
                     Layout.topMargin: 4
                 }
 
                 ConfigSwitch {
                     buttonIcon: "auto_fix"
                     text: Translation.tr("Auto spacing")
-                    visible: Config.options.bar.cornerStyle === 3
+                    visible: !PanelFamily.isTablet && Config.options.bar.cornerStyle === 3
                     checked: Config.options.bar.dynamicIslandLoadBalance
                     onCheckedChanged: {
                         Config.options.bar.dynamicIslandLoadBalance = checked;
@@ -129,7 +133,7 @@ Item {
                 ConfigSlider {
                     buttonIcon: "space_bar"
                     text: Translation.tr("Dynamic Island spacing")
-                    visible: Config.options.bar.cornerStyle === 3 && !Config.options.bar.dynamicIslandLoadBalance
+                    visible: !PanelFamily.isTablet && Config.options.bar.cornerStyle === 3 && !Config.options.bar.dynamicIslandLoadBalance
                     usePercentTooltip: false
                     from: Config.options.bar.vertical ? 16 : 48
                     to: Config.options.bar.vertical ? 100 : 250

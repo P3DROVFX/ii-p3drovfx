@@ -22,8 +22,8 @@ Item {
     required property real parallaxX
     required property real parallaxY
 
-    readonly property bool barVertical: Config.options.bar.vertical
-    readonly property bool barBottom: Config.options.bar.bottom
+    readonly property bool barVertical: BarPlacement.vertical
+    readonly property bool barBottom: BarPlacement.bottom
     readonly property real barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
     readonly property real gap: Appearance.gapsOut
 

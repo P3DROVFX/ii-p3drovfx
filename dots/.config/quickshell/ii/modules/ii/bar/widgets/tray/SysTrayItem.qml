@@ -6,6 +6,7 @@ import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
 import qs.services
 import qs.modules.common
+import qs.modules.common.tray
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
@@ -122,14 +123,14 @@ MouseArea {
 
                 var gap = Appearance.sizes.elevationMargin;
                 var pos = root.mapToItem(null, 0, 0);
-                if (Config.options.bar.vertical) {
-                    menuWindow.anchor.rect = Qt.rect(Config.options.bar.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
-                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
-                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Left : Edges.Right;
+                if (BarPlacement.vertical) {
+                    menuWindow.anchor.rect = Qt.rect(BarPlacement.bottom ? pos.x - gap : pos.x + gap, pos.y, root.width, root.height);
+                    menuWindow.anchor.edges = BarPlacement.bottom ? (Edges.Left | Edges.Middle) : (Edges.Right | Edges.Middle);
+                    menuWindow.anchor.gravity = BarPlacement.bottom ? Edges.Left : Edges.Right;
                 } else {
-                    menuWindow.anchor.rect = Qt.rect(pos.x, Config.options.bar.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
-                    menuWindow.anchor.edges = Config.options.bar.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
-                    menuWindow.anchor.gravity = Config.options.bar.bottom ? Edges.Top : Edges.Bottom;
+                    menuWindow.anchor.rect = Qt.rect(pos.x, BarPlacement.bottom ? pos.y - gap : pos.y + gap, root.width, root.height);
+                    menuWindow.anchor.edges = BarPlacement.bottom ? (Edges.Top | Edges.Center) : (Edges.Bottom | Edges.Center);
+                    menuWindow.anchor.gravity = BarPlacement.bottom ? Edges.Top : Edges.Bottom;
                 }
 
                 menuWindow.open();
@@ -198,6 +199,6 @@ MouseArea {
         id: tooltip
         extraVisibleCondition: root.containsMouse && !root.suppressTooltip && !menu.active
         alternativeVisibleCondition: extraVisibleCondition
-        anchorEdges: (!Config.options.bar.bottom && !Config.options.bar.vertical) ? Edges.Bottom : Edges.Top
+        anchorEdges: (!BarPlacement.bottom && !BarPlacement.vertical) ? Edges.Bottom : Edges.Top
     }
 }

@@ -32,12 +32,46 @@ Singleton {
 
     property int gestureState: root.stateIdle
 
+    // ── Multi-finger swipes ─────────────────────────────────────────────────
+    // The touchpad's three-finger gestures, for a device that has no touchpad. The
+    // single-contact recogniser above owns the edges and cancels itself the moment a second
+    // finger lands, so the two never compete for the same touch.
+    readonly property var multiOpts: (root.opts && root.opts.multiFinger) ? root.opts.multiFinger : null
+    readonly property bool multiEnabled: root.enabled && Boolean(root.multiOpts && root.multiOpts.enable)
+    readonly property int multiFingerCount: (root.multiOpts && root.multiOpts.fingers) ? root.multiOpts.fingers : 3
+    readonly property real multiCommitDistance: (root.multiOpts && root.multiOpts.distance) ? root.multiOpts.distance : 90
+
+    /// contactId -> { x, y }. Every allowed contact, whatever the recogniser is doing.
+    property var multiPoints: ({})
+    property bool multiArmed: false
+    /// One action per hand-down. Without this a long swipe fires on every frame past the
+    /// threshold, and a workspace change becomes ten.
+    property bool multiFired: false
+    property real multiStartX: 0
+    property real multiStartY: 0
+    property string multiScreenName: ""
+
+    signal multiFingerSwipe(string direction, string actionId, string screenName)
+
     // Active Gesture Data
     property string activeDeviceId: ""
     property int activeContactId: -1
     property string activeOrigin: ""
     property string activeActionId: ""
     property string activeScreenName: ""
+
+    /**
+     * Whether `gestureStarted` has been emitted without a matching end.
+     *
+     * `gestureCancelled` used to be emitted only from the tracking and qualified states,
+     * so every other route to `resetGestureState()` — the touch-up safety net, the
+     * binary being deleted, a device disappearing — announced a gesture that listeners
+     * then never heard the end of. The feedback overlay is the one that noticed: its pill
+     * stayed on screen until the shell restarted.
+     *
+     * Every announced gesture now gets exactly one end signal, whichever way it ends.
+     */
+    property bool gestureAnnounced: false
 
     property real startX: 0
     property real startY: 0
@@ -155,17 +189,33 @@ Singleton {
         command: ["test", "-f", Directories.scriptPath + "/touchGestures/touch_gestures"]
         onExited: (code) => {
             root.binaryExists = (code === 0);
+            if (root._checkPending) {
+                root._checkPending = false;
+                Qt.callLater(root.checkBinary);
+            }
         }
     }
 
+    /// A check asked for while one was already running.
+    property bool _checkPending: false
+
+    /// Never cancels a check in flight: killing a running `test` makes it exit non-zero,
+    /// so a second caller arriving mid-check produced "missing" for a binary that was
+    /// there. See the same note in OskAutoShow.
     function checkBinary() {
-        if (Directories.scriptPath.length > 0) {
-            checkBinaryProcess.running = false;
-            Qt.callLater(() => {
-                checkBinaryProcess.running = true;
-            });
+        if (Directories.scriptPath.length === 0)
+            return;
+        if (checkBinaryProcess.running) {
+            root._checkPending = true;
+            return;
         }
+        checkBinaryProcess.running = true;
     }
+
+    // Same reason as OskAutoShow's: the check gives up while the path is still empty, so
+    // it has to run again when the path arrives rather than only at completion.
+    readonly property string _scriptPath: Directories.scriptPath
+    on_ScriptPathChanged: root.checkBinary()
 
     Process {
         id: deleteBinaryProcess
@@ -185,6 +235,41 @@ Singleton {
         Qt.callLater(() => {
             deleteBinaryProcess.running = true;
         });
+    }
+
+    // ── Building the helper ─────────────────────────────────────────────────
+    /**
+     * The daemon ships as source, and until this existed the page offered a command to
+     * paste into a terminal.
+     *
+     * On a tablet that is circular: touch gestures are how you navigate a shell with no
+     * keyboard, and the instruction for turning them on needed a keyboard. The keyboard's
+     * own helper got a build button first; this is the same machinery, and the two are
+     * the pair a fresh install has to get past.
+     */
+    readonly property RustHelperBuild helperBuild: RustHelperBuild {
+        label: "TouchGestures"
+        sourceDir: Directories.scriptPath + "/touchGestures/touch_gestures_src"
+        binaryPath: Directories.scriptPath + "/touchGestures/touch_gestures"
+        crateName: "touch_gestures"
+
+        // `helperProcess` is bound to `enabled`, which the check below feeds, so
+        // re-checking is the whole handover — the daemon starts without a restart.
+        onFinished: ok => root.checkBinary()
+    }
+
+    readonly property bool building: root.helperBuild.building
+    readonly property string buildResult: root.helperBuild.buildResult
+    readonly property string buildOutput: root.helperBuild.buildOutput
+    readonly property bool cargoAvailable: root.helperBuild.cargoAvailable
+    /// Cargo's own narration, for a build that has to be watched rather than waited out.
+    readonly property string buildProgress: root.helperBuild.progressText
+    readonly property int buildUnits: root.helperBuild.unitsCompiled
+    readonly property int buildSeconds: root.helperBuild.elapsedSeconds
+    readonly property real buildProgressValue: root.helperBuild.progress
+
+    function buildHelper() {
+        root.helperBuild.build();
     }
 
     Process {
@@ -561,12 +646,34 @@ Singleton {
         if (py >= height - edge)
             return "bottomEdge";
 
-        return "";
+        // Anything else is the body of the screen. Unlike an edge this has no binding and
+        // no fixed axis: it exists only so a family can claim a free 2D drag there — the
+        // home screen swiping between workspaces. onTouchDown drops it unless a handler
+        // has claimed it, so nothing changes for a family that has not.
+        return "surface";
     }
 
     function actionForOrigin(origin) {
+        // An edge a family drags never commits to a discrete action, so its binding does
+        // not apply. Let the family name the drag instead, for the feedback overlay.
+        const dragged = TouchGestureDragRegistry.actionId(origin);
+        if (dragged)
+            return dragged;
+
         var bindings = root.opts ? root.opts.bindings : null;
         if (!bindings) return "none";
+
+        const bound = root.boundActionForOrigin(bindings, origin);
+        // A binding pointing at a surface this family does not load would recognise the
+        // swipe, commit it, and do nothing — which reads as a broken touchscreen rather
+        // than a wrong setting. Treat it as unbound instead.
+        if (!TouchGestureActionRegistry.availableForFamily(
+                TouchGestureActionRegistry.actionById(bound), PanelFamily.current))
+            return "none";
+        return bound;
+    }
+
+    function boundActionForOrigin(bindings, origin) {
 
         switch (origin) {
         case "leftEdge": return bindings.leftEdge ? bindings.leftEdge : "none";
@@ -587,6 +694,12 @@ Singleton {
         var invSqrt2 = 0.7071067811865475;
 
         switch (activeOrigin) {
+        case "surface":
+            // No axis to lock to, so report the distance travelled along whichever axis is
+            // longer and leave offAxis at zero. That keeps the direction-tolerance and
+            // reverse-direction guards below inert for surface drags, where "backwards" is
+            // a direction the handler may well want, rather than a cancelled gesture.
+            return { primary: Math.max(Math.abs(dx), Math.abs(dy)), offAxis: 0 };
         case "leftEdge":
             return { primary: dx, offAxis: Math.abs(dy) };
         case "rightEdge":
@@ -634,6 +747,102 @@ Singleton {
         return (last.distance - first.distance) / dt;
     }
 
+    function multiActionFor(direction) {
+        if (!root.multiOpts)
+            return "none";
+        if (direction === "left")
+            return root.multiOpts.swipeLeft ?? "none";
+        if (direction === "right")
+            return root.multiOpts.swipeRight ?? "none";
+        if (direction === "up")
+            return root.multiOpts.swipeUp ?? "none";
+        return root.multiOpts.swipeDown ?? "none";
+    }
+
+    function multiCentroid() {
+        var sx = 0, sy = 0, n = 0;
+        for (var key in root.multiPoints) {
+            sx += root.multiPoints[key].x;
+            sy += root.multiPoints[key].y;
+            n++;
+        }
+        return n === 0 ? null : { x: sx / n, y: sy / n, count: n };
+    }
+
+    function multiReset() {
+        root.multiPoints = ({});
+        root.multiArmed = false;
+        root.multiFired = false;
+        root.multiScreenName = "";
+    }
+
+    function multiTrack(contactId, px, py, screenName) {
+        root.multiPoints[contactId] = { x: px, y: py };
+        if (screenName)
+            root.multiScreenName = screenName;
+    }
+
+    function multiEvaluate() {
+        if (!root.multiEnabled || root.multiFired)
+            return;
+
+        var centroid = root.multiCentroid();
+        if (!centroid)
+            return;
+
+        // Exactly the configured number of fingers. A fourth landing mid-swipe is a
+        // different gesture, not more of this one.
+        if (centroid.count !== root.multiFingerCount) {
+            if (root.multiArmed && centroid.count > root.multiFingerCount)
+                root.multiFired = true;
+            root.multiArmed = false;
+            return;
+        }
+
+        if (!root.multiArmed) {
+            root.multiArmed = true;
+            root.multiStartX = centroid.x;
+            root.multiStartY = centroid.y;
+            return;
+        }
+
+        var dx = centroid.x - root.multiStartX;
+        var dy = centroid.y - root.multiStartY;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < root.multiCommitDistance)
+            return;
+
+        var direction = Math.abs(dx) > Math.abs(dy)
+            ? (dx < 0 ? "left" : "right")
+            : (dy < 0 ? "up" : "down");
+        root.multiFired = true;
+        root.multiCommit(direction);
+    }
+
+    function multiCommit(direction) {
+        var actionId = root.multiActionFor(direction);
+        if (!actionId || actionId === "none")
+            return;
+        if (gesturesBlocked) {
+            console.log("[TouchGestures] Multi-finger swipe blocked by active modal/lockscreen");
+            return;
+        }
+
+        // A binding pointing at a surface this family does not load would be recognised,
+        // commit, and do nothing — which reads as the touchscreen being broken.
+        var action = TouchGestureActionRegistry.actionById(actionId);
+        if (!TouchGestureActionRegistry.availableForFamily(action, PanelFamily.current)) {
+            console.log("[TouchGestures] Multi-finger", direction, "->", actionId,
+                        "is not available on the", PanelFamily.current, "family");
+            return;
+        }
+
+        var screenName = root.multiScreenName ? root.multiScreenName : root.resolveScreenName();
+        console.log("[TouchGestures]", root.multiFingerCount + "-finger", direction,
+                    "-> action:", actionId, "on screen:", screenName);
+        root.multiFingerSwipe(direction, actionId, screenName);
+        TouchGestureActionRegistry.trigger(actionId, screenName);
+    }
+
     function onTouchDown(event) {
         // Filtered devices must not reach the contact counter either, or their unpaired
         // ups and downs would drift it away from the real number of fingers down.
@@ -641,6 +850,12 @@ Singleton {
             return;
 
         activeContactCount++;
+
+        var multiResolved = root.multiEnabled ? resolveScreenAndCoords(event.deviceId, event.x, event.y) : null;
+        if (multiResolved) {
+            root.multiTrack(event.contactId, multiResolved.px, multiResolved.py, multiResolved.screenName);
+            root.multiEvaluate();
+        }
 
         if (activeContactCount > 1) {
             waitForAllContactsUp = true;
@@ -666,6 +881,12 @@ Singleton {
         if (origin === "") {
             return;
         }
+
+        // The body of the screen is not a gesture zone by default. Without this every touch
+        // anywhere would arm the recogniser, and the shell would be tracking drags inside
+        // application windows for nothing.
+        if (origin === "surface" && !TouchGestureDragRegistry.claims(origin))
+            return;
 
         var actionId = actionForOrigin(origin);
         if (!actionId || actionId === "none")
@@ -699,9 +920,22 @@ Singleton {
 
         console.log("[TouchGestures] Gesture START on", screenName, ":", origin, "action:", actionId, "startX:", px.toFixed(0), "startY:", py.toFixed(0));
         gestureStarted(screenName, origin, actionId, px, py);
+        root.gestureAnnounced = true;
+
+        TouchGestureDragRegistry.begin(origin, screenName);
     }
 
     function onTouchMove(event) {
+        // Before the single-contact filter: the hand's other fingers are not the active
+        // contact and their movement is the whole gesture.
+        if (root.multiEnabled && root.multiPoints[event.contactId] !== undefined) {
+            var multiResolved = resolveScreenAndCoords(event.deviceId, event.x, event.y);
+            if (multiResolved) {
+                root.multiTrack(event.contactId, multiResolved.px, multiResolved.py, multiResolved.screenName);
+                root.multiEvaluate();
+            }
+        }
+
         if (event.deviceId !== activeDeviceId || event.contactId !== activeContactId)
             return;
 
@@ -747,6 +981,11 @@ Singleton {
         progress = Math.max(0, Math.min(1, primaryTravel / commitDist));
 
         gestureProgressChanged(activeScreenName, activeOrigin, activeActionId, progress, primaryTravel);
+
+        // dx/dy as well as the scalar travel: an edge handler only needs how far along its
+        // one axis the finger has gone, but a surface handler has to know which way.
+        TouchGestureDragRegistry.update(activeOrigin, activeScreenName, primaryTravel,
+                                        currentVelocity(), px - startX, py - startY);
     }
 
     function onTouchUp(event) {
@@ -754,6 +993,11 @@ Singleton {
             return;
 
         activeContactCount = Math.max(0, activeContactCount - 1);
+        delete root.multiPoints[event.contactId];
+        if (Object.keys(root.multiPoints).length === 0)
+            root.multiReset();
+        else
+            root.multiArmed = false;
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;
         }
@@ -769,6 +1013,14 @@ Singleton {
         var velThreshold = (root.opts && root.opts.velocityThreshold) ? root.opts.velocityThreshold : 650;
 
         var vel = currentVelocity();
+
+        // A family dragging this edge owns the release: it settles its own surface from
+        // the velocity, and no discrete action fires.
+        if (TouchGestureDragRegistry.release(activeOrigin, vel)) {
+            enterCooldown();
+            return;
+        }
+
         var distanceCommit = primaryTravel >= commitDist;
         var flickCommit = primaryTravel >= minDist && vel >= velThreshold;
 
@@ -784,6 +1036,11 @@ Singleton {
             return;
 
         activeContactCount = Math.max(0, activeContactCount - 1);
+        delete root.multiPoints[event.contactId];
+        if (Object.keys(root.multiPoints).length === 0)
+            root.multiReset();
+        else
+            root.multiArmed = false;
         if (activeContactCount === 0) {
             waitForAllContactsUp = false;
         }
@@ -803,16 +1060,20 @@ Singleton {
 
         console.log("[TouchGestures] Gesture COMMITTED:", origin, "-> action:", actionId, "on screen:", screenName);
         gestureCommitted(screenName, origin, actionId);
+        root.gestureAnnounced = false;
         TouchGestureActionRegistry.trigger(actionId, screenName);
 
         enterCooldown();
     }
 
     function cancelActiveGesture(reason) {
-        if (gestureState === root.stateTracking || gestureState === root.stateQualified) {
+        // The drag registry only knows about gestures that reached tracking, so its
+        // cancel keeps the old guard. The *signal* does not: anyone told a gesture began
+        // has to be told it ended, from whatever state it ends in.
+        if (gestureState === root.stateTracking || gestureState === root.stateQualified)
+            TouchGestureDragRegistry.cancel(activeOrigin);
+        if (root.gestureAnnounced)
             console.log("[TouchGestures] Gesture CANCELLED:", reason);
-            gestureCancelled(activeScreenName, activeOrigin, activeActionId);
-        }
         resetGestureState();
     }
 
@@ -822,6 +1083,13 @@ Singleton {
     }
 
     function resetGestureState() {
+        // Emitted before the fields are cleared, so listeners get the gesture's own
+        // identity rather than empty strings. This is the single place every route out
+        // of a gesture passes through, which is why the end signal lives here.
+        if (root.gestureAnnounced) {
+            root.gestureAnnounced = false;
+            gestureCancelled(activeScreenName, activeOrigin, activeActionId);
+        }
         gestureState = root.stateIdle;
         activeDeviceId = "";
         activeContactId = -1;

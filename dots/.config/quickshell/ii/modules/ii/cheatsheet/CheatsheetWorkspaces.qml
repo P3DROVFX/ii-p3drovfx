@@ -785,7 +785,7 @@ Item {
                 if (win && typeof win.hide === "function") {
                     win.hide();
                 } else {
-                    GlobalStates.cheatsheetOpen = false;
+                    GlobalStates.closeCheatsheet();
                 }
             }
         }

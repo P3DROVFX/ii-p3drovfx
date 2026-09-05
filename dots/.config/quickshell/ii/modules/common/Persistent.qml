@@ -381,6 +381,39 @@ Singleton {
                 property list<var> historySeen: []
             }
 
+            property JsonObject tablet: JsonObject {
+                // Home-screen icons, keyed by workspace id:
+                //   { "1": [ { "id": "firefox", "x": 120, "y": 200 }, ... ], ... }
+                //
+                // A JSON string rather than a typed structure on purpose. This is a nested,
+                // variable-shaped map that grows an entry per workspace the user drops
+                // something on, and Config/Persistent's typed lists are documented as
+                // fragile for exactly that shape (see AGENTS.md on array typing). It is
+                // also state rather than preference — where the user last put an icon —
+                // which is why it lives here and not in Config.
+                property string homeIconsJson: "{}"
+                /**
+                 * Which set of missing helpers the first-launch prompt was dismissed for.
+                 *
+                 * The *set*, not a boolean: "Do it later" means later, and re-asking on
+                 * every launch would make it a nag. But a helper going missing later — a
+                 * deleted binary, a second one that was never built — is a different
+                 * situation and deserves to be raised again, which a boolean could not
+                 * express. Empty means never dismissed.
+                 */
+                property string helperSetupDismissed: ""
+
+                // Where the floating bubble was left, as a fraction of the screen, so it
+                // lands in the same corner on a different monitor rather than off the edge
+                // of a smaller one. -1 means "never moved": the first placement is the
+                // default corner, not a stored 0,0.
+                property real bubbleX: -1
+                property real bubbleY: -1
+                /// Which side the action panel opened towards last, so it does not flip
+                /// while the panel is on screen.
+                property bool bubbleOnRight: true
+            }
+
             property JsonObject sidebar: JsonObject {
                 property JsonObject policies: JsonObject {
                     property int tab: 0

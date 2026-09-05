@@ -20,6 +20,51 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
+        /**
+         * Which shell you get.
+         *
+         * The three families were reachable only by a keybind, an IPC call, a touch
+         * gesture or the floating bubble — and the bubble is a tablet surface, so a
+         * desktop user had no path to the other two at all. Three shells nobody can
+         * choose between is one shell with two dead code paths.
+         *
+         * Here rather than on its own page because it is a preference, not a mode: it
+         * takes one tap and it is the first thing on the page about how the interface
+         * looks.
+         */
+        ContentSection {
+            title: Translation.tr("Shell family")
+            icon: "space_dashboard"
+
+            ConfigSelectionArray {
+                currentValue: PanelFamily.current
+                onSelected: newValue => PanelFamily.select(newValue)
+                options: PanelFamily.available.map(family => ({
+                    value: family.id,
+                    icon: family.icon,
+                    displayName: Translation.tr(family.name)
+                }))
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                text: Translation.tr(PanelFamily.entry(PanelFamily.current)?.description ?? "")
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                materialIcon: "info"
+                text: Translation.tr("Switching rebuilds every surface, so the screen goes briefly blank. Your settings are kept — each family simply draws a different set of them.")
+            }
+        }
+
         ContentSection {
             title: Translation.tr("Motion & Shape")
             icon: "motion_photos_on"

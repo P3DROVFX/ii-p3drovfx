@@ -9,7 +9,7 @@ import QtQuick.Layouts
 MouseArea {
     id: root
     property bool hovered: false
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     property bool isMaterial: true
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (isMaterial ? materialPill.implicitWidth : defaultRow.implicitWidth + 6)
@@ -18,7 +18,7 @@ MouseArea {
     width: implicitWidth
     height: implicitHeight
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     MouseArea {
         anchors.fill: parent

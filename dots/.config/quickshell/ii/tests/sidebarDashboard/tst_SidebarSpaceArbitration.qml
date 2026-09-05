@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtTest
-import "../../modules/ii/sidebarDashboard/SidebarSpaceArbitration.js" as Arbitration
+import "../../modules/common/functions/SpaceArbitration.js" as Arbitration
 
 TestCase {
     name: "SidebarSpaceArbitration"

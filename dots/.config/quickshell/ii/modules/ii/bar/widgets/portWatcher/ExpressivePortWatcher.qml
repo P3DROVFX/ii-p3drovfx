@@ -38,7 +38,7 @@ MouseArea {
     visible: root.shown
     implicitWidth: !root.shown ? 0 : (root.vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth)
     implicitHeight: !root.shown ? 0 : (root.vertical ? pillVertical.implicitHeight : Appearance.sizes.baseBarHeight)
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)

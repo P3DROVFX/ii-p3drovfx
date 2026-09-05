@@ -1,0 +1,4 @@
+singleton TabletWindowActions 1.0 TabletWindowActions.qml
+TabletWindowFloating 1.0 TabletWindowFloating.qml
+TabletFloatingWindowControls 1.0 TabletFloatingWindowControls.qml
+TabletWindowControlButton 1.0 TabletWindowControlButton.qml

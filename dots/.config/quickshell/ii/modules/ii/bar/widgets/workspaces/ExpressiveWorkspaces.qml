@@ -19,7 +19,7 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
     property bool activated: false
     property color onActivatedColor: Appearance.colors.colOnPrimary
     property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0

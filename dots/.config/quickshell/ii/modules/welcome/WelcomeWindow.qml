@@ -8,9 +8,9 @@ import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
-import qs.modules.ii.sidebarDashboard.wifiNetworks
-import qs.modules.ii.sidebarDashboard.bluetoothDevices
-import qs.modules.ii.sidebarDashboard.volumeMixer
+import qs.modules.common.quickToggleDialogs.wifiNetworks
+import qs.modules.common.quickToggleDialogs.bluetoothDevices
+import qs.modules.common.quickToggleDialogs.volumeMixer
 
 FloatingWindow {
     id: root

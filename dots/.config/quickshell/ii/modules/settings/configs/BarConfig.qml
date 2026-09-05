@@ -157,12 +157,20 @@ Item {
 
                     NoticeBox {
                         Layout.fillWidth: true
-                        visible: ShellModePolicy.barPositionLocked
+                        visible: Config.options.panelFamily === "tablet"
+                        materialIcon: "tablet_android"
+                        text: Translation.tr("Bar position is fixed to Top in Tablet mode.")
+                    }
+
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: Config.options.panelFamily !== "tablet" && ShellModePolicy.barPositionLocked
                         materialIcon: "lock"
                         text: Translation.tr("Bar position is locked to Top while 'Dynamic Island in bar center' is active. Disable that feature first to change position.")
                     }
 
                     ConfigSelectionArray {
+                        visible: Config.options.panelFamily !== "tablet"
                         currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
                         onSelected: (newValue) => {
                             const isVertical = (newValue & 2) !== 0;

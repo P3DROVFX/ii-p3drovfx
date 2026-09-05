@@ -92,8 +92,8 @@ Item {
     readonly property bool searchStable: modeState._displayMode === "search" && (searchWidgetLoader.item ? searchWidgetLoader.item.openStateStable : false)
     readonly property bool isSearchModeActive: (modeState._displayMode === "search") || searchWidgetLoader.visible || root.isSearchActiveHere
 
-    readonly property real verticalTopOffset: Config.options.bar.bottom ? Math.max(0, barBackground.height - parent.height) : 0
-    readonly property real verticalBottomOffset: !Config.options.bar.bottom ? Math.max(0, barBackground.height - parent.height) : 0
+    readonly property real verticalTopOffset: BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
+    readonly property real verticalBottomOffset: !BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
 
     IslandModeController {
         id: modeController
@@ -121,8 +121,8 @@ Item {
         color: root.actualColor
 
         anchors {
-            top: !Config.options.bar.bottom ? parent.top : undefined
-            bottom: Config.options.bar.bottom ? parent.bottom : undefined
+            top: !BarPlacement.bottom ? parent.top : undefined
+            bottom: BarPlacement.bottom ? parent.bottom : undefined
             horizontalCenter: parent.horizontalCenter
         }
 
@@ -131,7 +131,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -221,10 +221,10 @@ Item {
         readonly property real availableIslandHeight: Math.max(0, height - root.frameThickness)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availableIslandHeight / 2))
         property real baseRadius: islandRadius
-        topLeftRadius: !Config.options.bar.bottom ? 0 : baseRadius
-        topRightRadius: !Config.options.bar.bottom ? 0 : baseRadius
-        bottomLeftRadius: Config.options.bar.bottom ? 0 : baseRadius
-        bottomRightRadius: Config.options.bar.bottom ? 0 : baseRadius
+        topLeftRadius: !BarPlacement.bottom ? 0 : baseRadius
+        topRightRadius: !BarPlacement.bottom ? 0 : baseRadius
+        bottomLeftRadius: BarPlacement.bottom ? 0 : baseRadius
+        bottomRightRadius: BarPlacement.bottom ? 0 : baseRadius
 
         Behavior on width {
             enabled: !root.searchStable && root.modeResizing
@@ -579,7 +579,7 @@ Item {
         implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopRight
-        visible: root.showBarBackground && !Config.options.bar.bottom
+        visible: root.showBarBackground && !BarPlacement.bottom
         opacity: visible ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
@@ -595,7 +595,7 @@ Item {
         implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.TopLeft
-        visible: root.showBarBackground && !Config.options.bar.bottom
+        visible: root.showBarBackground && !BarPlacement.bottom
         opacity: visible ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
@@ -611,7 +611,7 @@ Item {
         implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomRight
-        visible: root.showBarBackground && Config.options.bar.bottom
+        visible: root.showBarBackground && BarPlacement.bottom
         opacity: visible ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
@@ -627,7 +627,7 @@ Item {
         implicitSize: barBackground.islandRadius
         color: barBackground.color
         corner: RoundCorner.CornerEnum.BottomLeft
-        visible: root.showBarBackground && Config.options.bar.bottom
+        visible: root.showBarBackground && BarPlacement.bottom
         opacity: visible ? 1 : 0
         Behavior on opacity {
             NumberAnimation {

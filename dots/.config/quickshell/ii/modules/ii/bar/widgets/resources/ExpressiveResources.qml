@@ -468,6 +468,6 @@ Item {
     MouseArea {
         id: hoverArea
         anchors.fill: parent
-        hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        hoverEnabled: !BarInteraction.clickToShow
     }
 }

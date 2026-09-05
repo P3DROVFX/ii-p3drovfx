@@ -260,6 +260,7 @@ Item {
         ContentSection {
             title: Translation.tr("Screen Corners")
             icon: "mouse"
+            visible: Config.options.panelFamily !== "tablet"
 
             ConfigSwitch {
                 buttonIcon: "touch_app"

@@ -4,6 +4,7 @@ import qs
 import qs.services
 
 import qs.modules.common
+import qs.modules.common.panels.shellSwitcher
 import qs.modules.ii.background
 import qs.modules.ii.background.desktopMenu
 import qs.modules.ii.bar
@@ -16,7 +17,7 @@ import qs.modules.ii.mediaControls
 import qs.modules.ii.notificationPopup
 import qs.modules.ii.onScreenDisplay
 import qs.modules.ii.onScreenDisplay.minimalist
-import qs.modules.ii.onScreenKeyboard
+import qs.modules.common.onScreenKeyboard
 import qs.modules.ii.oledSaver
 import qs.modules.ii.overview
 import qs.modules.ii.polkit
@@ -50,8 +51,8 @@ import qs.modules.ii.editMode
 Scope {
     property bool barExtraCondition: true
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
-    readonly property bool barBot: Config.options.bar.bottom
-    readonly property bool barVert: Config.options.bar.vertical
+    readonly property bool barBot: BarPlacement.bottom
+    readonly property bool barVert: BarPlacement.vertical
 
     Component.onCompleted: Qt.callLater(() => updateBarExtraCondition())
     onUsingWrappedFrameChanged: updateBarExtraCondition()
@@ -66,7 +67,7 @@ Scope {
     }
 
     PanelLoader {
-        extraCondition: !Config.options.bar.vertical && barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: !BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
         component: Bar {}
     }
     PanelLoader {
@@ -186,6 +187,11 @@ Scope {
     PanelLoader {
         component: SessionScreen {}
     }
+    // Every family loads the chooser: a family that did not offer it would be one the
+    // user could switch into and never find the way out of.
+    PanelLoader {
+        component: ShellSwitcher {}
+    }
     PanelLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         component: SidebarPolicies {}
@@ -195,7 +201,7 @@ Scope {
         component: SidebarDashboard {}
     }
     PanelLoader {
-        extraCondition: Config.options.bar.vertical && barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
         component: VerticalBar {}
     }
     PanelLoader {

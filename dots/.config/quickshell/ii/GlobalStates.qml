@@ -104,7 +104,10 @@ Singleton {
             return;
         root.timetableRequestedDate = text;
         root.timetableNavigationRequest++;
-        root.cheatsheetOpen = true;
+        if (PanelFamily.nativeAppWindows)
+            root.openTabletApp("timetable");
+        else
+            root.cheatsheetOpen = true;
     }
 
     // Legacy Gnome-like window transition state.  These values intentionally
@@ -301,6 +304,10 @@ Singleton {
     // Scope in the shell tree, not a singleton.
     signal snipForAiRequested
     property bool sessionOpen: false
+    // The panel-family chooser. Every family loads it, because a family with no way out of
+    // itself is a family the user can be stuck in — and until this existed, the only ways
+    // between them were an IPC call and a keybind, neither of which is discoverable.
+    property bool shellSwitcherOpen: false
     property bool superDown: false
     property bool usageOpen: false
     property bool modesOpen: false
@@ -1371,11 +1378,20 @@ Singleton {
     }
 
     function toggleCheatsheet() {
+        if (PanelFamily.nativeAppWindows) {
+            root.toggleTabletApp("keybinds");
+            return;
+        }
         root.cheatsheetOpen = !root.cheatsheetOpen;
     }
 
     function openCheatsheet(tabId) {
-        root.cheatsheetPendingTab = String(tabId ?? "");
+        const requestedTab = String(tabId ?? "").trim();
+        if (PanelFamily.nativeAppWindows) {
+            root.openTabletApp(requestedTab.length > 0 ? requestedTab : "keybinds");
+            return;
+        }
+        root.cheatsheetPendingTab = requestedTab;
         if (root.cheatsheetOpen) {
             root.cheatsheetOpen = false;
         }
@@ -1383,6 +1399,10 @@ Singleton {
     }
 
     function closeCheatsheet() {
+        if (PanelFamily.nativeAppWindows && root.isTabletCheatsheetApp(root.tabletAppId)) {
+            root.closeTabletApp();
+            return;
+        }
         root.cheatsheetOpen = false;
     }
 
@@ -1737,6 +1757,8 @@ Singleton {
     property bool requestVolumeDialog: false
 
     readonly property bool effectiveLeftOpen: {
+        if (PanelFamily.nativeAppWindows)
+            return false;
         switch (Config.options.sidebar.position) {
         case "default":
             return policiesPanelOpen;
@@ -1765,7 +1787,32 @@ Singleton {
         }
     }
 
+    /// Set by a family that presents the policies panel as something other than a sidebar.
+    /// Without it, a family with native app windows simply swallowed the keybind, which
+    /// left the shortcut dead rather than redirected.
+    property var leftSidebarHandler: null
+    /// Android's back, installed by whichever family knows what "back" means there. Shared
+    /// code cannot: modules/common must not import a family to find out.
+    property var navigateBackHandler: null
+    /// Same contract for home. "An empty workspace" is not a stable answer — the home
+    /// screen's icons are stored per workspace, so the family has to name one.
+    property var navigateHomeHandler: null
+
+    /// Home screen app placement handlers, installed by the panel family owning home screen icons (Tablet).
+    property var addAppToHomeScreenHandler: null
+    property var addAppPairToHomeScreenHandler: null
+    property var addFolderToHomeScreenHandler: null
+    property var removeAppFromHomeScreenHandler: null
+    property var isAppOnHomeScreenHandler: null
+    property var clearHomeScreenAppsHandler: null
+    property int homeScreenAppsRevision: 0
+
     function toggleLeftSidebar(monitorName) {
+        if (PanelFamily.nativeAppWindows) {
+            if (root.leftSidebarHandler)
+                root.leftSidebarHandler(monitorName);
+            return;
+        }
         if (root.policiesPanelOpen) {
             root.policiesPanelOpen = false;
         } else {
@@ -1784,8 +1831,202 @@ Singleton {
     }
 
     function openLeftSidebar(monitorName) {
+        if (PanelFamily.nativeAppWindows)
+            return;
         root.activeLeftSidebarMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
         root.policiesPanelOpen = true;
+    }
+
+    // ── App drawer (tablet family) ───────────────────────────────────────────
+    // The tablet's replacement for the launcher: every installed app in one grid, with a
+    // search field that also reaches the shell's tool panels. Lives here rather than in the
+    // family because IPC, keybinds and the dock all open it from outside the drawer itself.
+    property bool appDrawerOpen: false
+    property string activeAppDrawerMonitor: ""
+
+    /// A search panel the drawer should open straight into, empty for the plain grid. Set
+    /// by whatever asked for the drawer, so a dock button can be "clipboard" rather than
+    /// "the drawer, then find clipboard".
+    property string appDrawerTool: ""
+
+    function openAppDrawer(monitorName) {
+        root.appDrawerTool = "";
+        root._showAppDrawer(monitorName);
+    }
+
+    function openAppDrawerTool(monitorName, toolId) {
+        root.appDrawerTool = toolId ?? "";
+        root._showAppDrawer(monitorName);
+    }
+
+    function _showAppDrawer(monitorName) {
+        // One full-screen tablet overlay at a time. Android never stacks the launcher on
+        // Overview either, and here it is also a correctness matter: each of these surfaces
+        // photographs the screen for its own blurred backdrop, so one opened over another
+        // bakes the other into its background — the drawer ended up showing Recents where
+        // the desktop should have been. See tabletOverlayVisible.
+        root.recentsOpen = false;
+        root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.appDrawerOpen = true;
+    }
+
+    // ── Which tablet overlays are actually on screen ─────────────────────────
+    /**
+     * The full-screen tablet surfaces currently painting, by name.
+     *
+     * Not the same question as "is it open": these surfaces animate out, so a closed one is
+     * still on screen for the length of its transition. Anything that photographs the screen
+     * has to wait for that, or it captures a surface that is on its way out and freezes it
+     * into its own background.
+     *
+     * The surfaces register themselves; nothing here knows what they are.
+     */
+    property var tabletOverlaysOnScreen: ({})
+
+    function setTabletOverlayOnScreen(name, onScreen) {
+        const key = String(name ?? "");
+        if (key.length === 0)
+            return;
+        const current = Object.assign({}, root.tabletOverlaysOnScreen);
+        if (onScreen)
+            current[key] = true;
+        else
+            delete current[key];
+        root.tabletOverlaysOnScreen = current;
+    }
+
+    /// True when some *other* full-screen tablet overlay is still painting.
+    function otherTabletOverlayOnScreen(exceptName) {
+        const except = String(exceptName ?? "");
+        for (const key in root.tabletOverlaysOnScreen) {
+            if (key !== except)
+                return true;
+        }
+        return false;
+    }
+
+    function toggleAppDrawer(monitorName) {
+        // Reopening on a different screen moves the drawer there instead of closing it, so
+        // the gesture is never a no-op on the screen it was made on. Same rule as the
+        // sidebars — see TouchGestureActionRegistry.shouldCloseOnScreen.
+        const name = monitorName || Hyprland.focusedMonitor?.name || "";
+        if (root.appDrawerOpen && (!name || root.activeAppDrawerMonitor === name)) {
+            root.appDrawerOpen = false;
+            return;
+        }
+        root.openAppDrawer(name);
+    }
+
+    // ── Hub mode (tablet family) ─────────────────────────────────────────────
+    /**
+     * A hub-mode session the user asked for, rather than one idling into existence.
+     *
+     * Hub mode's whole trigger is "charging and untouched for two minutes", which means
+     * the only way to find out what it looks like was to plug the tablet in and walk
+     * away — and then not touch it, because touching it is what dismisses it. Nobody
+     * configures a feature they cannot see, so the preference gets a way to be shown on
+     * demand: from Settings, from the floating bubble, or over IPC.
+     *
+     * A preview ignores every arming condition, including the feature being switched
+     * off. Deciding whether to switch it on is exactly what someone is doing when they
+     * ask for one.
+     */
+    property bool hubModePreview: false
+
+    function toggleHubModePreview() {
+        root.hubModePreview = !root.hubModePreview;
+    }
+
+    // ── Live draw (tablet family) ────────────────────────────────────────────
+    /**
+     * Installed by the family that owns the ink, so shared code can start a drawing
+     * without importing a tablet module.
+     *
+     * The same shape as `navigateBackHandler` and the home-screen handlers above, and for
+     * the same reason: modules/common may not reach into modules/tablet, and a family
+     * that has no live draw simply installs nothing.
+     */
+    property var liveDrawHandler: null
+    property int liveDrawSaveRequest: 0
+
+    // ── Tablet app windows ───────────────────────────────────────────────────
+    // Which shell surface the tablet family is currently showing as an app, or "" for none.
+    // See TabletSystemApps for what an "app" means here.
+    property string tabletAppId: ""
+    property int tabletAppLaunchRequest: 0
+    property bool tabletAppTransitioning: false
+
+    function isTabletCheatsheetApp(appId) {
+        return ["timetable", "keybinds", "elements", "aminoAcids", "commands", "workspaces", "email", "typingTest"]
+            .includes(String(appId ?? ""));
+    }
+
+    function openTabletApp(appId) {
+        const requestedAppId = String(appId ?? "").trim();
+        if (requestedAppId.length === 0) {
+            root.closeTabletApp();
+            return;
+        }
+
+        // The IPC target remains available to every family, but only a family that owns
+        // native app windows may change Hyprland's workspace as part of launching one.
+        if (!PanelFamily.nativeAppWindows) {
+            root.tabletAppId = requestedAppId;
+            return;
+        }
+
+        // A tablet shell tool is a real client window. Free the current one, move focus to
+        // an empty workspace, then map the next toplevel there on the following event turn.
+        // The transition flag distinguishes that deliberate unmap from a compositor close.
+        const request = ++root.tabletAppLaunchRequest;
+        root.tabletAppTransitioning = true;
+        root.appDrawerOpen = false;
+        root.recentsOpen = false;
+        root.tabletAppId = "";
+        Hyprland.dispatch("hl.dsp.focus({ workspace = 'empty' })");
+        Qt.callLater(() => {
+            if (root.tabletAppLaunchRequest !== request)
+                return;
+            root.tabletAppId = requestedAppId;
+            root.tabletAppTransitioning = false;
+        });
+    }
+
+    function toggleTabletApp(appId) {
+        const requestedAppId = String(appId ?? "").trim();
+        if (requestedAppId.length > 0 && root.tabletAppId === requestedAppId && !root.tabletAppTransitioning) {
+            root.closeTabletApp();
+            return;
+        }
+        root.openTabletApp(requestedAppId);
+    }
+
+    function closeTabletApp() {
+        root.tabletAppLaunchRequest++;
+        root.tabletAppTransitioning = false;
+        root.tabletAppId = "";
+    }
+
+    // ── Recents (tablet family) ──────────────────────────────────────────────
+    // Android keeps home screens and recents as two separate surfaces; this is the second
+    // one. Distinct from overviewOpen, which is the desktop shell's workspace grid.
+    property bool recentsOpen: false
+    property string activeRecentsMonitor: ""
+
+    function openRecents(monitorName) {
+        // See _showAppDrawer: two of these on screen at once means one photographs the other.
+        root.appDrawerOpen = false;
+        root.activeRecentsMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.recentsOpen = true;
+    }
+
+    function toggleRecents(monitorName) {
+        const name = monitorName || Hyprland.focusedMonitor?.name || "";
+        if (root.recentsOpen && (!name || root.activeRecentsMonitor === name)) {
+            root.recentsOpen = false;
+            return;
+        }
+        root.openRecents(name);
     }
 
     function openRightSidebar(monitorName) {
@@ -1915,6 +2156,13 @@ Singleton {
     onAnimatedRightSidebarWidthChanged: {}
 
     onPoliciesPanelOpenChanged: {
+        // A family that presents policies as app windows has no sidebar for this flag
+        // to open, so the flag is refused rather than left describing a surface that
+        // does not exist.
+        if (PanelFamily.nativeAppWindows && policiesPanelOpen) {
+            policiesPanelOpen = false;
+            return;
+        }
         // Edit Mode refuses the sidebars for its whole length: its chrome is
         // Overlay and the sidebars are Top, so an open one is painted over by
         // the toolbar that shares its edge - and neither sidebar is something
@@ -1967,6 +2215,69 @@ Singleton {
 
         function open(): void {
             root.openRightSidebar();
+        }
+    }
+
+    // Bindable from Hyprland as quickshell:appDrawerToggle / quickshell:recentsToggle.
+    // The tablet family is touch-first, not touch-only: every surface reachable by a
+    // gesture also has to be reachable without one.
+    GlobalShortcut {
+        name: "appDrawerToggle"
+        description: "Toggles the tablet app drawer"
+        onPressed: root.toggleAppDrawer("")
+    }
+
+    GlobalShortcut {
+        name: "recentsToggle"
+        description: "Toggles the tablet recents carousel"
+        onPressed: root.toggleRecents("")
+    }
+
+    // App drawer IPC (tablet family)
+    IpcHandler {
+        target: "appDrawer"
+
+        function toggle(): void {
+            root.toggleAppDrawer("");
+        }
+
+        function close(): void {
+            root.appDrawerOpen = false;
+        }
+
+        function open(): void {
+            root.openAppDrawer("");
+        }
+    }
+
+    // Tablet app windows IPC. Also the only way to open one from a script or a keybind,
+    // which the drawer alone could not offer.
+    IpcHandler {
+        target: "tabletApp"
+
+        function open(appId: string): void {
+            root.openTabletApp(appId);
+        }
+
+        function close(): void {
+            root.closeTabletApp();
+        }
+    }
+
+    // Recents IPC (tablet family)
+    IpcHandler {
+        target: "recents"
+
+        function toggle(): void {
+            root.toggleRecents("");
+        }
+
+        function close(): void {
+            root.recentsOpen = false;
+        }
+
+        function open(): void {
+            root.openRecents("");
         }
     }
 
@@ -2034,10 +2345,12 @@ Singleton {
         name: "workspaceNumber"
         description: "Hold to show workspace numbers, release to show icons"
         onPressed: {
-            root.superDown = true;
+            if (!PanelFamily.touchFirst)
+                root.superDown = true;
         }
         onReleased: {
-            root.superDown = false;
+            if (!PanelFamily.touchFirst)
+                root.superDown = false;
         }
     }
 

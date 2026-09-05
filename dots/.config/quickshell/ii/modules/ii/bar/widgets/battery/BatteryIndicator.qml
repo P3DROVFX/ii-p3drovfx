@@ -12,7 +12,7 @@ MouseArea {
     property bool borderless: Config.options.bar.borderless
     property bool disablePopup: false
     property bool isMaterial: Config.options.bar.styles.battery === "material"
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
 
     readonly property var chargeState: Battery.chargeState
     readonly property bool isCharging: Battery.isCharging
@@ -60,7 +60,7 @@ MouseArea {
     }
     implicitWidth: Battery.available ? _contentWidth : 0
     implicitHeight: Battery.available ? Appearance.sizes.baseBarHeight : 0
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
