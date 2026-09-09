@@ -273,14 +273,6 @@ Item {
                 return Todo.syncing ? Appearance.colors.colPrimary : Appearance.colors.colPrimary;
             }
             opacity: (!Todo.remoteEnabled || Todo.connected) ? 1.0 : 0.4
-
-            RotationAnimation on rotation {
-                running: Todo.remoteEnabled && Todo.syncing
-                from: 360
-                to: 0
-                duration: 1000
-                loops: Animation.Infinite
-            }
         }
 
         StyledToolTip {

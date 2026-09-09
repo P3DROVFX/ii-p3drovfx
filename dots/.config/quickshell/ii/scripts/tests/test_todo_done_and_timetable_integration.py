@@ -49,6 +49,12 @@ class TodoDoneAndTimetableIntegrationTests(unittest.TestCase):
     def test_todo_widget_consumes_todo_done_tasks(self):
         self.assertIn("const source = Todo.doneTasks ?? []", self.todo_widget_qml)
 
+    def test_todo_sync_indicator_does_not_rotate(self):
+        sync_button = self.todo_widget_qml.split("id: syncButton", 1)[1].split("StyledToolTip", 1)[0]
+        self.assertIn('return Todo.syncing ? "sync" : "cloud_done"', sync_button)
+        self.assertNotIn("RotationAnimation", sync_button)
+        self.assertNotIn("loops: Animation.Infinite", sync_button)
+
     def test_local_date_parsing_avoids_utc_midnight_drift(self):
         self.assertIn("function parseLocalDate(value)", self.todo_qml)
         self.assertIn("function _localDueDate(value)", self.ticktick_qml)
