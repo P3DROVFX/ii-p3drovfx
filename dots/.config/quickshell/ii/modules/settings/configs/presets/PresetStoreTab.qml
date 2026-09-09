@@ -24,6 +24,12 @@ ColumnLayout {
 
     // 0 stars · 1 recently updated · 2 name
     property int sortMode: 0
+    // Let the first row become useful immediately, then admit further
+    // previews in compact batches. A Flow/Repeater creates every card at once,
+    // so without this guard thirty full-size raw GitHub images compete for the
+    // same network and decoder queue.
+    property int previewBudget: 0
+    readonly property int previewBatchSize: 6
 
     readonly property var results: {
         let rows = PresetStore.discoverResults.slice();
@@ -34,6 +40,12 @@ ColumnLayout {
         else
             rows.sort((a, b) => (b.stars || 0) - (a.stars || 0));
         return rows;
+    }
+
+    onResultsChanged: {
+        root.previewBudget = Math.min(root.previewBatchSize, root.results.length);
+        if (root.previewBudget < root.results.length)
+            previewBatchTimer.restart();
     }
 
     Component.onCompleted: {
@@ -50,6 +62,18 @@ ColumnLayout {
         interval: 700
         repeat: false
         onTriggered: PresetStore.discover(searchField.text, 30)
+    }
+
+    Timer {
+        id: previewBatchTimer
+        interval: 220
+        repeat: false
+        onTriggered: {
+            root.previewBudget = Math.min(root.results.length,
+                root.previewBudget + root.previewBatchSize);
+            if (root.previewBudget < root.results.length)
+                restart();
+        }
     }
 
     NoticeBox {
@@ -226,8 +250,10 @@ ColumnLayout {
 
                 delegate: StoreResultCard {
                     required property var modelData
+                    required property int index
                     entry: modelData
                     width: resultFlow.itemWidth
+                    previewAllowed: index < root.previewBudget
                     onActivated: root.openDetails(modelData)
                 }
             }

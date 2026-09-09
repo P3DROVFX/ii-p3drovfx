@@ -51,6 +51,8 @@ ColumnLayout {
     property var installedHere: []
     property int revertsLeft: 0
     property bool cleaning: false
+    property int previewBudget: 0
+    readonly property int previewBatchSize: 6
 
     // Sorted by stars: on a page that asks someone to pick a look in a minute,
     // the order that needs no explanation is "what other people kept".
@@ -58,6 +60,12 @@ ColumnLayout {
         let rows = PresetStore.discoverResults.slice();
         rows.sort((a, b) => (b.stars || 0) - (a.stars || 0));
         return rows;
+    }
+
+    onResultsChanged: {
+        root.previewBudget = Math.min(root.previewBatchSize, root.results.length);
+        if (root.previewBudget < root.results.length)
+            previewBatchTimer.restart();
     }
 
     readonly property bool working: PresetStore.busy || root.cleaning
@@ -176,6 +184,18 @@ ColumnLayout {
         interval: 700
         repeat: false
         onTriggered: PresetStore.discover(searchField.text, 30)
+    }
+
+    Timer {
+        id: previewBatchTimer
+        interval: 220
+        repeat: false
+        onTriggered: {
+            root.previewBudget = Math.min(root.results.length,
+                root.previewBudget + root.previewBatchSize);
+            if (root.previewBudget < root.results.length)
+                restart();
+        }
     }
 
     RowLayout {
@@ -343,9 +363,11 @@ ColumnLayout {
 
                     delegate: StoreResultCard {
                         required property var modelData
+                        required property int index
                         entry: modelData
                         applyMode: true
                         width: resultFlow.itemWidth
+                        previewAllowed: index < root.previewBudget
                         onActivated: root.useLook(modelData)
                     }
                 }

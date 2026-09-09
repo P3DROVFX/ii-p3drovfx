@@ -20,6 +20,11 @@ Rectangle {
     required property var entry
 
     property bool applyMode: false
+    property bool previewAllowed: true
+    // A repository collection initially has one provisional card. Its real
+    // preset ids arrive with the manifest/index hydration, so opening or
+    // installing the provisional root would be an invalid operation.
+    readonly property bool metadataReady: card.entry.metadataReady !== false
 
     readonly property string installedAs: card.entry.installedAs ?? ""
     readonly property bool installed: card.installedAs.length > 0
@@ -35,9 +40,14 @@ Rectangle {
         ? card.entry.wallpaperUrl
         : (repoSlug.length > 0 ? `https://raw.githubusercontent.com/${repoSlug}/${repoBranch}/wallpaper.png` : "")
 
-    property string effectiveImageSource: (card.entry.imageUrl && card.entry.imageUrl.length > 0)
+    readonly property string primaryImageSource: (card.entry.imageUrl && card.entry.imageUrl.length > 0)
         ? card.entry.imageUrl
         : (fallbackWallpaperUrl.length > 0 ? fallbackWallpaperUrl : `${Directories.assetsPath}/images/default_wallpaper.png`)
+    property string failedImageSource: ""
+    readonly property string effectiveImageSource: failedImageSource.length > 0
+        ? failedImageSource : primaryImageSource
+
+    onEntryChanged: card.failedImageSource = ""
 
     height: width * 0.82
     radius: Appearance.rounding.normal
@@ -67,6 +77,7 @@ Rectangle {
         colBackground: "transparent"
         colBackgroundHover: "transparent"
         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
+        enabled: card.metadataReady
         onClicked: card.activated()
     }
 
@@ -98,7 +109,7 @@ Rectangle {
                 id: previewImage
                 anchors.fill: parent
                 sourceSize: Qt.size(400, 400)
-                source: card.effectiveImageSource
+                source: card.previewAllowed ? card.effectiveImageSource : ""
                 fillMode: Image.PreserveAspectCrop
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -112,9 +123,9 @@ Rectangle {
                 onStatusChanged: {
                     if (status === Image.Error) {
                         if (card.effectiveImageSource !== card.fallbackWallpaperUrl && card.fallbackWallpaperUrl.length > 0) {
-                            card.effectiveImageSource = card.fallbackWallpaperUrl;
+                            card.failedImageSource = card.fallbackWallpaperUrl;
                         } else if (card.effectiveImageSource !== `${Directories.assetsPath}/images/default_wallpaper.png`) {
-                            card.effectiveImageSource = `${Directories.assetsPath}/images/default_wallpaper.png`;
+                            card.failedImageSource = `${Directories.assetsPath}/images/default_wallpaper.png`;
                         }
                     }
                 }
@@ -211,12 +222,12 @@ Rectangle {
                 color: Appearance.colors.colLayer0
                 border.width: 1
                 border.color: Appearance.colors.colLayer0Border
-                visible: (card.entry.avatarUrl ?? "").length > 0
+                visible: card.previewAllowed && (card.entry.avatarUrl ?? "").length > 0
 
                 StyledImage {
                     id: authorAvatar
                     anchors.fill: parent
-                    source: card.entry.avatarUrl ?? ""
+                    source: card.previewAllowed ? (card.entry.avatarUrl ?? "") : ""
                     fillMode: Image.PreserveAspectCrop
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -267,6 +278,7 @@ Rectangle {
                 implicitWidth: 30
                 implicitHeight: 30
                 buttonRadius: Appearance.rounding.full
+                enabled: card.metadataReady
                 readonly property bool quiet: card.applyMode ? card.applied : card.installed
                 colBackground: quiet ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
                 colBackgroundHover: quiet ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryContainerHover

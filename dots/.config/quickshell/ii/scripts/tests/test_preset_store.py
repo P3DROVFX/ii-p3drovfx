@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if SCRIPTS_DIR not in sys.path:
@@ -259,6 +260,71 @@ class TestPureHelpers(unittest.TestCase):
         verdict = self.store.compatibility(None)
         self.assertTrue(verdict["ok"])
         self.assertEqual(verdict["status"], "unknown")
+
+    def test_discover_streams_repository_cards_before_metadata_probes_finish(self):
+        """The store must paint useful cards before its slower raw probes run."""
+        repository = {
+            "full_name": "alice/fast-theme",
+            "name": "fast-theme",
+            "description": "A fast test preset.",
+            "default_branch": "main",
+            "owner": {"login": "alice", "avatar_url": "https://avatars.example/alice"},
+            "stargazers_count": 7,
+            "html_url": "https://github.com/alice/fast-theme",
+            "pushed_at": "2026-09-09T00:00:00Z",
+        }
+        initial = []
+        with mock.patch.object(self.store, "gh_token", return_value=None), \
+             mock.patch.object(self.store, "http_json", return_value={"items": [repository]}), \
+             mock.patch.object(self.store, "load_links", return_value={}), \
+             mock.patch.object(self.store, "load_discover_meta_cache", return_value={}), \
+             mock.patch.object(self.store, "save_discover_meta_cache"), \
+             mock.patch.object(self.store, "probe_repo_meta",
+                               return_value=("alice/fast-theme", "main", "preset", {
+                                   "name": "Fast Theme", "screenshots": ["preview.png"]
+                               })), \
+             mock.patch.object(self.store, "emit", side_effect=initial.append):
+            result = self.store.cmd_discover(30, stream=True)
+
+        self.assertEqual(initial[0]["phase"], "initial")
+        self.assertFalse(initial[0]["results"][0]["metadataReady"])
+        self.assertEqual(initial[0]["results"][0]["name"], "fast-theme")
+        self.assertTrue(result["results"][0]["metadataReady"])
+        self.assertEqual(result["results"][0]["name"], "Fast Theme")
+
+    def test_streamed_output_is_flushed_before_the_metadata_batch_finishes(self):
+        with mock.patch("builtins.print") as printer:
+            self.store.emit({"ok": True, "phase": "initial"})
+        printer.assert_called_once_with('{"ok": true, "phase": "initial"}', flush=True)
+
+    def test_negative_metadata_cache_entry_is_not_reused_after_a_network_failure(self):
+        repo = {
+            "full_name": "alice/possibly-later",
+            "default_branch": "main",
+            "pushed_at": "2026-09-09T00:00:00Z",
+        }
+        cache = {
+            "alice/possibly-later": {
+                "branch": "main",
+                "updatedAt": "2026-09-09T00:00:00Z",
+                "checkedAt": self.store.time.time(),
+                "kind": "",
+                "data": {},
+            }
+        }
+        self.assertIsNone(self.store.cached_repo_meta(cache, repo))
+
+
+class TestPresetStoreQmlContract(unittest.TestCase):
+    """Keep the streamed Python protocol aligned with its QML consumer."""
+
+    def test_runner_consumes_split_parser_records_as_individual_json_lines(self):
+        path = os.path.join(os.path.dirname(SCRIPTS_DIR), "services", "PresetStore.qml")
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn('splitMarker: "\\n"', source)
+        self.assertIn('runner.acceptLine(data);', source)
+        self.assertNotIn('function acceptChunk(', source)
 
 
 class TestInstall(StoreTestCase):

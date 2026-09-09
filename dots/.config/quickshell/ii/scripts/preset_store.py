@@ -55,6 +55,11 @@ INDEX_NAME = 'index.json'
 INDEX_SCHEMA = 1
 DEFAULT_REPO_NAME = 'ii-presets'
 USER_AGENT = 'ii-preset-store/1.0'
+DISCOVER_META_CACHE_NAME = 'discover-metadata.json'
+# A repository search already carries `pushed_at`. Reuse a probe while that
+# value stays stable, but never let a stale negative probe hide a new preset
+# forever if GitHub's search index has not caught up yet.
+DISCOVER_META_CACHE_TTL = 6 * 60 * 60
 
 # The device flow needs an OAuth app that belongs to the shell, and its client
 # id is public by design -- it is not a secret and nothing can be done with it
@@ -125,12 +130,19 @@ def links_file():
     return os.path.join(store_dir(), 'links.json')
 
 
+def discover_meta_cache_file():
+    return os.path.join(store_dir(), DISCOVER_META_CACHE_NAME)
+
+
 def scripts_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def emit(payload):
-    print(json.dumps(payload))
+    # `discover --stream` has to reach the QML parser while probes are still
+    # running. Pipes are block-buffered by default, which would otherwise hold
+    # the first page until the final metadata result was ready.
+    print(json.dumps(payload), flush=True)
 
 
 def run(args, cwd=None, timeout=GIT_TIMEOUT, stdin_text=None):
@@ -529,6 +541,144 @@ def cmd_auth_login():
 # discover / fetch-manifest
 # ---------------------------------------------------------------------------
 
+def load_discover_meta_cache():
+    """Read optional discovery metadata without making the store depend on it."""
+    try:
+        data = read_json(discover_meta_cache_file())
+        entries = data.get('entries') if isinstance(data, dict) else None
+        return entries if isinstance(entries, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_discover_meta_cache(entries):
+    # The cache is an optimization only. A read-only or full config directory
+    # must not turn a perfectly usable GitHub result into a failed store.
+    try:
+        presets_helper.atomic_write_json(discover_meta_cache_file(), {
+            'schema': 1,
+            'entries': entries,
+        })
+    except Exception:
+        pass
+
+
+def cached_repo_meta(cache, repo):
+    slug = repo.get('full_name', '')
+    entry = cache.get(slug)
+    if not isinstance(entry, dict):
+        return None
+    if entry.get('branch') != repo.get('default_branch', 'main'):
+        return None
+    if entry.get('updatedAt') != (repo.get('pushed_at') or repo.get('updated_at') or ''):
+        return None
+    checked_at = entry.get('checkedAt', 0)
+    if not isinstance(checked_at, (int, float)) or time.time() - checked_at > DISCOVER_META_CACHE_TTL:
+        return None
+    kind = entry.get('kind')
+    data = entry.get('data')
+    # Do not reuse old negative entries. A raw GitHub outage and a repository
+    # with no manifest used to look identical here; retaining either would
+    # hide a valid collection for the cache TTL after a transient failure.
+    if not isinstance(kind, str) or not kind:
+        return None
+    return kind, data if isinstance(data, dict) else None
+
+
+def cache_repo_meta(cache, repo, kind, meta_data):
+    slug = repo.get('full_name', '')
+    if not slug:
+        return
+    cache[slug] = {
+        'branch': repo.get('default_branch', 'main'),
+        'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
+        'checkedAt': time.time(),
+        'kind': kind or '',
+        'data': meta_data if isinstance(meta_data, dict) else {},
+    }
+
+
+def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=False):
+    """Project one GitHub search result and optional manifest into one card."""
+    slug = repo.get('full_name', '')
+    branch = repo.get('default_branch', 'main')
+    owner = repo.get('owner') or {}
+    base = {
+        'repo': slug,
+        'name': repo.get('name', ''),
+        'description': repo.get('description') or '',
+        'author': owner.get('login', ''),
+        'avatarUrl': owner.get('avatar_url', ''),
+        # The fast first paint uses this conventional path. It can fail without
+        # blocking the list; the hydrated result below replaces it when the
+        # manifest or collection index names a real preview.
+        'imageUrl': 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch),
+        'wallpaperUrl': 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch),
+        'stars': repo.get('stargazers_count', 0),
+        'repoUrl': repo.get('html_url', ''),
+        'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
+        'defaultBranch': branch,
+        'installedAs': installed.get(slug, ''),
+        'metadataReady': bool(metadata_ready),
+    }
+    if kind == 'index' and isinstance(meta_data, dict):
+        results = []
+        for preset in meta_data.get('presets', []):
+            if not isinstance(preset, dict):
+                continue
+            preset_id = preset.get('id') or repo_name_from_preset(preset.get('name', ''))
+            if not preset_id:
+                continue
+            full_slug = '%s:%s' % (slug, preset_id)
+            path = str(preset.get('path', 'presets/%s' % preset_id)).strip('/')
+            wallpaper = preset.get('wallpaper')
+            banner = preset.get('banner')
+            screenshots = preset.get('screenshots') or []
+            preview = banner or (screenshots[0] if screenshots else None) or wallpaper \
+                or '%s/wallpaper.png' % path
+            wallpaper_path = wallpaper or '%s/wallpaper.png' % path
+            entry = dict(base)
+            entry.update({
+                'repo': full_slug,
+                'name': preset.get('name', '') or preset_id,
+                'description': preset.get('description') or base['description'],
+                'author': preset.get('author') or base['author'],
+                'imageUrl': 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, str(preview).lstrip('/')),
+                'wallpaperUrl': 'https://raw.githubusercontent.com/%s/%s/%s' % (
+                    slug, branch, str(wallpaper_path).lstrip('/')),
+                'repoUrl': '%s/tree/%s/%s' % (base['repoUrl'], branch, path),
+                'installedAs': installed.get(full_slug, ''),
+            })
+            results.append(entry)
+        return results
+    if kind == 'preset' and isinstance(meta_data, dict):
+        wallpaper = meta_data.get('wallpaper')
+        banner = meta_data.get('banner')
+        screenshots = meta_data.get('screenshots') or []
+        preview = banner or (screenshots[0] if screenshots else None) or wallpaper or 'wallpaper.png'
+        entry = dict(base)
+        entry.update({
+            'name': meta_data.get('name') or base['name'],
+            'description': meta_data.get('description') or base['description'],
+            'author': meta_data.get('author') or base['author'],
+            'imageUrl': 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, str(preview).lstrip('/')),
+            'wallpaperUrl': 'https://raw.githubusercontent.com/%s/%s/%s' % (
+                slug, branch, str(wallpaper or 'wallpaper.png').lstrip('/')),
+        })
+        return [entry]
+    return [base]
+
+
+def discover_results(items, installed, metas=None, metadata_ready=False):
+    """Keep the search order stable even though probes finish in parallel."""
+    metas = metas or {}
+    results = []
+    for repo in items:
+        slug = repo.get('full_name', '')
+        kind, meta_data = metas.get(slug, (None, None))
+        results.extend(discover_result(repo, installed, kind, meta_data, metadata_ready))
+    return results
+
 def probe_repo_meta(repo, token=None):
     slug = repo.get('full_name', '')
     branch = repo.get('default_branch', 'main')
@@ -553,7 +703,7 @@ def probe_repo_meta(repo, token=None):
     return slug, branch, None, None
 
 
-def cmd_discover(limit=30, query=''):
+def cmd_discover(limit=30, query='', stream=False):
     limit = max(1, min(int(limit or 30), 100))
     search = 'topic:%s' % TOPIC
     if query:
@@ -562,8 +712,9 @@ def cmd_discover(limit=30, query=''):
            % (urllib.parse.quote(search), limit))
     # Signed in, the rate limit is 30 searches a minute instead of 10, which
     # is the difference between a store that reloads and one that stops.
+    token = gh_token()
     try:
-        data = http_json(url, token=gh_token())
+        data = http_json(url, token=token)
     except urllib.error.HTTPError as exc:
         if exc.code in (403, 429):
             raise StoreError('GitHub is rate-limiting the search. Try again in a minute.')
@@ -574,110 +725,49 @@ def cmd_discover(limit=30, query=''):
     installed = {link.get('repo'): name for name, link in load_links().items()}
     items = data.get('items', [])
 
-    # Probe for index.json or preset.json in parallel across repositories
+    # The repository search already carries enough information to show useful
+    # cards. Emit that first; waiting for a pair of raw-file probes per repo
+    # made the Store look empty for tens of seconds on ordinary connections.
+    initial = discover_results(items, installed, metadata_ready=False)
+    if stream:
+        emit({'ok': True, 'phase': 'initial', 'topic': TOPIC,
+              'total': len(initial), 'results': initial})
+
+    cache = load_discover_meta_cache()
     metas = {}
-    if items:
-        token = gh_token()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(items))) as executor:
-            futures = [executor.submit(probe_repo_meta, repo, token) for repo in items]
-            for future in concurrent.futures.as_completed(futures):
-                slug, branch, kind, meta_data = future.result()
-                if kind:
-                    metas[slug] = (kind, meta_data)
-
-    results = []
+    missing = []
     for repo in items:
-        slug = repo.get('full_name', '')
-        branch = repo.get('default_branch', 'main')
-        kind, meta_data = metas.get(slug, (None, None))
-        if kind == 'index':
-            # Mono-repo collection: expose each individual preset
-            idx = meta_data
-            for p in idx.get('presets', []):
-                p_id = p.get('id') or repo_name_from_preset(p.get('name', ''))
-                full_slug = '%s:%s' % (slug, p_id)
-                p_path = p.get('path', 'presets/%s' % p_id).strip('/')
-                p_wallpaper = p.get('wallpaper')
-                p_banner = p.get('banner')
-                p_shots = p.get('screenshots') or []
-                if p_banner:
-                    image_rel = p_banner.lstrip('/')
-                elif p_shots:
-                    image_rel = p_shots[0].lstrip('/')
-                elif p_wallpaper:
-                    image_rel = p_wallpaper.lstrip('/')
-                else:
-                    image_rel = '%s/wallpaper.png' % p_path
-                image_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, image_rel)
-                wallpaper_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (
-                    slug, branch, p_wallpaper.lstrip('/') if p_wallpaper else ('%s/wallpaper.png' % p_path)
-                )
-
-                results.append({
-                    'repo': full_slug,
-                    'name': p.get('name', '') or p_id,
-                    'description': p.get('description') or repo.get('description') or '',
-                    'author': p.get('author') or (repo.get('owner') or {}).get('login', ''),
-                    'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
-                    'imageUrl': image_url,
-                    'wallpaperUrl': wallpaper_url,
-                    'stars': repo.get('stargazers_count', 0),
-                    'repoUrl': '%s/tree/%s/%s' % (repo.get('html_url', ''), branch, p_path),
-                    'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
-                    'defaultBranch': branch,
-                    'installedAs': installed.get(full_slug, ''),
-                })
-        elif kind == 'preset':
-            # Legacy single-preset repository with manifest
-            manifest = meta_data
-            p_wallpaper = manifest.get('wallpaper')
-            p_banner = manifest.get('banner')
-            p_shots = manifest.get('screenshots') or []
-            if p_banner:
-                image_rel = p_banner.lstrip('/')
-            elif p_shots:
-                image_rel = p_shots[0].lstrip('/')
-            elif p_wallpaper:
-                image_rel = p_wallpaper.lstrip('/')
-            else:
-                image_rel = 'wallpaper.png'
-            image_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (slug, branch, image_rel)
-            wallpaper_url = 'https://raw.githubusercontent.com/%s/%s/%s' % (
-                slug, branch, p_wallpaper.lstrip('/') if p_wallpaper else 'wallpaper.png'
-            )
-
-            results.append({
-                'repo': slug,
-                'name': manifest.get('name') or repo.get('name', ''),
-                'description': manifest.get('description') or repo.get('description') or '',
-                'author': manifest.get('author') or (repo.get('owner') or {}).get('login', ''),
-                'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
-                'imageUrl': image_url,
-                'wallpaperUrl': wallpaper_url,
-                'stars': repo.get('stargazers_count', 0),
-                'repoUrl': repo.get('html_url', ''),
-                'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
-                'defaultBranch': branch,
-                'installedAs': installed.get(slug, ''),
-            })
+        cached = cached_repo_meta(cache, repo)
+        if cached is None:
+            missing.append(repo)
         else:
-            # Fallback for repos without readable manifest
-            image_url = 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch)
-            results.append({
-                'repo': slug,
-                'name': repo.get('name', ''),
-                'description': repo.get('description') or '',
-                'author': (repo.get('owner') or {}).get('login', ''),
-                'avatarUrl': (repo.get('owner') or {}).get('avatar_url', ''),
-                'imageUrl': image_url,
-                'wallpaperUrl': image_url,
-                'stars': repo.get('stargazers_count', 0),
-                'repoUrl': repo.get('html_url', ''),
-                'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
-                'defaultBranch': branch,
-                'installedAs': installed.get(slug, ''),
-            })
-    return {'ok': True, 'topic': TOPIC, 'total': len(results), 'results': results}
+            metas[repo.get('full_name', '')] = cached
+
+    # Misses are an actual batch: bounded parallel raw requests. Individual
+    # malformed/deleted repositories resolve to the normal fallback card
+    # instead of holding every other result hostage.
+    if missing:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(12, len(missing))) as executor:
+            futures = [executor.submit(probe_repo_meta, repo, token) for repo in missing]
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    slug, _branch, kind, meta_data = future.result()
+                except Exception:
+                    continue
+                repo = next((candidate for candidate in missing
+                             if candidate.get('full_name', '') == slug), None)
+                if repo is None:
+                    continue
+                metas[slug] = (kind, meta_data)
+                # Only a positive manifest/index answer is stable enough to
+                # cache. `None` also represents connection and decode errors.
+                if kind:
+                    cache_repo_meta(cache, repo, kind, meta_data)
+        save_discover_meta_cache(cache)
+
+    results = discover_results(items, installed, metas, metadata_ready=True)
+    return {'ok': True, 'phase': 'complete', 'topic': TOPIC,
+            'total': len(results), 'results': results}
 
 
 def cmd_fetch_manifest(slug):
@@ -1651,9 +1741,10 @@ def dispatch(argv):
             sys.exit(cmd_auth_login())
         raise StoreError('Unknown auth command: %s' % action)
     if command == 'discover':
+        stream = take_flag(rest, '--stream')
         limit = take_option(rest, '--limit', '30')
         query = take_option(rest, '--query', '')
-        return cmd_discover(limit, query)
+        return cmd_discover(limit, query, stream)
     if command == 'fetch-manifest':
         return cmd_fetch_manifest(rest[0] if rest else '')
     if command == 'install':

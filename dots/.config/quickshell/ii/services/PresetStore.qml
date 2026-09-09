@@ -126,7 +126,11 @@ Singleton {
         }
         root.discovering = true;
         root.discoverError = "";
-        let args = ["discover", "--limit", String(limit && limit > 0 ? limit : 30)];
+        // `--stream` emits a search-backed first page before the slower
+        // manifest/index probes finish. The UI can therefore start decoding a
+        // small preview batch instead of showing an empty store for the whole
+        // probe waterfall.
+        let args = ["discover", "--stream", "--limit", String(limit && limit > 0 ? limit : 30)];
         if (wanted.length > 0)
             args = args.concat(["--query", wanted]);
         root._enqueue({
@@ -398,6 +402,7 @@ Singleton {
         runner.collected = "";
         runner.errorText = "";
         runner.exitCode = -1;
+        runnerOutputFallback.stop();
         runner.command = job.command;
         if (!job.guardsConfig) {
             root._startRunner();
@@ -438,6 +443,7 @@ Singleton {
         root.busyAction = "";
         root.busyName = "";
         watchdog.stop();
+        runnerOutputFallback.stop();
         configFlush.stop();
         if (job && job.guardsConfig)
             root._releaseConfigWrites();
@@ -560,6 +566,15 @@ Singleton {
         }
     }
 
+    function _progress(job, payload) {
+        if (!job || job.action !== "discover" || !payload || payload.phase !== "initial")
+            return;
+        if (payload.ok === true) {
+            root.discoverResults = payload.results || [];
+            root.discoverError = "";
+        }
+    }
+
     function _dropUpdate(name) {
         root.updates = root.updates.filter(entry => entry.name !== name);
     }
@@ -620,6 +635,16 @@ Singleton {
         property string errorText: ""
         property int exitCode: -1
 
+        function acceptLine(data) {
+            const line = String(data).trim();
+            if (line.length === 0)
+                return;
+            runner.collected += line + "\n";
+            try {
+                root._progress(root._current, JSON.parse(line));
+            } catch (e) {}
+        }
+
         // Exit and end-of-output are two separate events and neither is
         // reliably last, so the job is only finished once both have landed.
         function settle() {
@@ -642,9 +667,10 @@ Singleton {
             root._finish(payload);
         }
 
-        stdout: StdioCollector {
-            onStreamFinished: {
-                runner.collected = text;
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: data => {
+                runner.acceptLine(data);
                 runner.sawOutput = true;
                 runner.settle();
             }
@@ -657,6 +683,24 @@ Singleton {
         onExited: (code, status) => {
             runner.exitCode = code;
             runner.sawExit = true;
+            runner.settle();
+            // SplitParser deliberately has no stream-finished signal. A line
+            // arriving after the exit settles immediately above; this tiny
+            // fallback only releases a genuinely silent child with its stderr
+            // error rather than leaving the single mutation queue wedged.
+            if (!runner.sawOutput)
+                runnerOutputFallback.restart();
+        }
+    }
+
+    Timer {
+        id: runnerOutputFallback
+        interval: 50
+        repeat: false
+        onTriggered: {
+            if (!runner.sawExit || runner.sawOutput)
+                return;
+            runner.sawOutput = true;
             runner.settle();
         }
     }
