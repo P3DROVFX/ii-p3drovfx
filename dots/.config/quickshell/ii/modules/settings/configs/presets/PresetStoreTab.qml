@@ -90,6 +90,7 @@ ColumnLayout {
             id: searchField
             Layout.fillWidth: true
             Layout.fillHeight: true
+            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             placeholderText: Translation.tr("Search presets…")
             font.pixelSize: Appearance.font.pixelSize.normal
             onTextChanged: searchDebounce.restart()
@@ -107,7 +108,7 @@ ColumnLayout {
             topRightRadius: Appearance.rounding.full
             bottomLeftRadius: Appearance.rounding.full
             bottomRightRadius: Appearance.rounding.full
-            enabled: !PresetStore.discovering
+            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             onClicked: {
                 searchDebounce.stop();
                 PresetStore.discover(searchField.text, 30, true);
@@ -162,6 +163,14 @@ ColumnLayout {
     StyledIndeterminateProgressBar {
         Layout.fillWidth: true
         visible: PresetStore.discovering
+    }
+
+    StyledText {
+        Layout.fillWidth: true
+        visible: PresetStore.discoverHydrating
+        text: Translation.tr("Loading preset details in the background…")
+        font.pixelSize: Appearance.font.pixelSize.small
+        color: Appearance.colors.colOnSurfaceVariant
     }
 
     Rectangle {

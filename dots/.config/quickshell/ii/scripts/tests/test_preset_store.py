@@ -353,6 +353,23 @@ class TestPresetStoreQmlContract(unittest.TestCase):
         self.assertIn('runner.acceptLine(data);', source)
         self.assertNotIn('function acceptChunk(', source)
 
+    def test_initial_discovery_results_release_the_blocking_store_loader(self):
+        path = os.path.join(os.path.dirname(SCRIPTS_DIR), "services", "PresetStore.qml")
+        with open(path, encoding="utf-8") as handle:
+            source = handle.read()
+        self.assertIn('property bool discoverHydrating: false', source)
+        self.assertIn('root.discovering = false;\n            root.discoverHydrating = true;', source)
+
+    def test_store_controls_wait_for_streamed_discovery_to_finish(self):
+        for relative_path in [
+            ("modules", "settings", "configs", "presets", "PresetStoreTab.qml"),
+            ("modules", "welcome", "WelcomePresetStorePane.qml"),
+        ]:
+            path = os.path.join(os.path.dirname(SCRIPTS_DIR), *relative_path)
+            with open(path, encoding="utf-8") as handle:
+                source = handle.read()
+            self.assertEqual(source.count('enabled: !PresetStore.discovering && !PresetStore.discoverHydrating'), 2)
+
 
 class TestInstall(StoreTestCase):
     def test_install_materialises_the_preset_and_its_wallpaper(self):

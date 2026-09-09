@@ -213,6 +213,7 @@ ColumnLayout {
             id: searchField
             Layout.fillWidth: true
             Layout.fillHeight: true
+            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             colBackground: Appearance.colors.colLayer2
             placeholderText: Translation.tr("Search looks made by other people…")
             font.pixelSize: Appearance.font.pixelSize.normal
@@ -228,7 +229,7 @@ ColumnLayout {
             materialIcon: "refresh"
             mainText: Translation.tr("Refresh")
             buttonRadius: Appearance.rounding.full
-            enabled: !PresetStore.discovering
+            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             onClicked: {
                 searchDebounce.stop();
                 PresetStore.discover(searchField.text, 30, true);

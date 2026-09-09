@@ -42,6 +42,9 @@ Singleton {
     // stars, repoUrl, updatedAt, defaultBranch, installedAs }
     property var discoverResults: []
     property bool discovering: false
+    // A first search page is ready for use while optional manifest probes
+    // continue in the background. Keep that distinct from blocking discovery.
+    property bool discoverHydrating: false
     property string discoverError: ""
 
     // From `auth status`. `authenticated` is what gates publishing.
@@ -125,6 +128,7 @@ Singleton {
             return;
         }
         root.discovering = true;
+        root.discoverHydrating = false;
         root.discoverError = "";
         // `--stream` emits a search-backed first page before the slower
         // manifest/index probes finish. The UI can therefore start decoding a
@@ -481,6 +485,7 @@ Singleton {
         }
         if (job.action === "discover") {
             root.discovering = false;
+            root.discoverHydrating = false;
             root.discoverResults = ok ? (result.results || []) : [];
             root.discoverError = error;
             if (ok) {
@@ -572,6 +577,8 @@ Singleton {
         if (payload.ok === true) {
             root.discoverResults = payload.results || [];
             root.discoverError = "";
+            root.discovering = false;
+            root.discoverHydrating = true;
         }
     }
 
