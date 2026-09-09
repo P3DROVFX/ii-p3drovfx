@@ -314,6 +314,33 @@ class TestPureHelpers(unittest.TestCase):
         }
         self.assertIsNone(self.store.cached_repo_meta(cache, repo))
 
+    def test_publish_prepares_a_repository_local_github_noreply_identity(self):
+        calls = []
+
+        def fake_git(args, cwd, timeout=None):
+            calls.append(args)
+            if args[:2] == ["config", "--get"]:
+                return 1, "", "not set"
+            return 0, "", ""
+
+        with mock.patch.object(self.store, "git", side_effect=fake_git):
+            self.store.ensure_git_identity("/tmp/preset-store-test", {
+                "login": "octocat",
+                "userId": 583231,
+            })
+
+        self.assertIn(["config", "user.name", "octocat"], calls)
+        self.assertIn(["config", "user.email", "583231+octocat@users.noreply.github.com"], calls)
+
+    def test_new_publish_initializes_git_before_configuring_its_identity(self):
+        with open(STORE_SCRIPT, encoding="utf-8") as handle:
+            source = handle.read()
+        new_repo_flow = source[source.index("if not is_existing_repo:", source.index("def cmd_publish")):
+                              source.index("else:\n            ensure_git_identity(directory, auth)",
+                                           source.index("def cmd_publish"))]
+        self.assertLess(new_repo_flow.index("git(['init', '-b', 'main']"),
+                        new_repo_flow.index("ensure_git_identity(directory, auth)"))
+
 
 class TestPresetStoreQmlContract(unittest.TestCase):
     """Keep the streamed Python protocol aligned with its QML consumer."""

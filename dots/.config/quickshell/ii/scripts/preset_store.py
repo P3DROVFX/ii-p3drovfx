@@ -403,6 +403,7 @@ def cmd_auth_status():
     if not shutil.which('gh'):
         return {
             'ok': True, 'hasGh': False, 'authenticated': False, 'login': '',
+            'userId': 0,
             'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
             'deviceFlow': bool(GITHUB_CLIENT_ID),
             'hint': 'Publishing needs the GitHub CLI. Install the "github-cli" package.',
@@ -413,6 +414,7 @@ def cmd_auth_status():
     if code != 0:
         return {
             'ok': True, 'hasGh': True, 'authenticated': False, 'login': '',
+            'userId': 0,
             'scopes': [], 'missingScopes': list(REQUIRED_SCOPES),
             'deviceFlow': bool(GITHUB_CLIENT_ID),
             'hint': err or 'Not signed in to GitHub.',
@@ -422,18 +424,23 @@ def cmd_auth_status():
         if line.lower().startswith('x-oauth-scopes:'):
             scopes = [s.strip() for s in line.split(':', 1)[1].split(',') if s.strip()]
             break
-    login = ''
+    user = {}
     body = out.split('\n\n', 1)[-1]
     try:
-        login = json.loads(body).get('login', '')
+        user = json.loads(body)
     except Exception:
         pass
+    login = str(user.get('login') or '')
+    try:
+        user_id = int(user.get('id') or 0)
+    except (TypeError, ValueError):
+        user_id = 0
     # A fine-grained token reports no scopes at all. Treating that as "missing
     # everything" would block a token that works perfectly well, so an empty
     # scope list is taken at face value and the publish itself decides.
     missing = [s for s in REQUIRED_SCOPES if scopes and s not in scopes]
     return {
-        'ok': True, 'hasGh': True, 'authenticated': True, 'login': login,
+        'ok': True, 'hasGh': True, 'authenticated': True, 'login': login, 'userId': user_id,
         'scopes': scopes, 'missingScopes': missing,
         # Whether the in-shell device code can work at all. With no OAuth app
         # registered the panel has to offer the terminal instead of a button
@@ -1260,7 +1267,41 @@ def require_login():
     if status.get('missingScopes'):
         raise StoreError('Your GitHub token cannot create repositories. '
                          'Sign in again with the "repo" scope.')
-    return status['login']
+    return status
+
+
+def github_noreply_email(login, user_id):
+    """Use GitHub's public commit address without asking for a private email."""
+    login = str(login or '').strip()
+    if not login:
+        raise StoreError('GitHub did not return an account name for this login.')
+    try:
+        user_id = int(user_id or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    prefix = '%d+' % user_id if user_id > 0 else ''
+    return '%s%s@users.noreply.github.com' % (prefix, login)
+
+
+def ensure_git_identity(directory, auth):
+    """Give a publish clone a commit identity only when Git has none.
+
+    `gh auth login` authenticates network requests but deliberately does not
+    configure Git's author identity. Publishing creates a local commit before
+    its first push, so users without global `user.name`/`user.email` otherwise
+    fail after the repository has already been staged. The fallback stays
+    repository-local and uses GitHub's no-reply address, while respecting a
+    person's existing Git identity.
+    """
+    login = str((auth or {}).get('login') or '').strip()
+    email = github_noreply_email(login, (auth or {}).get('userId'))
+    for key, value in (('user.name', login), ('user.email', email)):
+        code, current, _ = git(['config', '--get', key], cwd=directory, timeout=20)
+        if code == 0 and current.strip():
+            continue
+        code, _, err = git(['config', key, value], cwd=directory, timeout=20)
+        if code != 0:
+            raise StoreError(err or 'Could not configure a Git commit identity for publishing.')
 
 
 def stage_screenshots(directory, manifest, screenshots):
@@ -1422,7 +1463,8 @@ def write_collection_readme(directory, index_data, slug):
 
 def cmd_publish(name, repo=None, description='', notes='', private=False, screenshots=None):
     name = check_name(name)
-    login = require_login()
+    auth = require_login()
+    login = auth['login']
     links = load_links()
     if name in links:
         raise StoreError('"%s" is already published. Use the update button instead.' % name)
@@ -1503,10 +1545,13 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
 
         topic_error = ''
         if not is_existing_repo:
-            for args in (['init', '-b', 'main'], ['add', '-A']):
-                code, _, err = git(args, cwd=directory, timeout=60)
-                if code != 0:
-                    raise StoreError(err or 'git %s failed.' % args[0])
+            code, _, err = git(['init', '-b', 'main'], cwd=directory, timeout=60)
+            if code != 0:
+                raise StoreError(err or 'git init failed.')
+            ensure_git_identity(directory, auth)
+            code, _, err = git(['add', '-A'], cwd=directory, timeout=60)
+            if code != 0:
+                raise StoreError(err or 'git add failed.')
             code, _, err = git(['commit', '-m', 'Add preset %s' % name], cwd=directory, timeout=60)
             if code != 0:
                 raise StoreError(err.splitlines()[-1] if err else 'Could not make the first commit.')
@@ -1520,6 +1565,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
             code, _, err = gh(['repo', 'edit', slug, '--add-topic', TOPIC], timeout=60)
             topic_error = '' if code == 0 else (err.splitlines()[-1] if err else 'Could not set the topic.')
         else:
+            ensure_git_identity(directory, auth)
             code, _, err = git(['add', '-A'], cwd=directory, timeout=60)
             if code != 0:
                 raise StoreError(err or 'git add failed.')
@@ -1557,11 +1603,13 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
     link = get_link(name)
     if not link.get('owned'):
         raise StoreError('"%s" was installed from someone else\'s repository, so it cannot be updated from here.' % name)
-    require_login()
+    auth = require_login()
     directory = link.get('path') or slug_dir(link.get('repo', ''))
     subpath = link.get('subpath', '')
     if not os.path.isdir(os.path.join(directory, '.git')):
         raise StoreError('The local copy of "%s" is gone.' % name)
+
+    ensure_git_identity(directory, auth)
 
     # Pull fast-forward first
     git(['fetch', '--quiet', 'origin'], cwd=directory)
