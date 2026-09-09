@@ -152,12 +152,63 @@ function resizeSpanFromDelta(startSpan, deltaPixels, cellSize, spacing, maximumS
 // a packed preview. This is deliberately separate from pack(): reordering a
 // draft must move existing delegates, never replace/retype them while a mouse
 // grab is active.
-function positionedItems(items, packed, cellWidth, cellHeight, spacing) {
+//
+// `compactHeight`/`compactTypes` shrink rows made only of compact widgets
+// (sliders) below the full cell height; passing either as null/undefined keeps
+// the uniform grid. Row heights must stay in lockstep between the render
+// (positionedItems), the page height (AndroidQuickPanel.pageHeight) and the
+// drag mapping (resolveDragCell), or the pointer lands in the wrong row.
+function isCompactItem(item, compactTypes) {
+    if (!item || !compactTypes || compactTypes.length === 0)
+        return false;
+    return compactTypes.indexOf(item.type) !== -1;
+}
+
+function rowPixelHeights(packed, cellHeight, spacing, compactHeight, compactTypes) {
+    var rows = Math.max(0, Number(packed && packed.rowsUsed) || 0);
+    if (!(compactHeight > 0) || !(cellHeight > 0) || compactHeight >= cellHeight
+            || !compactTypes || compactTypes.length === 0)
+        return null;
+    var compactRow = [];
+    var seenRow = [];
+    var items = toArray(packed && packed.items);
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (!it)
+            continue;
+        var start = Math.max(0, Math.floor(finiteOrZero(it.row)));
+        var span = Math.max(1, Math.floor(finiteOrZero(it.rowSpan !== undefined ? it.rowSpan : it.sizeH)));
+        var compact = isCompactItem(it, compactTypes);
+        for (var r = start; r < start + span; r++) {
+            seenRow[r] = true;
+            if (!compact)
+                compactRow[r] = false;
+            else if (compactRow[r] !== false)
+                compactRow[r] = true;
+        }
+    }
+    var heights = [];
+    for (var r2 = 0; r2 < rows; r2++)
+        heights.push((seenRow[r2] === true && compactRow[r2] === true) ? compactHeight : cellHeight);
+    return heights;
+}
+
+function positionedItems(items, packed, cellWidth, cellHeight, spacing, compactHeight, compactTypes) {
     var source = toArray(items);
     var packedItems = packed && packed.items ? toArray(packed.items) : [];
     var byId = Object.create(null);
     var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
     var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
+    var rowY = null;
+    var rowHeights = rowPixelHeights(packed, cellHeight, spacing, compactHeight, compactTypes);
+    if (rowHeights) {
+        rowY = [];
+        var acc = 0;
+        for (var r = 0; r < rowHeights.length; r++) {
+            rowY.push(acc);
+            acc += rowHeights[r] + spacing;
+        }
+    }
     var result = [];
 
     for (var packedIndex = 0; packedIndex < packedItems.length; packedIndex++) {
@@ -176,7 +227,9 @@ function positionedItems(items, packed, cellWidth, cellHeight, spacing) {
             positioned.sizeW = geometry.sizeW;
             positioned.sizeH = geometry.sizeH;
             positioned.layoutX = geometry.column * stepX;
-            positioned.layoutY = geometry.row * stepY;
+            positioned.layoutY = (rowY && geometry.row < rowY.length)
+                ? rowY[geometry.row]
+                : geometry.row * stepY;
         }
         result.push(positioned);
     }
@@ -331,8 +384,25 @@ function resolveDragCell(geometry, state, options) {
         anchored ? state.column : null,
         config.hysteresis
     )));
+
+    // Rows made of compact widgets (sliders) are shorter than a cell, so raw
+    // pixel Y no longer divides into uniform cells. Subtract the height delta of
+    // every row fully above the pointer to map back into the uniform grid the
+    // hysteresis and settle locks are defined on.
+    var rowHeights = toArray(source.rowHeights);
+    var uniformCenterY = centerY;
+    if (rowHeights.length > 0) {
+        var scanned = 0;
+        for (var r = 0; r < rowHeights.length; r++) {
+            var rowBottom = scanned + rowHeights[r] + (r < rowHeights.length - 1 ? spacing : 0);
+            if (centerY < rowBottom)
+                break;
+            scanned = rowBottom;
+            uniformCenterY -= rowHeights[r] - cellHeight;
+        }
+    }
     var row = Math.max(0, quantizeWithHysteresis(
-        (centerY - pixelHeight / 2) / stepY,
+        (uniformCenterY - pixelHeight / 2) / stepY,
         anchored ? state.row : null,
         config.hysteresis
     ));

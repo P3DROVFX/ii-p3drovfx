@@ -148,7 +148,7 @@ Item {
     // The cell resolution runs before any packing: a pointer sample that lands
     // on the cell the drag already owns — the overwhelming majority of them —
     // costs a couple of divisions instead of a deep clone of the page.
-    function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing) {
+    function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing, compactHeight, compactTypes) {
         if (!active || mode !== "reorder")
             return false;
         if (pageIndex < 0 || pageIndex >= draftPages.length)
@@ -160,6 +160,21 @@ Item {
             return false;
         var size = QuickToggleLayout.itemSize(page[draggedIndex]);
 
+        // Compact rows (sliders) only matter when the page actually has one; the
+        // overwhelmingly common no-slider page keeps the uniform cell math and
+        // the cheap short-circuit below untouched.
+        var rowHeights = null;
+        if (compactHeight > 0 && compactTypes && compactTypes.length > 0) {
+            for (var ci = 0; ci < page.length; ci++) {
+                if (page[ci] && compactTypes.indexOf(page[ci].type) !== -1) {
+                    rowHeights = QuickToggleLayout.rowPixelHeights(
+                        QuickToggleLayout.pack(page, root.columns),
+                        cellHeight, spacing, compactHeight, compactTypes);
+                    break;
+                }
+            }
+        }
+
         var cell = QuickToggleLayout.resolveDragCell({
             pointerX: pointerX,
             pointerY: pointerY,
@@ -168,7 +183,8 @@ Item {
             spacing: spacing,
             columns: root.columns,
             columnSpan: size.width,
-            rowSpan: size.height
+            rowSpan: size.height,
+            rowHeights: rowHeights
         }, dragCellState, {
             hysteresis: root.reorderHysteresis,
             settleMs: root.reorderSettleMs,

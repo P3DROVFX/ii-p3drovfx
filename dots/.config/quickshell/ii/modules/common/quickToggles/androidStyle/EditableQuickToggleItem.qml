@@ -197,7 +197,9 @@ Item {
                     gridPos.y,
                     root.target.baseCellWidth,
                     root.target.baseCellHeight,
-                    root.target.cellSpacing
+                    root.target.cellSpacing,
+                    root.target.panel ? root.target.panel.compactRowHeight : 0,
+                    root.target.panel ? root.target.panel.compactToggleTypes : null
                 );
             }
             if (root.target.panel && root.target.panel.handleDragScrollRequest) {

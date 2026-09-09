@@ -108,8 +108,30 @@ Item {
     property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
     property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 
+    // Compact vertical footprint: the track keeps StyledSlider's M preset at the
+    // reference cell height, so a full cell read as ~13px of dead margin per side.
+    // The widget hugs the track instead, and the packer reserves this height for
+    // slider-only rows (QuickToggleLayout.rowPixelHeights) instead of a full cell.
+    readonly property real compactHeight: QuickToggleMetrics.sliderWidgetHeight(root.baseCellHeight)
+
+    readonly property real effectiveTrackThickness: {
+        var t = QuickToggleMetrics.sliderTrack(root.baseCellHeight);
+        if (!(t > 0))
+            t = 30; // StyledSlider.Configuration.M
+        return t;
+    }
+
+    // Track corners follow the user's rounding preference (windowRounding is
+    // derived from appearance.roundingValue) but at a reduced fraction — the full
+    // token saturates a ~30px track into a blob. Half the track thickness is the
+    // geometric pill limit, and sharp mode zeroes the override the same way the
+    // StyledSlider default would.
+    readonly property real trackCornerRadius: Config.options.appearance.sharpMode
+        ? 0
+        : Math.min(effectiveTrackThickness / 2, Appearance.rounding.windowRounding * 0.3)
+
     implicitWidth: baseWidth
-    implicitHeight: baseHeight
+    implicitHeight: root.isVertical ? baseHeight : Math.min(baseHeight, compactHeight)
     
     Rectangle {
         anchors.fill: parent
@@ -177,6 +199,8 @@ Item {
                 // cell height sliderTrack() returns -1 and the fixed M preset stands.
                 readonly property real trackThickness: QuickToggleMetrics.sliderTrack(root.baseCellHeight)
                 configuration: trackThickness > 0 ? trackThickness : StyledSlider.Configuration.M
+                trackRadius: root.trackCornerRadius
+                unsharpenRadius: root.trackCornerRadius
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
                 valueAnimationDuration: root._activeValueAnimDuration
@@ -195,27 +219,19 @@ Item {
                     onClicked: root.openMenu()
                 }
 
-                MaterialShapeWrappedMaterialSymbol {
+                MaterialSymbol {
                     id: horizIcon
                     property bool nearFull: quickSliderHorizontal.value >= 0.82
+                    visible: root.materialSymbol.length > 0
                     anchors {
                         verticalCenter: parent.verticalCenter
                         right: nearFull ? quickSliderHorizontal.handle.right : parent.right
                         rightMargin: nearFull ? 10 : 4
                     }
-                    iconSize: root.scaled(16)
-                    padding: 4
-                    shape: MaterialShape.Shape.Cookie7Sided
+                    iconSize: root.scaled(20)
                     text: root.materialSymbol
 
                     color: {
-                        if (quickSliderHorizontal.value > 1.0) {
-                            return Appearance.colors.colErrorContainer;
-                        }
-                        return nearFull ? "transparent" : Appearance.colors.colSecondaryContainer;
-                    }
-
-                    colSymbol: {
                         if (quickSliderHorizontal.value > 1.0) {
                             return Appearance.m3colors.m3onErrorContainer;
                         }
@@ -223,9 +239,6 @@ Item {
                     }
 
                     Behavior on color {
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-                    Behavior on colSymbol {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                     Behavior on anchors.rightMargin {
@@ -261,6 +274,8 @@ Item {
                 id: quickSliderVertical
                 anchors.fill: parent
                 configuration: 48
+                trackRadius: root.trackCornerRadius
+                unsharpenRadius: root.trackCornerRadius
                 showValueLabel: false
                 stopIndicatorValues: []
                 valueAnimationDuration: root._activeValueAnimDuration

@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
+import qs.modules.common.quickToggles
 import qs.modules.common.quickToggles.androidStyle
 import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
@@ -64,6 +65,20 @@ AbstractQuickPanel {
     // Hosts with touch-sized grids (tablet family) raise this; the ii sidebar keeps 56,
     // and every derived metric (icon circles, typography) scales off it.
     property real baseCellHeight: 56
+
+    // Sliders hug their track instead of filling a full cell, so rows made only of
+    // them pack shorter. Render (positionedItems), page height and the drag cell
+    // mapping all consume the same two values — one source of truth each.
+    readonly property list<string> compactToggleTypes: {
+        var types = [];
+        var all = QuickToggleCatalog.allTypes();
+        for (var i = 0; i < all.length; i++) {
+            if (QuickToggleCatalog.kind(all[i]) === "slider")
+                types.push(all[i]);
+        }
+        return types;
+    }
+    readonly property real compactRowHeight: QuickToggleMetrics.sliderWidgetHeight(root.baseCellHeight)
 
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
@@ -154,7 +169,9 @@ AbstractQuickPanel {
         root.packedUnusedToggles,
         root.baseCellWidth,
         root.baseCellHeight,
-        root.spacing
+        root.spacing,
+        root.compactRowHeight,
+        root.compactToggleTypes
     )
 
     // One packer owns both visible geometry and height. Delegates are decorated
@@ -174,7 +191,9 @@ AbstractQuickPanel {
                 root.packedPages[i] || { rowsUsed: 0, items: [] },
                 root.baseCellWidth,
                 root.baseCellHeight,
-                root.spacing
+                root.spacing,
+                root.compactRowHeight,
+                root.compactToggleTypes
             ));
         }
         return result;
@@ -186,7 +205,14 @@ AbstractQuickPanel {
             return baseCellHeight + 8;
         var packedPage = packedPages[pageIndex];
         var rows = packedPage ? packedPage.rowsUsed : 0;
-        return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
+        var rowHeights = QuickToggleLayout.rowPixelHeights(
+            packedPage, baseCellHeight, spacing, compactRowHeight, compactToggleTypes);
+        if (!rowHeights)
+            return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
+        var total = 0;
+        for (var i = 0; i < rowHeights.length; i++)
+            total += rowHeights[i] + spacing;
+        return Math.max(baseCellHeight, total - spacing) + 8;
     }
 
     // Dynamic height based on current page + page indicators

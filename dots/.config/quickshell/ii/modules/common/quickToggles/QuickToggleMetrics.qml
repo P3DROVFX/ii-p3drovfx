@@ -56,4 +56,20 @@ Singleton {
             return -1;
         return Math.round(cellHeight * 0.62);
     }
+
+    /**
+     * Vertical footprint of a slider quick toggle. The track keeps StyledSlider's M
+     * preset at the reference cell height, so giving the widget a full cell left the
+     * track floating in ~13px of dead margin per side at 56px. The widget hugs the
+     * track instead — track plus compact padding, capped by the cell — and rows made
+     * only of these widgets reserve this height (see QuickToggleLayout.rowPixelHeights)
+     * without changing the cell grid the toggles use.
+     */
+    function sliderWidgetHeight(cellHeight: real): real {
+        var track = sliderTrack(cellHeight);
+        if (!(track > 0))
+            track = 30; // StyledSlider.Configuration.M
+        var cell = cellHeight > 0 ? cellHeight : track;
+        return Math.min(cell, track + 2 * scaled(cellHeight, 6));
+    }
 }
