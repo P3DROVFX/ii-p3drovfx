@@ -61,6 +61,12 @@ AbstractBackgroundWidget {
     property real controlsSize: 55
     property real buttonIconSize: 30
     property bool showSwitchButton: false
+    // MultiEffect cannot paint outside its own item when auto padding is
+    // disabled, so reserve the falloff area explicitly. Tying it to the
+    // widget size keeps the halo proportional if a layout changes the widget.
+    readonly property real glowPadding: Math.max(Appearance.rounding.large, root.widgetSize * 0.16)
+    readonly property real glowOpacity: Config.options.background.widgets.media.glow.enable
+        ? Math.min(1, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
 
     property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
     property QtObject blendedColors: AdaptedMaterialScheme {
@@ -156,37 +162,34 @@ AbstractBackgroundWidget {
         implicitWidth: root.widgetSize
         implicitHeight: root.widgetSize
 
-        // Silhouette glow (same technique as the Phone sidebar header pills):
-        // a DropShadow of the widget's own shape rendered behind it. The
-        // blurred inner half is covered by the opaque art background, so only
-        // the outer falloff shows — no blur composited inside the widget and
-        // no circular "wall" cutting the glow when the shape has lobes
-        // (cookies, bursts, flowers), because the source IS the shape.
-        MaterialShape {
-            id: glowSourceShape
+        // Render a blurred copy of the shape in a manually padded native
+        // QtQuick.Effects layer. The previous Qt5Compat DropShadow consumed an
+        // invisible source on this background window and could produce no
+        // output; the explicit host also gives the falloff room to exist
+        // outside the silhouette without a clipping wall.
+        Item {
+            id: artGlow
             anchors.fill: parent
-            shapeString: root.backgroundShape
-            color: "#FFFFFF"
-            visible: false
-        }
+            anchors.margins: -root.glowPadding
+            visible: root.glowOpacity > 0.01
+            opacity: root.glowOpacity
 
-        DropShadow {
-            id: blurredArtGlow
-            source: glowSourceShape
-            x: glowSourceShape.x
-            y: glowSourceShape.y
-            width: glowSourceShape.width
-            height: glowSourceShape.height
-            radius: 28
-            samples: 57
-            // Full-alpha color: the glow competes with the compositor's
-            // ignore_alpha rule on quickshell.* windows (alpha <= ~0.05 is
-            // discarded), so the old transparentized color at 0.01*brightness
-            // ended up below the threshold and the glow simply vanished.
-            color: root.artDominantColor
-            transparentBorder: true
-            opacity: Config.options.background.widgets.media.glow.enable ? Math.min(1, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
-            visible: opacity > 0.01
+            MaterialShape {
+                id: glowSourceShape
+                anchors.fill: parent
+                anchors.margins: root.glowPadding
+                shapeString: root.backgroundShape
+                color: root.artDominantColor
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: glowSourceShape
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: root.glowPadding
+                blur: 1.0
+            }
 
             Behavior on opacity {
                 animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
