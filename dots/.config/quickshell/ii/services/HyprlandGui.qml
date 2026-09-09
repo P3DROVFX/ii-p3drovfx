@@ -80,7 +80,21 @@ Singleton {
         "group:col.border_active": "appearance",
         "group:groupbar:col.active": "appearance",
         "decoration:rounding": "windows",
-        "decoration:blur:size": "windows"
+        "decoration:blur:size": "windows",
+        "decoration:blur:passes": "windows",
+        "decoration:blur:noise": "windows",
+        "decoration:blur:contrast": "windows",
+        "decoration:blur:brightness": "windows",
+        "decoration:blur:vibrancy": "windows",
+        "decoration:blur:vibrancy_darkness": "windows",
+        "decoration:blur:ignore_opacity": "windows",
+        "decoration:blur:new_optimizations": "windows",
+        "decoration:blur:xray": "windows",
+        "decoration:blur:special": "windows",
+        "decoration:blur:popups": "windows",
+        "decoration:blur:popups_ignorealpha": "windows",
+        "decoration:blur:input_methods": "windows",
+        "decoration:blur:input_methods_ignorealpha": "windows"
     })
 
     property bool ready: false

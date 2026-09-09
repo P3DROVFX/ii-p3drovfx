@@ -2433,6 +2433,25 @@ Singleton {
                     property real contentTransparency: 0.38
                 }
                 property int blurSize: 10
+                // Keep blurSize at its existing path for presets. These defaults
+                // match the II Hyprland look; the compositor still owns enabled.
+                property JsonObject blur: JsonObject {
+                    property bool advancedOptions: false
+                    property int passes: 3
+                    property real noise: 0.05
+                    property real contrast: 0.89
+                    property real brightness: 1.0
+                    property real vibrancy: 0.2
+                    property real vibrancyDarkness: 0.2
+                    property bool ignoreOpacity: true
+                    property bool newOptimizations: true
+                    property bool xray: false
+                    property bool special: false
+                    property bool popups: false
+                    property real popupsIgnoreAlpha: 0.6
+                    property bool inputMethods: true
+                    property real inputMethodsIgnoreAlpha: 0.8
+                }
                 property int borderWidth: 1
                 property int gapsIn: 4
                 property int gapsOut: 5
