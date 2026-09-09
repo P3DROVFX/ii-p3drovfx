@@ -385,8 +385,6 @@ Item {
                         implicitHeight: 80
                         radius: Appearance.rounding.normal
                         color: Appearance.colors.colLayer2
-                        border.width: 1
-                        border.color: Appearance.colors.colOutline
 
                         RowLayout {
                             anchors.fill: parent

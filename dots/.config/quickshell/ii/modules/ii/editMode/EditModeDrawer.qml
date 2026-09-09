@@ -630,8 +630,6 @@ Item {
         width: Appearance.sizes.editModeDrawerWidth
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.verylarge
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
 
         // The remove tint: lit while a desktop widget is carried over the panel.
         Rectangle {
@@ -1819,8 +1817,6 @@ Item {
         height: 40
         radius: Appearance.rounding.full
         color: Appearance.m3colors.m3surfaceContainer
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
 
         RowLayout {
             id: ghostRow

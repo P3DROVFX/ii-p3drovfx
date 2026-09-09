@@ -2064,6 +2064,7 @@ Item {
                                     StyledTextInput {
                                         id: categoryInput
                                         Layout.fillWidth: true
+                                        clip: true
                                         color: Appearance.colors.colOnSurface
                                         Keys.onReturnPressed: root.addCategory()
 
@@ -2120,6 +2121,7 @@ Item {
                                     StyledTextInput {
                                         id: linkInput
                                         Layout.fillWidth: true
+                                        clip: true
                                         text: root.formUrl
                                         onTextChanged: root.formUrl = text
                                         color: Appearance.colors.colOnSurface
@@ -2145,6 +2147,7 @@ Item {
                                     StyledTextInput {
                                         id: locationInput
                                         Layout.fillWidth: true
+                                        clip: true
                                         text: root.formLocation
                                         onTextChanged: root.formLocation = text
                                         color: Appearance.colors.colOnSurface
@@ -2249,11 +2252,13 @@ Item {
                                             Layout.fillHeight: true
                                             clip: true
                                             contentWidth: width
-                                            contentHeight: notesInput.implicitHeight
+                                            contentHeight: Math.max(height, notesInput.height)
+                                            interactive: contentHeight > height
 
                                             StyledTextArea {
                                                 id: notesInput
                                                 width: notesFlick.width
+                                                height: Math.max(notesFlick.height, contentHeight)
                                                 placeholderText: Translation.tr("Add details (optional)")
                                                 font.pixelSize: Appearance.font.pixelSize.small
                                                 color: Appearance.colors.colOnSurface

@@ -145,8 +145,6 @@ Item {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
         color: Appearance.m3colors.m3surfaceContainer
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
     }
 
     ColumnLayout {
@@ -373,8 +371,6 @@ Item {
                 anchors.fill: parent
                 radius: Appearance.rounding.windowRounding
                 color: Appearance.m3colors.m3surfaceContainer
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
             }
 
             ColumnLayout {

@@ -202,8 +202,6 @@ Item {
         }
         radius: Appearance.rounding.large
         color: hoverHandler.hovered ? root.colBgHover : root.colBg
-        border.width: Config.options.appearance.borderless ? 0 : 1
-        border.color: root.colBorder
         implicitHeight: cardLayout.implicitHeight + 36
         clip: true
         opacity: root.mutating ? 0.85 : 1.0

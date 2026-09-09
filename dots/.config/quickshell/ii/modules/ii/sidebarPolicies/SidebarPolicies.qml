@@ -298,8 +298,6 @@ Scope { // Scope
                 id: sidebarLeftBackground
                 focus: GlobalStates.sidebarLeftOpen
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-                border.width: root.pin ? 0 : 1
-                border.color: root.pin ? "transparent" : Appearance.colors.colLayer0Border
                 radius: root.pin ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
                 
                 height: root.pin ? parent.height : parent.height - (Appearance.sizes.hyprlandGapsOut * 2)

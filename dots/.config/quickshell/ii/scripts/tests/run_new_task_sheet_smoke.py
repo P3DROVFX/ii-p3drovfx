@@ -197,6 +197,17 @@ Item {
    compare(sheet.formTags.length, 0);
   }
 
+  function test_long_notes_stay_inside_their_own_scroll_area() {
+   const sheet = createTemporaryObject(sheetComponent, parent);
+   const notes = findInput(sheet, "newTaskNotesArea");
+   const notesFlick = findInput(sheet, "newTaskNotesFlickable");
+   verify(notes !== null && notesFlick !== null);
+   notes.text = Array(80).fill("A long task note").join("\\n");
+   wait(0);
+   verify(notes.height > notesFlick.height);
+   verify(notesFlick.contentHeight > notesFlick.height);
+  }
+
   function test_google_tasks_hides_priority_and_tags() {
    Todo.supportsPriority = false; Todo.supportsTags = false;
    const sheet = createTemporaryObject(sheetComponent, parent);

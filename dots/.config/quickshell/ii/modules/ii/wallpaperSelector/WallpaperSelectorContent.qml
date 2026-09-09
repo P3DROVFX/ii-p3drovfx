@@ -503,8 +503,6 @@ function moveToTrashFile(modelData) {
             margins: Appearance.sizes.elevationMargin
         }
         focus: true
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
         color: Appearance.colors.colLayer0
         radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 

@@ -162,7 +162,7 @@ Item {
                 height: root.cellHeight
                 radius: Appearance.rounding.small
                 color: Appearance.colors.colLayer1
-                border.width: cell.applied ? 2 : 1
+                border.width: cell.applied ? 2 : 0
                 border.color: cell.applied ? Appearance.colors.colPrimary : Appearance.colors.colLayer0Border
                 scale: tileMouse.containsPress ? 0.96 : 1
                 Behavior on scale {

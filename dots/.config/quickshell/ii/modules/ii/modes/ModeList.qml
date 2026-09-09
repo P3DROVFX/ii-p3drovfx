@@ -181,8 +181,6 @@ Rectangle {
                 height: list.rowHeight
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colLayer2
-                border.width: 1
-                border.color: Appearance.colors.colOutlineVariant
 
                 Behavior on y {
                     enabled: list.dragging

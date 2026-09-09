@@ -402,8 +402,6 @@ Item {
                     height: 28
                     radius: Appearance.rounding.small
                     color: Appearance.colors.colLayer1
-                    border.width: 1.5
-                    border.color: Appearance.colors.colPrimary
 
                     MouseArea {
                         anchors.fill: parent

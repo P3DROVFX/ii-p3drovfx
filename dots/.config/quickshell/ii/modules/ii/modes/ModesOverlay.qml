@@ -178,8 +178,6 @@ Scope {
 
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
-                    border.width: 1
-                    border.color: Appearance.colors.colLayer0Border
                     radius: Appearance.rounding.windowRounding
                     implicitWidth: Math.min(maxBgWidth, modesContent.implicitWidth + padding * 2)
                     implicitHeight: Math.min(maxBgHeight, modesContent.implicitHeight + padding * 2)

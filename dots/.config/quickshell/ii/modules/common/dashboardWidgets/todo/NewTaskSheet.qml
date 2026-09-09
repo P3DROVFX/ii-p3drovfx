@@ -341,6 +341,9 @@ Item {
                             id: titleInput
                             objectName: "newTaskTitleInput"
                             Layout.fillWidth: true
+                            // The title shares its row with the leading shape;
+                            // keep long single-line input inside its own lane.
+                            clip: true
                             font.pixelSize: Appearance.font.pixelSize.normal
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
@@ -464,6 +467,7 @@ Item {
                                 id: tagInput
                                 objectName: "newTaskTagInput"
                                 Layout.fillWidth: true
+                                clip: true
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 color: Appearance.colors.colOnSurface
 
@@ -574,24 +578,35 @@ Item {
                             text: Translation.tr("Notes")
                         }
 
-                        StyledTextArea {
-                            id: notesArea
-                            objectName: "newTaskNotesArea"
+                        StyledFlickable {
+                            id: notesFlick
+                            objectName: "newTaskNotesFlickable"
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            wrapMode: TextEdit.Wrap
-                            background: null
-                            padding: 0
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colOnSurface
+                            clip: true
+                            contentWidth: width
+                            contentHeight: Math.max(height, notesArea.height)
+                            interactive: contentHeight > height
 
-                            StyledText {
-                                anchors.fill: parent
-                                visible: notesArea.text.length === 0 && !notesArea.activeFocus
-                                verticalAlignment: Text.AlignTop
-                                text: Translation.tr("Details, links, anything else")
-                                color: Appearance.colors.colOnLayer1Inactive
+                            StyledTextArea {
+                                id: notesArea
+                                objectName: "newTaskNotesArea"
+                                width: notesFlick.width
+                                height: Math.max(notesFlick.height, contentHeight)
+                                wrapMode: TextEdit.Wrap
+                                background: null
+                                padding: 0
                                 font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurface
+
+                                StyledText {
+                                    anchors.fill: parent
+                                    visible: notesArea.text.length === 0 && !notesArea.activeFocus
+                                    verticalAlignment: Text.AlignTop
+                                    text: Translation.tr("Details, links, anything else")
+                                    color: Appearance.colors.colOnLayer1Inactive
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                }
                             }
                         }
                     }
