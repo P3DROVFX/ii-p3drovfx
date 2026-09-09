@@ -277,8 +277,17 @@ Rectangle {
                         id: navButton
                         required property int index
                         required property var modelData
-                        showToggledHighlight: false
-                        colBackgroundHover: toggled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
+                        // Tabs sit on Layer1: an unselected hover needs the
+                        // elevated Layer2 state, while the selected tab is a
+                        // secondary container with its own hover/press tokens.
+                        showToggledHighlight: true
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
+                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                        colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
+                        colRipple: Appearance.colors.colLayer2Active
+                        colRippleToggled: Appearance.colors.colSecondaryContainerActive
                         toggled: root.selectedTab == index
                         buttonText: modelData.name
                         buttonIcon: modelData.icon
