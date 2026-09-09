@@ -61,12 +61,14 @@ AbstractBackgroundWidget {
     property real controlsSize: 55
     property real buttonIconSize: 30
     property bool showSwitchButton: false
-    // MultiEffect cannot paint outside its own item when auto padding is
-    // disabled, so reserve the falloff area explicitly. Tying it to the
-    // widget size keeps the halo proportional if a layout changes the widget.
+    // The glow is a static stack of the selected shape. Each larger, more
+    // transparent silhouette forms one band of the falloff; no effect texture
+    // is involved, so the background window cannot leak a rectangular buffer.
     readonly property real glowPadding: Math.max(Appearance.rounding.large, root.widgetSize * 0.16)
     readonly property real glowOpacity: Config.options.background.widgets.media.glow.enable
-        ? Math.min(1, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
+        // The band alphas add where their silhouettes overlap. Capping the
+        // shared strength preserves a soft edge even at the highest setting.
+        ? Math.min(0.6, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
 
     property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
     property QtObject blendedColors: AdaptedMaterialScheme {
@@ -162,33 +164,35 @@ AbstractBackgroundWidget {
         implicitWidth: root.widgetSize
         implicitHeight: root.widgetSize
 
-        // Render a blurred copy of the shape in a manually padded native
-        // QtQuick.Effects layer. The previous Qt5Compat DropShadow consumed an
-        // invisible source on this background window and could produce no
-        // output; the explicit host also gives the falloff room to exist
-        // outside the silhouette without a clipping wall.
+        // A direct MaterialShape halo is deliberately used instead of any
+        // blur effect. Both the old compatibility shadow and the native blur
+        // could leak their offscreen rectangular buffer on this window. These
+        // nested silhouettes are regular scene items, so their transparent
+        // pixels stay transparent and every outline still follows the selected
+        // Material shape.
         Item {
             id: artGlow
             anchors.fill: parent
-            anchors.margins: -root.glowPadding
             visible: root.glowOpacity > 0.01
             opacity: root.glowOpacity
 
-            MaterialShape {
-                id: glowSourceShape
-                anchors.fill: parent
-                anchors.margins: root.glowPadding
-                shapeString: root.backgroundShape
-                color: root.artDominantColor
-            }
+            Repeater {
+                model: [
+                    { "spread": 1.0, "alpha": 0.055 },
+                    { "spread": 0.82, "alpha": 0.07 },
+                    { "spread": 0.64, "alpha": 0.09 },
+                    { "spread": 0.46, "alpha": 0.12 },
+                    { "spread": 0.28, "alpha": 0.16 },
+                    { "spread": 0.12, "alpha": 0.21 }
+                ]
 
-            MultiEffect {
-                anchors.fill: parent
-                source: glowSourceShape
-                autoPaddingEnabled: false
-                blurEnabled: true
-                blurMax: root.glowPadding
-                blur: 1.0
+                delegate: MaterialShape {
+                    required property var modelData
+                    anchors.fill: parent
+                    anchors.margins: -root.glowPadding * modelData.spread
+                    shapeString: root.backgroundShape
+                    color: ColorUtils.transparentize(root.artDominantColor, 1 - modelData.alpha)
+                }
             }
 
             Behavior on opacity {
