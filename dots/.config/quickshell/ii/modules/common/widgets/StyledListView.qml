@@ -42,6 +42,10 @@ ListView {
     readonly property real minY: root.originY - root.topMargin
     readonly property real maxY: Math.max(minY, root.originY + root.contentHeight - root.height + root.bottomMargin)
     readonly property real maxBounceOvershoot: Math.min(60, Math.max(30, root.height * 0.12))
+    // "Reduce settings animations" also removes the top/bottom overscroll
+    // bounce: no rubber-banding on drag, wheel overshoot clamps hard to the
+    // bounds and there is nothing left to rebound.
+    readonly property bool bounceEffectsEnabled: !(Config.options?.appearance?.settingsPerformanceMode ?? false)
 
     /**
      * The reader turned the wheel, and where that puts them. A list that moves
@@ -126,7 +130,7 @@ ListView {
     }
 
     maximumFlickVelocity: 3500
-    boundsBehavior: Flickable.DragOverBounds
+    boundsBehavior: bounceEffectsEnabled ? Flickable.DragOverBounds : Flickable.StopAtBounds
     ScrollBar.vertical: StyledScrollBar {}
 
     // This must stay a pointer handler rather than an anchored MouseArea.
@@ -164,6 +168,12 @@ ListView {
                 const effectiveStep = (currentPos >= root.maxY) ? (stepDown * resistance) : ((stepDown - (root.maxY - currentPos)) * resistance);
                 const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
                 targetY = root.maxY + newOvershoot;
+            }
+
+            if (!root.bounceEffectsEnabled) {
+                // No rubber-banding: clamp hard to the bounds, no rebound.
+                targetY = Math.max(root.minY, Math.min(root.maxY, rawTarget));
+                isOvershooting = false;
             }
 
             root.scrollTargetY = targetY;

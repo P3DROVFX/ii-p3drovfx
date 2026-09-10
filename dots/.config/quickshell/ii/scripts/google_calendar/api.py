@@ -38,7 +38,7 @@ def request_json(method: str, path: str, token: str, body=None, query=None):
         },
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             if response.status == 204 or method == "DELETE":
                 return {"ok": True, "data": {"deleted": True}}
             raw = response.read().decode("utf-8")

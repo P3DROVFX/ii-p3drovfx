@@ -109,7 +109,7 @@ Item {
                 }
 
                 StyledToolTip {
-                    text: Translation.tr("Disables animations and expensive effects inside Settings.")
+                    text: Translation.tr("Disables animations and expensive effects inside Settings, including the scroll bounce at the top and bottom.")
                 }
             }
 

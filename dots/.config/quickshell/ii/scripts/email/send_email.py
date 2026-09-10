@@ -29,7 +29,7 @@ def send_message(token, raw_msg, thread_id=None):
             "Content-Type": "application/json"
         }
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read())
 
 def main():

@@ -36,7 +36,7 @@ def request_json(method, path, token, body=None, query=None):
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             if resp.status == 204 or method == "DELETE":
                 return {"ok": True, "data": {"deleted": True}}
             res_body = resp.read().decode("utf-8")

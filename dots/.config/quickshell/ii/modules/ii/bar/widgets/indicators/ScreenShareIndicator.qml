@@ -13,6 +13,12 @@ MouseArea {
     id: indicator
 
     property bool vertical: false
+    // Producer/observer pattern fixed 2026-09-10: the pw-dump loop still runs
+    // per widget instance, but `screensharestate.sh` now holds a non-blocking
+    // flock with a pid heartbeat and exits when reparented, so the instances
+    // the bar spawns (per section, per monitor, survivors of every hot-reload
+    // or kill -9 — the 2026-09-08 audit measured eight coexisting) collapse
+    // to exactly one live producer per machine. See the script header.
     property bool activelyScreenSharing: false
 
     // Edit Mode has to be able to reach a widget that is currently showing
@@ -26,12 +32,18 @@ MouseArea {
     implicitWidth: shown ? (vertical ? Appearance.sizes.verticalBarWidth : 40) : 0
     implicitHeight: shown ? (vertical ? 40 : Appearance.sizes.baseBarHeight) : 0
     hoverEnabled: true
+
+    // The producer loop lives here, but the script holds a non-blocking flock
+    // with a heartbeat, so the several instances this widget spawns (per bar
+    // section, per monitor, per reload) collapse into ONE live pw-dump loop —
+    // the 2026-09-08 audit measured eight coexisting, unkillable producers.
+    // The flock makes a loser exit in milliseconds instead of stacking.
     Process {
         id: screenShareProc
         running: true
-        command: ["bash", "-c", Directories.screenshareStateScript]
+        command: ["bash", Directories.screenshareStateScript]
     }
-    
+
     FileView {
         id: stateFile
         path: Directories.screenshareStatePath

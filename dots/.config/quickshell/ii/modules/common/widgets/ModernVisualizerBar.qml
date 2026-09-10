@@ -2,7 +2,7 @@ import QtQuick
 import qs.modules.common
 import qs.modules.common.functions
 
-Item { // High-performance lightweight visualizer bar
+Item { // Lightweight visualizer bar: direct height application
     id: root
 
     property real amplitude: 0.0 // 0.0 to 1.0
@@ -18,32 +18,22 @@ Item { // High-performance lightweight visualizer bar
     implicitWidth: barWidth
     implicitHeight: maxHeight
 
-    // Target heights for smooth animation
+    // Heights are applied directly from the sample, not retargeted through
+    // Behaviors: Cava pushes ~30 samples/s and every instance of this bar
+    // used to run two NumberAnimations per bar (eight across Neural Media's
+    // four + the notch's four), each restarted ~60x/s — the steady-state CPU
+    // the 2026-09-10 pass traced to the visualizer while media played. The
+    // Dock Media widget already samples straight into `height` with no
+    // animation and looks identical, because 30 Hz *is* the animation; an
+    // extra 90 ms tween per sample only adds retarget churn.
     readonly property real targetHeight: minHeight + amplitude * (maxHeight - minHeight)
     readonly property real bgTargetHeight: minHeight + bgAmplitude * (maxHeight - minHeight)
-
-    property real currentHeight: targetHeight
-    property real currentBgHeight: bgTargetHeight
-
-    Behavior on currentHeight {
-        NumberAnimation {
-            duration: 90
-            easing.type: Easing.OutCubic
-        }
-    }
-
-    Behavior on currentBgHeight {
-        NumberAnimation {
-            duration: 110
-            easing.type: Easing.OutCubic
-        }
-    }
 
     // 1. Background Capsule (Translucent)
     Rectangle {
         id: bgCapsule
         width: root.barWidth * 1.4
-        height: Math.min(root.maxHeight * 1.2, root.currentBgHeight * 1.2 + 4)
+        height: Math.min(root.maxHeight * 1.2, root.bgTargetHeight * 1.2 + 4)
         radius: width / 2
         anchors.centerIn: parent
         opacity: 0.25 + root.bgAmplitude * 0.2
@@ -55,7 +45,7 @@ Item { // High-performance lightweight visualizer bar
     Rectangle {
         id: fgCapsule
         width: root.barWidth
-        height: root.currentHeight
+        height: root.targetHeight
         radius: width / 2
         anchors.centerIn: parent
         color: root.fgColor

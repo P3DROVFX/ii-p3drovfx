@@ -51,7 +51,7 @@ def refresh_token_exchange(refresh_token):
     )
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             body = json.loads(resp.read().decode('utf-8'))
             return body
     except urllib.error.HTTPError as e:

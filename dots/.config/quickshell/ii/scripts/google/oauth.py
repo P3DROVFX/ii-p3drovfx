@@ -125,7 +125,7 @@ def main():
                     headers={"Content-Type": "application/x-www-form-urlencoded"}
                 )
 
-                with urllib.request.urlopen(req) as resp:
+                with urllib.request.urlopen(req, timeout=30) as resp:
                     tokens = json.loads(resp.read().decode('utf-8'))
             except urllib.error.HTTPError as e:
                 err_body = e.read().decode('utf-8', errors='ignore')
@@ -168,7 +168,7 @@ def main():
                     "https://www.googleapis.com/oauth2/v2/userinfo",
                     headers={"Authorization": f"Bearer {access_token}"}
                 )
-                with urllib.request.urlopen(userinfo_req) as resp:
+                with urllib.request.urlopen(userinfo_req, timeout=30) as resp:
                     userinfo = json.loads(resp.read().decode('utf-8'))
                     email = userinfo.get("email", "")
                     picture = userinfo.get("picture", "")

@@ -92,7 +92,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data=data,
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 tokens = json.loads(resp.read())
         except urllib.error.HTTPError as e:
             body = e.read().decode()
@@ -117,7 +117,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "https://www.googleapis.com/oauth2/v2/userinfo",
                 headers={"Authorization": f"Bearer {access}"}
             )
-            with urllib.request.urlopen(req2) as resp:
+            with urllib.request.urlopen(req2, timeout=30) as resp:
                 userinfo = json.loads(resp.read())
             email = userinfo.get("email", "desconhecido")
             picture = userinfo.get("picture", "")

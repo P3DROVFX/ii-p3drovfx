@@ -81,6 +81,22 @@ Singleton {
     function setError(message: string): void { root.operationQueue = []; root.refreshQueued = false; root.operationPending = false; root.errorMessage = message; root.loading = false; root.errorOccurred(message) }
     function resetDisabled(): void { root.available = false; root.active = false; root.activeProfile = ""; root.activeProvider = ""; root.profiles = []; root.activeProfiles = []; root.availableProviders = []; root.nordvpnAvailable = false; root.protonvpnAvailable = false; root.statusText = Translation.tr("Disabled"); root.loading = false }
     function refresh(): void { if (!root.enabled) { root.operationQueue = []; root.currentOperation = null; root.refreshQueued = false; root.resetDisabled(); return } if (root.refreshQueued) return; root.refreshQueued = true; root.loading = true; root.errorMessage = ""; root.enqueue("probeNmcli", ["which", "nmcli"], null) }
+    // The 10 s poll must not rebuild the world. refresh() runs the whole
+    // discovery chain (three `which` probes, the profile list, and a status
+    // call to EVERY installed CLI provider) — the 2026-09-08 audit caught
+    // `protonvpn status` (a Python CLI, ~103 MiB PSS peak) being paid for on
+    // every tick even though the configured backend was NetworkManager.
+    // The light poll reads only what can change silently between ticks:
+    // NM's active connections, plus the CLI status of a provider only while
+    // that provider is the one we believe is connected.
+    function pollStatus(): void {
+        if (!root.enabled || root.loading || root.refreshQueued) return
+        root.loading = true
+        if (root.available) root.enqueue("active", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], null)
+        if (root.activeProvider === "nordvpn" && root.nordvpnAvailable) root.enqueue("nordStatus", ["nordvpn", "status"], null)
+        else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable) root.enqueue("protonStatus", ["protonvpn", "status"], null)
+        root.enqueue("finishRefresh", ["true"], null)
+    }
     function toggleVpn(): void {
         if (!root.enabled) {
             root.setError(Translation.tr("VPN is disabled in settings"))
@@ -139,6 +155,7 @@ Singleton {
             else if (kind === "probeNord") { root.nordvpnAvailable = exitCode === 0 && out.trim().length > 0; if (root.nordvpnAvailable) root.availableProviders = root.availableProviders.concat(["nordvpn"]); root.enqueue("probeProton", ["which", "protonvpn"], null) }
             else if (kind === "probeProton") { root.protonvpnAvailable = exitCode === 0 && out.trim().length > 0; if (root.protonvpnAvailable) root.availableProviders = root.availableProviders.concat(["protonvpn"]); root.providerCapabilities = { networkmanager: { status: root.available, connect: root.available, disconnect: root.available, location: root.available }, nordvpn: { status: root.nordvpnAvailable, connect: root.nordvpnAvailable, disconnect: root.nordvpnAvailable, location: root.nordvpnAvailable }, protonvpn: { status: root.protonvpnAvailable, connect: root.protonvpnAvailable, disconnect: root.protonvpnAvailable, location: root.protonvpnAvailable } }; if (root.available) { root.enqueue("profiles", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,UUID", "connection", "show"], null); root.enqueue("active", ["nmcli", "-t", "--escape", "yes", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"], null) } if (root.nordvpnAvailable) root.enqueue("nordStatus", ["nordvpn", "status"], null); if (root.protonvpnAvailable) root.enqueue("protonStatus", ["protonvpn", "status"], null); root.enqueue("finishRefresh", ["true"], null) }
             else if (kind === "profiles") { const result = []; for (const row of root.parseNmcli(out, 3)) { const type = String(row[1]).toLowerCase(); if (type.includes("vpn") || type.includes("wireguard") || type === "tun") result.push({ name: row[0], type: row[1], uuid: row[2] || "" }) } root.profiles = result }
+            else if (kind === "active") { root.parseActive(out) }
             else if (kind === "finishRefresh") { root.normalizeProviderState(); root.operationPending = false; root.refreshQueued = false; root.loading = false; if (!root.available && !root.nordvpnAvailable && !root.protonvpnAvailable) root.statusText = Translation.tr("No VPN backend found"); if (root.autoConnect && !root.autoConnectAttempted && !root.active) { root.autoConnectAttempted = true; root.connectDefault() } }
             else if (kind === "nordStatus") { const p = root.parseProviderStatus(out); root.nordvpnStatus = p.status; root.nordvpnLocation = p.location; root.providerDiagnostics = Object.assign({}, root.providerDiagnostics, { nordvpn: { exitCode: exitCode, stderr: err.trim() } }); if (p.connected && !root.activeProfiles.length) { root.active = true; root.activeProvider = "nordvpn"; root.activeProfile = p.location; root.statusText = p.status } }
             else if (kind === "protonStatus") { const p = root.parseProviderStatus(out); root.protonvpnStatus = p.status; root.protonvpnLocation = p.location; root.providerDiagnostics = Object.assign({}, root.providerDiagnostics, { protonvpn: { exitCode: exitCode, stderr: err.trim() } }); if (p.connected && !root.active && !root.activeProfiles.length) { root.active = true; root.activeProvider = "protonvpn"; root.activeProfile = p.location; root.statusText = p.status } }
@@ -150,7 +167,7 @@ Singleton {
             root.finishOperation()
         }
     }
-    Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0; onTriggered: if (!root.loading) root.refresh() }
+    Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0; onTriggered: root.pollStatus() }
     Process {
         id: filePickerProc
         running: false

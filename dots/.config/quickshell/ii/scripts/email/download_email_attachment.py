@@ -17,7 +17,7 @@ def main():
         url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}/attachments/{attachment_id}"
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
         
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read())
             b64_data = data.get("data", "")
             

@@ -398,11 +398,18 @@ Item {
                     });
                     
                     if (currentIndex >= 0) {
-                        var visited = root.visitedTabs;
-                        if (!visited[currentIndex]) {
-                            visited[currentIndex] = true;
-                            root.visitedTabs = visited;
-                        }
+                        // Warm cache bounded to the current tab plus the one it
+                        // came from. `visitedTabs` used to only ever grow: with
+                        // keepLeftSidebarLoaded, a tour of AI + Translator +
+                        // Phone left three heavy trees resident forever (the
+                        // 2026-09-08 audit's top RAM priority, §2). The
+                        // previous-tab bound covers the common back-and-forth
+                        // without unbounded retention.
+                        var visited = {};
+                        visited[currentIndex] = true;
+                        if (root._prevTabIndex >= 0 && root._prevTabIndex !== currentIndex)
+                            visited[root._prevTabIndex] = true;
+                        root.visitedTabs = visited;
                     }
 
                     if (swipeView.currentItem && swipeView.currentItem.item && typeof swipeView.currentItem.item.triggerContentEntrance === "function") {

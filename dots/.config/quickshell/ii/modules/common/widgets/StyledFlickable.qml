@@ -5,7 +5,11 @@ import qs.modules.common
 Flickable {
     id: root
     maximumFlickVelocity: 3500
-    boundsBehavior: Flickable.DragOverBounds
+    // "Reduce settings animations" also removes the top/bottom overscroll
+    // bounce: no rubber-banding on drag, wheel overshoot clamps hard to the
+    // bounds and there is nothing left to rebound.
+    readonly property bool bounceEffectsEnabled: !(Config.options?.appearance?.settingsPerformanceMode ?? false)
+    boundsBehavior: bounceEffectsEnabled ? Flickable.DragOverBounds : Flickable.StopAtBounds
 
     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
@@ -98,6 +102,12 @@ Flickable {
                 const effectiveStep = (currentPos >= root.maxY) ? (stepDown * resistance) : ((stepDown - (root.maxY - currentPos)) * resistance);
                 const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
                 targetY = root.maxY + newOvershoot;
+            }
+
+            if (!root.bounceEffectsEnabled) {
+                // No rubber-banding: clamp hard to the bounds, no rebound.
+                targetY = Math.max(root.minY, Math.min(root.maxY, rawTarget));
+                isOvershooting = false;
             }
 
             root.scrollTargetY = targetY;

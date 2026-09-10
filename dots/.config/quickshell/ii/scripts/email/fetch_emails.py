@@ -9,7 +9,7 @@ import gmail_config
 def api_get(url, token):
     try:
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8", errors="ignore"))
     except Exception:
         return {}
