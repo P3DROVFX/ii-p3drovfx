@@ -970,7 +970,7 @@ Item {
         parent: root
         anchors.fill: parent
         show: false
-        backgroundWidth: 400
+        backgroundWidth: root.pendingKind === "fork" ? 620 : 400
         z: 100000
         onDismiss: show = false
 
@@ -983,6 +983,25 @@ Item {
             text: root.pendingKind === "branch"
                 ? Translation.tr("The ii folder is replaced with the %1 branch of %2. Your settings are kept and the shell restarts. The run happens in a terminal window and this window closes.").arg(root.pendingLabel).arg(root.forkLabel)
                 : Translation.tr("The ii folder is replaced with that fork's latest and your settings are reset to its defaults, since its options differ. A backup of both is kept. The run happens in a terminal window and this window closes.")
+        }
+
+        // Another fork has no such page, so the way back is the CLI. Only
+        // shown for fork switches: a branch switch keeps these buttons.
+        NoticeBox {
+            visible: root.pendingKind === "fork"
+            Layout.fillWidth: true
+            materialIcon: "info"
+            text: Translation.tr("Switching forks replaces your ii folder. You'll lose these visual buttons until you return.\n\n" +
+                                 "To return or switch again from a terminal, run:\n" +
+                                 "  II-P3DROVFX fork p3drovfx\n\n" +
+                                 "Or run the setup script directly:\n" +
+                                 "  ~/.local/share/ii-p3drovfx/setup-ii-p3drovfx.sh switch --fork p3drovfx\n\n" +
+                                 "Useful subcommands and flags:\n" +
+                                 "  switch: change fork or branch without reinstalling dependencies\n" +
+                                 "  update: refresh the fork and branch you are already on\n" +
+                                 "  --fork <name|url>: a preset (p3drovfx, end4, vynx) or a GitHub URL\n" +
+                                 "  --branch <name>: main or dev\n" +
+                                 "  --keep-config: keep your current settings")
         }
 
         WindowDialogButtonRow {
