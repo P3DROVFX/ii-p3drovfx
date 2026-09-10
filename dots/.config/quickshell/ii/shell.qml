@@ -11,6 +11,7 @@
 ////@ pragma Env QT_SCALE_FACTOR=1
 
 import "modules/common"
+import "modules/common/idleDim"
 import "services"
 import "panelFamilies"
 
@@ -27,6 +28,7 @@ ShellRoot {
 
     // Stuff for every panel family
     ReloadPopup {}
+    IdleDim {} // hypridle's 120 s dim, see hypr/hypridle.conf
 
     Component.onCompleted: {
         if (Qt.application) {

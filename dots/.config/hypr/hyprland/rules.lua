@@ -169,6 +169,7 @@ hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bo
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
+hl.layer_rule({ match = { namespace = "quickshell:idleDim" }, above_lock = 1, no_anim = true, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, blur = true})
