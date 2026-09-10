@@ -48,22 +48,43 @@ Item {
     property bool legacyGnomeZoomedOut: false
     // Edit Mode's shrink of the whole plane; the identity outside the mode.
     property matrix4x4 editMatrix: Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+    // Edit Mode's per-monitor progress, handed in by the surface that owns this
+    // plane. Zero on every screen the mode is not on, so a second monitor's
+    // wallpaper never follows a shrink it does not have.
+    property real editProgress: 0
 
     // Smoothly center parallax during overview opening to ensure zoom-out presets
-    // never expose black screen edges at extreme workspace positions.
+    // never expose black screen edges at extreme workspace positions, and during
+    // Edit Mode's shrink so the wallpaper and the widgets arrive as one desktop.
+    //
+    // The mode term is a ramp on `editProgress`, not a gate on the `editMode`
+    // boolean, for two reasons. The boolean is global while only one screen
+    // shrinks, so keying on it would centre every monitor's wallpaper and slide
+    // each of them on its own 450ms Behavior clock; the widgets already ramp on
+    // the per-monitor scalar (BackgroundWidgetsWindow.widgetsParallaxOffset) and
+    // the two layers must not disagree inside one card. And the boolean flips
+    // instantly on the way out, which is the other half of the race.
+    //
+    // The blend order is not cosmetic: the overview term already multiplies by
+    // `progress`, so applying the mode's factor afterwards is what keeps the two
+    // independent - during the overview the mode is closed (factor 1, expression
+    // unchanged byte for byte), during the mode no overview is open.
+    readonly property real editParallaxFactor: 1.0 - editProgress
     readonly property real effectiveParallaxX: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
             return wallpaperPlanes.centeredX;
-        if (overviewController && overviewController.progress > 0.001)
-            return parallaxX + (wallpaperPlanes.centeredX - parallaxX) * overviewController.progress;
-        return parallaxX;
+        const raw = (overviewController && overviewController.progress > 0.001)
+            ? parallaxX + (wallpaperPlanes.centeredX - parallaxX) * overviewController.progress
+            : parallaxX;
+        return wallpaperPlanes.centeredX + (raw - wallpaperPlanes.centeredX) * editParallaxFactor;
     }
     readonly property real effectiveParallaxY: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
             return wallpaperPlanes.centeredY;
-        if (overviewController && overviewController.progress > 0.001)
-            return parallaxY + (wallpaperPlanes.centeredY - parallaxY) * overviewController.progress;
-        return parallaxY;
+        const raw = (overviewController && overviewController.progress > 0.001)
+            ? parallaxY + (wallpaperPlanes.centeredY - parallaxY) * overviewController.progress
+            : parallaxY;
+        return wallpaperPlanes.centeredY + (raw - wallpaperPlanes.centeredY) * editParallaxFactor;
     }
 
     required property bool anyWidgetIsDragging
@@ -420,8 +441,16 @@ Item {
                         // overscanned wallpaper sits top-left and the lock zoom-out exposes it.
                         x: wallpaperImageRoot.effectiveParallaxX
                         y: wallpaperImageRoot.effectiveParallaxY
+                        // One clock for the centring in both directions, exactly
+                        // as the widget canvas gates its own position Behaviors
+                        // on the mode's scalar. The centring above is already
+                        // derived from `editProgress`, so this chase would only
+                        // lag it - and it used to be enabled through the whole
+                        // mode, which is the 450ms-vs-500ms race between the
+                        // wallpaper and the widgets inside one shrinking card.
                         Behavior on x {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
+                                && wallpaperImageRoot.editProgress <= 0.001
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
@@ -429,6 +458,7 @@ Item {
                         }
                         Behavior on y {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
+                                && wallpaperImageRoot.editProgress <= 0.001
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic

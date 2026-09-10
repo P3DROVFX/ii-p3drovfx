@@ -30,6 +30,12 @@ MouseArea {
     // the desktop's. The overlay reuses this component and has its own
     // dismissal, so it must not follow the mode.
     property bool editMode: false
+    // The mode's per-monitor shrink scalar, handed in by the owning window. The
+    // lattice is drawn ON the card, so it has to know about that card's own
+    // transition: the global progress would let a second monitor fade its
+    // full-screen dots in for a shrink that never happens there, with a corner
+    // radius divided by a scale never applied there.
+    property real editProgress: 0
 
     // ── Selection ────────────────────────────────────────────────────────────
     // Marquee multi-select. Opt-in per canvas: the overlay's canvas closes
@@ -667,15 +673,26 @@ MouseArea {
         anchors.fill: parent
         z: -1
         renderTarget: Canvas.FramebufferObject
-        // The lattice shows for a drag, and throughout the mode: in the mode
-        // the desktop is being laid out, and the grid is what it is laid out on.
-        readonly property bool wanted: (root.draggingActive || root.editMode) && root.gridOverlayEnabled
+        // The lattice shows for a drag, and once the mode has fully arrived.
+        // Mid-transition it stays hidden: the desktop is being shrink-scaled on
+        // every one of those frames, and a full-screen FBO sampled along with it
+        // is a cost the open animation has no use for - nothing is being aligned
+        // to the lattice while the card is still moving. Settling it also means
+        // the canvas is allocated and painted exactly once, off the animation
+        // path, instead of being rebuilt while the compositor is already busy.
+        // `root.editProgress` is the host's PER-MONITOR scalar, so a second
+        // monitor neither waits on a transition it does not have nor fades its
+        // dots in for a shrink never applied there.
+        readonly property bool modeSettled: !root.editMode
+            || Appearance.reducedMotion || root.editProgress >= 1
+        readonly property bool wanted: (root.draggingActive
+            || (root.editMode && modeSettled)) && root.gridOverlayEnabled
         visible: wanted && opacity > 0.001
         opacity: wanted ? 0.55 : 0
 
-        readonly property bool animating: GlobalStates.editProgress > 0 && GlobalStates.editProgress < 1
+        readonly property bool animating: root.editProgress > 0 && root.editProgress < 1
 
-        property real dotSize: 4.0
+        property real dotSize: 2.0
         onDotSizeChanged: { if (wanted && !animating) requestPaint(); }
         readonly property color dotColor: Appearance.colors.colPrimary
 

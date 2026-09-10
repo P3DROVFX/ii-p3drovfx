@@ -39,6 +39,17 @@ Item {
     property var dragSlot: null
     readonly property bool dragActive: root.dragSlot !== null
     property var dropTarget: null
+    // The frozen candidate table and the gesture's own decision state. Built
+    // once when the press commits, from the RESTING row, and every pointer
+    // sample resolves against that - never against the geometry the preview
+    // itself is moving. Re-asking `barDropTarget` per sample let the preview
+    // decide the next preview: the hole opened, a neighbour's live centre
+    // slid past the pointer, the answer flipped, the row re-animated - the
+    // flicker on every swap. See edit_mode.js, "The reorder target, decided
+    // on frozen cells". The hold window is the bar's own resize clock.
+    property var dragCells: null
+    property var dragState: null
+    readonly property real settleWindow: Appearance.animation.barResize.duration + 140
 
     // The window this bar is drawn in, published for the chrome: a catalogue
     // row dragged over here arrives in screen coordinates and has to be
@@ -124,9 +135,44 @@ Item {
             : root.mapToItem(null, root.width * f, root.height / 2);
     }
 
+    // The frozen candidate table, measured off the RESTING row. Call this
+    // before anything arms the preview: setting `dragSlot` is what lifts the
+    // carried widget and opens the first hole, and a table built after that
+    // would freeze the row mid-parting.
+    function restingCells(excludeSlot) {
+        const groups = [];
+        const empties = [];
+        for (let b = 0; b < 3; b++) {
+            if (b === 1 && root.centreBlocked)
+                continue;
+            const list = root.slots
+                .filter(s => s !== excludeSlot && s.bucket === b && s.width > 0 && s.height > 0)
+                .map(s => {
+                    const at = s.mapToItem(root, s.width / 2, s.height / 2);
+                    return {
+                        "index": s.storedIndex,
+                        "at": root.vertical ? at.y : at.x,
+                        "extent": root.vertical ? s.height : s.width
+                    };
+                });
+            if (list.length === 0) {
+                const a = root.anchorFor(b);
+                if (a) {
+                    const la = root.mapFromItem(null, a.x, a.y);
+                    empties.push({ "bucket": b, "at": root.vertical ? la.y : la.x });
+                }
+                continue;
+            }
+            groups.push({ "bucket": b, "slots": list });
+        }
+        return EditModeLogic.buildBarGapCells(groups, empties);
+    }
+
     function beginDrag(slot) {
         if (!GlobalStates.editMode)
             return;
+        root.dragCells = root.restingCells(slot);
+        root.dragState = EditModeLogic.createBarDragState();
         root.dragSlot = slot;
         root.dropTarget = null;
         // What the row has to make room for, measured off the widget itself
@@ -141,13 +187,18 @@ Item {
         root.dragSlot = null;
         root.externalId = "";
         root.dropTarget = null;
+        root.dragCells = null;
+        root.dragState = null;
         GlobalStates.editBarDragActive = false;
         ghost.shown = false;
         indicator.shown = false;
     }
 
     // The drawn widgets other than the one being carried, in the shape
-    // barDropTarget wants them.
+    // barDropTarget wants them. The fallback path for a row too degenerate to
+    // freeze a table from (no candidates at all); a live-geometry answer is
+    // fine there precisely because nothing moves - there is no preview to
+    // feed back into the decision.
     function otherSlots() {
         return root.slots
             .filter(s => s !== root.dragSlot && !(root.centreBlocked && s.bucket === 1))
@@ -157,8 +208,39 @@ Item {
     }
 
     function targetAt(scenePoint) {
+        // The frozen table answers while a gesture runs. A drag from the
+        // catalogue gets one built on its first sample: the carried ROW item
+        // lifts on press for a reorder, and an external preview opens a hole
+        // too - both move the live centres, so both must resolve off the
+        // resting geometry, not the moving one.
+        if (!root.dragCells)
+            root.dragCells = root.restingCells(root.dragSlot);
+        if (!root.dragState)
+            root.dragState = EditModeLogic.createBarDragState();
+        if (root.dragCells.length > 0) {
+            const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
+            const r = EditModeLogic.resolveBarGap(root.dragCells,
+                root.vertical ? local.y : local.x, root.dragState,
+                { "now": Date.now(), "hysteresis": 0.25, "settleMs": root.settleWindow });
+            if (r)
+                return (r.cell.bucket === 1 && root.centreBlocked) ? null
+                    : { "bucket": r.cell.bucket, "index": r.cell.index };
+        }
         const target = EditModeLogic.barDropTarget(root.otherSlots(), [0, 1, 2].map(root.anchorFor), scenePoint, root.axis);
         return (target && target.bucket === 1 && root.centreBlocked) ? null : target;
+    }
+
+    // The answer at release: a candidate held by the accommodation window is
+    // what the pointer last asked for, so letting go inside the hold still
+    // lands on the gap the user was aiming at.
+    function settledTarget() {
+        if (EditModeLogic.flushBarGap(root.dragState) && root.dragState && root.dragState.chosen) {
+            const c = root.dragState.chosen;
+            if (c.bucket === 1 && root.centreBlocked)
+                return null;
+            root.dropTarget = { "bucket": c.bucket, "index": c.index };
+        }
+        return root.dropTarget;
     }
 
     function dragMoved(scenePoint) {
@@ -200,13 +282,18 @@ Item {
             return;
         root.externalId = "";
         root.dropTarget = null;
+        // The table is frozen PER GESTURE: the row may have changed between
+        // two visits from the catalogue, and a stale hold would answer the
+        // next drag with the last one's decision.
+        root.dragCells = null;
+        root.dragState = null;
         GlobalStates.editBarDragActive = false;
         indicator.shown = false;
     }
 
     function externalDrop(componentId, sceneX, sceneY) {
         root.externalDragMoved(componentId, sceneX, sceneY);
-        const target = root.dropTarget;
+        const target = root.settledTarget();
         root.externalDragEnd();
         if (!GlobalStates.editMode || !target || !componentId)
             return;
@@ -264,19 +351,21 @@ Item {
         return (a && a.after && a.bucket === bucket && a.index === storedIndex) ? root.dragExtent : 0;
     }
 
-    function isLifted(bucket, storedIndex) {
-        const s = root.dragSlot;
-        return s !== null && s.bucket === bucket && s.storedIndex === storedIndex;
-    }
-
     // The placeholder that fills that gap. Re-placed on a tick rather than on
     // pointer events alone: the room it sits in opens over an animation, and
     // between two moves of the pointer the layout is still catching up. The
     // tick stops once the geometry it computes stops changing, so a pointer
     // held still over one spot costs nothing; anything that can move the
     // placeholder rearms it.
+    //
+    // The still-count must outlast the row's own clock. The hole opens on
+    // `barResize` (280ms); the old fixed budget of 8 ticks (~128ms) stopped
+    // re-placing the placeholder MID-animation, freezing it over the
+    // neighbour it was meant to avoid - the "despositioned preview" of a
+    // held pointer. A few ticks of margin over the resize settles it.
     property int settledTicks: 0
-    readonly property int settleAfter: 8
+    readonly property int settleAfter: Math.ceil(
+        (Appearance.animation.barResize.duration + 140) / 16)
     function rearmPreview() {
         root.settledTicks = 0;
     }
@@ -346,7 +435,11 @@ Item {
     // ── The commits, guarded on the mode: a drag can outlive it ─────────────
     function drop() {
         const slot = root.dragSlot;
-        const target = root.dropTarget;
+        // The decision AT release, not the last sample: a candidate still
+        // held by the accommodation window is applied first, so letting go
+        // moments after crossing a boundary lands where the pointer aimed.
+        // (Read before `endDrag`, which clears the state it flushes into.)
+        const target = root.settledTarget();
         root.endDrag();
         if (!GlobalStates.editMode || !slot || !target)
             return;

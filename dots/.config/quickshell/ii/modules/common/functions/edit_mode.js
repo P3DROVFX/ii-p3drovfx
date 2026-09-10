@@ -635,3 +635,153 @@ function barDropTarget(slots, anchors, point, axis) {
 function moveTargetForInsertion(from, insertion) {
     return insertion > from ? insertion - 1 : insertion;
 }
+
+// ---------------------------------------------------------------------------
+// The reorder target, decided on frozen cells
+// ---------------------------------------------------------------------------
+//
+// `barDropTarget` answers the question once per pointer sample, against
+// whatever geometry the row has at that moment - which is right for a query
+// and wrong for a gesture: the preview ITSELF moves the row (the carried
+// widget collapses, the gap opens, the neighbours slide), so re-asking every
+// sample lets the preview decide the next preview. A pointer resting near a
+// boundary flips the gap between two slots every frame - the flicker people
+// see when swapping two bar widgets - and each flip re-animates the row,
+// chasing a target that is still moving.
+//
+// So the gesture works like the dock's reorder (`DockReorder.resolveDropIndex`)
+// and the quick-toggle drag (`QuickToggleLayout.resolveDragCell`): the caller
+// snapshots the row's drop candidates ONCE, when the press commits, in the
+// controller's own coordinates, and every sample resolves against that frozen
+// table. Two guards stop the remaining boundary chatter:
+//
+//   * Penetration - a cell's neighbour takes the decision only when the
+//     pointer crosses the midpoint between the two cells by `hysteresis` of
+//     their distance. A pointer parked on the boundary decides once.
+//   * Accommodation - for `settleMs` after a decision changes (roughly the
+//     bar's resize clock), the decision holds unless the pointer has since
+//     travelled a full cell. A slow drift across a boundary is one deliberate
+//     move, not three; a fast sweep is never swallowed, because it travels.
+//
+// A held candidate is not dropped: `flushBarGap` applies it at release, so
+// letting go inside the hold window still lands where the pointer last
+// pointed. Pure numbers, like everything here - the cells are what the
+// controller measured, and the whole table can move or not as it likes.
+
+function createBarDragState() {
+    return { "chosen": null, "pending": null, "since": 0, "anchor": 0 };
+}
+
+// Build the frozen candidate table from a snapshot of the resting row.
+// `groups` are per-bucket drawn slots in resting geometry:
+// [{ "bucket", "slots": [{ "index", "at", "extent" }] }]; `empties` are
+// stand-in points for buckets with nothing drawn, [{ "bucket", "at" }].
+// One cell per physical gap: between adjacent slots at their midpoint, at
+// the outer ends one half-extent past them, plus the empties. A cell's
+// `index` is the stored insertion index that gap answers with (the drawn
+// slot's own index for "before it", its index + 1 after the last one),
+// which is exactly what `barDropTarget` would return for a pointer parked
+// at that position.
+function buildBarGapCells(groups, empties) {
+    const cells = [];
+    const gs = groups || [];
+    for (let g = 0; g < gs.length; g++) {
+        const bucket = gs[g].bucket;
+        const list = (gs[g].slots || []).slice().sort((a, b) => a.at - b.at);
+        if (list.length === 0)
+            continue;
+        for (let i = 0; i < list.length; i++) {
+            const s = list[i];
+            const prev = i > 0 ? list[i - 1] : null;
+            const beforeAt = prev !== null
+                ? (prev.at + s.at) / 2
+                : s.at - Math.max(24, s.extent / 2 + 4);
+            cells.push({ "key": "b" + bucket + ":" + s.index, "bucket": bucket, "index": s.index, "at": beforeAt });
+        }
+        const last = list[list.length - 1];
+        cells.push({
+            "key": "b" + bucket + ":" + (last.index + 1),
+            "bucket": bucket,
+            "index": last.index + 1,
+            "at": last.at + Math.max(24, last.extent / 2 + 4),
+        });
+    }
+    const es = empties || [];
+    for (let e = 0; e < es.length; e++) {
+        if (es[e] && Number.isFinite(Number(es[e].at)))
+            cells.push({ "key": "e" + es[e].bucket, "bucket": es[e].bucket, "index": 0, "at": Number(es[e].at) });
+    }
+    cells.sort((a, b) => a.at - b.at);
+    return cells;
+}
+
+// `cells` are the frozen drop candidates along the axis, sorted by `at`:
+// [{ "key", "bucket", "index", "at" }]. Returns the current decision and
+// whether this sample changed it.
+function resolveBarGap(cells, pointer, state, options) {
+    const list = cells || [];
+    if (list.length === 0)
+        return null;
+    const position = Number(pointer);
+    if (!isFinite(position))
+        return null;
+    const config = options || {};
+    const now = Number(config.now) || 0;
+    const hysteresis = Math.max(0, Math.min(0.49, Number(config.hysteresis) || 0.25));
+    const settleMs = Math.max(0, Number(config.settleMs) || 0);
+
+    let nearest = list[0];
+    let nearestDistance = Math.abs(position - list[0].at);
+    for (let i = 1; i < list.length; i++) {
+        const distance = Math.abs(position - list[i].at);
+        if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearest = list[i];
+        }
+    }
+
+    if (!state)
+        return { "cell": nearest, "changed": true };
+    if (state.chosen === null) {
+        state.chosen = nearest;
+        state.since = now;
+        state.anchor = position;
+        return { "cell": nearest, "changed": true };
+    }
+
+    const chosen = state.chosen;
+    if (chosen.key === nearest.key) {
+        state.pending = null;
+        return { "cell": chosen, "changed": false };
+    }
+
+    const step = nearest.at - chosen.at;
+    const distance = Math.abs(step);
+    const boundary = (chosen.at + nearest.at) / 2 + (step > 0 ? 1 : -1) * distance * hysteresis;
+    const crossed = step > 0 ? position >= boundary : position <= boundary;
+    if (!crossed) {
+        // Not a decision yet: the pointer sits in the dead zone, and the
+        // current answer stands.
+        return { "cell": chosen, "changed": false };
+    }
+    if (settleMs > 0 && now - state.since < settleMs
+        && Math.abs(position - state.anchor) < distance) {
+        state.pending = nearest;
+        return { "cell": chosen, "changed": false };
+    }
+
+    state.chosen = nearest;
+    state.pending = null;
+    state.since = now;
+    state.anchor = position;
+    return { "cell": nearest, "changed": true };
+}
+
+// Apply a held candidate at release. Returns whether the decision moved.
+function flushBarGap(state) {
+    if (!state || !state.pending)
+        return false;
+    state.chosen = state.pending;
+    state.pending = null;
+    return true;
+}

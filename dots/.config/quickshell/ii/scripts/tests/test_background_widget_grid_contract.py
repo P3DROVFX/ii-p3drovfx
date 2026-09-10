@@ -33,10 +33,56 @@ class TestBackgroundWidgetGridContract(unittest.TestCase):
 
     def test_dot_size_and_circular_rendering(self):
         content = self.widget_canvas_path.read_text()
-        self.assertIn("property real dotSize: 4.0", content,
-                      "dotSize should be increased to 4.0")
+        self.assertIn("property real dotSize: 2.0", content,
+                      "dotSize should stay small; 4.0 read as screen pollution")
         self.assertIn("ctx.arc(x, y, dotRadius, 0, tau);", content,
                       "dotGrid should render smooth circles using ctx.arc")
+
+    def test_dotgrid_waits_for_settled_mode(self):
+        """The lattice must not paint during the open animation.
+
+        The desktop is shrink-scaled on every frame of it, and a full-screen
+        Canvas FBO sampled along with that scale is the lag people see on open.
+        """
+        content = self.widget_canvas_path.read_text()
+        self.assertIn("readonly property bool modeSettled", content,
+                      "dotGrid should gate the mode on a settled transition")
+        self.assertIn("root.editProgress >= 1", content,
+                      "modeSettled should wait for the host's own progress scalar to land")
+        self.assertIn("(root.editMode && modeSettled)", content,
+                      "the mode half of `wanted` must be gated on modeSettled")
+
+    def test_lattice_is_per_monitor(self):
+        """A second monitor must not fade dots in for a shrink it never gets."""
+        content = self.widget_canvas_path.read_text()
+        self.assertIn("property real editProgress: 0", content,
+                      "WidgetCanvas should take a per-monitor edit progress scalar")
+        window = self.bg_window_path.read_text()
+        self.assertIn("editMode: bgWidgetsWindow.isEditMonitor && GlobalStates.editMode", window,
+                      "the desktop canvas should follow the mode only on the edited screen")
+        self.assertIn("editProgress: bgWidgetsWindow.editProgress", window,
+                      "the desktop canvas should be handed the per-monitor progress")
+
+    def test_no_scale_written_during_drag(self):
+        """A reposition must not touch `scale`.
+
+        The 3% drag lift wrote root.scale on press and release, which
+        re-rasterised every Canvas behind `Supersampled` and bumped the shared
+        size map for a widget whose size never changed. The grab is reported by
+        the snap guides and the selection halo instead.
+        """
+        content = self.abstract_widget_path.read_text()
+        self.assertNotIn("dragLift", content,
+                         "drag must not drive a scale factor")
+        self.assertNotIn("isDragging ? 1.03", content,
+                         "the press must not grow the widget")
+        # The settled-scale rule that replaced it must stay settled: entry and
+        # drag transients ride on `scale`, so re-registering per frame is the
+        # churn that made the open animation cost main-thread work.
+        self.assertIn("readonly property real settledScale", content,
+                      "the size map should record the settled scale")
+        self.assertIn("enabled: !root.exiting && root.entryProgress >= 1", content,
+                      "entry must not stack a second animation on its own scalar")
 
     def test_wallpaper_drag_dim_reduced(self):
         content = self.wallpaper_image_path.read_text()

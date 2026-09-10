@@ -53,8 +53,27 @@ PanelWindow {
     implicitWidth: pill.implicitWidth
     implicitHeight: Math.max(pill.implicitHeight, root.besideToolbar ? root.toolbar.height : 0)
 
+    // The input region must NOT be derived from the button itself. `pill`
+    // arrives through a scale (0.82 -> 1), an opacity fade and a Translate, and
+    // an item-based Region tracks exactly that moving geometry - the bar's own
+    // mask carries the same warning ("Item-based regions can otherwise retain
+    // the geometry captured midway through the slide", BarWindow.qml). Here it
+    // was worse than a stale frame: the surface kept the small, up-and-left
+    // rect the button had during its entry, while the button painted at full
+    // size in its final place, so a click only landed where the two overlapped.
+    // This Item is the button's final rect with no transform of its own, so the
+    // mask is the whole pill from the first frame it can be hit.
+    Item {
+        id: pillHitbox
+
+        anchors.left: pill.left
+        anchors.right: pill.right
+        anchors.top: pill.top
+        anchors.bottom: pill.bottom
+    }
+
     mask: Region {
-        item: pill
+        item: pillHitbox
     }
 
     RippleButton {

@@ -396,7 +396,16 @@ PanelWindow {
     readonly property bool widgetsParallaxCentered: GlobalStates.lockScreenCentered
         || GlobalStates.workspaceRestoreInProgress
         || bgWidgetsWindow.wallpaperSafetyTriggered
-        || GlobalStates.editMode
+    // Edit Mode does centre the desktop, but on the mode's own scalar rather
+    // than on its boolean. Keyed on `editMode`, the widgets' parallax offset
+    // went to zero in the very frame the card started shrinking, so the desktop
+    // slid sideways under everything else at the start of every open and again,
+    // the other way, on the way out - and it did it on every monitor, because
+    // the boolean is global while only one screen shrinks. `editProgress` is
+    // already per-monitor and already carries the shrink, so one multiplication
+    // puts the two in step and leaves both ends unchanged: full parallax on the
+    // desktop, centred once the card has landed.
+    readonly property real widgetsParallaxOffset: 1.0 - bgWidgetsWindow.editProgress
 
     readonly property real widgetParallaxX: {
         if (widgetsParallaxCentered)
@@ -404,7 +413,7 @@ PanelWindow {
         const disp = overviewController && overviewController.progress > 0.001
             ? wallpaperDisplacementX * (1.0 - overviewController.progress)
             : wallpaperDisplacementX;
-        return disp * widgetsParallaxFactor;
+        return disp * widgetsParallaxFactor * bgWidgetsWindow.widgetsParallaxOffset;
     }
     readonly property real widgetParallaxY: {
         if (widgetsParallaxCentered)
@@ -412,7 +421,7 @@ PanelWindow {
         const disp = overviewController && overviewController.progress > 0.001
             ? wallpaperDisplacementY * (1.0 - overviewController.progress)
             : wallpaperDisplacementY;
-        return disp * widgetsParallaxFactor;
+        return disp * widgetsParallaxFactor * bgWidgetsWindow.widgetsParallaxOffset;
     }
 
     readonly property bool overviewOpen: GlobalStates.overviewOpen
@@ -564,13 +573,18 @@ PanelWindow {
             // draws, divided back out of the shrink so both curves match.
             // Evaluated statically for the mode to avoid repainting on every animation tick of editProgress.
             gridCardRect: Qt.rect(0, 0, bgWidgetsWindow.width, bgWidgetsWindow.height)
-            gridCardRadius: GlobalStates.editMode && bgWidgetsWindow.editViewport && bgWidgetsWindow.editViewport.scale > 0
+            // Per-monitor, like everything else about the card: a second screen
+            // has no corner to cut and no transition to wait on.
+            gridCardRadius: bgWidgetsWindow.isEditMonitor && bgWidgetsWindow.editViewport
+                && bgWidgetsWindow.editViewport.scale > 0
                 ? Appearance.rounding.verylarge / bgWidgetsWindow.editViewport.scale : 0
+            selectionEnabled: true
             // The desktop is the one canvas that opts into marquee selection;
             // the mode is handed in so this canvas, and not the overlay's,
-            // follows it.
-            selectionEnabled: true
-            editMode: GlobalStates.editMode
+            // follows it - and gated on THIS screen, so a monitor the mode is
+            // not on neither behaves as if edited nor fades its lattice in.
+            editMode: bgWidgetsWindow.isEditMonitor && GlobalStates.editMode
+            editProgress: bgWidgetsWindow.editProgress
             // The widget menu, drawn by this screen's edit chrome. The point
             // is mapped through the canvas's transform chain (the mode's
             // shrink included), so it lands where the pointer is on screen.
@@ -636,15 +650,25 @@ PanelWindow {
             width: parent.width
             height: parent.height
 
+            // One clock, in both directions. While the mode's scalar is in
+            // flight the offset is already derived from it, so this Behavior has
+            // to stay off — and it must stay off through the EXIT too, which the
+            // old `!GlobalStates.editMode` test did not cover: leaving the mode
+            // flips the boolean in the first frame while `editProgress` is still
+            // ramping, so the 450ms chase stacked on top of the scalar and the
+            // desktop slid twice, arriving late. Reading the scalar instead of
+            // the boolean makes the entry and the exit the same movement.
             Behavior on x {
-                enabled: !bgWidgetsWindow.overviewAnimationVisible && !GlobalStates.editMode
+                enabled: !bgWidgetsWindow.overviewAnimationVisible
+                    && bgWidgetsWindow.editProgress <= 0.001
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on y {
-                enabled: !bgWidgetsWindow.overviewAnimationVisible && !GlobalStates.editMode
+                enabled: !bgWidgetsWindow.overviewAnimationVisible
+                    && bgWidgetsWindow.editProgress <= 0.001
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic

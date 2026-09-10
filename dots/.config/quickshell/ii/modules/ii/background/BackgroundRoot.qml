@@ -630,6 +630,11 @@ PanelWindow {
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
             editMatrix: bgRoot.editMatrix
+            // The same per-monitor scalar the plane's own shrink is built from,
+            // so the wallpaper's parallax ramps to centre on the mode's clock
+            // exactly like the widget canvas does. Reading the global boolean
+            // here would centre every monitor.
+            editProgress: bgRoot.editProgress
         }
 
         // The desktop menu when there is no widget surface to ask for it: with no widget shown

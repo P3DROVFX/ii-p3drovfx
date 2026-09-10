@@ -86,6 +86,18 @@ Singleton {
     function moveTargetForInsertion(...args) {
         return EditMode.moveTargetForInsertion(...args)
     }
+    function createBarDragState(...args) {
+        return EditMode.createBarDragState(...args)
+    }
+    function buildBarGapCells(...args) {
+        return EditMode.buildBarGapCells(...args)
+    }
+    function resolveBarGap(...args) {
+        return EditMode.resolveBarGap(...args)
+    }
+    function flushBarGap(...args) {
+        return EditMode.flushBarGap(...args)
+    }
 
     readonly property var sizeSteps: EditMode.SIZE_STEPS
 
