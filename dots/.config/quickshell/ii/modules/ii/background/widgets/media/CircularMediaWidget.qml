@@ -185,6 +185,7 @@ AbstractBackgroundWidget {
                     layer.enabled: true
                     layer.effect: FastBlur {
                         radius: 4 // light blur
+                        transparentBorder: true
                     }
                 }
 
@@ -550,6 +551,7 @@ AbstractBackgroundWidget {
                         anchors.fill: parent
                         source: outerMaskBase
                         radius: 3 // soft feather on the bezel mask boundary
+                        transparentBorder: true
                     }
                 }
             }
@@ -561,6 +563,7 @@ AbstractBackgroundWidget {
                 layer.enabled: true
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                    transparentBorder: true
                 }
 
                 // Crescent Mask Shape
@@ -617,6 +620,7 @@ AbstractBackgroundWidget {
                 layer.enabled: true
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                    transparentBorder: true
                 }
 
                 // Crescent Mask Shape
