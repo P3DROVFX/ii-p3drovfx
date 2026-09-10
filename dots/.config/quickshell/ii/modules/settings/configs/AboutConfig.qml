@@ -29,8 +29,8 @@ Item {
     // People who contributed to this fork, as credited by its author. GitHub
     // login, display name and a one-line role; the avatar comes from GitHub.
     readonly property var contributors: [
-        { "login": "P3DROVFX", "name": "P3DROVFX", "role": Translation.tr("Author and maintainer of ii-p3drovfx") },
-        { "login": "Scrimas", "name": "Scrimas", "role": Translation.tr("Contributor") }
+        { "login": "P3DROVFX", "name": "P3DROVFX", "role": Translation.tr("Author and maintainer of II-P3DROVFX") },
+        { "login": "Scrimas", "name": "Scrimas", "role": Translation.tr("Collaborator") }
     ]
 
     readonly property var forkPresets: [
@@ -116,8 +116,9 @@ Item {
     onHasUpdateChanged: root.refreshRecent()
     onCheckingChanged: root.refreshRecent()
 
-    // One cell of the 2×2 lineage grid: a project, its home link and a couple
-    // of buttons. Corner radii are set per cell by the caller.
+    // One cell of the 2×2 lineage grid: the title on top, the project's mark
+    // large in the middle, its name, home link and buttons under it. Corner
+    // radii are set per cell by the caller.
     component LineageTile: ContentSubsection {
         id: tile
         property string name: ""
@@ -125,87 +126,95 @@ Item {
         property Component logo: null
         // [{icon, label, url, fill}]
         property var links: []
+        readonly property int logoSize: Math.round(Math.min(160, tile.width * 0.36))
 
         Layout.fillWidth: true
-        Layout.fillHeight: true
         Layout.preferredWidth: 1
         topLeftRadius: Appearance.rounding.verysmall
         topRightRadius: Appearance.rounding.verysmall
         bottomLeftRadius: Appearance.rounding.verysmall
         bottomRightRadius: Appearance.rounding.verysmall
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 6
-            spacing: 12
+            Layout.topMargin: 8
+            Layout.bottomMargin: 4
+            spacing: 6
 
             Loader {
-                Layout.preferredWidth: 48
-                Layout.preferredHeight: 48
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: tile.logoSize
+                Layout.preferredHeight: tile.logoSize
                 sourceComponent: tile.logo
             }
 
-            ColumnLayout {
+            StyledText {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: tile.name
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnLayer1
-                    elide: Text.ElideRight
-                }
-
-                StyledText {
-                    visible: tile.url !== ""
-                    Layout.fillWidth: true
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    text: `<a href='${tile.url}'>${tile.url.replace(/^https?:\/\/(www\.)?/, "")}</a>`
-                    textFormat: Text.RichText
-                    elide: Text.ElideRight
-                    onLinkActivated: link => Qt.openUrlExternally(link)
-                    PointingHandLinkHover {}
-                }
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.bottomMargin: 4
-            spacing: 4
-
-            Repeater {
-                model: tile.links
-
-                delegate: RippleButtonWithIcon {
-                    required property var modelData
-                    materialIcon: modelData.icon
-                    materialIconFill: modelData.fill ?? true
-                    mainText: modelData.label
-                    onClicked: Qt.openUrlExternally(modelData.url)
-                }
+                Layout.topMargin: 6
+                text: tile.name
+                horizontalAlignment: Text.AlignHCenter
+                font.pixelSize: Appearance.font.pixelSize.larger
+                font.weight: Font.Bold
+                color: Appearance.colors.colOnLayer1
+                elide: Text.ElideRight
             }
 
-            Item {
+            StyledText {
+                visible: tile.url !== ""
                 Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.pixelSize: Appearance.font.pixelSize.small
+                text: `<a href='${tile.url}'>${tile.url.replace(/^https?:\/\/(www\.)?/, "")}</a>`
+                textFormat: Text.RichText
+                elide: Text.ElideRight
+                onLinkActivated: link => Qt.openUrlExternally(link)
+                PointingHandLinkHover {}
+            }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 4
+                spacing: 4
+
+                Repeater {
+                    model: tile.links
+
+                    delegate: RippleButtonWithIcon {
+                        required property var modelData
+                        materialIcon: modelData.icon
+                        materialIconFill: modelData.fill ?? true
+                        mainText: modelData.label
+                        onClicked: Qt.openUrlExternally(modelData.url)
+                    }
+                }
             }
         }
     }
 
     // One credited person: GitHub avatar (initial until it loads), name, role.
-    // The whole row opens the profile.
+    // The whole card opens the profile. Cards sit in a two-column grid, so
+    // the big corners go on the grid's outer corners, not on each card.
     component ContributorRow: RippleButton {
         id: person
         property string login: ""
         property string name: ""
         property string role: ""
+        // Position in the grid. Named apart from the delegate's `index`: a
+        // property redeclared by the delegate is invisible to bindings here.
+        property int slot: 0
+        property int count: 1
+        readonly property int lastRow: Math.ceil(count / 2) - 1
+        readonly property int row: Math.floor(slot / 2)
+        readonly property bool leftCol: slot % 2 === 0
+        readonly property bool rightEdge: !leftCol || slot === count - 1
 
         Layout.fillWidth: true
+        Layout.preferredWidth: 1
         implicitHeight: personLayout.implicitHeight + 20
-        useDynamicRadius: true
+        topLeftRadius: row === 0 && leftCol ? Appearance.rounding.large : Appearance.rounding.verysmall
+        topRightRadius: row === 0 && rightEdge ? Appearance.rounding.large : Appearance.rounding.verysmall
+        bottomLeftRadius: row === lastRow && leftCol ? Appearance.rounding.large : Appearance.rounding.verysmall
+        bottomRightRadius: row === lastRow && rightEdge ? Appearance.rounding.large : Appearance.rounding.verysmall
         colBackground: Appearance.colors.colLayer2
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
@@ -826,8 +835,8 @@ Item {
                     color: Appearance.colors.colSubtext
                     wrapMode: Text.Wrap
                     text: root.onP3drovfx
-                        ? Translation.tr("Other forks do not have this page: to come back, or to try a fork by URL, run 'ii-p3drovfx fork <name or URL>' in a terminal.")
-                        : Translation.tr("Branches are only offered for II-P3DROVFX here. For this fork, run 'ii-p3drovfx branch <name>' in a terminal.")
+                        ? Translation.tr("Other forks do not have this page: to come back, or to try a fork by URL, run 'II-P3DROVFX fork <name or URL>' in a terminal.")
+                        : Translation.tr("Branches are only offered for II-P3DROVFX here. For this fork, run 'II-P3DROVFX branch <name>' in a terminal.")
                 }
             }
         }
@@ -848,15 +857,17 @@ Item {
                     topLeftRadius: Appearance.rounding.large
                     title: Translation.tr("This fork")
                     icon: "call_split"
-                    name: "ii-p3drovfx"
+                    name: "II-P3DROVFX"
                     url: "https://github.com/P3DROVFX/ii-p3drovfx"
                     links: [
                         { "icon": "code", "label": Translation.tr("GitHub"), "url": "https://github.com/P3DROVFX/ii-p3drovfx" },
+                        { "icon": "auto_stories", "label": Translation.tr("Wiki"), "url": "https://github.com/P3DROVFX/ii-p3drovfx/wiki" },
                         { "icon": "adjust", "label": Translation.tr("Issues"), "url": "https://github.com/P3DROVFX/ii-p3drovfx/issues", "fill": false }
                     ]
                     logo: Image {
+                        anchors.fill: parent
                         source: "file://" + Quickshell.shellPath("assets/icons/ii-p3drovfx.png")
-                        sourceSize: Qt.size(96, 96)
+                        sourceSize: Qt.size(width * 2, height * 2)
                         fillMode: Image.PreserveAspectFit
                     }
                 }
@@ -887,7 +898,7 @@ Item {
                         { "icon": "favorite", "label": Translation.tr("Sponsor"), "url": "https://github.com/sponsors/end-4" }
                     ]
                     logo: IconImage {
-                        implicitSize: 48
+                        anchors.fill: parent
                         source: Quickshell.iconPath("illogical-impulse")
                     }
                 }
@@ -903,7 +914,7 @@ Item {
                         { "icon": "bug_report", "label": Translation.tr("Bugs"), "url": SystemInfo.bugReportUrl }
                     ]
                     logo: IconImage {
-                        implicitSize: 48
+                        anchors.fill: parent
                         source: Quickshell.iconPath(SystemInfo.logo)
                     }
                 }
@@ -916,14 +927,24 @@ Item {
             title: Translation.tr("Contributors")
             tooltip: Translation.tr("People credited by the fork's author. The list lives at the top of this page's source file.")
 
-            Repeater {
-                model: root.contributors
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 2
+                columnSpacing: 2
 
-                delegate: ContributorRow {
-                    required property var modelData
-                    login: modelData.login
-                    name: modelData.name
-                    role: modelData.role
+                Repeater {
+                    model: root.contributors
+
+                    delegate: ContributorRow {
+                        required property var modelData
+                        required property int index
+                        slot: index
+                        login: modelData.login
+                        name: modelData.name
+                        role: modelData.role
+                        count: root.contributors.length
+                    }
                 }
             }
         }
