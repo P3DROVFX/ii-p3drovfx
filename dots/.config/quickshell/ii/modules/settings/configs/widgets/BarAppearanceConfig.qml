@@ -308,9 +308,24 @@ Item {
 
                 NoticeBox {
                     Layout.fillWidth: true
-                    visible: ShellModePolicy.barDropShadowBlocked
+                    visible: ShellModePolicy.barDropShadowBlocked && !ShellModePolicy.lowIgnoreAlphaBlocksDropShadow
                     materialIcon: "lock"
                     text: Translation.tr("Bar drop-shadow is disabled while Connect mode and transparency are both active to keep the bar color consistent with Sidebar Policies.")
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: ShellModePolicy.lowIgnoreAlphaBlocksDropShadow
+                    materialIcon: "gradient"
+                    text: Translation.tr("Bar drop-shadow is disabled while Ignore Alpha is below 30%. Raise it to bring the shadow back.")
+
+                    ShortcutBox {
+                        targetPageId: "windows"
+                        targetSectionTitle: Translation.tr("Transparency & Blur")
+                        materialIcon: "arrow_forward"
+                        text: Translation.tr("Go to Windows settings")
+                        linkText: Translation.tr("Go there")
+                    }
                 }
 
                 ContentSubsection {

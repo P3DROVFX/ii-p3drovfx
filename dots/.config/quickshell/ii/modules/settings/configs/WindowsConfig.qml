@@ -78,7 +78,7 @@ ContentPage {
             text: Translation.tr("Blur Size")
             usePercentTooltip: false
             from: 0
-            to: 100
+            to: 50
             stepSize: 1
             snapMode: Slider.NoSnap
             stopIndicatorValues: []

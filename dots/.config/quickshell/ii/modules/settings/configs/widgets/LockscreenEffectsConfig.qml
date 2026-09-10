@@ -65,22 +65,11 @@ Item {
                 text: Translation.tr("Blur intensity")
                 enabled: Config.options.lock.blur.enable
                 from: 0
-                to: 200
+                to: 50
                 stepSize: 5
                 value: Config.options.lock.blur.radius
                 usePercentTooltip: false
                 onValueChanged: Config.options.lock.blur.radius = value
-            }
-
-            ConfigSpinBox {
-                enabled: Config.options.lock.blur.enable
-                icon: "zoom_in"
-                text: Translation.tr("Extra wallpaper zoom (%)")
-                value: Config.options.lock.blur.extraZoom * 100
-                from: 0
-                to: 100
-                stepSize: 5
-                onValueChanged: Config.options.lock.blur.extraZoom = value / 100
             }
         }
 
