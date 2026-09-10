@@ -441,6 +441,7 @@ Scope {
                         Toolbar {
                             id: topToolbar
                             Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: cheatsheetColumnLayout.width
                             enableShadow: false
 
                             transform: Translate {
@@ -467,6 +468,11 @@ Scope {
                                 id: tabBar
                                 tabButtonList: root.tabButtonList
                                 showShortcutHints: cheatsheetBackground.ctrlPressed
+                                // A row of every cheatsheet page is wider than a
+                                // compact display. Keep every destination as an
+                                // icon, while only the current one keeps its label.
+                                collapseInactiveLabels: cheatsheetRoot.screen
+                                    && cheatsheetRoot.screen.width < 1100
 
                                 requestOnly: true
                                 currentIndex: cheatsheetRoot.selectedTab
@@ -498,8 +504,13 @@ Scope {
                             property real calculatedWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.92 : 1700
                             property real calculatedHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.75 : 650
 
-                            Layout.preferredWidth: Math.min(1800, Math.max(900, calculatedWidth))
-                            Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
+                            // These are desktop preferences, not minima. A
+                            // minimum wider than the monitor made pages keep
+                            // calculating content outside the visible dialog.
+                            Layout.preferredWidth: Math.min(1800, calculatedWidth)
+                            Layout.maximumWidth: calculatedWidth
+                            Layout.preferredHeight: Math.min(850, calculatedHeight)
+                            Layout.maximumHeight: calculatedHeight
                             spacing: 10
                             currentIndex: cheatsheetRoot.selectedTab
                             readonly property bool currentPageLocksHorizontalSwipe: currentItem

@@ -83,6 +83,27 @@ class TypingTestContractTests(unittest.TestCase):
         self.assertIn("property bool enableTypingTest: true", config)
         self.assertIn("Config.options.cheatsheet.enableTypingTest", settings)
 
+    def test_cheatsheet_typing_page_can_shrink_to_small_viewports(self) -> None:
+        """The cheatsheet must lay out the typing page inside a narrow screen."""
+        cheatsheet = source("modules/ii/cheatsheet/Cheatsheet.qml")
+        toolbar = source("modules/ii/overview/typing/TypingTestToolbar.qml")
+        footer = source("modules/ii/cheatsheet/CheatsheetTypingTest.qml")
+        hint_bar = source("modules/common/widgets/KeyHintBar.qml")
+
+        # A preferred desktop size is fine, but it cannot become a minimum
+        # that makes the page calculate beyond the physical screen.
+        self.assertIn("Layout.maximumWidth: calculatedWidth", cheatsheet)
+        self.assertNotIn("Math.max(900, calculatedWidth)", cheatsheet)
+        self.assertIn("collapseInactiveLabels:", cheatsheet)
+        # Four desktop groups collapse to rows as the available width falls.
+        self.assertIn("readonly property int controlColumns", toolbar)
+        self.assertIn("columns: root.controlColumns", toolbar)
+        # The long shortcut strip has to receive the complete footer width and
+        # wrap individual hints rather than extend beyond the right edge.
+        self.assertIn("KeyHintBar {\n                Layout.fillWidth: true", footer)
+        self.assertIn("Flow {", hint_bar)
+        self.assertIn("implicitHeight: hintFlow.implicitHeight", hint_bar)
+
     def test_config_and_settings_expose_the_feature(self) -> None:
         config = source("modules/common/Config.qml")
         modules = source("modules/settings/configs/widgets/LauncherModulesConfig.qml")

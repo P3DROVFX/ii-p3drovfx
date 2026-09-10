@@ -37,8 +37,13 @@ Item {
     /** Gap between the group track and the shape sitting inside it. */
     readonly property real trackPadding: 4
     readonly property var presets: root.engine?.mode === "time" ? [15, 30, 60, 120] : [10, 25, 50, 100]
+    // Keep the controls at their spacious desktop arrangement when there is
+    // room, but turn the same groups into two rows (then one) before any of
+    // them can calculate beyond a compact cheatsheet page.
+    readonly property int controlColumns: root.width >= 900 ? 4 : (root.width >= 560 ? 2 : 1)
+    readonly property bool compactLabels: root.width < 460
 
-    implicitHeight: root.pillHeight
+    implicitHeight: controls.implicitHeight
     opacity: root.engine?.state === "running" ? 0.4 : 1
 
     Behavior on opacity {
@@ -75,7 +80,9 @@ Item {
         readonly property color contentColor: pillButton.active
             ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
 
-        implicitWidth: pillContent.implicitWidth + (pillButton.pillLabel.length > 0 ? 22 : 14)
+        readonly property bool showLabel: pillButton.pillLabel.length > 0
+            && (!root.compactLabels || pillButton.pillIcon.length === 0)
+        implicitWidth: pillContent.implicitWidth + (pillButton.showLabel ? 22 : 14)
         implicitHeight: root.pillHeight - root.trackPadding * 2
         buttonRadius: Appearance.rounding.full
         colBackground: pillButton.active ? Appearance.colors.colPrimary : "transparent"
@@ -106,7 +113,7 @@ Item {
             }
 
             StyledText {
-                visible: pillButton.pillLabel.length > 0
+                visible: pillButton.showLabel
                 text: pillButton.pillLabel
                 font.pixelSize: Appearance.font.pixelSize.small
                 font.weight: pillButton.active ? Font.DemiBold : Font.Normal
@@ -123,11 +130,17 @@ Item {
         }
     }
 
-    RowLayout {
-        anchors.centerIn: parent
-        spacing: 10
+    GridLayout {
+        id: controls
+        objectName: "typingTestControls"
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(root.width, implicitWidth)
+        columns: root.controlColumns
+        columnSpacing: Appearance.sizes.elevationMargin / 2
+        rowSpacing: Appearance.sizes.elevationMargin / 2
 
         PillGroup {
+            Layout.alignment: Qt.AlignHCenter
             // Both modifiers decorate the generated target, so they follow the
             // target rather than the mode: free zen has nothing to decorate,
             // guided zen has exactly what the other modes have.
@@ -150,6 +163,7 @@ Item {
         }
 
         PillGroup {
+            Layout.alignment: Qt.AlignHCenter
             Repeater {
                 model: [
                     { id: "time", icon: "schedule", label: Translation.tr("time") },
@@ -171,6 +185,7 @@ Item {
         // Zen's own pair, standing in for the presets the other modes get:
         // free typing, or the same generated words with no limit on them.
         PillGroup {
+            Layout.alignment: Qt.AlignHCenter
             visible: root.engine?.mode === "zen"
 
             PillButton {
@@ -190,6 +205,7 @@ Item {
         }
 
         PillGroup {
+            Layout.alignment: Qt.AlignHCenter
             visible: root.engine?.mode !== "zen"
 
             Repeater {
@@ -211,6 +227,7 @@ Item {
         // Panel-level entries rather than test parameters, so they get their
         // own group at the end instead of sitting among the presets.
         PillGroup {
+            Layout.alignment: Qt.AlignHCenter
             Repeater {
                 model: [
                     { id: "stats", icon: "monitoring", tip: Translation.tr("Statistics") },

@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="ii-tabs-smoke-") as directory:
     swipe = block(source, "SwipeView {")
     toolbar = (ROOT / "modules/common/widgets/ToolbarTabBar.qml").read_text()
     controller = toolbar.split("Item {", 1)[1].split("    Layout.alignment:", 1)[0]
-    put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n}")
+    put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n property bool collapseInactiveLabels: false\n}")
     shutil.copy(ROOT / "modules/common/widgets/RetainedLoader.qml", out / "RetainedLoader.qml")
     put("TabBuilds.js", ".pragma library\nvar counts = ({});\nfunction record(name) { counts[name] = (counts[name] || 0) + 1; }\nfunction reset() { counts = ({}); }\n")
     for page in ["CheatsheetTimetable.qml", "CheatsheetKeybinds.qml", "CheatsheetPeriodicTable.qml",
@@ -54,6 +54,7 @@ import "TabBuilds.js" as TabBuilds
 import QtTest
 Item {
  id: root; width: 1200; height: 700
+ property int screenWidth: 1600
  property bool activeState: true
  property bool cachePrepared: false
  property var tabButtonList: [
@@ -72,7 +73,7 @@ Item {
    width: 1200; height: 700; requested: true; retainFor: 60
    sourceComponent: Item {
     id: cheatsheetRoot
-    property var screen: ({width:1600,height:900})
+    property var screen: ({width:root.screenWidth,height:900})
     property alias view: swipeView
     property alias bar: tabBar
     ''' + selection + '''
@@ -171,8 +172,15 @@ Item {
    }
    sheet.view.setCurrentIndex(1);
    compare(Persistent.states.cheatsheet.tabIndex,1);
-   Persistent.states.cheatsheet.tabIndex=3;
-   tryCompare(sheet.view,"currentIndex",3); compare(sheet.bar.currentIndex,3);
+  Persistent.states.cheatsheet.tabIndex=3;
+  tryCompare(sheet.view,"currentIndex",3); compare(sheet.bar.currentIndex,3);
+ }
+  function test_compact_screen_collapses_inactive_tab_labels() {
+   root.screenWidth=800;
+   const frame=createTemporaryObject(frameComponent,root);
+   tryCompare(frame,"status",Loader.Ready);
+   verify(frame.item.bar.collapseInactiveLabels);
+   root.screenWidth=1600;
   }
   function test_reopen_and_expiry_keep_the_selected_tab() {
    Persistent.states.cheatsheet.tabIndex=1;

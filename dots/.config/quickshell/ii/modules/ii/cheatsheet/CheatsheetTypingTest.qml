@@ -60,8 +60,9 @@ Item {
 
         // Mirrors SearchPanelScaffold's footer so the page reads identically
         // to the launcher panel under the same settings.
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
+            spacing: Appearance.sizes.elevationMargin / 2
             visible: surface.statusText.length > 0
                 // Same reasoning as SearchPanelScaffold.showKeyHintFooter: a shortcut strip
                 // is instructions for hardware a touch-first family does not assume exists.
@@ -77,12 +78,8 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
             }
 
-            Item {
-                Layout.fillWidth: true
-                visible: surface.statusText.length === 0
-            }
-
             KeyHintBar {
+                Layout.fillWidth: true
                 visible: Config.options.search.appearance.showKeyHintBar && !PanelFamily.touchFirst
                 hints: surface.primaryHint.label
                     ? [surface.primaryHint].concat(surface.hints) : surface.hints
