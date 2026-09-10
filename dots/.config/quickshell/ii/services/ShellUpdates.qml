@@ -33,7 +33,25 @@ Singleton {
     property int commitsBehind: 0
     property bool checking: false
 
+    // The commits in the range, newest first, each {sha, subject, body, author,
+    // date, type, scope, summary} — the last three parsed out of a
+    // "type(scope): summary" subject. Empty when there is no update, the remote
+    // is not GitHub, or the fetch failed (commitsBehind is 0 then too).
+    property var commits: []
+    // The fetch stops after a few pages; a main merge can exceed that.
+    property bool commitsTruncated: false
+
     readonly property bool hasUpdate: activeCommit !== "" && remoteCommit !== "" && activeCommit !== remoteCommit
+    readonly property string compareUrl: {
+        const slug = root.githubSlug(root.activeRemote);
+        if (slug === "" || !root.hasUpdate) return "";
+        return `https://github.com/${slug}/compare/${root.activeCommit}...${root.remoteCommit}`;
+    }
+
+    // Fires after every completed check, successful or not; consumers that
+    // react to the commit list (the AI summary) hook this rather than
+    // commitsChanged, which also fires when the list is cleared.
+    signal checkFinished()
 
     readonly property real lastCheck: Config.options?.update?.lastAutoCheck ?? 0
 
@@ -95,11 +113,33 @@ Singleton {
         return m ? `${m[1]}/${m[2]}` : "";
     }
 
+    // "feat(bar): add thing" → {type: "feat", scope: "bar", summary: "add thing"}.
+    // A subject without the convention keeps its whole text as the summary and
+    // an empty type, so the views can still list it.
+    function parseSubject(subject) {
+        const text = String(subject ?? "").trim();
+        const m = text.match(/^([a-zA-Z]+)(?:\(([^)]*)\))?(!)?:\s*(.+)$/);
+        if (!m) return { type: "", scope: "", summary: text, breaking: false };
+        return { type: m[1].toLowerCase(), scope: (m[2] ?? "").trim(), summary: m[4].trim(), breaking: m[3] === "!" };
+    }
+
+    function commitUrl(sha) {
+        const slug = root.githubSlug(root.activeRemote);
+        return slug === "" ? "" : `https://github.com/${slug}/commit/${sha}`;
+    }
+
+    function _setCommits(list, truncated) {
+        root.commits = Array.from(list ?? []).map(entry => Object.assign({}, entry, root.parseSubject(entry.subject)));
+        root.commitsTruncated = !!truncated;
+    }
+
     function _finishCheck() {
         watchdog.stop();
         root.checking = false;
-        print(`[ShellUpdates] ${root.activeFork}@${root.activeBranch}: local ${root.activeCommit.substring(0, 7) || "?"}, remote ${root.remoteCommit.substring(0, 7) || "?"}, hasUpdate ${root.hasUpdate}, behind ${root.commitsBehind}`);
+        if (!root.hasUpdate) root._setCommits([], false);
+        print(`[ShellUpdates] ${root.activeFork}@${root.activeBranch}: local ${root.activeCommit.substring(0, 7) || "?"}, remote ${root.remoteCommit.substring(0, 7) || "?"}, hasUpdate ${root.hasUpdate}, behind ${root.commitsBehind}, listed ${root.commits.length}${root.commitsTruncated ? "+" : ""}`);
         stamp.restart();
+        root.checkFinished();
     }
 
     // Recording the check writes config.json, and so does the bar indicator
@@ -169,17 +209,23 @@ Singleton {
         }
     }
 
-    // Commit count via the GitHub compare API. The response carries the whole
-    // diff — hundreds of KB — so grep pulls the one field out inside the pipe
-    // rather than handing all of it to QML. The JSON comes back pretty-printed,
-    // hence the whitespace in the pattern.
+    // Commit count and list via the GitHub compare API. The response carries
+    // the whole diff — hundreds of KB per page — so the script pages through it
+    // and reduces it to one compact JSON object before QML sees anything.
     Process {
         id: compareProc
-        command: ["bash", "-c", 'curl -sfL --max-time 15 -H "Accept: application/vnd.github+json" ' + '"https://api.github.com/repos/$1/compare/$2...$3" ' + '| grep -m1 -oE \'"ahead_by"[[:space:]]*:[[:space:]]*[0-9]+\' | grep -oE \'[0-9]+\'', "ii-compare", root.githubSlug(root.activeRemote), root.activeCommit, root.remoteCommit]
+        command: ["python3", `${Directories.scriptPath}/updates/fetch_commits.py`, root.githubSlug(root.activeRemote), root.activeCommit, root.remoteCommit]
         stdout: StdioCollector {
             onStreamFinished: {
-                const n = parseInt(text.trim());
+                let payload = null;
+                try {
+                    payload = JSON.parse(text);
+                } catch (e) {
+                    payload = null;
+                }
+                const n = parseInt(payload?.ahead);
                 root.commitsBehind = isNaN(n) ? 0 : n;
+                root._setCommits(payload?.commits ?? [], payload?.truncated);
                 root._finishCheck();
             }
         }

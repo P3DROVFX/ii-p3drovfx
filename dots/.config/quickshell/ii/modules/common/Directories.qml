@@ -110,6 +110,8 @@ Singleton {
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
+    // AI summary of the commits behind the fork's remote, keyed by the range.
+    property string shellUpdateSummaryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/shell_update_summary.json`)
     // ESPN scoreboards and per-game summaries shared by the sports widgets
     // and the timetable. Kept outside calendar storage by design.
     property string sportsCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/sports.json`)

@@ -4772,6 +4772,12 @@ Singleton {
                 // daily/weekly period is not restarted from zero on every shell
                 // restart. Written by ShellUpdates, not by the settings UI.
                 property real lastAutoCheck: 0
+                // Ask the AI tab's current model for a plain-language summary of
+                // the new commits after a check finds at least aiSummaryMinCommits
+                // of them. Off by default: it spends a request on the user's key.
+                // A manual "Summarize" button works regardless of this switch.
+                property bool aiSummary: false
+                property int aiSummaryMinCommits: 10
             }
 
             property JsonObject musicRecognition: JsonObject {

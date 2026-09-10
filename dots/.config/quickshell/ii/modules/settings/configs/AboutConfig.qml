@@ -784,6 +784,81 @@ ContentPage {
                     onClicked: ShellUpdates.refresh()
                 }
             }
+
+            // ── Optional AI summary of what an update contains ──
+            ConfigSwitch {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Summarize new commits with AI")
+                checked: Config.options.update.aiSummary
+                onCheckedChanged: Config.options.update.aiSummary = checked
+
+                StyledToolTip {
+                    text: Translation.tr("After a check finds enough new commits, asks the AI tab's current model for a short plain-language summary of them. Uses one request on your key per new remote version; the result is kept until the remote moves again. The Summarize button below works without this.")
+                }
+            }
+
+            ConfigSpinBox {
+                Layout.fillWidth: true
+                enabled: Config.options.update.aiSummary
+                icon: "filter_list"
+                text: Translation.tr("Only when at least this many commits behind")
+                value: Config.options.update.aiSummaryMinCommits
+                from: 1
+                to: 500
+                stepSize: 1
+                onValueChanged: Config.options.update.aiSummaryMinCommits = value
+            }
+
+            StyledText {
+                visible: Config.options.update.aiSummary && !ShellUpdateSummary.submitCheck?.allowed
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
+                text: {
+                    switch (ShellUpdateSummary.unavailableReason) {
+                    case "disabled":
+                        return Translation.tr("AI is turned off in Policies, so nothing will be summarised until it is enabled.");
+                    case "missing-key":
+                        return Translation.tr("The AI tab's current model has no API key yet; add one or pick another model.");
+                    case "model-unavailable":
+                        return Translation.tr("No AI model is selected; pick one in the AI tab.");
+                    case "remote-model-blocked":
+                        return Translation.tr("Local-only AI mode blocks the current model; pick a local one.");
+                    default:
+                        return "";
+                    }
+                }
+            }
+        }
+
+        // ── What the waiting update contains ──
+        ContentSubsection {
+            visible: page.hasUpdate && (ShellUpdates.commits.length > 0 || ShellUpdateSummary.current)
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            title: Translation.tr("What's new")
+            icon: "new_releases"
+            tooltip: Translation.tr("The commits on the remote that this checkout does not have yet, grouped by kind. Click one to open it on GitHub.")
+
+            ShellUpdateSummaryCard {
+                Layout.fillWidth: true
+                showUnavailable: true
+            }
+
+            ShellUpdateChangelog {
+                Layout.fillWidth: true
+            }
+
+            RippleButtonWithIcon {
+                visible: ShellUpdates.compareUrl !== ""
+                materialIcon: "open_in_new"
+                mainText: Translation.tr("Open the full comparison on GitHub")
+                onClicked: Qt.openUrlExternally(ShellUpdates.compareUrl)
+            }
         }
     }
 
