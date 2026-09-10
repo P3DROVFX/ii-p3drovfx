@@ -600,6 +600,10 @@ Item {
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(slotItem.appId), "image-missing")
                                 implicitSize: Math.round(root.iconSize * slotItem.magScale)
+                                asynchronous: false
+                                backer.cache: false
+                                backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision,
+                                    parent.height + TaskbarApps.iconThemeRevision)
 
                                 anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
                                 anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
@@ -808,6 +812,11 @@ Item {
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(activeSlot.modelData.appId), "image-missing")
                                 implicitSize: Math.round(root.iconSize * activeSlot.magScale)
+                                asynchronous: false
+                                backer.cache: false
+                                backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision,
+                                    parent.height + TaskbarApps.iconThemeRevision)
+
 
                                 anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
                                 anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
