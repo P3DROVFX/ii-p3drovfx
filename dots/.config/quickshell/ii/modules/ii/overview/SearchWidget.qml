@@ -1152,7 +1152,9 @@ Item {
         // Best-match mode answers the question the captions were organising an
         // answer to, so the rest reads better as one uninterrupted list.
         const heroActive = root.bestMatchActive && query.length > 0;
-        const showCaptions = root.resultCategoryId === "all" && groupCount > 1
+        // Also show captions when category filter is active (even single section)
+        // so the category hint always has a caption row to live inline with.
+        const showCaptions = (root.resultCategoryId === "all" ? groupCount > 1 : root.showNormalCategoryFilter)
             && !(heroActive && root.bestMatchUniformList);
 
         const rows = [];
@@ -1639,7 +1641,10 @@ Item {
 
                 ListView {
                     id: appResults
-                    anchors.fill: parent
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
                     visible: opacity > 0 && !root.showEmptySearchState
                     opacity: root.showSkeletons || root.showEmptySearchState ? 0.0 : 1.0
                     Behavior on opacity {
@@ -2192,6 +2197,26 @@ Item {
                                         color: Appearance.colors.colOnSurfaceVariant
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
+                                    }
+
+                                    // Category hint inline on first section caption
+                                    RowLayout {
+                                        visible: root.showNormalCategoryFilter && resultDelegate.modelData.isFirst
+                                        spacing: 4
+
+                                        StyledText {
+                                            text: root.activeResultCategory.label
+                                            color: Appearance.colors.colOutline
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Medium
+                                        }
+
+                                        KeyHint {
+                                            visible: Config.options.search.appearance.showKeyHints
+                                            keys: ["Tab"]
+                                            surface: "transparent"
+                                            onSurface: Appearance.colors.colOutline
+                                        }
                                     }
                                 }
                             }

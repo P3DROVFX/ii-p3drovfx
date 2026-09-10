@@ -743,7 +743,7 @@ RowLayout {
 
     RippleButton {
         id: categoryFilterChip
-        visible: root.showCategoryFilter
+        visible: false // moved inline to section caption row
         Layout.alignment: Qt.AlignVCenter
         implicitWidth: categoryFilterContent.implicitWidth + Appearance.sizes.elevationMargin * 2
         implicitHeight: searchInput.implicitHeight
