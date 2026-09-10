@@ -378,10 +378,6 @@ Singleton {
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
-        // Desktop widgets share one transparent Bottom-layer surface. Letting the
-        // generic blur rule inspect its antialiased glow pixels makes the compositor
-        // expose effect-texture edges when the user lowers ignore_alpha.
-        script += "hl.layer_rule({ name = 'ii:appearance:background-widgets', match = { namespace = 'quickshell:backgroundWidgets' }, blur = false, blur_popups = false, ignore_alpha = 1 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:corners', match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:session', match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
