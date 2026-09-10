@@ -823,7 +823,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 19
+    readonly property int currentConfigVersion: 20
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1270,6 +1270,14 @@ Singleton {
             if (cheatsheet.keepLastTabLoaded === undefined && typeof cheatsheet.keepKeybindsLoaded === "boolean")
                 cheatsheet.keepLastTabLoaded = cheatsheet.keepKeybindsLoaded;
             delete cheatsheet.keepKeybindsLoaded;
+        }
+
+        // v19 -> v20: the updater's script path and flags were never read by
+        // anything; stripping them here keeps the "unrecognized settings"
+        // notice from greeting everyone after this update.
+        if (from < 20 && raw.update && typeof raw.update === "object" && !Array.isArray(raw.update)) {
+            delete raw.update.scriptPath;
+            delete raw.update.scriptFlags;
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -4759,8 +4767,6 @@ Singleton {
             }
 
             property JsonObject update: JsonObject {
-                property string scriptPath: ""
-                property string scriptFlags: "--no-backup --no-confirm"
                 // Whether the Settings "Update" button also overlays the fork's
                 // dots/.config/hypr onto ~/.config/hypr (passes --hypr/--no-hypr
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.

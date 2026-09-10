@@ -637,9 +637,10 @@ Singleton {
 
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
-                // The About page's "What's new" block can run to dozens of
-                // rows and sits above the branch switcher.
-                property bool whatsNewCollapsed: false
+                // Whether the About page's commit list is folded away. It
+                // can run to dozens of rows, and with an AI summary above it
+                // the list is detail, so it starts folded.
+                property bool whatsNewCollapsed: true
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"

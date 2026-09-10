@@ -76,13 +76,79 @@ class FetchCommitsTests(unittest.TestCase):
     def test_non_object_response_is_failure(self):
         self.assertIsNone(self.mod.collect("o/r", "a", "b", fetch=lambda *a: []))
 
+    def test_recent_mode_lists_the_branch_newest_first(self):
+        seen = []
+
+        def fetch(slug, branch, count):
+            seen.append((slug, branch, count))
+            return [fake_item(i) for i in (9, 8, 7)]
+
+        out = self.mod.collect_recent("o/r", "dev", 3, fetch=fetch)
+        self.assertEqual(seen, [("o/r", "dev", 3)])
+        self.assertEqual(out["ahead"], 0)
+        self.assertFalse(out["truncated"])
+        self.assertEqual([c["sha"] for c in out["commits"]], [f"{i:040x}" for i in (9, 8, 7)])
+
+    def test_recent_mode_rejects_a_non_list(self):
+        self.assertIsNone(self.mod.collect_recent("o/r", "dev", 3, fetch=lambda *a: {"message": "rate limited"}))
+
+    def test_recent_flag_needs_only_the_slug(self):
+        # Both forms are parsed by main(); a wrong arity prints the usage.
+        self.assertEqual(self.mod.main([]), 2)
+        self.assertEqual(self.mod.main(["o/r", "--recent=5", "a", "b"]), 2)
+
 
 class ChangelogConsumersContractTests(unittest.TestCase):
     def test_update_service_runs_the_script_and_exposes_commits(self):
         text = (ROOT / "services/ShellUpdates.qml").read_text(encoding="utf-8")
         self.assertIn("updates/fetch_commits.py", text)
-        for token in ("property var commits", "property bool commitsTruncated", "signal checkFinished", "function parseSubject", "compareUrl"):
+        for token in ("property var commits", "property bool commitsTruncated", "signal checkFinished", "function parseSubject", "compareUrl",
+                      "property var recentCommits", "function loadRecent", "--recent="):
             self.assertIn(token, text)
+
+    def test_every_checkout_change_runs_in_a_terminal(self):
+        # The setup script restarts the shell partway through; a run owned by
+        # this process would die with it. Nothing but the terminal launcher may
+        # start the script, and the pages must go through the service.
+        text = (ROOT / "services/ShellUpdates.qml").read_text(encoding="utf-8")
+        for token in ("function launchInTerminal", "function launchUpdate", "function launchBranchSwitch", "function launchForkSwitch", "Press Enter to close"):
+            self.assertIn(token, text)
+        self.assertIn('"update", "--keep-config"', text)
+        self.assertIn('"switch", "--branch"', text)
+        self.assertIn('"switch", "--fork"', text)
+        indicator = (ROOT / "modules/ii/bar/widgets/indicators/ShellUpdateIndicator.qml").read_text(encoding="utf-8")
+        self.assertIn("ShellUpdates.launchUpdate()", indicator)
+        self.assertNotIn("execDetached", indicator)
+        about = (ROOT / "modules/settings/configs/AboutConfig.qml").read_text(encoding="utf-8")
+        self.assertIn("ShellUpdates.launchUpdate()", about)
+        self.assertIn("GlobalStates.settingsOpen = false", about)
+        for token in ("systemd-run", "Process {", "ansiToRich"):
+            self.assertNotIn(token, about)
+        fork = (ROOT / "modules/settings/configs/widgets/ForkBranchConfig.qml").read_text(encoding="utf-8")
+        for token in ("WindowDialog", "ShellUpdates.launchBranchSwitch", "ShellUpdates.launchForkSwitch", "GlobalStates.settingsOpen = false"):
+            self.assertIn(token, fork)
+
+    def test_about_page_folds_the_list_only_with_ai_summaries(self):
+        about = (ROOT / "modules/settings/configs/AboutConfig.qml").read_text(encoding="utf-8")
+        self.assertIn("readonly property bool listsFold: Config.options.update.aiSummary", about)
+        self.assertIn("collapsible: root.listsFold", about)
+        self.assertIn("ShellUpdates.recentCommits", about)
+        registry = (ROOT / "modules/common/SettingsPageRegistry.qml").read_text(encoding="utf-8")
+        self.assertIn('"widgets/ForkBranchConfig.qml"', registry)
+        self.assertIn('"widgets/ShellLineageConfig.qml"', registry)
+        self.assertFalse((ROOT / "services/ChangelogService.qml").exists())
+        widget = (ROOT / "modules/common/widgets/ShellUpdateChangelog.qml").read_text(encoding="utf-8")
+        self.assertIn("property var commits: ShellUpdates.commits", widget)
+
+    def test_dead_updater_options_are_gone_and_migrated(self):
+        text = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
+        self.assertNotIn("property string scriptFlags", text)
+        self.assertNotIn("property string scriptPath: \"\"", text[text.index("property JsonObject update:"):text.index("property JsonObject update:") + 400])
+        self.assertIn("delete raw.update.scriptFlags", text)
+        self.assertIn("currentConfigVersion: 20", text)
+        helper = (ROOT / "scripts/presets_helper.py").read_text(encoding="utf-8")
+        self.assertNotIn("update.scriptPath", helper)
+        self.assertNotIn("update.scriptFlags", helper)
 
     def test_summary_service_is_gated_and_cached(self):
         text = (ROOT / "services/ShellUpdateSummary.qml").read_text(encoding="utf-8")
