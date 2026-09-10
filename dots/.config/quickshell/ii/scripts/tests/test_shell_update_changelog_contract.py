@@ -124,18 +124,22 @@ class ChangelogConsumersContractTests(unittest.TestCase):
         self.assertIn("GlobalStates.settingsOpen = false", about)
         for token in ("systemd-run", "Process {", "ansiToRich"):
             self.assertNotIn(token, about)
-        fork = (ROOT / "modules/settings/configs/widgets/ForkBranchConfig.qml").read_text(encoding="utf-8")
-        for token in ("WindowDialog", "ShellUpdates.launchBranchSwitch", "ShellUpdates.launchForkSwitch", "GlobalStates.settingsOpen = false"):
-            self.assertIn(token, fork)
+        # Fork and branch switching is inline on the page, behind one dialog.
+        for token in ("WindowDialog", "ShellUpdates.launchBranchSwitch", "ShellUpdates.launchForkSwitch"):
+            self.assertIn(token, about)
 
     def test_about_page_folds_the_list_only_with_ai_summaries(self):
         about = (ROOT / "modules/settings/configs/AboutConfig.qml").read_text(encoding="utf-8")
         self.assertIn("readonly property bool listsFold: Config.options.update.aiSummary", about)
         self.assertIn("collapsible: root.listsFold", about)
         self.assertIn("ShellUpdates.recentCommits", about)
-        registry = (ROOT / "modules/common/SettingsPageRegistry.qml").read_text(encoding="utf-8")
-        self.assertIn('"widgets/ForkBranchConfig.qml"', registry)
-        self.assertIn('"widgets/ShellLineageConfig.qml"', registry)
+        # Review asked for no sub-pages: the lineage grid and the credited
+        # contributors sit on the page itself.
+        self.assertFalse((ROOT / "modules/settings/configs/widgets/ForkBranchConfig.qml").exists())
+        self.assertFalse((ROOT / "modules/settings/configs/widgets/ShellLineageConfig.qml").exists())
+        self.assertNotIn("ForkBranchConfig", (ROOT / "modules/common/SettingsPageRegistry.qml").read_text(encoding="utf-8"))
+        self.assertIn("readonly property var contributors:", about)
+        self.assertIn("avatars.githubusercontent.com", about)
         self.assertFalse((ROOT / "services/ChangelogService.qml").exists())
         widget = (ROOT / "modules/common/widgets/ShellUpdateChangelog.qml").read_text(encoding="utf-8")
         self.assertIn("property var commits: ShellUpdates.commits", widget)

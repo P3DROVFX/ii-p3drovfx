@@ -1,3 +1,4 @@
+import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Layouts
 import qs
@@ -15,18 +16,55 @@ import qs.modules.common.widgets
  * what the waiting update contains — in that order, since that is what the
  * page is opened for. The checkout itself is only ever changed from a
  * terminal window (see ShellUpdates.launchInTerminal), so the log outlives
- * the shell restart the setup script performs. Switching fork or branch and
- * the lineage links live on sub-pages.
+ * the shell restart the setup script performs. Fork and branch switching,
+ * the projects this shell builds on and the people who built this fork
+ * follow on the same page.
  */
 Item {
     id: root
     anchors.fill: parent
 
     property alias contentY: page.contentY
-    property alias activeSubPage: subPageOverlay.activeSubPage
 
-    function openSubPage(url) {
-        subPageOverlay.open(Qt.resolvedUrl(url));
+    // People who contributed to this fork, as credited by its author. GitHub
+    // login, display name and a one-line role; the avatar comes from GitHub.
+    readonly property var contributors: [
+        { "login": "P3DROVFX", "name": "P3DROVFX", "role": Translation.tr("Author and maintainer of ii-p3drovfx") },
+        { "login": "Scrimas", "name": "Scrimas", "role": Translation.tr("Contributor") }
+    ]
+
+    readonly property var forkPresets: [
+        { "id": "p3drovfx", "label": "II-P3DROVFX", "icon": "fork_right" },
+        { "id": "end4", "label": "end-4", "icon": "deployed_code" },
+        { "id": "vynx", "label": "ii-vynx", "icon": "cloud_download" }
+    ]
+
+    // What the confirmation dialog is about: "branch" or "fork", the
+    // argument the script gets, and how the dialog names it.
+    property string pendingKind: ""
+    property string pendingTarget: ""
+    property string pendingLabel: ""
+
+    function confirm(kind, target, label) {
+        root.pendingKind = kind;
+        root.pendingTarget = target;
+        root.pendingLabel = label;
+        confirmDialog.show = true;
+    }
+
+    // Both switches replace the whole ii folder, so each is confirmed with
+    // what exactly gets replaced, then handed to a terminal window and the
+    // Settings window closes: the setup script restarts the shell partway
+    // through, and only a terminal keeps the log readable across that.
+    function runPending() {
+        confirmDialog.show = false;
+        if (root.pendingKind === "branch")
+            ShellUpdates.launchBranchSwitch(root.pendingTarget);
+        else if (root.pendingKind === "fork")
+            ShellUpdates.launchForkSwitch(root.pendingTarget);
+        else
+            return;
+        GlobalStates.settingsOpen = false;
     }
 
     readonly property bool hasUpdate: ShellUpdates.hasUpdate
@@ -77,6 +115,181 @@ Item {
 
     onHasUpdateChanged: root.refreshRecent()
     onCheckingChanged: root.refreshRecent()
+
+    // One cell of the 2×2 lineage grid: a project, its home link and a couple
+    // of buttons. Corner radii are set per cell by the caller.
+    component LineageTile: ContentSubsection {
+        id: tile
+        property string name: ""
+        property string url: ""
+        property Component logo: null
+        // [{icon, label, url, fill}]
+        property var links: []
+
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        Layout.preferredWidth: 1
+        topLeftRadius: Appearance.rounding.verysmall
+        topRightRadius: Appearance.rounding.verysmall
+        bottomLeftRadius: Appearance.rounding.verysmall
+        bottomRightRadius: Appearance.rounding.verysmall
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            spacing: 12
+
+            Loader {
+                Layout.preferredWidth: 48
+                Layout.preferredHeight: 48
+                sourceComponent: tile.logo
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: tile.name
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    visible: tile.url !== ""
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    text: `<a href='${tile.url}'>${tile.url.replace(/^https?:\/\/(www\.)?/, "")}</a>`
+                    textFormat: Text.RichText
+                    elide: Text.ElideRight
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                    PointingHandLinkHover {}
+                }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 4
+            spacing: 4
+
+            Repeater {
+                model: tile.links
+
+                delegate: RippleButtonWithIcon {
+                    required property var modelData
+                    materialIcon: modelData.icon
+                    materialIconFill: modelData.fill ?? true
+                    mainText: modelData.label
+                    onClicked: Qt.openUrlExternally(modelData.url)
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+        }
+    }
+
+    // One credited person: GitHub avatar (initial until it loads), name, role.
+    // The whole row opens the profile.
+    component ContributorRow: RippleButton {
+        id: person
+        property string login: ""
+        property string name: ""
+        property string role: ""
+
+        Layout.fillWidth: true
+        implicitHeight: personLayout.implicitHeight + 20
+        useDynamicRadius: true
+        colBackground: Appearance.colors.colLayer2
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colRipple: Appearance.colors.colLayer2Active
+        onClicked: Qt.openUrlExternally(`https://github.com/${person.login}`)
+
+        StyledToolTip {
+            text: `github.com/${person.login}`
+        }
+
+        contentItem: RowLayout {
+            id: personLayout
+            spacing: 12
+
+            Item {
+                Layout.leftMargin: 2
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: Appearance.colors.colSecondaryContainer
+                    visible: avatar.status !== Image.Ready
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: person.name.charAt(0).toUpperCase()
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+                }
+
+                Image {
+                    id: avatar
+                    anchors.fill: parent
+                    source: person.login !== "" ? `https://avatars.githubusercontent.com/${person.login}?s=96` : ""
+                    sourceSize: Qt.size(96, 96)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    smooth: true
+                    visible: status === Image.Ready
+                    layer.enabled: true
+                    layer.smooth: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: avatar.width
+                            height: avatar.height
+                            radius: width / 2
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: person.name
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: person.role
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideRight
+                }
+            }
+
+            MaterialSymbol {
+                Layout.rightMargin: 4
+                text: "open_in_new"
+                iconSize: 20
+                color: Appearance.colors.colSubtext
+            }
+        }
+    }
 
     ContentPage {
         id: page
@@ -448,73 +661,58 @@ Item {
                 }
             }
 
-            ContentSubsection {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                title: Translation.tr("Applying")
-                icon: "system_update_alt"
-                tooltip: Translation.tr("What the updater does besides refreshing the Quickshell config.")
+            ConfigSwitch {
+                buttonIcon: "settings_applications"
+                text: Translation.tr("Also replace Hyprland config")
+                checked: Config.options.update.replaceHyprConfig
+                onCheckedChanged: Config.options.update.replaceHyprConfig = checked
 
-                ConfigSwitch {
-                    Layout.fillWidth: true
-                    buttonIcon: "settings_applications"
-                    text: Translation.tr("Also replace Hyprland config")
-                    checked: Config.options.update.replaceHyprConfig
-                    onCheckedChanged: Config.options.update.replaceHyprConfig = checked
-
-                    StyledToolTip {
-                        text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
-                    }
+                StyledToolTip {
+                    text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
                 }
             }
 
-            ContentSubsection {
+            ConfigSwitch {
+                buttonIcon: "auto_awesome"
+                text: Translation.tr("Summarize new commits with AI")
+                checked: Config.options.update.aiSummary
+                onCheckedChanged: Config.options.update.aiSummary = checked
+
+                StyledToolTip {
+                    text: Translation.tr("After a check finds enough new commits, asks the AI tab's current model for a short plain-language summary of them. Uses one request on your key per new remote version; the result is kept until the remote moves again. The Summarize button in What's new works without this.")
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.update.aiSummary
+                icon: "filter_list"
+                text: Translation.tr("Only when at least this many commits behind")
+                value: Config.options.update.aiSummaryMinCommits
+                from: 1
+                to: 500
+                stepSize: 1
+                onValueChanged: Config.options.update.aiSummaryMinCommits = value
+            }
+
+            StyledText {
+                visible: Config.options.update.aiSummary && !ShellUpdateSummary.submitCheck?.allowed
                 Layout.fillWidth: true
-                Layout.topMargin: 8
-                title: Translation.tr("AI summary")
-                icon: "auto_awesome"
-                tooltip: Translation.tr("After a check finds enough new commits, asks the AI tab's current model for a short plain-language summary of them. Uses one request on your key per new remote version; the result is kept until the remote moves again. The Summarize button in What's new works without this.")
-
-                ConfigSwitch {
-                    Layout.fillWidth: true
-                    buttonIcon: "auto_awesome"
-                    text: Translation.tr("Summarize new commits with AI")
-                    checked: Config.options.update.aiSummary
-                    onCheckedChanged: Config.options.update.aiSummary = checked
-                }
-
-                ConfigSpinBox {
-                    Layout.fillWidth: true
-                    enabled: Config.options.update.aiSummary
-                    icon: "filter_list"
-                    text: Translation.tr("Only when at least this many commits behind")
-                    value: Config.options.update.aiSummaryMinCommits
-                    from: 1
-                    to: 500
-                    stepSize: 1
-                    onValueChanged: Config.options.update.aiSummaryMinCommits = value
-                }
-
-                StyledText {
-                    visible: Config.options.update.aiSummary && !ShellUpdateSummary.submitCheck?.allowed
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 4
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
-                    wrapMode: Text.Wrap
-                    text: {
-                        switch (ShellUpdateSummary.unavailableReason) {
-                        case "disabled":
-                            return Translation.tr("AI is turned off in Policies, so nothing will be summarised until it is enabled.");
-                        case "missing-key":
-                            return Translation.tr("The AI tab's current model has no API key yet; add one or pick another model.");
-                        case "model-unavailable":
-                            return Translation.tr("No AI model is selected; pick one in the AI tab.");
-                        case "remote-model-blocked":
-                            return Translation.tr("Local-only AI mode blocks the current model; pick a local one.");
-                        default:
-                            return "";
-                        }
+                Layout.leftMargin: 4
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
+                text: {
+                    switch (ShellUpdateSummary.unavailableReason) {
+                    case "disabled":
+                        return Translation.tr("AI is turned off in Policies, so nothing will be summarised until it is enabled.");
+                    case "missing-key":
+                        return Translation.tr("The AI tab's current model has no API key yet; add one or pick another model.");
+                    case "model-unavailable":
+                        return Translation.tr("No AI model is selected; pick one in the AI tab.");
+                    case "remote-model-blocked":
+                        return Translation.tr("Local-only AI mode blocks the current model; pick a local one.");
+                    default:
+                        return "";
                     }
                 }
             }
@@ -522,35 +720,245 @@ Item {
 
         // ── Where the checkout comes from ──
         ContentSection {
-            icon: "hub"
-            title: Translation.tr("Source")
+            icon: "fork_right"
+            title: Translation.tr("Fork & branch")
+            tooltip: Translation.tr("A branch switch keeps your settings; a fork switch resets them to that fork's defaults, since its options differ. Both replace the ii folder, keep a backup of what they replaced, and run in a terminal window after a confirmation.")
 
-            ColumnLayout {
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: 8
 
-                ConfigSubpageRow {
-                    buttonIcon: "fork_right"
-                    title: Translation.tr("Fork & branch")
-                    description: Translation.tr("Switch between stable and new features, move to another fork, or clone one by URL")
-                    summary: `${root.forkLabel} · ${ShellUpdates.activeBranch}`
-                    onClicked: root.openSubPage("widgets/ForkBranchConfig.qml")
+                Repeater {
+                    model: [
+                        { "icon": "hub", "text": root.forkLabel },
+                        { "icon": "call_split", "text": ShellUpdates.activeBranch },
+                        { "icon": "commit", "text": root.shortCommit }
+                    ]
+
+                    delegate: Rectangle {
+                        required property var modelData
+                        visible: modelData.text !== ""
+                        implicitWidth: chipLayout.implicitWidth + 24
+                        implicitHeight: 32
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colSecondaryContainer
+
+                        RowLayout {
+                            id: chipLayout
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            MaterialSymbol {
+                                text: modelData.icon
+                                iconSize: 16
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+
+                            StyledText {
+                                text: modelData.text
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+                    }
                 }
 
-                ConfigSubpageRow {
-                    buttonIcon: "account_tree"
-                    title: Translation.tr("About this shell")
-                    description: Translation.tr("The projects this configuration builds on, with their docs and issue trackers")
-                    summary: `ii-p3drovfx · ii-vynx · illogical-impulse · ${SystemInfo.distroName}`
-                    onClicked: root.openSubPage("widgets/ShellLineageConfig.qml")
+                StyledText {
+                    visible: ShellUpdates.activeRemote !== ""
+                    Layout.fillWidth: true
+                    text: ShellUpdates.activeRemote
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideMiddle
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Branch")
+                icon: "call_split"
+                tooltip: Translation.tr("main is what has been tested; dev gets features as they land.")
+
+                ConfigSelectionArray {
+                    currentValue: root.onP3drovfx ? ShellUpdates.activeBranch : null
+                    onSelected: newValue => {
+                        if (newValue === ShellUpdates.activeBranch)
+                            return;
+                        root.confirm("branch", newValue, newValue);
+                    }
+                    options: [
+                        {
+                            "displayName": Translation.tr("main") + " · " + Translation.tr("stable"),
+                            "icon": "verified",
+                            "value": "main",
+                            "enabled": root.onP3drovfx
+                        },
+                        {
+                            "displayName": Translation.tr("dev") + " · " + Translation.tr("new features"),
+                            "icon": "science",
+                            "value": "dev",
+                            "enabled": root.onP3drovfx
+                        }
+                    ]
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Fork")
+                icon: "swap_horiz"
+
+                ConfigSelectionArray {
+                    currentValue: root.onP3drovfx ? "p3drovfx" : ShellUpdates.activeFork
+                    onSelected: newValue => {
+                        if (newValue === ShellUpdates.activeFork || (newValue === "p3drovfx" && root.onP3drovfx))
+                            return;
+                        const preset = root.forkPresets.find(p => p.id === newValue);
+                        root.confirm("fork", newValue, preset ? preset.label : newValue);
+                    }
+                    options: root.forkPresets.map(p => ({ "displayName": p.label, "icon": p.icon, "value": p.id }))
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.Wrap
+                    text: root.onP3drovfx
+                        ? Translation.tr("Other forks do not have this page: to come back, or to try a fork by URL, run 'ii-p3drovfx fork <name or URL>' in a terminal.")
+                        : Translation.tr("Branches are only offered for II-P3DROVFX here. For this fork, run 'ii-p3drovfx branch <name>' in a terminal.")
+                }
+            }
+        }
+
+        // ── What this shell builds on ──
+        ContentSection {
+            icon: "account_tree"
+            title: Translation.tr("About this shell")
+            tooltip: Translation.tr("Each project builds on the next one.")
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 2
+                columnSpacing: 2
+
+                LineageTile {
+                    topLeftRadius: Appearance.rounding.large
+                    title: Translation.tr("This fork")
+                    icon: "call_split"
+                    name: "ii-p3drovfx"
+                    url: "https://github.com/P3DROVFX/ii-p3drovfx"
+                    links: [
+                        { "icon": "code", "label": Translation.tr("GitHub"), "url": "https://github.com/P3DROVFX/ii-p3drovfx" },
+                        { "icon": "adjust", "label": Translation.tr("Issues"), "url": "https://github.com/P3DROVFX/ii-p3drovfx/issues", "fill": false }
+                    ]
+                    logo: Image {
+                        source: "file://" + Quickshell.shellPath("assets/icons/ii-p3drovfx.png")
+                        sourceSize: Qt.size(96, 96)
+                        fillMode: Image.PreserveAspectFit
+                    }
+                }
+
+                LineageTile {
+                    topRightRadius: Appearance.rounding.large
+                    title: Translation.tr("Upstream")
+                    icon: "code"
+                    name: "ii-vynx"
+                    url: "https://github.com/vaguesyntax/ii-vynx"
+                    links: [
+                        { "icon": "auto_stories", "label": Translation.tr("Wiki"), "url": "https://github.com/vaguesyntax/ii-vynx/wiki" },
+                        { "icon": "adjust", "label": Translation.tr("Issues"), "url": "https://github.com/vaguesyntax/ii-vynx/issues", "fill": false }
+                    ]
+                    logo: CustomIcon {
+                        source: "ii-vynx"
+                    }
+                }
+
+                LineageTile {
+                    bottomLeftRadius: Appearance.rounding.large
+                    title: Translation.tr("Parent dots")
+                    icon: "deployed_code"
+                    name: "illogical-impulse"
+                    url: "https://github.com/end-4/dots-hyprland"
+                    links: [
+                        { "icon": "auto_stories", "label": Translation.tr("Wiki"), "url": "https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/" },
+                        { "icon": "favorite", "label": Translation.tr("Sponsor"), "url": "https://github.com/sponsors/end-4" }
+                    ]
+                    logo: IconImage {
+                        implicitSize: 48
+                        source: Quickshell.iconPath("illogical-impulse")
+                    }
+                }
+
+                LineageTile {
+                    bottomRightRadius: Appearance.rounding.large
+                    title: Translation.tr("Distribution")
+                    icon: "developer_board"
+                    name: SystemInfo.distroName
+                    url: SystemInfo.homeUrl
+                    links: [
+                        { "icon": "auto_stories", "label": Translation.tr("Docs"), "url": SystemInfo.documentationUrl },
+                        { "icon": "bug_report", "label": Translation.tr("Bugs"), "url": SystemInfo.bugReportUrl }
+                    ]
+                    logo: IconImage {
+                        implicitSize: 48
+                        source: Quickshell.iconPath(SystemInfo.logo)
+                    }
+                }
+            }
+        }
+
+        // ── Who built this fork ──
+        ContentSection {
+            icon: "group"
+            title: Translation.tr("Contributors")
+            tooltip: Translation.tr("People credited by the fork's author. The list lives at the top of this page's source file.")
+
+            Repeater {
+                model: root.contributors
+
+                delegate: ContributorRow {
+                    required property var modelData
+                    login: modelData.login
+                    name: modelData.name
+                    role: modelData.role
                 }
             }
         }
     }
 
-    ConfigSubPageHost {
-        id: subPageOverlay
+    WindowDialog {
+        id: confirmDialog
+        parent: root
         anchors.fill: parent
-        z: 10
+        show: false
+        backgroundWidth: 400
+        z: 100000
+        onDismiss: show = false
+
+        WindowDialogTitle {
+            text: Translation.tr("Switch to %1?").arg(root.pendingLabel)
+        }
+
+        WindowDialogParagraph {
+            Layout.fillWidth: true
+            text: root.pendingKind === "branch"
+                ? Translation.tr("The ii folder is replaced with the %1 branch of %2. Your settings are kept and the shell restarts. The run happens in a terminal window and this window closes.").arg(root.pendingLabel).arg(root.forkLabel)
+                : Translation.tr("The ii folder is replaced with that fork's latest and your settings are reset to its defaults, since its options differ. A backup of both is kept. The run happens in a terminal window and this window closes.")
+        }
+
+        WindowDialogButtonRow {
+            DialogButton {
+                buttonText: Translation.tr("Cancel")
+                onClicked: confirmDialog.show = false
+            }
+
+            DialogButton {
+                buttonText: Translation.tr("Switch")
+                onClicked: root.runPending()
+            }
+        }
     }
 }
