@@ -11,7 +11,7 @@ Item {
     id: root
 
     property bool enableShadow: true
-    property real padding: 6
+    property real padding: 3
     property alias colBackground: background.color
     property alias spacing: toolbarLayout.spacing
     default property alias toolbarData: toolbarLayout.data
