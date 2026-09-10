@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import qs.modules.common
 import qs.modules.common.functions
 import qs.services
@@ -16,6 +18,26 @@ ColumnLayout {
     // Explain why no summary can be made (Settings wants that; the bar popup
     // would rather stay quiet).
     property bool showUnavailable: false
+    // The box behind the summary. Settings puts the card on a layer-2 surface,
+    // so it wants something darker or the box only shows on hover.
+    property color boxColor: Appearance.colors.colLayer2
+
+    // The answer, one entry per line. Qt's Markdown list renderer indents
+    // bullets by a fixed 40 px that QML cannot shrink, so the bullets are laid
+    // out by hand from the raw lines instead.
+    readonly property var lines: {
+        const out = [];
+        for (const raw of String(ShellUpdateSummary.text ?? "").split("\n")) {
+            const match = raw.match(/^(\s*)(?:[-*•]|\d+[.)])\s+(.*)$/);
+            if (match) {
+                out.push({ bullet: true, level: Math.min(2, Math.floor(match[1].length / 2)), text: match[2].trim() });
+                continue;
+            }
+            const text = raw.trim();
+            if (text !== "") out.push({ bullet: false, level: 0, text: text });
+        }
+        return out;
+    }
 
     readonly property bool hasSummary: ShellUpdateSummary.current
     readonly property bool canRun: ShellUpdateSummary.available && !ShellUpdateSummary.generating
@@ -92,22 +114,49 @@ ColumnLayout {
     Rectangle {
         visible: root.hasSummary
         Layout.fillWidth: true
-        implicitHeight: summaryText.implicitHeight + (root.compact ? 16 : 24)
+        implicitHeight: summaryColumn.implicitHeight + (root.compact ? 16 : 24)
         radius: Appearance.rounding.normal
-        color: Appearance.colors.colLayer2
+        color: root.boxColor
 
-        StyledText {
-            id: summaryText
+        ColumnLayout {
+            id: summaryColumn
             anchors {
                 fill: parent
                 margins: root.compact ? 8 : 12
             }
-            text: ShellUpdateSummary.text
-            textFormat: Text.MarkdownText
-            wrapMode: Text.Wrap
-            font.pixelSize: root.compact ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnLayer1
-            onLinkActivated: link => Qt.openUrlExternally(link)
+            spacing: root.compact ? 4 : 6
+
+            Repeater {
+                model: root.lines
+
+                RowLayout {
+                    id: line
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    Layout.leftMargin: line.modelData.level * (root.compact ? 12 : 16)
+                    spacing: 6
+
+                    StyledText {
+                        visible: line.modelData.bullet
+                        Layout.alignment: Qt.AlignTop
+                        text: "•"
+                        font.pixelSize: lineText.font.pixelSize
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    StyledText {
+                        id: lineText
+                        Layout.fillWidth: true
+                        text: line.modelData.text
+                        textFormat: Text.MarkdownText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: root.compact ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer1
+                        onLinkActivated: link => Qt.openUrlExternally(link)
+                    }
+                }
+            }
         }
     }
 

@@ -20,6 +20,10 @@ ColumnLayout {
     property int maxRows: 0
     property bool compact: false
     property real rowSpacing: 4
+    // Row colours; Settings sits on a layer-2 surface and overrides them one
+    // layer down so the rows stay visible without hover.
+    property color rowColor: Appearance.colors.colLayer2
+    property color rowHoverColor: Appearance.colors.colLayer2Hover
 
     readonly property var groupDefs: [
         { id: "feat", title: Translation.tr("New"), icon: "auto_awesome", types: ["feat", "feature", "add"] },
@@ -116,7 +120,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     implicitHeight: rowLayout.implicitHeight + (root.compact ? 8 : 12)
                     radius: Appearance.rounding.small
-                    color: rowMouse.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+                    color: rowMouse.containsMouse ? root.rowHoverColor : root.rowColor
 
                     Behavior on color {
                         ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }

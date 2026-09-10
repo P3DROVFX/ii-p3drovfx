@@ -850,10 +850,13 @@ ContentPage {
             ShellUpdateSummaryCard {
                 Layout.fillWidth: true
                 showUnavailable: true
+                boxColor: Appearance.colors.colLayer1
             }
 
             ShellUpdateChangelog {
                 Layout.fillWidth: true
+                rowColor: Appearance.colors.colLayer1
+                rowHoverColor: Appearance.colors.colLayer1Hover
             }
 
             RippleButtonWithIcon {
