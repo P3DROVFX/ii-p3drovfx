@@ -161,8 +161,10 @@ ApiStrategy {
         if (model.thinkingKind === "gemini-level") {
             return {
                 // The 3.x line always reasons; the least it will do is
-                // "minimal", which is what "off" means for these models.
-                "thinkingLevel": level === "off" ? "minimal" : level,
+                // "minimal", which is what "off" means for these models —
+                // except where the model names a higher floor (3.7 and 3.8
+                // Flash reject "minimal" outright).
+                "thinkingLevel": level === "off" ? String(model?.quirks?.thinkingFloor ?? "minimal") : level,
                 "includeThoughts": level !== "off"
             };
         }
