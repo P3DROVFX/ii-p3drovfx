@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs
 import Quickshell
+import Quickshell.Io
 import Quickshell.Widgets
 import qs.services
 import qs.modules.common
@@ -26,12 +27,26 @@ Item {
 
     property alias contentY: page.contentY
 
-    // People who contributed to this fork, as credited by its author. GitHub
-    // login, display name and a one-line role; the avatar comes from GitHub.
-    readonly property var contributors: [
-        { "login": "P3DROVFX", "name": "P3DROVFX", "role": Translation.tr("Author and maintainer of II-P3DROVFX") },
-        { "login": "Scrimas", "name": "Scrimas", "role": Translation.tr("Collaborator") }
-    ]
+    // People who contributed to this fork, as credited by its author, read
+    // from CONTRIBUTORS.json at the top of the ii folder: GitHub login,
+    // display name and a one-line role each; the avatar comes from GitHub.
+    property var contributors: []
+
+    FileView {
+        path: Quickshell.shellPath("CONTRIBUTORS.json")
+        onLoaded: {
+            let parsed = null;
+            try {
+                parsed = JSON.parse(text());
+            } catch (e) {
+                console.warn("[About] CONTRIBUTORS.json is not valid JSON:", e);
+                return;
+            }
+            const list = Array.isArray(parsed?.contributors) ? parsed.contributors : [];
+            root.contributors = list.filter(c => c && typeof c.login === "string" && c.login !== "");
+        }
+        onLoadFailed: error => console.warn("[About] CONTRIBUTORS.json could not be read:", error)
+    }
 
     readonly property var forkPresets: [
         { "id": "p3drovfx", "label": "II-P3DROVFX", "icon": "fork_right" },
@@ -304,7 +319,6 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
-        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         // ── Identity: fork, branch, commit, and whether the remote moved ──

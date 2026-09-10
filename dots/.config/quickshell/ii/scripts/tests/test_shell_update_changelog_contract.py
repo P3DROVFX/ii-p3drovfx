@@ -138,8 +138,21 @@ class ChangelogConsumersContractTests(unittest.TestCase):
         self.assertFalse((ROOT / "modules/settings/configs/widgets/ForkBranchConfig.qml").exists())
         self.assertFalse((ROOT / "modules/settings/configs/widgets/ShellLineageConfig.qml").exists())
         self.assertNotIn("ForkBranchConfig", (ROOT / "modules/common/SettingsPageRegistry.qml").read_text(encoding="utf-8"))
-        self.assertIn("readonly property var contributors:", about)
+        self.assertIn('Quickshell.shellPath("CONTRIBUTORS.json")', about)
         self.assertIn("avatars.githubusercontent.com", about)
+
+    def test_contributors_file_is_well_formed(self):
+        # The credited people are data at the top of the tree, not code, so
+        # the fork's author can edit them without touching QML.
+        import json
+        with (ROOT / "CONTRIBUTORS.json").open(encoding="utf-8") as handle:
+            data = json.load(handle)
+        people = data["contributors"]
+        self.assertGreaterEqual(len(people), 1)
+        for person in people:
+            self.assertTrue(person.get("login"))
+            self.assertTrue(person.get("name"))
+            self.assertTrue(person.get("role"))
         self.assertFalse((ROOT / "services/ChangelogService.qml").exists())
         widget = (ROOT / "modules/common/widgets/ShellUpdateChangelog.qml").read_text(encoding="utf-8")
         self.assertIn("property var commits: ShellUpdates.commits", widget)

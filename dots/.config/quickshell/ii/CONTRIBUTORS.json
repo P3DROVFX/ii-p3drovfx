@@ -1,0 +1,7 @@
+{
+  "_comment": "People credited on Settings > About & Updates. `login` is the GitHub username (profile link and avatar), `name` is what the card shows, `role` is the line under it. Order here is the display order.",
+  "contributors": [
+    { "login": "P3DROVFX", "name": "P3DROVFX", "role": "Author and maintainer of II-P3DROVFX" },
+    { "login": "Scrimas", "name": "Scrimas", "role": "Collaborator" }
+  ]
+}
