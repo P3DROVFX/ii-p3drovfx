@@ -842,7 +842,10 @@ ContentPage {
             Layout.topMargin: 8
             title: Translation.tr("What's new")
             icon: "new_releases"
-            tooltip: Translation.tr("The commits on the remote that this checkout does not have yet, grouped by kind. Click one to open it on GitHub.")
+            tooltip: Translation.tr("The commits on the remote that this checkout does not have yet, grouped by kind. Click one to open it on GitHub. Click the header to fold the block away.")
+            collapsible: true
+            expanded: !(Persistent.states?.settings?.whatsNewCollapsed ?? false)
+            onExpandedChanged: Persistent.states.settings.whatsNewCollapsed = !expanded
 
             ShellUpdateSummaryCard {
                 Layout.fillWidth: true

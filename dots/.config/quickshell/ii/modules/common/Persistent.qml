@@ -637,6 +637,9 @@ Singleton {
 
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
+                // The About page's "What's new" block can run to dozens of
+                // rows and sits above the branch switcher.
+                property bool whatsNewCollapsed: false
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"
