@@ -44,8 +44,8 @@ ShellRoot {
         Wallpapers.load();
         Updates.load();
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
+        ShellUpdateSummary.load(); // Same: the automatic summary hooks the probe from startup
         DarkModeService.automatic;
-        ChangelogService.load();
         SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
         VideoColorSampler.active; // Touch singleton to initialize
         WaterReminderService.enabled; // Touch singleton: drives water reminder notifications

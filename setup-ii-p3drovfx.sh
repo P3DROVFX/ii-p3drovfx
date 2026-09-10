@@ -6,9 +6,10 @@
 # Running it bare applies the Quickshell config only. Installing the base
 # illogical-impulse dotfiles underneath it is always an explicit request.
 #
-# The same file is symlinked to ~/.local/bin/ii-p3drovfx and every command
-# below is reachable through that name too, with one difference: bare
-# `ii-p3drovfx` prints help instead of applying.
+# The same file is symlinked to ~/.local/bin/ii-p3drovfx (and II-P3DROVFX,
+# the fork's written name) and every command below is reachable through
+# either name too, with one difference: bare `ii-p3drovfx` prints help
+# instead of applying.
 #
 # ── Commands ─────────────────────────────────────────────────────────────────
 #
@@ -96,6 +97,8 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$_source")" >/dev/null 2>&1 && pwd)"
 SCRIPT_SELF="$(basename "$_source")"
 INVOKED_AS="$(basename "${0}")"
+# True when run through the installed CLI link, whichever spelling.
+invoked_as_cli() { [[ "$INVOKED_AS" == "$CLI_NAME" || "$INVOKED_AS" == "$CLI_ALIAS" ]]; }
 unset _source _dir
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -113,6 +116,7 @@ QS_DIR="$XDG_CONFIG_HOME/quickshell"
 TARGET_DIR="$QS_DIR/ii"
 BIN_DIR="$HOME/.local/bin"
 CLI_NAME="ii-p3drovfx"
+CLI_ALIAS="II-P3DROVFX" # the fork's written name; same link, so both spellings work
 
 # Paths this script used to write to, migrated on first run.
 LEGACY_CLI_NAME="vynx"
@@ -1544,6 +1548,7 @@ install_cli() {
     [[ -f "$script" ]] || return 0
     chmod +x "$script" 2>/dev/null || true
     ln -sfn "$script" "$BIN_DIR/$CLI_NAME"
+    ln -sfn "$script" "$BIN_DIR/$CLI_ALIAS"
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
         ui_warn "$(tilde "$BIN_DIR") is not on PATH."
         ui_note "Add to your shell rc:  set -gx PATH \$HOME/.local/bin \$PATH"
@@ -1593,6 +1598,7 @@ remove_cli() {
             return 0
         }
         rm -f "$target"
+        [[ -L "$BIN_DIR/$CLI_ALIAS" ]] && rm -f "$BIN_DIR/$CLI_ALIAS"
         ui_ok "Removed" "$(tilde "$target")"
         ui_note "$(tilde "$MIRROR_DIR") is left intact."
     else
@@ -2254,7 +2260,7 @@ cmd_hypr() {
 
 show_help() {
     local me="$SCRIPT_SELF"
-    [[ "$INVOKED_AS" == "$CLI_NAME" ]] && me="$CLI_NAME"
+    invoked_as_cli && me="$INVOKED_AS"
 
     ui_banner "ii-p3drovfx" "v$SETUP_VERSION"
 
@@ -2552,8 +2558,8 @@ parse_args() {
 main() {
     parse_args "$@"
 
-    # Bare `vynx` is a CLI, not an installer: show the surface instead of acting.
-    if [[ -z "$COMMAND" && "$INVOKED_AS" == "$CLI_NAME" ]]; then
+    # Bare `ii-p3drovfx` is a CLI, not an installer: show the surface instead of acting.
+    if [[ -z "$COMMAND" ]] && invoked_as_cli; then
         COMMAND="help"
     fi
     [[ -z "$COMMAND" ]] && COMMAND="apply"

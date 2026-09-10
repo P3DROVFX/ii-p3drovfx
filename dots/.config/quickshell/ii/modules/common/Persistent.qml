@@ -301,7 +301,7 @@ Singleton {
 
             property JsonObject ai: JsonObject {
                 // Catalog id of the model that answers, "provider:model".
-                property string modelId: "google:gemini-3.6-flash"
+                property string modelId: "google:gemini-3.8-flash"
                 // Defaults for a new chat. The older fields below are kept so
                 // states written by the first AI rebuild can be migrated.
                 property string defaultModelId: ""
@@ -637,6 +637,10 @@ Singleton {
 
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
+                // Whether the About page's commit list is folded away. It
+                // can run to dozens of rows, and with an AI summary above it
+                // the list is detail, so it starts folded.
+                property bool whatsNewCollapsed: true
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"

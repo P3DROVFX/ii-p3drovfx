@@ -104,7 +104,6 @@ PERSONAL_PATHS = (
     "bar.weather.city",
     "bar.weather.enableGPS",
     "update.lastAutoCheck",
-    "update.scriptPath",
 )
 
 # Folders that exist on the author's disk and probably nowhere else.
@@ -156,7 +155,6 @@ ASSET_PATHS = (
 # (pattern, category, note). Patterns take the same dotted form as above.
 RISK_RULES = (
     ("apps.*", "shell", "Command run when this shell action is picked"),
-    ("update.scriptFlags", "shell", "Arguments handed to the updater"),
     ("mediaDownloader.extraArgs", "shell", "Extra arguments handed to the downloader"),
     ("ai.tools.allowShellInLocalPolicy", "ai", "Lets the assistant run shell commands"),
     ("ai.tools.alwaysAllow", "ai", "Assistant tools that stop asking first"),

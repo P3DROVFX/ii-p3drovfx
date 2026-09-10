@@ -406,7 +406,6 @@ Singleton {
             "name": "About & Updates",
             "icon": "info",
             "component": "modules/settings/configs/AboutConfig.qml",
-            "subPages": [],
             "aliases": []
         },
         {

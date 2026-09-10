@@ -56,6 +56,28 @@ QtObject {
             // resolves to something.
             models: [
                 {
+                    value: "gemini-3.8-flash",
+                    title: "Gemini 3.8 Flash",
+                    thinking: true,
+                    thinkingKind: "gemini-level",
+                    samplingParams: false,
+                    // Refuses "minimal" with a 400; "low" is the least it will do.
+                    quirks: {
+                        thinkingFloor: "low"
+                    }
+                },
+                {
+                    value: "gemini-3.7-flash",
+                    title: "Gemini 3.7 Flash",
+                    thinking: true,
+                    thinkingKind: "gemini-level",
+                    samplingParams: false,
+                    // Refuses "minimal" with a 400; "low" is the least it will do.
+                    quirks: {
+                        thinkingFloor: "low"
+                    }
+                },
+                {
                     value: "gemini-3.6-flash",
                     title: "Gemini 3.6 Flash",
                     thinking: true,
