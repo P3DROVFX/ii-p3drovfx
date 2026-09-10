@@ -371,7 +371,7 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: Appearance.rounding.small
-                color: Appearance.colors.colSurfaceContainer
+                color: "transparent"
             }
 
             MouseArea {

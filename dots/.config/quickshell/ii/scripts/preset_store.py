@@ -8,10 +8,9 @@ clone, updating is a fast-forward pull, and publishing is `gh repo create`
 followed by `gh repo edit --add-topic`, so a preset can be written, shipped
 and updated without ever opening a browser tab.
 
-Every command prints exactly one JSON line on stdout, failures included, so a
-QML caller never has to tell "it broke" apart from "it printed nothing". The
-one exception is `auth login`, which streams one JSON line per step because
-the user has to be shown a code while the flow is still waiting.
+Commands print JSON lines on stdout, failures included. Discovery and detail
+reads accept --stream to publish metadata and cached images as they arrive;
+auth login also streams because its device code must be shown while waiting.
 
 Commands:
   auth status
@@ -32,6 +31,9 @@ Commands:
 import concurrent.futures
 import datetime
 import glob
+import fcntl
+import hashlib
+from pathlib import Path
 import json
 import os
 import re
@@ -60,6 +62,11 @@ DISCOVER_META_CACHE_NAME = 'discover-metadata.json'
 # value stays stable, but never let a stale negative probe hide a new preset
 # forever if GitHub's search index has not caught up yet.
 DISCOVER_META_CACHE_TTL = 6 * 60 * 60
+SEARCH_CACHE_TTL = 5 * 60
+BROWSE_TIMEOUT = 12
+METADATA_WORKERS = 4
+PREVIEW_WORKERS = 3
+PREVIEW_CACHE_BYTES = 256 * 1024 * 1024
 
 # The device flow needs an OAuth app that belongs to the shell, and its client
 # id is public by design -- it is not a secret and nothing can be done with it
@@ -385,13 +392,139 @@ def http_json(url, token=None, timeout=HTTP_TIMEOUT):
 
 
 def http_text(url, timeout=HTTP_TIMEOUT):
-    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read().decode('utf-8')
+    # urllib tries every resolved address sequentially. With four blackholed
+    # IPv6 addresses a 20s socket timeout becomes 80s before IPv4 even starts.
+    # curl uses Happy Eyeballs and a deadline for the entire transfer.
+    with tempfile.TemporaryDirectory(prefix='ii-store-http-') as directory:
+        path = os.path.join(directory, 'response')
+        curl_download(url, path, min(timeout, BROWSE_TIMEOUT), 2 * 1024 * 1024)
+        return Path(path).read_text(encoding='utf-8')
+
+
+def curl_download(url, path, timeout=BROWSE_TIMEOUT, max_bytes=MAX_ASSET_BYTES):
+    args = ['curl', '--silent', '--show-error', '--location', '--fail',
+            '--proto', '=https', '--proto-redir', '=https',
+            '--connect-timeout', '3', '--max-time', str(timeout),
+            '--max-filesize', str(max_bytes), '--user-agent', USER_AGENT,
+            '--output', path, '--write-out', '%{http_code}',
+            urllib.parse.quote(url, safe=':/?=&%')]
+    code, status, error = run(args, timeout=timeout + 2)
+    if code:
+        if status.isdigit() and int(status) >= 400:
+            raise urllib.error.HTTPError(url, int(status), 'GitHub returned ' + status, {}, None)
+        raise urllib.error.URLError(error or 'Download timed out')
+
+
+def browse_cache_file(kind, key):
+    digest = hashlib.sha256(key.encode('utf-8')).hexdigest()
+    return os.path.join(store_dir(), 'browse-cache', kind, digest + '.json')
+
+
+def read_optional_json(path):
+    try:
+        data = read_json(path)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_optional_json(path, data):
+    try:
+        presets_helper.atomic_write_json(path, data)
+    except OSError:
+        pass
+
+
+def preview_path(url):
+    # Keep one last-good image per URL while revalidating a changed repository.
+    # The revision sidecar avoids downloading unchanged binaries on reopening.
+    digest = hashlib.sha256(url.encode('utf-8')).hexdigest()
+    ext = image_ext(urllib.parse.urlparse(url).path) or '.png'
+    return Path(store_dir()) / 'browse-cache' / 'images' / (digest + ext)
+
+
+def cached_preview(url):
+    path = preview_path(url)
+    try:
+        if url and path.is_file() and path.stat().st_size > 0:
+            # Qt caches decoded images by URL. Replacing bytes at the same path
+            # needs a new cache key; QUrl.toLocalFile strips the query on read.
+            return path.as_uri() + '?v=' + str(path.stat().st_mtime_ns)
+    except OSError:
+        pass
+    return ''
+
+
+def download_preview(url, revision=''):
+    # Discovery and an open detail may request the same image simultaneously.
+    # Serialize only that URL, then recheck the cache inside the lock.
+    path = preview_path(url)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(path) + '.lock', 'a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            return _download_preview(url, revision)
+    except OSError:
+        return cached_preview(url)
+
+
+def _download_preview(url, revision=''):
+    if not url or urllib.parse.urlparse(url).hostname not in (
+            'raw.githubusercontent.com', 'avatars.githubusercontent.com'):
+        return ''
+    path = preview_path(url)
+    stamp = str(path) + '.json'
+    old = cached_preview(url)
+    state = read_optional_json(stamp)
+    if (old and state.get('revision') == revision
+            and (revision or time.time() - state.get('checkedAt', 0) < DISCOVER_META_CACHE_TTL)):
+        return old
+    # A broken image is tried once per minute, never once per emitted frame.
+    if time.time() - state.get('failedAt', 0) < 60:
+        return old
+    temporary = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.part', delete=False) as handle:
+            temporary = handle.name
+        curl_download(url, temporary)
+        # Reject HTML/error bodies before handing the file to Qt's decoder.
+        with open(temporary, 'rb') as handle:
+            header = handle.read(16)
+        if not (header.startswith((b'\x89PNG\r\n\x1a\n', b'\xff\xd8\xff', b'GIF8', b'BM'))
+                or (header.startswith(b'RIFF') and header[8:12] == b'WEBP')):
+            raise ValueError('Preview is not an image')
+        os.replace(temporary, path)
+        write_optional_json(stamp, {'revision': revision, 'checkedAt': time.time()})
+        return cached_preview(url)
+    except Exception:
+        write_optional_json(stamp, {**state, 'failedAt': time.time()})
+        return old
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def prune_preview_cache(keep_urls):
+    directory = Path(store_dir()) / 'browse-cache' / 'images'
+    keep = {preview_path(url) for url in keep_urls if url}
+    try:
+        files = [p for p in directory.iterdir() if p.suffix in IMAGE_EXTS]
+        total = sum(p.stat().st_size for p in files)
+        for path in sorted(files, key=lambda p: p.stat().st_mtime):
+            if total <= PREVIEW_CACHE_BYTES:
+                break
+            if path in keep:
+                continue
+            total -= path.stat().st_size
+            path.unlink(missing_ok=True)
+            Path(str(path) + '.json').unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def gh_token():
-    code, out, _ = gh(['auth', 'token'], timeout=20)
+    code, out, _ = gh(['auth', 'token'], timeout=3)
     return out if code == 0 and out else None
 
 
@@ -600,6 +733,7 @@ def cache_repo_meta(cache, repo, kind, meta_data):
         'branch': repo.get('default_branch', 'main'),
         'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
         'checkedAt': time.time(),
+        'repository': repo,
         'kind': kind or '',
         'data': meta_data if isinstance(meta_data, dict) else {},
     }
@@ -616,11 +750,9 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
         'description': repo.get('description') or '',
         'author': owner.get('login', ''),
         'avatarUrl': owner.get('avatar_url', ''),
-        # The fast first paint uses this conventional path. It can fail without
-        # blocking the list; the hydrated result below replaces it when the
-        # manifest or collection index names a real preview.
-        'imageUrl': 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch),
-        'wallpaperUrl': 'https://raw.githubusercontent.com/%s/%s/wallpaper.png' % (slug, branch),
+        # Unknown collection roots are placeholders, never guessed downloads.
+        'imageUrl': '',
+        'wallpaperUrl': '',
         'stars': repo.get('stargazers_count', 0),
         'repoUrl': repo.get('html_url', ''),
         'updatedAt': repo.get('pushed_at') or repo.get('updated_at') or '',
@@ -639,9 +771,9 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
             full_slug = '%s:%s' % (slug, preset_id)
             path = str(preset.get('path', 'presets/%s' % preset_id)).strip('/')
             wallpaper = preset.get('wallpaper')
-            banner = preset.get('banner')
             screenshots = preset.get('screenshots') or []
-            preview = banner or (screenshots[0] if screenshots else None) or wallpaper \
+            # banner is the sidebar decoration, not a screenshot of the look.
+            preview = (screenshots[0] if screenshots else None) or wallpaper \
                 or '%s/wallpaper.png' % path
             wallpaper_path = wallpaper or '%s/wallpaper.png' % path
             entry = dict(base)
@@ -660,9 +792,8 @@ def discover_result(repo, installed, kind=None, meta_data=None, metadata_ready=F
         return results
     if kind == 'preset' and isinstance(meta_data, dict):
         wallpaper = meta_data.get('wallpaper')
-        banner = meta_data.get('banner')
         screenshots = meta_data.get('screenshots') or []
-        preview = banner or (screenshots[0] if screenshots else None) or wallpaper or 'wallpaper.png'
+        preview = (screenshots[0] if screenshots else None) or wallpaper or 'wallpaper.png'
         entry = dict(base)
         entry.update({
             'name': meta_data.get('name') or base['name'],
@@ -683,7 +814,8 @@ def discover_results(items, installed, metas=None, metadata_ready=False):
     for repo in items:
         slug = repo.get('full_name', '')
         kind, meta_data = metas.get(slug, (None, None))
-        results.extend(discover_result(repo, installed, kind, meta_data, metadata_ready))
+        results.extend(discover_result(repo, installed, kind, meta_data,
+                                       bool(kind) or metadata_ready))
     return results
 
 def probe_repo_meta(repo, token=None):
@@ -710,84 +842,164 @@ def probe_repo_meta(repo, token=None):
     return slug, branch, None, None
 
 
-def cmd_discover(limit=30, query='', stream=False):
+def cmd_discover(limit=30, query='', stream=False, force=False):
     limit = max(1, min(int(limit or 30), 100))
-    search = 'topic:%s' % TOPIC
-    if query:
-        search = '%s %s' % (query.strip(), search)
+    search = ('%s topic:%s' % (query.strip(), TOPIC)).strip()
     url = ('https://api.github.com/search/repositories?q=%s&sort=stars&order=desc&per_page=%d'
            % (urllib.parse.quote(search), limit))
-    # Signed in, the rate limit is 30 searches a minute instead of 10, which
-    # is the difference between a store that reloads and one that stops.
-    token = gh_token()
-    try:
-        data = http_json(url, token=token)
-    except urllib.error.HTTPError as exc:
-        if exc.code in (403, 429):
-            raise StoreError('GitHub is rate-limiting the search. Try again in a minute.')
-        raise StoreError('GitHub returned %s.' % exc.code)
-    except urllib.error.URLError as exc:
-        raise StoreError('Could not reach GitHub: %s' % exc.reason)
-
-    installed = {link.get('repo'): name for name, link in load_links().items()}
-    items = data.get('items', [])
-
-    # The repository search already carries enough information to show useful
-    # cards. Emit that first; waiting for a pair of raw-file probes per repo
-    # made the Store look empty for tens of seconds on ordinary connections.
-    initial = discover_results(items, installed, metadata_ready=False)
-    if stream:
-        emit({'ok': True, 'phase': 'initial', 'topic': TOPIC,
-              'total': len(initial), 'results': initial})
-
+    snapshot_path = browse_cache_file('search', url)
+    snapshot = read_optional_json(snapshot_path)
     cache = load_discover_meta_cache()
+    installed = {link.get('repo'): name for name, link in load_links().items()}
+    items = snapshot.get('items', [])
     metas = {}
-    missing = []
-    for repo in items:
-        cached = cached_repo_meta(cache, repo)
-        if cached is None:
-            missing.append(repo)
-        else:
-            metas[repo.get('full_name', '')] = cached
+    media = {}
+    avatars = {}
+    warning = ''
+    emitted = False
 
-    # Misses are an actual batch: bounded parallel raw requests. Individual
-    # malformed/deleted repositories resolve to the normal fallback card
-    # instead of holding every other result hostage.
-    if missing:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(12, len(missing))) as executor:
-            futures = [executor.submit(probe_repo_meta, repo, token) for repo in missing]
-            for future in concurrent.futures.as_completed(futures):
+    def rows():
+        result = discover_results(items, installed, metas)
+        for row in result:
+            row['previewLocal'] = cached_preview(row['imageUrl'])
+            row['avatarLocal'] = avatars.get(row['avatarUrl'], cached_preview(row['avatarUrl']))
+            row['previewState'] = 'loading' if row['metadataReady'] else 'metadata'
+            row.update(media.get(row['repo'], {}))
+        return result
+
+    def publish(phase):
+        nonlocal emitted
+        result = rows()
+        payload = {'ok': True, 'phase': phase, 'topic': TOPIC,
+                   'total': len(result), 'results': result, 'warning': warning}
+        if stream and phase != 'complete':
+            emit(payload)
+            emitted = True
+        return payload
+
+    def seed_metadata():
+        for repo in items:
+            slug = repo.get('full_name', '')
+            entry = cache.get(slug, {})
+            if entry.get('kind') and isinstance(entry.get('data'), dict):
+                metas[slug] = (entry['kind'], entry['data'])
+
+    # Cached cards and local images reach the UI before authentication/network.
+    seed_metadata()
+    if items:
+        publish('initial')
+    fresh = time.time() - snapshot.get('checkedAt', 0) < SEARCH_CACHE_TTL
+    cooling_down = time.time() < snapshot.get('retryAt', 0)
+    if cooling_down:
+        warning = 'GitHub asked us to wait. Showing saved presets.'
+        if not items:
+            raise StoreError(warning)
+    elif force or not fresh:
+        try:
+            data = http_json(url, token=gh_token(), timeout=BROWSE_TIMEOUT)
+            items = data.get('items', [])
+            snapshot = {'items': items, 'checkedAt': time.time()}
+            write_optional_json(snapshot_path, snapshot)
+        except Exception as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code in (403, 429):
+                headers = exc.headers or {}
                 try:
-                    slug, _branch, kind, meta_data = future.result()
+                    retry_at = max(time.time() + float(headers.get('Retry-After', 60)),
+                                   float(headers.get('X-RateLimit-Reset', 0)))
+                except (TypeError, ValueError):
+                    retry_at = time.time() + 60
+                write_optional_json(snapshot_path, {**snapshot, 'retryAt': retry_at})
+                warning = 'GitHub is rate-limiting the search. Try again later.'
+            else:
+                warning = 'Could not refresh GitHub. Showing saved presets.'
+            if not items:
+                raise StoreError(warning) from exc
+    seed_metadata()
+    publish('metadata' if emitted else 'initial')
+
+    # Metadata and media have separate small pools. A slow repo cannot keep
+    # an already-resolved card or preview from reaching the UI.
+    scheduled = set()
+    scheduled_avatars = set()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=METADATA_WORKERS) as probes, \
+         concurrent.futures.ThreadPoolExecutor(max_workers=PREVIEW_WORKERS) as previews:
+        pending = {}
+
+        def schedule_previews():
+            for row in rows():
+                key = (row['repo'], row['imageUrl'])
+                if not row['metadataReady'] or key in scheduled:
+                    continue
+                scheduled.add(key)
+                pending[previews.submit(load_media, row)] = ('preview', row)
+            for row in rows():
+                avatar = row['avatarUrl']
+                if avatar and avatar not in scheduled_avatars:
+                    scheduled_avatars.add(avatar)
+                    pending[previews.submit(download_preview, avatar)] = ('avatar', avatar)
+
+        def load_media(row):
+            revision = row['updatedAt']
+            local = download_preview(row['imageUrl'], revision)
+            if not local and row['wallpaperUrl'] != row['imageUrl']:
+                local = download_preview(row['wallpaperUrl'], revision)
+            return {'previewLocal': local,
+                    'previewState': 'ready' if local else 'error'}
+
+        for repo in items:
+            if cached_repo_meta(cache, repo) is None and not cooling_down:
+                pending[probes.submit(probe_repo_meta, repo)] = ('metadata', repo)
+        schedule_previews()
+        while pending:
+            done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                kind, source = pending.pop(future)
+                try:
+                    answer = future.result()
                 except Exception:
-                    continue
-                repo = next((candidate for candidate in missing
-                             if candidate.get('full_name', '') == slug), None)
-                if repo is None:
-                    continue
-                metas[slug] = (kind, meta_data)
-                # Only a positive manifest/index answer is stable enough to
-                # cache. `None` also represents connection and decode errors.
-                if kind:
-                    cache_repo_meta(cache, repo, kind, meta_data)
-        save_discover_meta_cache(cache)
+                    answer = None
+                if kind == 'preview':
+                    current = next((row for row in rows() if row['repo'] == source['repo']), None)
+                    if current and current['imageUrl'] == source['imageUrl']:
+                        media[source['repo']] = answer or {'previewState': 'error'}
+                elif kind == 'avatar':
+                    avatars[source] = answer or ''
+                elif answer and answer[2]:
+                    slug, _branch, meta_kind, data = answer
+                    metas[slug] = (meta_kind, data)
+                    cache_repo_meta(cache, source, meta_kind, data)
+                    save_discover_meta_cache(cache)
+                else:
+                    # Preserve a last-good collection if its refresh fails.
+                    slug = source.get('full_name', '')
+                    if slug not in metas:
+                        media[slug] = {'previewState': 'error'}
+                schedule_previews()
+            publish('progress')
 
-    results = discover_results(items, installed, metas, metadata_ready=True)
-    return {'ok': True, 'phase': 'complete', 'topic': TOPIC,
-            'total': len(results), 'results': results}
+    result = publish('complete')
+    prune_preview_cache([row['imageUrl'] for row in result['results']]
+                        + [row['wallpaperUrl'] for row in result['results']])
+    return result
 
 
-def cmd_fetch_manifest(slug):
+def cmd_fetch_manifest(slug, stream=False):
     slug = check_slug(slug)
     base_slug, preset_id = parse_slug(slug)
-    try:
-        repo = http_json('https://api.github.com/repos/%s' % base_slug, token=gh_token())
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            raise StoreError('No such repository: %s' % base_slug)
-        raise StoreError('GitHub returned %s.' % exc.code)
-    except urllib.error.URLError as exc:
-        raise StoreError('Could not reach GitHub: %s' % exc.reason)
+    cached = load_discover_meta_cache().get(base_slug, {})
+    repo = cached.get('repository')
+    # Older metadata caches already know the branch/index. Upgrade them without
+    # paying for the exact same repository and index again when opening a card.
+    if not repo and cached.get('kind'):
+        repo = {'full_name': base_slug, 'default_branch': cached.get('branch', 'main'),
+                'pushed_at': cached.get('updatedAt', ''),
+                'html_url': 'https://github.com/' + base_slug}
+    if not repo:
+        try:
+            repo = http_json('https://api.github.com/repos/%s' % base_slug,
+                             token=gh_token(), timeout=BROWSE_TIMEOUT)
+        except Exception as exc:
+            raise StoreError('Could not read repository %s: %s' % (base_slug, exc)) from exc
 
     branch = repo.get('default_branch') or 'main'
     subpath = ''
@@ -795,7 +1007,8 @@ def cmd_fetch_manifest(slug):
         subpath = 'presets/%s' % preset_id
         index_raw = 'https://raw.githubusercontent.com/%s/%s/%s' % (base_slug, branch, INDEX_NAME)
         try:
-            index_data = json.loads(http_text(index_raw))
+            index_data = (cached.get('data') if cached.get('kind') == 'index'
+                          else json.loads(http_text(index_raw)))
             for p in index_data.get('presets', []):
                 p_id = p.get('id') or repo_name_from_preset(p.get('name', ''))
                 if p_id == preset_id:
@@ -808,7 +1021,18 @@ def cmd_fetch_manifest(slug):
                     if subpath else
                     'https://raw.githubusercontent.com/%s/%s/%s' % (base_slug, branch, MANIFEST_NAME))
     try:
-        manifest = validate_manifest(json.loads(http_text(manifest_url)), MANIFEST_NAME)
+        manifest_cache_path = browse_cache_file('manifests', manifest_url)
+        saved = read_optional_json(manifest_cache_path)
+        revision = repo.get('pushed_at') or repo.get('updated_at') or ''
+        if (saved.get('revision') == revision and saved.get('manifest')
+                and time.time() - saved.get('checkedAt', 0) < DISCOVER_META_CACHE_TTL):
+            manifest = validate_manifest(saved['manifest'])
+        elif not preset_id and cached.get('kind') == 'preset':
+            manifest = validate_manifest(cached['data'])
+        else:
+            manifest = validate_manifest(json.loads(http_text(manifest_url)), MANIFEST_NAME)
+            write_optional_json(manifest_cache_path, {'manifest': manifest,
+                                'revision': revision, 'checkedAt': time.time()})
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             raise StoreError('%s carries no %s, so it is not a preset.' % (slug, MANIFEST_NAME))
@@ -829,8 +1053,24 @@ def cmd_fetch_manifest(slug):
          'https://raw.githubusercontent.com/%s/%s/%s' % (base_slug, branch, path.lstrip('/')))
         for path in summary['screenshots']
     ]
-    return {'ok': True, 'manifest': summary,
-            'compatibility': compatibility(summary.get('configVersion'))}
+    payload = {'ok': True, 'manifest': summary,
+               'compatibility': compatibility(summary.get('configVersion'))}
+    if stream:
+        urls = summary['screenshotUrls'][:MAX_SCREENSHOTS]
+        summary['screenshotUrls'] = [cached_preview(url) for url in urls]
+        emit({**payload, 'phase': 'manifest'})
+        with concurrent.futures.ThreadPoolExecutor(max_workers=PREVIEW_WORKERS) as pool:
+            pending = {pool.submit(download_preview, url, revision): i for i, url in enumerate(urls)}
+            for future in concurrent.futures.as_completed(pending):
+                try:
+                    local = future.result()
+                except Exception:
+                    local = ''
+                if local:
+                    summary['screenshotUrls'][pending[future]] = local
+                    emit({**payload, 'phase': 'manifest'})
+        payload['phase'] = 'complete'
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -1705,7 +1945,10 @@ def cmd_links():
             'present': os.path.isdir(os.path.join(directory, '.git')),
             'installed': os.path.exists(os.path.join(presets_dir(), '%s.json' % name)),
         })
-    return {'ok': True, 'total': len(rows), 'links': rows}
+    state_home = os.environ.get('XDG_STATE_HOME') or os.path.join(home(), '.local', 'state')
+    backups = glob.glob(os.path.join(state_home, 'ii', 'preset-backups', '*-config.json'))
+    return {'ok': True, 'total': len(rows), 'links': rows,
+            'canRevert': any(os.path.isfile(path) for path in backups)}
 
 
 def cmd_unlink(name):
@@ -1792,9 +2035,11 @@ def dispatch(argv):
         stream = take_flag(rest, '--stream')
         limit = take_option(rest, '--limit', '30')
         query = take_option(rest, '--query', '')
-        return cmd_discover(limit, query, stream)
+        force = take_flag(rest, '--force')
+        return cmd_discover(limit, query, stream, force)
     if command == 'fetch-manifest':
-        return cmd_fetch_manifest(rest[0] if rest else '')
+        stream = take_flag(rest, '--stream')
+        return cmd_fetch_manifest(rest[0] if rest else '', stream)
     if command == 'install':
         force = take_flag(rest, '--force')
         name = take_option(rest, '--name')

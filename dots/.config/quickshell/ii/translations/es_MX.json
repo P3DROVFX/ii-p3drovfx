@@ -4033,5 +4033,13 @@
     "Adjust fingers": "Ajustar dedos",
     "Finger for the selected key": "Dedo para la tecla seleccionada",
     "Reset fingers": "Restablecer dedos",
-    "Suggested by position. Adjust any key for your keyboard or technique.": "Sugerencia por posición. Ajusta cualquier tecla a tu teclado o técnica."
+    "Suggested by position. Adjust any key for your keyboard or technique.": "Sugerencia por posición. Ajusta cualquier tecla a tu teclado o técnica.",
+    "Applying…": "Aplicando…",
+    "Loading previews…": "Cargando vistas previas…",
+    "Apply now?": "¿Aplicar ahora?",
+    "Applied": "Aplicado",
+    "Revert": "Revertir",
+    "Reverting…": "Revirtiendo…",
+    "Your previous settings are saved. Use Revert to restore them.": "Tu configuración anterior está guardada. Usa Revertir para restaurarla.",
+    "Your current settings will be backed up before applying, so you can revert afterwards.": "Se guardará una copia de tu configuración actual antes de aplicar, para que puedas revertir después."
 }

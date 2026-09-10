@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -277,6 +278,9 @@ class TestPureHelpers(unittest.TestCase):
         with mock.patch.object(self.store, "gh_token", return_value=None), \
              mock.patch.object(self.store, "http_json", return_value={"items": [repository]}), \
              mock.patch.object(self.store, "load_links", return_value={}), \
+             mock.patch.object(self.store, "download_preview", return_value=""), \
+             mock.patch.object(self.store, "read_optional_json", return_value={}), \
+             mock.patch.object(self.store, "write_optional_json"), \
              mock.patch.object(self.store, "load_discover_meta_cache", return_value={}), \
              mock.patch.object(self.store, "save_discover_meta_cache"), \
              mock.patch.object(self.store, "probe_repo_meta",
@@ -342,6 +346,213 @@ class TestPureHelpers(unittest.TestCase):
                         new_repo_flow.index("ensure_git_identity(directory, auth)"))
 
 
+class TestStoreLoading(StoreTestCase):
+    def setUp(self):
+        super().setUp()
+        import preset_store
+        self.store = preset_store
+        self.repo = {"full_name": "alice/themes", "name": "themes",
+                     "default_branch": "main", "pushed_at": "revision-1",
+                     "owner": {"login": "alice"}}
+        self.index = {"presets": [{"id": "blue", "name": "Blue",
+                                   "path": "presets/blue", "banner": "presets/blue/banner.png"}]}
+        self.patchers = [mock.patch.object(self.store, "home", return_value=self.home),
+                         mock.patch.object(self.store, "gh_token", return_value=None)]
+        for patcher in self.patchers:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def seed_metadata(self):
+        cache = {}
+        self.store.cache_repo_meta(cache, self.repo, "index", self.index)
+        self.store.save_discover_meta_cache(cache)
+
+    def test_store_preview_uses_screenshot_instead_of_sidebar_banner(self):
+        preset = {"id": "estelar", "name": "Estelar", "path": "presets/estelar",
+                  "banner": "presets/estelar/banner.png",
+                  "wallpaper": "presets/estelar/wallpaper.jpeg",
+                  "screenshots": ["presets/estelar/screenshots/1.png"]}
+        collection = self.store.discover_result(self.repo, {}, "index", {"presets": [preset]}, True)[0]
+        self.assertTrue(collection["imageUrl"].endswith("presets/estelar/screenshots/1.png"))
+        single = dict(preset, screenshots=["screenshots/1.png"], banner="banner.png")
+        single_row = self.store.discover_result(self.repo, {}, "preset", single, True)[0]
+        self.assertTrue(single_row["imageUrl"].endswith("/screenshots/1.png"))
+        preset["screenshots"] = []
+        fallback = self.store.discover_result(self.repo, {}, "index", {"presets": [preset]}, True)[0]
+        self.assertTrue(fallback["imageUrl"].endswith("presets/estelar/wallpaper.jpeg"))
+
+    def test_first_frame_uses_cached_collection_without_provisional_wallpaper(self):
+        self.seed_metadata()
+        frames = []
+        with mock.patch.object(self.store, "http_json", return_value={"items": [self.repo]}), \
+             mock.patch.object(self.store, "emit", side_effect=frames.append), \
+             mock.patch.object(self.store, "download_preview", return_value=""), \
+             mock.patch.object(self.store, "probe_repo_meta") as probe:
+            result = self.store.cmd_discover(stream=True)
+        self.assertEqual(frames[0]["results"][0]["repo"], "alice/themes:blue")
+        self.assertTrue(frames[0]["results"][0]["metadataReady"])
+        probe.assert_not_called()
+        self.assertEqual(result["results"][0]["name"], "Blue")
+
+    def test_fast_repo_and_preview_stream_before_slow_repo_finishes(self):
+        import threading
+        ready = threading.Event()
+        frames = []
+        slow = dict(self.repo, full_name="alice/slow", name="slow")
+
+        def probe(repo, token=None):
+            if repo["name"] == "slow":
+                if not ready.wait(3):
+                    raise AssertionError("A slow repository blocked the fast preview")
+            return repo["full_name"], "main", "index", self.index
+
+        def receive(frame):
+            frames.append(frame)
+            if any(row.get("previewLocal") for row in frame["results"]):
+                ready.set()
+
+        with mock.patch.object(self.store, "http_json", return_value={"items": [self.repo, slow]}), \
+             mock.patch.object(self.store, "probe_repo_meta", side_effect=probe), \
+             mock.patch.object(self.store, "download_preview", return_value="file:///tmp/cached.png"), \
+             mock.patch.object(self.store, "emit", side_effect=receive):
+            self.store.cmd_discover(stream=True)
+        self.assertTrue(ready.is_set())
+        preview_frame = next(f for f in frames if any(r.get("previewLocal") for r in f["results"]))
+        self.assertTrue(any(r["repo"] == "alice/slow" and not r["metadataReady"]
+                            for r in preview_frame["results"]))
+
+    def test_reopening_reuses_search_and_preview_without_network(self):
+        self.seed_metadata()
+        with mock.patch.object(self.store, "http_json", return_value={"items": [self.repo]}) as api, \
+             mock.patch.object(self.store, "download_preview", return_value=""):
+            self.store.cmd_discover()
+            self.store.cmd_discover()
+        self.assertEqual(api.call_count, 1)
+
+    def test_offline_refresh_keeps_cached_cards(self):
+        self.seed_metadata()
+        with mock.patch.object(self.store, "http_json", return_value={"items": [self.repo]}), \
+             mock.patch.object(self.store, "download_preview", return_value=""):
+            self.store.cmd_discover()
+        with mock.patch.object(self.store, "http_json", side_effect=TimeoutError("offline")), \
+             mock.patch.object(self.store, "download_preview", return_value=""):
+            result = self.store.cmd_discover(force=True)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["results"][0]["name"], "Blue")
+        self.assertTrue(result["warning"])
+
+    def test_detail_reuses_repo_and_index_and_caches_manifest(self):
+        self.seed_metadata()
+        manifest = {"schema": 1, "name": "Blue", "version": "1.0.0", "configVersion": 16,
+                    "screenshots": ["preview.png"]}
+        with mock.patch.object(self.store, "http_json") as api, \
+             mock.patch.object(self.store, "http_text", return_value=json.dumps(manifest)) as raw:
+            first = self.store.cmd_fetch_manifest("alice/themes:blue")
+            second = self.store.cmd_fetch_manifest("alice/themes:blue")
+        api.assert_not_called()
+        self.assertEqual(raw.call_count, 1)
+        self.assertTrue(raw.call_args.args[0].endswith("presets/blue/preset.json"))
+        self.assertEqual(first, second)
+        self.assertTrue(first["ok"])
+
+    def test_media_download_has_hard_deadline_and_atomic_cache_reuse(self):
+        def transfer(args, **kwargs):
+            self.assertIn("--max-time", args)
+            self.assertIn("--connect-timeout", args)
+            self.assertIn("--max-filesize", args)
+            destination = args[args.index("--output") + 1]
+            Path(destination).write_bytes(b"\x89PNG\r\n\x1a\n" + b"preview")
+            return 0, "200", ""
+
+        from pathlib import Path
+        with mock.patch.object(self.store, "run", side_effect=transfer) as curl:
+            a = self.store.download_preview("https://raw.githubusercontent.com/alice/themes/main/banner.png", "r1")
+            b = self.store.download_preview("https://raw.githubusercontent.com/alice/themes/main/banner.png", "r1")
+        self.assertTrue(a.startswith("file://"))
+        self.assertEqual(a, b)
+        self.assertEqual(curl.call_count, 1)
+
+    def test_rate_limit_cooldown_prevents_repeated_api_requests(self):
+        import urllib.error
+        self.seed_metadata()
+        with mock.patch.object(self.store, "http_json", return_value={"items": [self.repo]}), \
+             mock.patch.object(self.store, "download_preview", return_value=""):
+            self.store.cmd_discover()
+        limited = urllib.error.HTTPError("https://api.github.com", 429, "wait", {"Retry-After": "60"}, None)
+        with mock.patch.object(self.store, "http_json", side_effect=limited) as api, \
+             mock.patch.object(self.store, "download_preview", return_value=""):
+            self.assertTrue(self.store.cmd_discover(force=True)["results"])
+            self.assertTrue(self.store.cmd_discover(force=True)["results"])
+        self.assertEqual(api.call_count, 1)
+
+    def test_detail_metadata_arrives_before_screenshot_download(self):
+        self.seed_metadata()
+        frames = []
+        manifest = {"schema": 1, "name": "Blue", "configVersion": 16,
+                    "screenshots": ["preview.png"]}
+
+        def download(url, revision):
+            self.assertTrue(frames)
+            self.assertEqual(frames[0]["phase"], "manifest")
+            self.assertEqual(frames[0]["manifest"]["screenshotUrls"], [""])
+            return "file:///cached/preview.png"
+
+        with mock.patch.object(self.store, "http_text", return_value=json.dumps(manifest)), \
+             mock.patch.object(self.store, "download_preview", side_effect=download), \
+             mock.patch.object(self.store, "emit", side_effect=lambda f: frames.append(json.loads(json.dumps(f)))):
+            result = self.store.cmd_fetch_manifest("alice/themes:blue", stream=True)
+        self.assertEqual(result["phase"], "complete")
+        self.assertEqual(result["manifest"]["screenshotUrls"], ["file:///cached/preview.png"])
+
+    def test_concurrent_preview_requests_share_one_download(self):
+        import concurrent.futures
+        from pathlib import Path
+
+        def transfer(args, **kwargs):
+            Path(args[args.index("--output") + 1]).write_bytes(b"\x89PNG\r\n\x1a\npreview")
+            return 0, "200", ""
+
+        with mock.patch.object(self.store, "run", side_effect=transfer) as curl, \
+             concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+            urls = ["https://raw.githubusercontent.com/alice/themes/main/banner.png"] * 3
+            results = list(pool.map(self.store.download_preview, urls))
+        self.assertTrue(all(results))
+        self.assertEqual(len(set(results)), 1)
+        self.assertEqual(curl.call_count, 1)
+
+    def test_changed_revision_invalidates_qt_image_cache_key(self):
+        import os
+        url = "https://raw.githubusercontent.com/alice/themes/main/banner.png"
+        counter = 0
+
+        def transfer(url, destination, *args):
+            nonlocal counter
+            counter += 1
+            Path(destination).write_bytes(b"\x89PNG\r\n\x1a\npreview")
+            os.utime(destination, ns=(counter * 1000000000, counter * 1000000000))
+
+        with mock.patch.object(self.store, "curl_download", side_effect=transfer):
+            first = self.store.download_preview(url, "revision-1")
+            second = self.store.download_preview(url, "revision-2")
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.startswith("file://") and second.startswith("file://"))
+
+    def test_failed_preview_refresh_retains_last_good_image_and_backs_off(self):
+        from pathlib import Path
+        url = "https://raw.githubusercontent.com/alice/themes/main/banner.png"
+        path = self.store.preview_path(url)
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"\x89PNG\r\n\x1a\nold-preview")
+        with mock.patch.object(self.store, "curl_download", side_effect=TimeoutError("offline")) as curl:
+            first = self.store.download_preview(url, "new-revision")
+            second = self.store.download_preview(url, "new-revision")
+        self.assertTrue(first.startswith(path.as_uri() + "?v="))
+        self.assertEqual(second, first)
+        self.assertEqual(curl.call_count, 1)
+        self.assertEqual(path.read_bytes(), b"\x89PNG\r\n\x1a\nold-preview")
+
+
+
 class TestPresetStoreQmlContract(unittest.TestCase):
     """Keep the streamed Python protocol aligned with its QML consumer."""
 
@@ -369,6 +580,34 @@ class TestPresetStoreQmlContract(unittest.TestCase):
             with open(path, encoding="utf-8") as handle:
                 source = handle.read()
             self.assertEqual(source.count('enabled: !PresetStore.discovering && !PresetStore.discoverHydrating'), 2)
+
+    def test_browsing_is_not_queued_as_a_preset_mutation(self):
+        source = Path(os.path.dirname(SCRIPTS_DIR), "services", "PresetStore.qml").read_text()
+        discover = source[source.index('    function discover('):source.index('    function fetchManifest(')]
+        detail = source[source.index('    function fetchManifest('):source.index('    function install(')]
+        self.assertIn('discoveryReader.start(', discover)
+        self.assertNotIn('root._enqueue(', discover)
+        self.assertNotIn('root._run(', detail)
+        self.assertIn('payload.phase === "manifest"', source)
+
+    def test_detail_install_label_requires_an_install_request(self):
+        source = Path(os.path.dirname(SCRIPTS_DIR), "modules/settings/configs/presets/PresetDetailSubPage.qml").read_text()
+        self.assertIn('PresetStore.actionPending("install", root.repo)', source)
+        self.assertIn('actionLabel: root.installing', source)
+        self.assertIn('enabled: !root.loading && root.manifest !== null', source)
+        self.assertIn('repoTarget !== root.requestedInstallRepo', source)
+        self.assertNotIn('PresetStore.busyFor', source)
+
+
+    def test_installed_detail_offers_apply_and_restorable_active_preset_offers_undo(self):
+        source = Path(os.path.dirname(SCRIPTS_DIR), "modules/settings/configs/presets/PresetDetailSubPage.qml").read_text()
+        self.assertIn('Translation.tr("Apply now?")', source)
+        self.assertIn('Translation.tr("Applied")', source)
+        self.assertIn('visible: (root.applied && PresetStore.canRevert) || root.revertRequested', source)
+        self.assertIn('anchors.right: installFab.left', source)
+        self.assertIn('PresetStore.revert();', source)
+        self.assertIn('!root.applied || root.hasUpdate', source)
+
 
 
 class TestInstall(StoreTestCase):

@@ -10,10 +10,9 @@ import qs.modules.common.functions
 /**
  * The Store tab: whatever GitHub answers for the preset topic, right now.
  *
- * There is no index and no server behind this. Every listing is a live search,
- * which is why the tab says what it is doing rather than showing an empty grid
- * while it waits, and why a refused search reports the reason instead of
- * looking like a store with nothing in it.
+ * Cached listings and previews remain visible while GitHub is refreshed.
+ * Repository metadata and images arrive progressively without recreating the
+ * delegates, and failed refreshes keep the last usable listing.
  */
 ColumnLayout {
     id: root
@@ -24,13 +23,6 @@ ColumnLayout {
 
     // 0 stars · 1 recently updated · 2 name
     property int sortMode: 0
-    // Let the first row become useful immediately, then admit further
-    // previews in compact batches. A Flow/Repeater creates every card at once,
-    // so without this guard thirty full-size raw GitHub images compete for the
-    // same network and decoder queue.
-    property int previewBudget: 0
-    readonly property int previewBatchSize: 6
-
     readonly property var results: {
         let rows = PresetStore.discoverResults.slice();
         if (root.sortMode === 1)
@@ -42,13 +34,15 @@ ColumnLayout {
         return rows;
     }
 
-    onResultsChanged: {
-        root.previewBudget = Math.min(root.previewBatchSize, root.results.length);
-        if (root.previewBudget < root.results.length)
-            previewBatchTimer.restart();
+    ListModel {
+        id: resultModel
+        dynamicRoles: true
     }
 
+    onResultsChanged: PresetStore.syncResultsModel(resultModel, root.results)
+
     Component.onCompleted: {
+        PresetStore.syncResultsModel(resultModel, root.results);
         PresetStore.ensureLoaded();
         PresetStore.discover("", 30);
         PresetStore.checkUpdates(false);
@@ -62,18 +56,6 @@ ColumnLayout {
         interval: 700
         repeat: false
         onTriggered: PresetStore.discover(searchField.text, 30)
-    }
-
-    Timer {
-        id: previewBatchTimer
-        interval: 220
-        repeat: false
-        onTriggered: {
-            root.previewBudget = Math.min(root.results.length,
-                root.previewBudget + root.previewBatchSize);
-            if (root.previewBudget < root.results.length)
-                restart();
-        }
     }
 
     NoticeBox {
@@ -154,7 +136,7 @@ ColumnLayout {
 
         StyledText {
             visible: !PresetStore.discovering && PresetStore.discoverError.length === 0
-            text: Translation.tr("%1 found").arg(root.results.length)
+            text: Translation.tr("%1 found").arg(String(root.results.length))
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnSurfaceVariant
         }
@@ -168,7 +150,9 @@ ColumnLayout {
     StyledText {
         Layout.fillWidth: true
         visible: PresetStore.discoverHydrating
-        text: Translation.tr("Loading preset details in the background…")
+        text: root.results.some(entry => entry.metadataReady === false)
+            ? Translation.tr("Loading preset details in the background…")
+            : Translation.tr("Loading previews…")
         font.pixelSize: Appearance.font.pixelSize.small
         color: Appearance.colors.colOnSurfaceVariant
     }
@@ -255,15 +239,13 @@ ColumnLayout {
             }
 
             Repeater {
-                model: root.results
+                model: resultModel
 
                 delegate: StoreResultCard {
-                    required property var modelData
-                    required property int index
-                    entry: modelData
+                    required property var payload
+                    entry: payload
                     width: resultFlow.itemWidth
-                    previewAllowed: index < root.previewBudget
-                    onActivated: root.openDetails(modelData)
+                    onActivated: root.openDetails(payload)
                 }
             }
         }

@@ -51,8 +51,6 @@ ColumnLayout {
     property var installedHere: []
     property int revertsLeft: 0
     property bool cleaning: false
-    property int previewBudget: 0
-    readonly property int previewBatchSize: 6
 
     // Sorted by stars: on a page that asks someone to pick a look in a minute,
     // the order that needs no explanation is "what other people kept".
@@ -62,11 +60,12 @@ ColumnLayout {
         return rows;
     }
 
-    onResultsChanged: {
-        root.previewBudget = Math.min(root.previewBatchSize, root.results.length);
-        if (root.previewBudget < root.results.length)
-            previewBatchTimer.restart();
+    ListModel {
+        id: resultModel
+        dynamicRoles: true
     }
+
+    onResultsChanged: PresetStore.syncResultsModel(resultModel, root.results)
 
     readonly property bool working: PresetStore.busy || root.cleaning
         || root.pendingRepo !== "" || root.pendingName !== ""
@@ -130,7 +129,10 @@ ColumnLayout {
             PresetStore.uninstall(name);
     }
 
-    Component.onCompleted: PresetStore.ensureLoaded()
+    Component.onCompleted: {
+        PresetStore.ensureLoaded();
+        PresetStore.syncResultsModel(resultModel, root.results);
+    }
 
     onActiveChanged: {
         if (!root.active)
@@ -141,8 +143,8 @@ ColumnLayout {
     Connections {
         target: PresetStore
 
-        function onInstallFinished(name, ok, error) {
-            if (root.pendingRepo === "")
+        function onInstallFinished(name, ok, error, repoTarget) {
+            if (root.pendingRepo === "" || root.pendingRepo !== repoTarget)
                 return;
             root.pendingRepo = "";
             if (!ok) {
@@ -184,18 +186,6 @@ ColumnLayout {
         interval: 700
         repeat: false
         onTriggered: PresetStore.discover(searchField.text, 30)
-    }
-
-    Timer {
-        id: previewBatchTimer
-        interval: 220
-        repeat: false
-        onTriggered: {
-            root.previewBudget = Math.min(root.results.length,
-                root.previewBudget + root.previewBatchSize);
-            if (root.previewBudget < root.results.length)
-                restart();
-        }
     }
 
     RowLayout {
@@ -360,16 +350,14 @@ ColumnLayout {
                 }
 
                 Repeater {
-                    model: root.results
+                    model: resultModel
 
                     delegate: StoreResultCard {
-                        required property var modelData
-                        required property int index
-                        entry: modelData
+                        required property var payload
+                        entry: payload
                         applyMode: true
                         width: resultFlow.itemWidth
-                        previewAllowed: index < root.previewBudget
-                        onActivated: root.useLook(modelData)
+                        onActivated: root.useLook(payload)
                     }
                 }
             }

@@ -4097,5 +4097,13 @@
     "Adjust fingers": "Adjust fingers",
     "Finger for the selected key": "Finger for the selected key",
     "Reset fingers": "Reset fingers",
-    "Suggested by position. Adjust any key for your keyboard or technique.": "Suggested by position. Adjust any key for your keyboard or technique."
+    "Suggested by position. Adjust any key for your keyboard or technique.": "Suggested by position. Adjust any key for your keyboard or technique.",
+    "Applying…": "Applying…",
+    "Loading previews…": "Loading previews…",
+    "Apply now?": "Apply now?",
+    "Applied": "Applied",
+    "Revert": "Revert",
+    "Reverting…": "Reverting…",
+    "Your previous settings are saved. Use Revert to restore them.": "Your previous settings are saved. Use Revert to restore them.",
+    "Your current settings will be backed up before applying, so you can revert afterwards.": "Your current settings will be backed up before applying, so you can revert afterwards."
 }

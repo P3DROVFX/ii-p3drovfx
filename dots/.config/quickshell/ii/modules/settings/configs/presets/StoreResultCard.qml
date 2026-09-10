@@ -34,34 +34,18 @@ Rectangle {
     readonly property bool working: card.installed
         ? PresetStore.busyFor(card.installedAs) : PresetStore.busyFor(card.entry.repo)
 
-    readonly property string repoSlug: (card.entry.repo ?? "").split(":")[0]
-    readonly property string repoBranch: card.entry.defaultBranch ?? "main"
-    readonly property string fallbackWallpaperUrl: (card.entry.wallpaperUrl && card.entry.wallpaperUrl.length > 0)
-        ? card.entry.wallpaperUrl
-        : (repoSlug.length > 0 ? `https://raw.githubusercontent.com/${repoSlug}/${repoBranch}/wallpaper.png` : "")
-
-    readonly property string primaryImageSource: (card.entry.imageUrl && card.entry.imageUrl.length > 0)
-        ? card.entry.imageUrl
-        : (fallbackWallpaperUrl.length > 0 ? fallbackWallpaperUrl : `${Directories.assetsPath}/images/default_wallpaper.png`)
-    property string failedImageSource: ""
-    readonly property string effectiveImageSource: failedImageSource.length > 0
-        ? failedImageSource : primaryImageSource
-
-    onEntryChanged: card.failedImageSource = ""
+    readonly property string effectiveImageSource: card.entry.previewLocal || ""
+    readonly property bool previewLoading: !card.metadataReady
+        ? card.entry.previewState !== "error"
+        : card.entry.previewState === "loading"
 
     height: width * 0.82
     radius: Appearance.rounding.normal
     color: Appearance.colors.colSurfaceContainerLow
-    border.width: 2
-    border.color: cardButton.down ? Appearance.colors.colPrimaryActive
-        : (cardButton.hovered ? Appearance.colors.colPrimary : "transparent")
     scale: cardButton.down ? 0.96 : 1
 
     signal activated
 
-    Behavior on border.color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(card)
-    }
     Behavior on scale {
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
@@ -99,7 +83,7 @@ Rectangle {
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: "wallpaper"
+                    text: card.entry.previewState === "error" ? "image_not_supported" : "wallpaper"
                     iconSize: 32
                     color: Appearance.colors.colOnLayer1Inactive
                 }
@@ -107,6 +91,12 @@ Rectangle {
 
             StyledImage {
                 id: previewImage
+                property bool hasReadyImage: false
+                opacity: status === Image.Ready || (status === Image.Loading && hasReadyImage) ? 1 : 0
+                onStatusChanged: {
+                    if (status === Image.Ready)
+                        hasReadyImage = true;
+                }
                 anchors.fill: parent
                 sourceSize: Qt.size(400, 400)
                 source: card.previewAllowed ? card.effectiveImageSource : ""
@@ -119,16 +109,13 @@ Rectangle {
                         radius: Appearance.rounding.small
                     }
                 }
+            }
 
-                onStatusChanged: {
-                    if (status === Image.Error) {
-                        if (card.effectiveImageSource !== card.fallbackWallpaperUrl && card.fallbackWallpaperUrl.length > 0) {
-                            card.failedImageSource = card.fallbackWallpaperUrl;
-                        } else if (card.effectiveImageSource !== `${Directories.assetsPath}/images/default_wallpaper.png`) {
-                            card.failedImageSource = `${Directories.assetsPath}/images/default_wallpaper.png`;
-                        }
-                    }
-                }
+            StyledIndeterminateProgressBar {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                visible: card.previewAllowed && card.previewLoading && !card.effectiveImageSource
             }
 
             // Top-left: Stars Badge
@@ -140,8 +127,6 @@ Rectangle {
                 implicitWidth: starRow.implicitWidth + 12
                 radius: Appearance.rounding.full
                 color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.35)
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
 
                 RowLayout {
                     id: starRow
@@ -220,14 +205,12 @@ Rectangle {
                 height: 24
                 radius: width / 2
                 color: Appearance.colors.colLayer0
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
-                visible: card.previewAllowed && (card.entry.avatarUrl ?? "").length > 0
+                visible: card.previewAllowed && (card.entry.avatarLocal ?? "").length > 0
 
                 StyledImage {
                     id: authorAvatar
                     anchors.fill: parent
-                    source: card.previewAllowed ? (card.entry.avatarUrl ?? "") : ""
+                    source: card.previewAllowed ? (card.entry.avatarLocal ?? "") : ""
                     fillMode: Image.PreserveAspectCrop
                     layer.enabled: true
                     layer.effect: OpacityMask {

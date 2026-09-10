@@ -17,7 +17,8 @@ import qs.modules.common.functions
  *
  *  - One job at a time. Two git operations on the same clone at once corrupt
  *    it, and a preset install rewrites the same folder an apply reads from, so
- *    everything queues behind a single process rather than racing.
+ *    file operations queue behind a single process. Discovery and detail reads
+ *    use independent workers so browsing cannot be delayed by a git fetch.
  *  - The presets folder is the only store of record. An installed preset is a
  *    normal preset on disk; what lives here is which repository it came from
  *    and whether an update is waiting.
@@ -60,6 +61,8 @@ Singleton {
     // The preset the running config came from, written by presets.sh on apply.
     // Empty after a revert, or when the settings were never a preset.
     property string activePreset: ""
+    property bool canRevert: false
+    readonly property bool reverting: root._pending("revert", "")
 
     property bool ready: false
     property bool busy: false
@@ -73,7 +76,7 @@ Singleton {
     signal presetFilesChanged           // the presets folder was rewritten
     signal discoverFinished
     signal manifestReady(string repo, var result)
-    signal installFinished(string name, bool ok, string error)
+    signal installFinished(string name, bool ok, string error, string repo)
     signal updatesChecked(int count)
     signal pullFinished(string name, bool ok, bool changed, string error)
     signal diffReady(string name, var result)
@@ -119,7 +122,7 @@ Singleton {
     // store tab is a search. The same question asked again inside a minute is
     // answered with what is already on screen; `force` is the refresh button.
     function discover(query, limit, force) {
-        if (root._pending("discover", ""))
+        if (discoveryReader.job)
             return;
         const wanted = (query ?? "").trim();
         if (!force && root._lastDiscover > 0 && wanted === root._lastDiscoverQuery
@@ -137,7 +140,9 @@ Singleton {
         let args = ["discover", "--stream", "--limit", String(limit && limit > 0 ? limit : 30)];
         if (wanted.length > 0)
             args = args.concat(["--query", wanted]);
-        root._enqueue({
+        if (force)
+            args.push("--force");
+        discoveryReader.start({
             action: "discover",
             name: "",
             query: wanted,
@@ -149,7 +154,22 @@ Singleton {
     function fetchManifest(repo) {
         if (!repo)
             return;
-        root._run("fetch-manifest", repo, ["fetch-manifest", repo]);
+        const cached = root._manifestCache[repo];
+        const row = root.discoverResults.find(entry => entry.repo === repo);
+        const revision = row ? row.updatedAt : "";
+        if (cached && cached.revision === revision && Date.now() - cached.time < 300000) {
+            root._wantedManifest = "";
+            root.manifestReady(repo, cached.result);
+            return;
+        }
+        if (manifestReader.job && manifestReader.job.name === repo) {
+            root._wantedManifest = "";
+            return;
+        }
+        // Navigation keeps only the newest requested detail. It cannot sit
+        // behind check-updates (which may fetch several installed clones).
+        root._wantedManifest = repo;
+        root._pumpManifest();
     }
 
     function install(repo, name, force) {
@@ -341,9 +361,14 @@ Singleton {
         return link !== null && link.owned === true;
     }
 
-    // True while anything is queued or running for this preset, so a card can
-    // grey its own buttons without freezing the rest of the list.
+    // File operations stay serialized; browsing never means installing.
+    function actionPending(action, name) {
+        return !!name && root._pending(action, name);
+    }
+
     function busyFor(name) {
+        if (!name)
+            return false;
         if (root.busy && root.busyName === name)
             return true;
         for (let i = 0; i < root._queue.length; i++) {
@@ -351,6 +376,131 @@ Singleton {
                 return true;
         }
         return false;
+    }
+
+    property var _manifestCache: ({})
+    property string _wantedManifest: ""
+
+    function syncResultsModel(model, entries) {
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i];
+            let existing = i;
+            while (existing < model.count && model.get(existing).key !== entry.repo)
+                existing++;
+            if (existing === model.count)
+                model.insert(i, {key: entry.repo, payload: entry});
+            else {
+                if (existing !== i)
+                    model.move(existing, i, 1);
+                if (JSON.stringify(model.get(i).payload) !== JSON.stringify(entry))
+                    model.setProperty(i, "payload", entry);
+            }
+        }
+        if (model.count > entries.length)
+            model.remove(entries.length, model.count - entries.length);
+    }
+
+    function _rememberManifest(repo, payload) {
+        const row = root.discoverResults.find(entry => entry.repo === repo);
+        root._manifestCache = Object.assign({}, root._manifestCache, {
+            [repo]: {result: payload, time: Date.now(), revision: row ? row.updatedAt : ""}
+        });
+    }
+
+    function _pumpManifest() {
+        if (manifestReader.job || !root._wantedManifest)
+            return;
+        const repo = root._wantedManifest;
+        root._wantedManifest = "";
+        manifestReader.start({action: "fetch-manifest", name: repo,
+            command: ["python3", root.storeScript, "fetch-manifest", repo, "--stream"]});
+    }
+
+    // Independent read workers have no access to the mutation busy flags.
+    // SplitParser delivers progress; exit plus a short drain joins the final
+    // line and process completion even when Qt reports them in reverse order.
+    component ReadWorker: QtObject {
+        id: worker
+        property var job: null
+        property var result: null
+        property string errorText: ""
+        property int deadline: 45000
+        signal finished(var request, var payload)
+
+        function start(request) {
+            worker.job = request;
+            worker.result = null;
+            worker.errorText = "";
+            child.command = request.command;
+            child.running = true;
+            timeout.restart();
+        }
+
+        function finish() {
+            const request = worker.job;
+            if (!request)
+                return;
+            const payload = worker.result || {ok: false,
+                error: worker.errorText || Translation.tr("The preset store did not answer.")};
+            worker.job = null;
+            timeout.stop();
+            worker.finished(request, payload);
+        }
+
+        property Process child: Process {
+            id: child
+            stdout: SplitParser {
+                splitMarker: "\n"
+                onRead: data => {
+                    try {
+                        const payload = JSON.parse(String(data));
+                        // A crashed stream's last progress record is not a
+                        // successful final response; keep cards, report error.
+                        if (!payload.phase || payload.phase === "complete")
+                            worker.result = payload;
+                        else if (payload.phase === "manifest") {
+                            root._rememberManifest(worker.job.name, payload);
+                            root.manifestReady(worker.job.name, payload);
+                        } else
+                            root._progress(worker.job, payload);
+                    } catch (e) {}
+                }
+            }
+            stderr: StdioCollector {
+                onStreamFinished: worker.errorText = text.trim()
+            }
+            onExited: drain.restart()
+        }
+        property Timer drain: Timer {
+            id: drain
+            interval: 50
+            onTriggered: worker.finish()
+        }
+        property Timer timeout: Timer {
+            id: timeout
+            interval: worker.deadline
+            onTriggered: {
+                worker.result = {ok: false, error: Translation.tr("This took too long and was stopped.")};
+                child.running = false;
+                drain.restart();
+            }
+        }
+    }
+
+    ReadWorker {
+        id: discoveryReader
+        deadline: 180000
+        onFinished: (request, payload) => root._dispatch(request, payload)
+    }
+
+    ReadWorker {
+        id: manifestReader
+        onFinished: (request, payload) => {
+            if (payload.ok === true)
+                root._rememberManifest(request.name, payload);
+            root._dispatch(request, payload);
+            root._pumpManifest();
+        }
     }
 
     // ── Job queue ────────────────────────────────────────────────────────────
@@ -473,6 +623,8 @@ Singleton {
 
         if (job.action === "links") {
             root.installed = ok ? (result.links || []) : [];
+            if (ok)
+                root.canRevert = result.canRevert === true;
             root.ready = true;
             root.installedRefreshed();
             return;
@@ -486,8 +638,9 @@ Singleton {
         if (job.action === "discover") {
             root.discovering = false;
             root.discoverHydrating = false;
-            root.discoverResults = ok ? (result.results || []) : [];
-            root.discoverError = error;
+            if (ok)
+                root.discoverResults = result.results || [];
+            root.discoverError = error || result.warning || "";
             if (ok) {
                 root._lastDiscover = Date.now();
                 root._lastDiscoverQuery = job.query ?? "";
@@ -506,7 +659,7 @@ Singleton {
             }
             // The store lists repositories, so the name a preset landed under
             // is only known once it is installed.
-            root.installFinished(ok ? (result.name || "") : job.name, ok, error);
+            root.installFinished(ok ? (result.name || "") : job.name, ok, error, job.name);
             return;
         }
         if (job.action === "check-updates") {
@@ -561,22 +714,27 @@ Singleton {
             // presets.sh writes the marker itself; re-reading it is what makes
             // activePreset true rather than assumed.
             activeFile.reload();
+            if (ok) {
+                root.canRevert = true;
+                root.refresh();
+            }
             root.applyFinished(job.name, ok);
             return;
         }
         if (job.action === "revert") {
             activeFile.reload();
+            root.refresh();
             root.revertFinished(ok);
             return;
         }
     }
 
     function _progress(job, payload) {
-        if (!job || job.action !== "discover" || !payload || payload.phase !== "initial")
+        if (!job || job.action !== "discover" || !payload || ["initial", "metadata", "progress"].indexOf(payload.phase) === -1)
             return;
         if (payload.ok === true) {
             root.discoverResults = payload.results || [];
-            root.discoverError = "";
+            root.discoverError = payload.warning || "";
             root.discovering = false;
             root.discoverHydrating = true;
         }
