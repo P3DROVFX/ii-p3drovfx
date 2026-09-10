@@ -99,12 +99,22 @@ Item { // Window
     // width. Without this the live:false texture stays letterboxed at the old
     // aspect, producing the "empty space above/below" bug after drops.
     onWindowDataChanged: {
-        if (root.initialized && root.toplevel)
+        if (root.initialized && root.visible && root.toplevel && !windowPreview.live)
             recaptureDebounce.restart()
     }
 
     function requestRecapture() {
-        recaptureDebounce.restart()
+        if (root.visible && !windowPreview.live)
+            recaptureDebounce.restart()
+    }
+
+    // Keep the last frame while search hides the grid, then refresh frozen
+    // previews on return. A hidden tile must not keep exporting live windows.
+    onVisibleChanged: {
+        if (root.visible)
+            requestRecapture();
+        else
+            recaptureDebounce.stop();
     }
 
     Timer {
@@ -112,7 +122,7 @@ Item { // Window
         interval: 60
         repeat: false
         onTriggered: {
-            if (root.toplevel && windowPreview.captureSource)
+            if (root.visible && !windowPreview.live && root.toplevel && windowPreview.captureSource)
                 windowPreview.captureFrame()
         }
     }
@@ -157,8 +167,8 @@ Item { // Window
         id: windowPreview
         anchors.fill: parent
         captureSource: (root.toplevel && Config.options.overview.showWindowPreviews) ? root.toplevel : null
-        // Performance: live false to avoid continuous screencopy overhead
-        live: Config.options.background.windowZoomLiveCapture
+        // Respect live previews only while the grid can actually be seen.
+        live: root.visible && Config.options.background.windowZoomLiveCapture
         z: 1
 
         // Color overlay for interactions

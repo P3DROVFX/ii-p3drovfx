@@ -41,6 +41,13 @@ Item {
     readonly property bool serviceBusy: TouchGestureService.activeScreenName === root.myScreenName
         && TouchGestureService.activeOrigin.length > 0
 
+    // Kept beside `serviceBusy` for the window's mapping decision: the pill must
+    // stay mapped through the post-commit opacity fade, or the surface would be
+    // unmapped the frame `active` drops and the fade would cut hard.
+    readonly property bool overlayVisible: root.serviceBusy || root.active
+        || indicatorContainer.opacity > 0.01
+        || TouchGestureService.calibrating
+
     onServiceBusyChanged: {
         if (!root.serviceBusy && root.active)
             fadeTimer.restart();

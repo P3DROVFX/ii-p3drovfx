@@ -443,55 +443,14 @@ PanelWindow {
     readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
 
     Item {
-        id: materialShapeMaskContainer
-        x: 0
-        y: 0
-        width: bgWidgetsWindow.screen.width
-        height: bgWidgetsWindow.screen.height
-        visible: bgWidgetsWindow.isMaterialShapeOverview
-
-        MaterialShape {
-            id: materialShapeMask
-            anchors.centerIn: parent
-            width: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
-            height: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
-            shapeString: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.currentMaterialShape : "Flower"
-            color: "#ffffff"
-
-            transform: [
-                Scale {
-                    origin.x: materialShapeMask.width / 2
-                    origin.y: materialShapeMask.height / 2
-                    xScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
-                    yScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
-                },
-                Rotation {
-                    origin.x: materialShapeMask.width / 2
-                    origin.y: materialShapeMask.height / 2
-                    angle: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskRotation : 0.0
-                }
-            ]
-        }
-    }
-
-    ShaderEffectSource {
-        id: materialShapeMaskSource
-        sourceItem: materialShapeMaskContainer
-        hideSource: true
-        live: bgWidgetsWindow.isMaterialShapeOverview
-        visible: false
-    }
-
-    Item {
         id: transformContainer
         anchors.fill: parent
 
-        layer.enabled: bgWidgetsWindow.isMaterialShapeOverview
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: materialShapeMaskSource
-            maskThresholdMin: 0.5
-            maskSpreadAtMin: 1.0
+        // Match the wallpaper's stable layer lifetime: opening only changes
+        // shader uniforms, without reallocating the fullscreen source texture.
+        layer.enabled: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isMaterialShape
+        layer.effect: OverviewMaterialMask {
+            controller: bgWidgetsWindow.overviewController
         }
 
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")

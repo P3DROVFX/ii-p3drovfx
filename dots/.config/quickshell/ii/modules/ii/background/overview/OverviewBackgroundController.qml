@@ -71,19 +71,22 @@ Item {
     }
 
     onActiveChanged: {
-        if (active) {
+        if (active)
             captureScaleOrigin();
-            if (isMaterialShape)
-                pickRandomShape();
-        }
+    }
+
+    // Prepare the next silhouette only after the closing animation finishes.
+    // Reopening mid-close must reverse the same shape, not replace it on screen.
+    onProgressChanged: {
+        if (!active && progress === 0 && isMaterialShape)
+            pickRandomShape();
     }
 
     Component.onCompleted: {
-        if (active) {
+        if (active)
             captureScaleOrigin();
-            if (isMaterialShape)
-                pickRandomShape();
-        }
+        if (isMaterialShape)
+            pickRandomShape();
     }
 
     readonly property real scaleOriginX: centeredScaleOriginX

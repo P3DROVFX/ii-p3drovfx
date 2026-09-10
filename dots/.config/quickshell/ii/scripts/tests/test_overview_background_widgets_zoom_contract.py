@@ -41,10 +41,11 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         """Material Shape overview preset masks widgets to match the central shape cut."""
         self.assertIn("import QtQuick.Effects", BG_WIDGETS_WINDOW)
         self.assertIn("readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible", BG_WIDGETS_WINDOW)
-        self.assertIn("id: materialShapeMaskContainer", BG_WIDGETS_WINDOW)
-        self.assertIn("id: materialShapeMaskSource", BG_WIDGETS_WINDOW)
+        self.assertNotIn("id: materialShapeMaskContainer", BG_WIDGETS_WINDOW)
+        self.assertNotIn("id: materialShapeMaskSource", BG_WIDGETS_WINDOW)
         self.assertIn("layer.enabled: bgWidgetsWindow.isMaterialShapeOverview", BG_WIDGETS_WINDOW)
-        self.assertIn("maskSource: materialShapeMaskSource", BG_WIDGETS_WINDOW)
+        self.assertIn("layer.effect: OverviewMaterialMask", BG_WIDGETS_WINDOW)
+        self.assertIn("controller: bgWidgetsWindow.overviewController", BG_WIDGETS_WINDOW)
 
     def test_background_root_unifies_transform_clock_to_overview_controller(self):
         """BackgroundRoot must not instantiate duplicate OverviewZoomController."""

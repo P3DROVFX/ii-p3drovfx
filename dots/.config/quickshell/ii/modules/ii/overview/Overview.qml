@@ -58,6 +58,9 @@ Scope {
                         readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+                        readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
+                        readonly property bool backgroundAnimating: backgroundController
+                            && backgroundController.progress > 0.001 && backgroundController.progress < 0.999
                         readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
 
                         WlrLayershell.namespace: "quickshell:overview"
@@ -325,9 +328,13 @@ Scope {
                                     }
                                 ]
 
-                                layer.enabled: !isNotchMode
+                                // Once a query expands the surface, keep slide/fade but stop
+                                // blurring it: otherwise every height tick reallocates the
+                                // offscreen target and blur pyramid while results are arriving.
+                                layer.enabled: !isNotchMode && !root.searchSurfaceOwned
+                                    && slideOpacity > 0.001 && slideOpacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: (1.0 - searchWidgetWrapper.slideOpacity) > 0.001
+                                    blurEnabled: true
                                     blurMax: 64.0
                                     blur: (1.0 - searchWidgetWrapper.slideOpacity) * 1.0
                                 }
@@ -453,6 +460,7 @@ Scope {
 
                                 SearchWidget {
                                     id: searchWidget
+                                    surfaceAnimating: slideInParallel.running || slideOutParallel.running || root.backgroundAnimating
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
                                     surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -475,10 +483,11 @@ Scope {
                                 // without ever changing the query could leave the grid
                                 // on screen behind it.
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
+                                visible: opacity > 0.001
 
-                                layer.enabled: overviewLoader.opacity < 0.999
+                                layer.enabled: overviewLoader.opacity > 0.001 && overviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: overviewLoader.opacity < 0.999
+                                    blurEnabled: true
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
                                 }
@@ -507,10 +516,11 @@ Scope {
                                 anchors.fill: parent
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
+                                visible: opacity > 0.001
 
-                                layer.enabled: scrollingOverviewLoader.opacity < 0.999
+                                layer.enabled: scrollingOverviewLoader.opacity > 0.001 && scrollingOverviewLoader.opacity < 0.999
                                 layer.effect: MultiEffect {
-                                    blurEnabled: scrollingOverviewLoader.opacity < 0.999
+                                    blurEnabled: true
                                     blurMax: 64.0
                                     blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
                                 }

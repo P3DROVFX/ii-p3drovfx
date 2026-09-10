@@ -119,36 +119,6 @@ Item {
     property int windowZ: 1
     property int windowDraggingZ: 99999
     property real workspaceSpacing: 10
-    property real cascadeProgress: 1.0
-
-    NumberAnimation {
-        id: cascadeAnim
-        target: root
-        property: "cascadeProgress"
-        from: 0.0
-        to: 1.0
-        duration: Math.round(480 * Appearance.animMultiplier)
-        easing.type: Easing.OutCubic
-    }
-
-    Connections {
-        target: GlobalStates
-        function onOverviewOpenChanged() {
-            if (GlobalStates.overviewOpen) {
-                root.cascadeProgress = 0.0;
-                cascadeAnim.restart();
-            } else {
-                root.cascadeProgress = 1.0;
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        if (GlobalStates.overviewOpen) {
-            root.cascadeProgress = 0.0;
-            cascadeAnim.restart();
-        }
-    }
 
     property int dragDropType: -1 // 0: workspace, 1: window
 
@@ -240,7 +210,12 @@ Item {
                                 id: workspaceStaggerTimer
                                 interval: 80 + workspace.cellIndex * 55
                                 repeat: false
-                                onTriggered: workspaceStaggerAnim.restart()
+                                onTriggered: {
+                                    if (root.visible)
+                                        workspaceStaggerAnim.restart();
+                                    else
+                                        workspace.animProgress = 1.0;
+                                }
                             }
 
                             NumberAnimation {
@@ -252,6 +227,19 @@ Item {
                                 duration: Math.round(380 * Appearance.animMultiplier)
                                 easing.type: Easing.OutBack
                                 easing.overshoot: 1.15
+                            }
+
+                            Connections {
+                                target: root
+                                function onVisibleChanged() {
+                                    // Search retains this grid; hidden cascades have
+                                    // no pixels to animate and must release their timers.
+                                    if (!root.visible) {
+                                        workspaceStaggerTimer.stop();
+                                        workspaceStaggerAnim.stop();
+                                        workspace.animProgress = 1.0;
+                                    }
+                                }
                             }
 
                             Connections {
@@ -396,7 +384,12 @@ Item {
                         id: windowStaggerTimer
                         interval: 80 + window.cellIndex * 55
                         repeat: false
-                        onTriggered: windowStaggerAnim.restart()
+                        onTriggered: {
+                            if (root.visible)
+                                windowStaggerAnim.restart();
+                            else
+                                window.animProgress = 1.0;
+                        }
                     }
 
                     NumberAnimation {
@@ -408,6 +401,17 @@ Item {
                         duration: Math.round(380 * Appearance.animMultiplier)
                         easing.type: Easing.OutBack
                         easing.overshoot: 1.15
+                    }
+
+                    Connections {
+                        target: root
+                        function onVisibleChanged() {
+                            if (!root.visible) {
+                                windowStaggerTimer.stop();
+                                windowStaggerAnim.stop();
+                                window.animProgress = 1.0;
+                            }
+                        }
                     }
 
                     Connections {

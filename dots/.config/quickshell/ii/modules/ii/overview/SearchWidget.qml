@@ -21,6 +21,9 @@ Item {
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
+    // The host owns the actual opening/closing clocks; typing cadence must not
+    // override them when the first key arrives before the surface has settled.
+    property bool surfaceAnimating: false
     // Set by the per-monitor Overview host so a deep-link is acknowledged by
     // the monitor that is actually rendering the Search surface.
     property string surfaceMonitorName: ""
@@ -2163,7 +2166,29 @@ Item {
                             }
                         }
 
-                        Component.onCompleted: revealAnim.start()
+                        function finishReveal() {
+                            revealAnim.stop();
+                            resultDelegate.revealProgress = 1;
+                        }
+
+                        Connections {
+                            target: root
+                            function onSuppressItemTransitionsChanged() {
+                                if (root.suppressItemTransitions)
+                                    resultDelegate.finishReveal();
+                            }
+                            function onSurfaceAnimatingChanged() {
+                                if (root.surfaceAnimating)
+                                    resultDelegate.finishReveal();
+                            }
+                        }
+
+                        Component.onCompleted: {
+                            if (root.surfaceAnimating || root.suppressItemTransitions)
+                                resultDelegate.finishReveal();
+                            else
+                                revealAnim.start();
+                        }
 
                         Component {
                             id: sectionCaption
@@ -2415,7 +2440,7 @@ Item {
                     // Captions and rows now share one positioning path, so a caption
                     // can no longer snap to its final spot while the rows around it
                     // are still travelling.
-                    readonly property int reorderDuration: root.suppressItemTransitions
+                    readonly property int reorderDuration: root.suppressItemTransitions || root.surfaceAnimating
                         ? 0
                         : Appearance.animation.elementMoveFast.duration
 
