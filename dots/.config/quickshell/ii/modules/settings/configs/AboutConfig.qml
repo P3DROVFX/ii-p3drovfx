@@ -141,66 +141,67 @@ Item {
         property Component logo: null
         // [{icon, label, url, fill}]
         property var links: []
-        readonly property int logoSize: Math.round(Math.min(160, tile.width * 0.36))
 
         Layout.fillWidth: true
+        Layout.fillHeight: true
         Layout.preferredWidth: 1
         topLeftRadius: Appearance.rounding.verysmall
         topRightRadius: Appearance.rounding.verysmall
         bottomLeftRadius: Appearance.rounding.verysmall
         bottomRightRadius: Appearance.rounding.verysmall
 
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 8
-            Layout.bottomMargin: 4
-            spacing: 6
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            spacing: 12
 
             Loader {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: tile.logoSize
-                Layout.preferredHeight: tile.logoSize
+                Layout.preferredWidth: 50
+                Layout.preferredHeight: 50
                 sourceComponent: tile.logo
             }
 
-            StyledText {
+            ColumnLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 6
-                text: tile.name
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: Appearance.font.pixelSize.larger
-                font.weight: Font.Bold
-                color: Appearance.colors.colOnLayer1
-                elide: Text.ElideRight
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: tile.name
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    visible: tile.url !== ""
+                    Layout.fillWidth: true
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    text: `<a href='${tile.url}'>${tile.url.replace(/^https?:\/\/(www\.)?/, "")}</a>`
+                    textFormat: Text.RichText
+                    elide: Text.ElideRight
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                    PointingHandLinkHover {}
+                }
             }
+        }
 
-            StyledText {
-                visible: tile.url !== ""
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: Appearance.font.pixelSize.small
-                text: `<a href='${tile.url}'>${tile.url.replace(/^https?:\/\/(www\.)?/, "")}</a>`
-                textFormat: Text.RichText
-                elide: Text.ElideRight
-                onLinkActivated: link => Qt.openUrlExternally(link)
-                PointingHandLinkHover {}
-            }
+        Flow {
+            Layout.fillWidth: true
+            spacing: 5
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: 4
-                spacing: 4
+            Repeater {
+                model: tile.links
 
-                Repeater {
-                    model: tile.links
-
-                    delegate: RippleButtonWithIcon {
-                        required property var modelData
-                        materialIcon: modelData.icon
-                        materialIconFill: modelData.fill ?? true
-                        mainText: modelData.label
-                        onClicked: Qt.openUrlExternally(modelData.url)
-                    }
+                delegate: RippleButtonWithIcon {
+                    required property var modelData
+                    materialIcon: modelData.icon
+                    materialIconFill: modelData.fill ?? true
+                    mainText: modelData.label
+                    onClicked: Qt.openUrlExternally(modelData.url)
                 }
             }
         }
