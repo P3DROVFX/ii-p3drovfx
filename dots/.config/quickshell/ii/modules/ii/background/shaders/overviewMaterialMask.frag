@@ -10,6 +10,9 @@ layout(std140, binding = 0) uniform buf {
     float maskExtent;
     vec2 rotationVector;
     float maskReady;
+    vec2 maskScreenExtent;
+    float sourceScale;
+    vec2 sourceOffset;
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -23,7 +26,7 @@ void main() {
 
     // Undo QML's centered rotation/scale in pixel space, including on portrait
     // and ultrawide screens. Normalized screen UVs alone distort the shape.
-    vec2 p = (qt_TexCoord0 - vec2(0.5)) * screenExtent;
+    vec2 p = qt_TexCoord0 * screenExtent * sourceScale + sourceOffset - maskScreenExtent * 0.5;
     vec2 rotated = vec2(rotationVector.x * p.x + rotationVector.y * p.y,
                         -rotationVector.y * p.x + rotationVector.x * p.y);
     vec2 uv = rotated / maskExtent + vec2(0.5);

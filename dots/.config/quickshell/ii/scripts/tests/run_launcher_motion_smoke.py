@@ -82,6 +82,7 @@ Item {
    property bool videoEffectsDisabled: false
    property bool overviewAnimationVisible: true
    property bool materialShapeActive: overviewController.isMaterialShape && overviewAnimationVisible
+   property bool materialShapeDirectMask: overviewController.isMaterialShape && !shadowEnabled
    property bool materialShapeShadowActive: materialShapeActive && shadowEnabled
    property bool shadowEnabled: false
    property QtObject overviewController: QtObject {
@@ -188,6 +189,14 @@ Item {
      compare(wallpaperContent.layer.enabled,false);
      globalStates.lockLookActive=true;
      compare(wallpaperContent.layer.enabled,true);
+   }
+   function test_material_shape_keeps_its_direct_source_ready_between_openings() {
+     wallpaperImageRoot.overviewController.isMaterialShape=true;
+     verify(wallpaperContent.layer.enabled);
+     wallpaperImageRoot.overviewAnimationVisible=false;
+     verify(wallpaperContent.layer.enabled);
+     wallpaperImageRoot.shadowEnabled=true;
+     compare(wallpaperContent.layer.enabled,false);
    }
    function test_backing_texture_is_bounded_and_stable_during_close() {
      compare(backingImage.layer.textureSize,Qt.size(960,540));

@@ -160,6 +160,7 @@ Item {
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property bool materialShapeActive: overviewController.isMaterialShape && overviewAnimationVisible
     readonly property bool materialShapeShadowActive: materialShapeActive && (Config.options.background.materialShapeShadow === true)
+    readonly property bool materialShapeDirectMask: overviewController.isMaterialShape && Config.options.background.materialShapeShadow !== true
     readonly property real overviewCoverScale: overviewController.overviewCoverScale
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
@@ -197,9 +198,9 @@ Item {
     TransitionImage {
         id: overviewBackingImage
         anchors.fill: parent
-        imageSource: (wallpaperImageRoot.overviewController.isGnomeLike
-            ? (!wallpaperSafetyTriggered ? wallpaperPath : "")
-            : (wallpaperImageRoot.overviewController.useBackingImage && wallpaperImageRoot.overviewAnimationVisible && !wallpaperSafetyTriggered ? wallpaperPath : ""))
+        // Keep the small backing decoded for the selected preset. Clearing it
+        // on close made Card Lift decode/crossfade again during the next search.
+        imageSource: wallpaperImageRoot.overviewController.useBackingImage && !wallpaperSafetyTriggered ? wallpaperPath : ""
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
         visible: (wallpaperImageRoot.overviewController.isGnomeLike
@@ -227,6 +228,11 @@ Item {
     Loader {
         id: overviewBackingBlurLoader
         anchors.fill: overviewBackingImage
+        // Cache the final blur as well as its input. Gnome's blur is static;
+        // Card Lift changes it per frame, but now renders only 1/16 the pixels.
+        layer.enabled: active
+        layer.textureSize: Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
+        layer.smooth: true
         // The backing must survive until the closing zoom covers it again.
         // Gating Gnome on active alone destroyed its blur on the first close frame.
         active: wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.overviewAnimationVisible
@@ -234,6 +240,8 @@ Item {
         sourceComponent: MultiEffect {
             anchors.fill: parent
             source: overviewBackingImage
+            // This plane fills the monitor; blur padding outside it is wasted.
+            autoPaddingEnabled: false
             blurEnabled: true
             blurMax: 75
             blur: wallpaperImageRoot.overviewController.isGnomeLike ? 0.7 : wallpaperImageRoot.overviewController.blurAmount
@@ -299,17 +307,6 @@ Item {
                 }
             ]
 
-        Rectangle {
-            id: centralClipMask
-            x: 0
-            y: 0
-            width: centralWallpaperClipRect.width
-            height: centralWallpaperClipRect.height
-            radius: centralWallpaperClipRect.radius
-            visible: false
-            layer.enabled: centralWallpaperClipRect.layer.enabled && !wallpaperImageRoot.overviewController.isMaterialShape
-        }
-
         Loader {
             id: materialShapeMaskContainer
             x: 0
@@ -361,6 +358,9 @@ Item {
         StyledRectangularShadow {
             id: centralWallpaperShadow
             target: centralWallpaperClipRect
+            // Radius, blur and offset all animate. A cached shadow would redraw
+            // and resize an extra fullscreen texture on each of those frames.
+            cached: false
             blur: 32 * scaleProgress
             offset: Qt.vector2d(0, 4 * scaleProgress)
             visible: wallpaperImageRoot.isGnomeLikeOverview
@@ -389,26 +389,25 @@ Item {
                 ? 1.5 * wallpaperImageRoot.scaleProgress
                 : 0
 
-            // Keep the shader and its source texture ready between openings.
-            // Rebuilding this layer can expose an empty source for one frame,
-            // even when the silhouette texture itself has finished painting.
-            layer.enabled: (radius > 0) || (wallpaperImageRoot.overviewController.isMaterialShape
-                && (Config.options.background.materialShapeShadow !== true || wallpaperImageRoot.overviewAnimationVisible))
-            layer.effect: wallpaperImageRoot.overviewController.isMaterialShape && Config.options.background.materialShapeShadow !== true
-                ? materialMaskEffect : roundedMaskEffect
+            // Material Shape masks the stable content texture below directly;
+            // capturing its animated transform here would dirty a full monitor.
+            layer.enabled: (radius > 0) || wallpaperImageRoot.materialShapeShadowActive
+            layer.effect: wallpaperImageRoot.overviewController.isMaterialShape
+                ? materialShadowEffect
+                : roundedMaskEffect
 
             Component {
-                id: materialMaskEffect
-                OverviewMaterialMask {
-                    controller: wallpaperImageRoot.overviewController
+                id: roundedMaskEffect
+                OverviewRoundedMask {
+                    cornerRadius: centralWallpaperClipRect.radius
                 }
             }
 
             Component {
-                id: roundedMaskEffect
+                id: materialShadowEffect
                 MultiEffect {
                     maskEnabled: true
-                    maskSource: wallpaperImageRoot.overviewController.isMaterialShape ? materialShapeMaskSource : centralClipMask
+                    maskSource: materialShapeMaskSource
                     maskThresholdMin: 0.5
                     maskSpreadAtMin: 1.0
 
@@ -444,18 +443,34 @@ Item {
 
             Item {
                 id: wallpaperContent
-                // The parent already renders the rounded/masked overview plane.
-                // Nesting another fullscreen target here duplicates that work.
-                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.lockLookActive
+                // Material Shape retains this layer between openings. Scale and
+                // parallax are outer transforms: the wallpaper texture stays clean
+                // while the shader moves its screen-space cutout over that texture.
+                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.lockLookActive || wallpaperImageRoot.materialShapeDirectMask
+                layer.effect: wallpaperImageRoot.materialShapeDirectMask ? materialWallpaperMaskEffect : null
                 width: wallpaperPlanes.wallpaperW
                 height: wallpaperPlanes.wallpaperH
+                readonly property real contentScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0)
+                    * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
+
+                Component {
+                    id: materialWallpaperMaskEffect
+                    OverviewMaterialMask {
+                        controller: wallpaperImageRoot.overviewController
+                        maskScreenExtent: Qt.vector2d(centralWallpaperClipRect.width, centralWallpaperClipRect.height)
+                        sourceScale: wallpaperContent.contentScale
+                        sourceOffset: Qt.vector2d(
+                            parallaxTranslate.x + wallpaperContent.width * (1 - sourceScale) / 2,
+                            parallaxTranslate.y + wallpaperContent.height * (1 - sourceScale) / 2)
+                    }
+                }
 
                 transform: [
                     Scale {
                         origin.x: wallpaperContent.width / 2
                         origin.y: wallpaperContent.height / 2
-                        xScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0) * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
-                        yScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0) * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
+                        xScale: wallpaperContent.contentScale
+                        yScale: wallpaperContent.contentScale
                     },
                     Translate {
                         id: parallaxTranslate

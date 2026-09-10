@@ -39,6 +39,7 @@ import "overview"
 Rectangle {
  id: root; width:640; height:360; color:"blue"
  QtObject { id: maskController
+   property real progress: 1
    property real maskTargetDiameter: 240
    property real maskScale: 1
    property real maskRotation: 0
@@ -59,8 +60,20 @@ Rectangle {
      Rotation { origin.x:legacyShape.width/2; origin.y:legacyShape.height/2; angle:maskController.maskRotation }
    ]
  }
+ Item { id: wallpaperPlane
+   width:960; height:540
+   property real zoom:1
+   property real shiftX:-160
+   property real shiftY:-90
+   transform: [
+     Scale { origin.x:wallpaperPlane.width/2; origin.y:wallpaperPlane.height/2;
+       xScale:wallpaperPlane.zoom; yScale:wallpaperPlane.zoom },
+     Translate { x:wallpaperPlane.shiftX; y:wallpaperPlane.shiftY }
+   ]
+ }
  TestCase {
    name:"OverviewMaterialMask"; when:windowShown
+   function init() { maskController.progress=1; }
    function initTestCase() {
      verify(waitForRendering(effect));
      verify(effect.controller!==null);
@@ -85,6 +98,8 @@ Rectangle {
      verify(mask.source!==null);
      compare(mask.screenExtent,Qt.vector2d(320,180));
      verify(mask.visible,"layer effect must be visible");
+     tryCompare(mask,"textureReady",true);
+     verify(waitForRendering(layeredPlane));
      // Read only this synthetic offscreen scene, never the desktop/window system.
      const pixels=grabImage(root);
      compare(pixels.blue(0,0),255,"Shape must cut the layer corner");
@@ -152,6 +167,26 @@ Rectangle {
        }
      }
      root.width=640;root.height=360;
+   }
+   function test_closed_overview_bypasses_mask() {
+     maskController.progress=0;
+     compare(effect.maskReady,0);
+   }
+   function test_wallpaper_mapping_matches_outer_qml_transform() {
+     for(let size of [[960,540],[640,360],[720,1280]]) {
+       wallpaperPlane.width=size[0];wallpaperPlane.height=size[1];
+       for(let zoom of [1,0.94,1.15]) for(let shift of [[0,0],[-160,-90],[-27,41]]) {
+         wallpaperPlane.zoom=zoom;
+         wallpaperPlane.shiftX=shift[0];wallpaperPlane.shiftY=shift[1];
+         const offsetX=shift[0]+size[0]*(1-zoom)/2;
+         const offsetY=shift[1]+size[1]*(1-zoom)/2;
+         for(let uv of [[0,0],[0.2,0.7],[0.5,0.5],[1,1]]) {
+           const mapped=wallpaperPlane.mapToItem(root,uv[0]*size[0],uv[1]*size[1]);
+           fuzzyCompare(uv[0]*size[0]*zoom+offsetX,mapped.x,0.0001);
+           fuzzyCompare(uv[1]*size[1]*zoom+offsetY,mapped.y,0.0001);
+         }
+       }
+     }
    }
  }
 }

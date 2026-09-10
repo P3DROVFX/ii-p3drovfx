@@ -12,6 +12,11 @@ ShaderEffect {
     readonly property real maskReady: textureReady && controller.progress > 0 ? 1 : 0
     readonly property var maskSource: shapeTexture
     readonly property vector2d screenExtent: Qt.vector2d(width, height)
+    // A wallpaper may publish its overscanned plane directly. Map that plane
+    // to viewport pixels without recapturing it when its outer transform moves.
+    property vector2d maskScreenExtent: screenExtent
+    property real sourceScale: 1
+    property vector2d sourceOffset: Qt.vector2d(0, 0)
     readonly property real maskExtent: Math.max(1, controller.maskTargetDiameter * controller.maskScale)
     readonly property real maskAngle: controller.maskRotation * Math.PI / 180
     readonly property vector2d rotationVector: Qt.vector2d(Math.cos(maskAngle), Math.sin(maskAngle))
