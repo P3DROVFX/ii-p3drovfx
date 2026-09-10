@@ -15,6 +15,10 @@ import QtQuick.Layouts
 ColumnLayout {
     id: root
 
+    // The commits to list, in the service's shape; the pending range by
+    // default, the branch's recent history when the About page is up to date.
+    property var commits: ShellUpdates.commits
+    property bool truncated: ShellUpdates.commitsTruncated
     // 0 lists everything; otherwise the first N rows in group order and a
     // trailing "and N more".
     property int maxRows: 0
@@ -35,7 +39,7 @@ ColumnLayout {
     ]
 
     readonly property var groups: {
-        const commits = Array.from(ShellUpdates.commits ?? []);
+        const commits = Array.from(root.commits ?? []);
         const buckets = root.groupDefs.map(def => ({ def: def, commits: [] }));
         const other = buckets[buckets.length - 1];
         for (const commit of commits) {
@@ -53,7 +57,7 @@ ColumnLayout {
         return shown;
     }
     readonly property int shownCount: root.groups.reduce((sum, group) => sum + group.commits.length, 0)
-    readonly property int hiddenCount: Math.max(0, (ShellUpdates.commits?.length ?? 0) - root.shownCount)
+    readonly property int hiddenCount: Math.max(0, (root.commits?.length ?? 0) - root.shownCount)
 
     function groupColor(id) {
         if (id === "feat") return Appearance.colors.colPrimaryContainer;
@@ -195,7 +199,7 @@ ColumnLayout {
     }
 
     StyledText {
-        visible: root.hiddenCount > 0 || ShellUpdates.commitsTruncated
+        visible: root.hiddenCount > 0 || root.truncated
         Layout.fillWidth: true
         font.pixelSize: Appearance.font.pixelSize.smaller
         color: Appearance.colors.colSubtext

@@ -14,8 +14,8 @@ import Quickshell
  * matches the remote branch; otherwise a single symbol, which grows on hover to
  * reveal how many commits behind it is — the ExpressiveUtilButtons idiom.
  *
- * Clicking opens the update script in a terminal *without* --no-confirm, so the
- * script prompts before touching anything, unlike the Settings button.
+ * Clicking opens the update script in a terminal, the same way the About page
+ * does; the script prompts there before touching anything.
  */
 MouseArea {
     id: indicator
@@ -61,13 +61,7 @@ MouseArea {
     }
 
     function launchUpdate() {
-        const terminal = Config.options?.apps?.terminal || "kitty -1";
-        const hyprFlag = (Config.options?.update?.replaceHyprConfig ?? true) ? "--hypr" : "--no-hypr";
-        // Array form, so a home directory with a space in it cannot break the
-        // command apart the way a single shell string would.
-        const cmd = terminal.split(" ").filter(part => part.length > 0);
-        cmd.push("-e", "bash", "-c", 'if [ ! -f "$1" ]; then ' + 'printf "Update script not found:\\n  %s\\n\\n[Press Enter to close] " "$1"; read -r; exit 1; fi; ' + 'bash "$1" update --keep-config "$2"; ' + 'printf "\\n[Press Enter to close] "; read -r', "ii-update", ShellUpdates.setupScript, hyprFlag);
-        Quickshell.execDetached(cmd);
+        ShellUpdates.launchUpdate();
     }
 
     Rectangle {

@@ -2,6 +2,11 @@
 """List the commits a GitHub branch is ahead of a local checkout by.
 
 Usage: fetch_commits.py OWNER/REPO BASE_SHA HEAD_SHA [--max-pages N] [--body-chars N]
+       fetch_commits.py OWNER/REPO --recent=N [--branch=NAME] [--body-chars N]
+
+The second form lists the newest N commits of a branch instead, in the same
+shape (with "ahead" 0), for the About page's recent-changes list when the
+checkout is already up to date.
 
 Pages the compare API (250 commits per page, the endpoint's ceiling) and prints
 one compact JSON object on stdout:
@@ -24,16 +29,24 @@ import urllib.request
 
 PER_PAGE = 250
 API = "https://api.github.com/repos/{slug}/compare/{base}...{head}?per_page={per_page}&page={page}"
+RECENT_API = "https://api.github.com/repos/{slug}/commits?sha={branch}&per_page={count}"
 
 
-def fetch_page(slug, base, head, page, timeout=15):
-    url = API.format(slug=slug, base=base, head=head, per_page=PER_PAGE, page=page)
+def fetch_json(url, timeout=15):
     request = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
         "User-Agent": "ii-shell-updates",
     })
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.load(response)
+
+
+def fetch_page(slug, base, head, page, timeout=15):
+    return fetch_json(API.format(slug=slug, base=base, head=head, per_page=PER_PAGE, page=page), timeout)
+
+
+def fetch_recent(slug, branch, count, timeout=15):
+    return fetch_json(RECENT_API.format(slug=slug, branch=branch, count=count), timeout)
 
 
 def reduce_commit(item, body_chars):
@@ -77,18 +90,33 @@ def collect(slug, base, head, max_pages=8, body_chars=400, fetch=fetch_page):
     return {"ahead": max(ahead, len(commits)), "truncated": truncated, "commits": commits}
 
 
+def collect_recent(slug, branch, count, body_chars=400, fetch=fetch_recent):
+    """The newest `count` commits of `branch`, newest first, or None on failure."""
+    data = fetch(slug, branch, count)
+    if not isinstance(data, list):
+        return None
+    commits = [reduce_commit(item, body_chars) for item in data if isinstance(item, dict)]
+    return {"ahead": 0, "truncated": False, "commits": commits}
+
+
 def main(argv):
     args = [a for a in argv if not a.startswith("--")]
-    if len(args) != 3:
-        sys.stderr.write(__doc__)
-        return 2
-    opts = {"max-pages": 8, "body-chars": 400}
+    opts = {"max-pages": 8, "body-chars": 400, "recent": 0, "branch": "main"}
     for flag in (a for a in argv if a.startswith("--")):
         name, _, value = flag[2:].partition("=")
-        if name in opts:
+        if name == "branch":
+            opts[name] = value or "main"
+        elif name in opts:
             opts[name] = int(value)
+    recent = opts["recent"] > 0
+    if len(args) != (1 if recent else 3):
+        sys.stderr.write(__doc__)
+        return 2
     try:
-        payload = collect(args[0], args[1], args[2], opts["max-pages"], opts["body-chars"])
+        if recent:
+            payload = collect_recent(args[0], opts["branch"], opts["recent"], opts["body-chars"])
+        else:
+            payload = collect(args[0], args[1], args[2], opts["max-pages"], opts["body-chars"])
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError) as exc:
         sys.stderr.write(f"fetch_commits: {exc}\n")
         return 1

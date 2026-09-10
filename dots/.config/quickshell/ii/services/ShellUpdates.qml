@@ -32,6 +32,10 @@ Singleton {
     // Callers show a bare icon rather than a "0" when hasUpdate has no count.
     property int commitsBehind: 0
     property bool checking: false
+    // Whether the remote has been asked at all since this process started.
+    // remoteCommit is not persisted, so before the first probe an empty value
+    // means "unknown", not "unreachable".
+    property bool probed: false
 
     // The commits in the range, newest first, each {sha, subject, body, author,
     // date, type, scope, summary} — the last three parsed out of a
@@ -40,6 +44,15 @@ Singleton {
     property var commits: []
     // The fetch stops after a few pages; a main merge can exceed that.
     property bool commitsTruncated: false
+
+    // The newest commits of the active branch, newest first, in the same shape
+    // as `commits`. Only the About page reads it, when the checkout is up to
+    // date and there is nothing pending to list, so it is fetched on request
+    // rather than with every check; loadRecent() throttles the requests.
+    property var recentCommits: []
+    property bool recentLoading: false
+    property string _recentFor: ""
+    property real _recentAt: 0
 
     readonly property bool hasUpdate: activeCommit !== "" && remoteCommit !== "" && activeCommit !== remoteCommit
     readonly property string compareUrl: {
@@ -106,6 +119,22 @@ Singleton {
         root.refresh();
     }
 
+    // Display name for a fork preset id; a custom remote shows its repo slug.
+    function forkLabel(fork) {
+        switch (fork) {
+        case "p3drovfx":
+        case "mine":
+            return "II-P3DROVFX";
+        case "end4":
+            return "end-4";
+        case "vynx":
+        case "upstream":
+            return "ii-vynx";
+        default:
+            return root.githubSlug(root.activeRemote) || fork || Translation.tr("Unknown fork");
+        }
+    }
+
     // owner/repo out of an https or ssh GitHub remote; "" for anything else.
     function githubSlug(remote) {
         if (!remote) return "";
@@ -126,6 +155,66 @@ Singleton {
     function commitUrl(sha) {
         const slug = root.githubSlug(root.activeRemote);
         return slug === "" ? "" : `https://github.com/${slug}/commit/${sha}`;
+    }
+
+    // Fetch the branch's newest commits unless the ones held are for this
+    // checkout and younger than ten minutes. One anonymous GitHub request
+    // each; the limit is 60 an hour and the update check spends some too.
+    function loadRecent(count = 10) {
+        if (root.recentLoading) return;
+        const key = `${root.activeRemote}#${root.activeBranch}@${root.activeCommit}`;
+        if (root._recentFor === key && Date.now() - root._recentAt < 10 * 60 * 1000) return;
+        if (root.githubSlug(root.activeRemote) === "") {
+            root.recentCommits = [];
+            return;
+        }
+        root._recentFor = key;
+        root.recentLoading = true;
+        recentProc.count = count;
+        recentProc.running = true;
+    }
+
+    // ── Running the setup script ──
+    //
+    // Every action that touches the checkout runs in a terminal window rather
+    // than under this process: the script kills and restarts Quickshell partway
+    // through, and a log that lives inside the shell dies with it. The window
+    // waits for Enter afterwards, so the output can still be read once the new
+    // shell is up. The script is handed the arguments as they are, after a
+    // check that it exists at all — a fork that does not ship it would
+    // otherwise open a terminal that closes on the spot.
+    function launchInTerminal(args) {
+        const terminal = Config.options?.apps?.terminal || "kitty -1";
+        // Array form, so a home directory with a space in it cannot break the
+        // command apart the way a single shell string would.
+        const cmd = terminal.split(" ").filter(part => part.length > 0);
+        cmd.push("-e", "bash", "-c", 'if [ ! -f "$1" ]; then ' + 'printf "Update script not found:\\n  %s\\n\\n[Press Enter to close] " "$1"; read -r; exit 1; fi; ' + 'script="$1"; shift; bash "$script" "$@"; ' + 'printf "\\n[Press Enter to close] "; read -r', "ii-update", root.setupScript, ...args);
+        Quickshell.execDetached(cmd);
+    }
+
+    function hyprFlag() {
+        return (Config.options?.update?.replaceHyprConfig ?? true) ? "--hypr" : "--no-hypr";
+    }
+
+    // Refresh the active fork and branch. The script asks before applying, so
+    // the terminal is the confirmation; config.json is kept.
+    function launchUpdate() {
+        root.launchInTerminal(["update", "--keep-config", root.hyprFlag()]);
+    }
+
+    // Move to another branch of the current fork. Confirmed in Settings first,
+    // so the script runs unattended; config.json is kept since the schema is
+    // the same fork's.
+    function launchBranchSwitch(branch) {
+        root.launchInTerminal(["switch", "--branch", branch, "--fork", root.activeFork, "--yes", "--keep-config", root.hyprFlag()]);
+    }
+
+    // Replace the checkout with another fork (a preset name or a GitHub URL).
+    // Confirmed in Settings first. config.json is reset on purpose: another
+    // fork's schema differs, and a kept file crashes the shell on a missing
+    // or reshaped option. The script keeps a backup of both.
+    function launchForkSwitch(fork) {
+        root.launchInTerminal(["switch", "--fork", fork, "--yes", root.hyprFlag()]);
     }
 
     function _setCommits(list, truncated) {
@@ -199,6 +288,7 @@ Singleton {
                 // An unreachable remote prints nothing; keeping the last known
                 // SHA would claim an update that was never confirmed.
                 root.remoteCommit = text.trim();
+                root.probed = true;
                 if (!root.hasUpdate || root.githubSlug(root.activeRemote) === "") {
                     root.commitsBehind = 0;
                     root._finishCheck();
@@ -227,6 +317,26 @@ Singleton {
                 root.commitsBehind = isNaN(n) ? 0 : n;
                 root._setCommits(payload?.commits ?? [], payload?.truncated);
                 root._finishCheck();
+            }
+        }
+    }
+
+    Process {
+        id: recentProc
+        property int count: 10
+        command: ["python3", `${Directories.scriptPath}/updates/fetch_commits.py`, root.githubSlug(root.activeRemote), `--recent=${recentProc.count}`, `--branch=${root.activeBranch}`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let payload = null;
+                try {
+                    payload = JSON.parse(text);
+                } catch (e) {
+                    payload = null;
+                }
+                root.recentCommits = Array.from(payload?.commits ?? []).map(entry => Object.assign({}, entry, root.parseSubject(entry.subject)));
+                // A failed fetch keeps nothing and may retry on the next visit.
+                root._recentAt = payload ? Date.now() : 0;
+                root.recentLoading = false;
             }
         }
     }
