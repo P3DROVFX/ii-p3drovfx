@@ -50,10 +50,17 @@ QtObject {
     readonly property bool osdStyleEditable: root.effectiveMode !== "connect"
     readonly property bool connectModeActive: root.effectiveMode === "connect"
 
+    // A very low Ignore Alpha makes the compositor discard most of the
+    // drop-shadow pixels, so the shadow would flicker or vanish while still
+    // costing GPU. Block it instead of rendering garbage.
+    readonly property bool lowIgnoreAlphaBlocksDropShadow: Config.ready
+        && (Config.options.appearance.ignoreAlpha ?? 1) < 0.3
+
     // A transparent Connect bar cannot use its drop shadow without changing
     // the apparent color of the shared colLayer0 surface.
     readonly property bool barDropShadowBlocked:
-        root.connectModeActive && Config.options.appearance.transparency.enable
+        (root.connectModeActive && Config.options.appearance.transparency.enable)
+        || root.lowIgnoreAlphaBlocksDropShadow
 
     readonly property string defaultBlockedReasonKey: root.floatingNotchActive
         && root.effectiveMode === "connect"
