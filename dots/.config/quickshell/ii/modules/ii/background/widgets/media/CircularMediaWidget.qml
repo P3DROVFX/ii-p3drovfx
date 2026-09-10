@@ -131,10 +131,16 @@ AbstractBackgroundWidget {
         return Math.max(0.0, Math.min(1.0, root.player.position / root.player.length));
     }
 
+    // This widget shares the desktop canvas' compositor surface with other widgets,
+    // so it cannot override Hyprland's ignore_alpha rule by itself. When the user
+    // chooses its problematic low range, omit only this widget's translucent blur
+    // textures while leaving the canvas and every other widget's blur untouched.
+    readonly property bool blurredEffectsSafe: Appearance.ignoreAlpha > 0.3
+
     // Outer bezel shadow support
     StyledDropShadow {
         target: bezelRing
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: root.blurredEffectsSafe && (Config.options.background.widgets.enableShadows ?? true)
     }
 
     // Outer Bezel Ring (Moldura) using opaque solid colBackgroundSurfaceContainer base
@@ -182,7 +188,7 @@ AbstractBackgroundWidget {
                     visible: root.artSource !== ""
                     asynchronous: true
 
-                    layer.enabled: true
+                    layer.enabled: root.blurredEffectsSafe
                     layer.effect: FastBlur {
                         radius: 4 // light blur
                         transparentBorder: true
@@ -532,9 +538,9 @@ AbstractBackgroundWidget {
             anchors.fill: parent
             z: 10
             enabled: false // Transparent to mouse events
-            visible: Config.options.background.widgets.circular_media.enableGlassReflection ?? true
+            visible: root.blurredEffectsSafe && (Config.options.background.widgets.circular_media.enableGlassReflection ?? true)
 
-            layer.enabled: true
+            layer.enabled: root.blurredEffectsSafe
             layer.effect: OpacityMask {
                 maskSource: Item {
                     width: glassReflectionOverlay.width
@@ -560,7 +566,7 @@ AbstractBackgroundWidget {
             Item {
                 id: topReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                layer.enabled: root.blurredEffectsSafe
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
                     transparentBorder: true
@@ -617,7 +623,7 @@ AbstractBackgroundWidget {
             Item {
                 id: bottomReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                layer.enabled: root.blurredEffectsSafe
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
                     transparentBorder: true

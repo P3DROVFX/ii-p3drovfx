@@ -24,6 +24,12 @@ class CircularMediaGlowContractTests(unittest.TestCase):
         self.assertGreater(blur_count, 0)
         self.assertEqual(blur_count, self.circular_media.count("transparentBorder: true"))
 
+    def test_low_ignore_alpha_disables_only_circular_translucent_effects(self):
+        self.assertIn("readonly property bool blurredEffectsSafe: Appearance.ignoreAlpha > 0.3", self.circular_media)
+        self.assertIn("visible: root.blurredEffectsSafe && (Config.options.background.widgets.enableShadows ?? true)", self.circular_media)
+        self.assertIn("layer.enabled: root.blurredEffectsSafe", self.circular_media)
+        self.assertIn("visible: root.blurredEffectsSafe && (Config.options.background.widgets.circular_media.enableGlassReflection ?? true)", self.circular_media)
+
 
 if __name__ == "__main__":
     unittest.main()
