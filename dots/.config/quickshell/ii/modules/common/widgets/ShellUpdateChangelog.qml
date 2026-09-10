@@ -122,7 +122,9 @@ ColumnLayout {
                     required property var modelData
 
                     Layout.fillWidth: true
-                    implicitHeight: rowLayout.implicitHeight + (root.compact ? 8 : 12)
+                    // Same inset on every side; the row reads as one padded pill.
+                    readonly property int pad: root.compact ? 6 : 8
+                    implicitHeight: rowLayout.implicitHeight + pad * 2
                     radius: Appearance.rounding.small
                     color: rowMouse.containsMouse ? root.rowHoverColor : root.rowColor
 
@@ -136,8 +138,8 @@ ColumnLayout {
                             left: parent.left
                             right: parent.right
                             verticalCenter: parent.verticalCenter
-                            leftMargin: root.compact ? 8 : 10
-                            rightMargin: root.compact ? 8 : 10
+                            leftMargin: row.pad
+                            rightMargin: row.pad
                         }
                         spacing: 8
 
