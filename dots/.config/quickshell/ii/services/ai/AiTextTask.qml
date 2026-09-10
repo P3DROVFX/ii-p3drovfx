@@ -24,6 +24,14 @@ QtObject {
     property string systemPrompt: ""
     property string userText: ""
     property string targetModelId: ""
+    // Forces the strategy's thinking level for this task ("off" for
+    // housekeeping that should not pay for reasoning); empty keeps the
+    // user's setting.
+    property string thinkingLevel: ""
+    property real temperature: 0.3
+    // Script name under /tmp/quickshell-<user>/ai/. Two tasks that can run
+    // at the same time must not share a body file.
+    property string scriptName: "text_task"
 
     readonly property int policy: Number(Config.options?.policies?.ai ?? 1)
     readonly property bool allowed: root.policy !== 0
@@ -68,6 +76,9 @@ QtObject {
 
     property var _strategy: null
     property AiMessageData _message: AiMessageData {}
+    // What the provider sent outside the stream frames; on failure that is
+    // its error JSON, which says far more than the status code.
+    property string _rawTail: ""
 
     function start(sysPrompt, text, modelId): bool {
         if (root.running)
@@ -118,18 +129,28 @@ QtObject {
 
         root._message.content = "";
         root._message.rawContent = "";
+        root._message.thought = "";
+        root._message.finishReason = "";
+        root._message.done = false;
+        root._rawTail = "";
 
-        const messages = [
-            { role: "user", content: root.userText }
-        ];
+        // A real message object: the strategies read rawContent, attachments
+        // and the function-call fields off it, none of which a bare
+        // {role, content} literal has.
+        const prompt = Ai.aiMessageComponent.createObject(root, {
+            "role": "user",
+            "content": root.userText,
+            "rawContent": root.userText
+        });
 
         let reqData;
+        root._strategy.thinkingOverride = root.thinkingLevel;
         try {
             reqData = root._strategy.buildRequestData(
                 activeModel,
-                messages,
+                [prompt],
                 root.systemPrompt,
-                0.3,
+                root.temperature,
                 []
             );
         } catch (e) {
@@ -137,6 +158,9 @@ QtObject {
             root.errorText = Translation.tr("Failed to build request data: ") + e.message;
             root.failed(root.errorText);
             return false;
+        } finally {
+            root._strategy.thinkingOverride = "";
+            prompt.destroy();
         }
 
         requester.model = activeModel;
@@ -149,6 +173,20 @@ QtObject {
         return requester.start();
     }
 
+    // The provider's own words for a failure, when what it sent outside the
+    // stream frames holds an error message; "" otherwise. Error bodies come
+    // pretty-printed across many lines, so this is a search, not a parse.
+    function providerError(): string {
+        const found = root._rawTail.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (!found)
+            return "";
+        try {
+            return String(JSON.parse(`"${found[1]}"`)).slice(0, 300);
+        } catch (e) {
+            return found[1].slice(0, 300);
+        }
+    }
+
     function cancel(): void {
         if (requester.running) {
             requester.abort();
@@ -159,12 +197,14 @@ QtObject {
     property AiRequest requester: AiRequest {
         id: requester
         apiKeyEnvVarName: Ai.apiKeyEnvVarName
-        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/text_task.sh`
+        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/${root.scriptName}.sh`
         maxRetries: 1
 
         onLine: data => {
             if (!root.running)
                 return;
+            if (!data.startsWith("data:"))
+                root._rawTail = (root._rawTail + data + "\n").slice(-4000);
             try {
                 requester.strategy.parseResponseLine(data, root._message);
                 const currentContent = root._message.content;
@@ -183,7 +223,11 @@ QtObject {
                 root.status = "aborted";
                 return;
             }
-            if (reason === "done" && root._message.content.length > 0) {
+            // Every strategy records the provider's stop reason on the last
+            // frame; none means the stream was cut before it — a shell
+            // reload, a dropped connection — and what arrived is not an
+            // answer, however clean the exit looks.
+            if (reason === "done" && root._message.content.length > 0 && root._message.finishReason !== "") {
                 root.resultText = root._message.content.trim();
                 root.status = "done";
                 root.finished(root.resultText);
@@ -191,7 +235,9 @@ QtObject {
             }
 
             root.status = "error";
-            if (httpStatus === 401 || httpStatus === 403) {
+            if (reason === "done" && root._message.content.length > 0) {
+                root.errorText = Translation.tr("The answer was cut off before it was complete.");
+            } else if (httpStatus === 401 || httpStatus === 403) {
                 root.errorText = Translation.tr("API key rejected or unauthorized.");
             } else if (httpStatus === 429) {
                 root.errorText = Translation.tr("Rate limit or quota exceeded.");
@@ -200,6 +246,9 @@ QtObject {
             } else {
                 root.errorText = Translation.tr("AI request failed (status: %1, code: %2).").arg(httpStatus).arg(code);
             }
+            const detail = root.providerError();
+            if (detail !== "")
+                root.errorText += " " + detail;
             root.failed(root.errorText);
         }
     }

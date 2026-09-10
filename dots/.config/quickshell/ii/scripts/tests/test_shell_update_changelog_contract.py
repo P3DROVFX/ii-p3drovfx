@@ -86,8 +86,13 @@ class ChangelogConsumersContractTests(unittest.TestCase):
 
     def test_summary_service_is_gated_and_cached(self):
         text = (ROOT / "services/ShellUpdateSummary.qml").read_text(encoding="utf-8")
-        for token in ("Ai.canSubmit", "aiSummaryMinCommits", "aiSummary", "shellUpdateSummaryPath", "AiRequest", "thinkingOverride = \"off\"", "tearingDown", 'finishReason === ""'):
+        for token in ("Ai.canSubmit", "aiSummaryMinCommits", "aiSummary", "shellUpdateSummaryPath", "AiTextTask", "attemptedTo", "tearingDown"):
             self.assertIn(token, text)
+
+    def test_text_task_rejects_a_cut_stream(self):
+        text = (ROOT / "services/ai/AiTextTask.qml").read_text(encoding="utf-8")
+        self.assertIn('finishReason !== ""', text)
+        self.assertIn("thinkingOverride = root.thinkingLevel", text)
 
     def test_gemini_flash_37_38_declare_a_thinking_floor_the_strategy_honours(self):
         catalog = (ROOT / "services/ai/ModelCatalog.qml").read_text(encoding="utf-8")

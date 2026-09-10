@@ -10,18 +10,16 @@ import Quickshell.Io
 
 /*
  * Plain-language summary of the commits ShellUpdates found, written by the AI
- * tab's current model. Optional: it spends one request on the user's key, so
- * it only runs by itself when the user switched it on and the update is big
- * enough to be worth condensing (below that the grouped commit list reads
- * fine on its own). A manual run is always available.
+ * tab's current model (a local one under the local-only policy). Optional: it
+ * spends one request on the user's key, so it only runs by itself when the
+ * user switched it on and the update is big enough to be worth condensing
+ * (below that the grouped commit list reads fine on its own). A manual run is
+ * always available.
  *
- * The result is cached on disk keyed by the commit range and model, so a
- * shell reload, the periodic re-check and a restart never re-run it; a new
- * remote HEAD does.
- *
- * Mirrors the AI tab's context compaction: one AiRequest of its own, a
- * strategy built for the model, thinking off, low temperature, and no chat
- * session is touched.
+ * The request is an AiTextTask, the same one-shot helper the notes editor
+ * uses; this service adds the gating, the range bookkeeping and the on-disk
+ * cache. The cache is keyed by the commit range, so a shell reload, the
+ * periodic re-check and a restart never re-run it; a new remote HEAD does.
  */
 Singleton {
     id: root
@@ -29,12 +27,13 @@ Singleton {
     readonly property bool enabled: Config.options?.update?.aiSummary ?? false
     readonly property int minCommits: Math.max(1, Config.options?.update?.aiSummaryMinCommits ?? 10)
 
-    readonly property var submitCheck: Ai.canSubmit()
-    // A model that can answer right now, plus something to summarise.
+    // The model the task would use, and whether it can answer right now.
+    readonly property var submitCheck: Ai.canSubmit(task.model?.id ?? "")
     readonly property bool available: (submitCheck?.allowed ?? false) && ShellUpdates.hasUpdate && ShellUpdates.commits.length > 0
     readonly property string unavailableReason: submitCheck?.reason ?? ""
-    readonly property string modelId: Ai.currentModelEntry?.id ?? ""
-    readonly property string modelTitle: Ai.currentModelEntry?.title ?? Ai.currentModelEntry?.name ?? root.modelId
+    readonly property string modelId: task.model?.id ?? ""
+    readonly property string modelTitle: task.model ? (task.model.title || task.model.name || root.modelId) : ""
+    readonly property bool generating: task.running
 
     // What the cache holds. `text` is only meaningful when `current`.
     property string text: ""
@@ -44,7 +43,6 @@ Singleton {
     property real generatedAt: 0
     readonly property bool current: text !== "" && ShellUpdates.hasUpdate && cachedFrom === ShellUpdates.activeCommit && cachedTo === ShellUpdates.remoteCommit
 
-    property bool generating: false
     property string error: ""
     property bool cacheLoaded: false
 
@@ -52,12 +50,14 @@ Singleton {
     // remote while it runs makes its answer stale on arrival.
     property string pendingFrom: ""
     property string pendingTo: ""
-    // The last line the provider sent; on failure it usually holds the
-    // error JSON, which says far more than the status code.
-    property string lastRawLine: ""
-    // A QML reload tears this singleton down mid-request: curl is killed, yet
-    // the process still reports a clean exit with the 200 it already saw, and
-    // the half-written answer would be cached as though it were whole.
+    // The range the automatic run last tried, whatever came of it. A failure
+    // — a rejected key, an exhausted quota, a model refusing a parameter —
+    // must not be retried on every check; the Redo button is the way to try
+    // again.
+    property string attemptedFrom: ""
+    property string attemptedTo: ""
+    // A QML reload tears this singleton down mid-request; whatever the task
+    // reports on its way out must not be cached.
     property bool tearingDown: false
 
     // Bodies are only worth sending for a range small enough that the model
@@ -66,9 +66,7 @@ Singleton {
     readonly property int bodyCommitLimit: 50
     readonly property int payloadCharLimit: 60000
 
-    readonly property string instruction: "You write release notes for end users of a Linux desktop shell (a Quickshell and Hyprland configuration called Illogical Impulse). You are given the commits between the version the user has installed and the latest one, newest first. Write a short Markdown summary: three to six bullet points grouped by what changes for the user — new features, fixes, visual changes, settings or configuration changes. Put anything that changes behaviour or configuration, or that needs action from the user, first. Plain language, no commit hashes, no file or code names unless they matter to the user, no code formatting or backticks, no preamble and no heading. Answer with the bullets only."
-
-    property AiMessageData message: AiMessageData {}
+    readonly property string instruction: "You write release notes for end users of a Linux desktop shell (a Quickshell and Hyprland configuration called Illogical Impulse). You are given the commits between the version the user has installed and the latest one, newest first. Write a short Markdown summary: three to six bullet points grouped by what changes for the user — new features, fixes, visual changes, settings or configuration changes. Put anything that changes behaviour or configuration, or that needs action from the user, first. Plain language, no commit hashes, no file or code names unless they matter to the user, no code formatting or backticks, no links, no preamble and no heading. Answer with the bullets only."
 
     function load() {}
 
@@ -93,105 +91,55 @@ Singleton {
     }
 
     // Runs after a check when the user opted in and the update is big enough.
+    // One try per range: a summary that exists, or an attempt that already
+    // failed, both leave it alone.
     function maybeAutoSummarize() {
         if (!root.enabled || !root.cacheLoaded) return;
         if (ShellUpdates.commitsBehind < root.minCommits) return;
+        if (root.current) return;
+        if (root.attemptedFrom === ShellUpdates.activeCommit && root.attemptedTo === ShellUpdates.remoteCommit) return;
         root.summarize(false);
     }
 
     function summarize(force = false): bool {
         if (root.generating || !root.available) return false;
-        if (!force && root.current && root.cachedModel === root.modelId) return false;
-        const model = Ai.currentModelEntry;
-        if (!model) return false;
-        const strategy = Ai.createApiStrategy(model.api_format || "openai");
-        if (!strategy) return false;
+        if (!force && root.current) return false;
 
         root.error = "";
-        root.lastRawLine = "";
-        root.message.content = "";
-        root.message.rawContent = "";
-        root.message.thought = "";
-        root.message.finishReason = "";
-        root.message.done = false;
-
-        const request = Ai.aiMessageComponent.createObject(root, {
-            "role": "user",
-            "content": root.buildPrompt(),
-            "rawContent": ""
-        });
-        strategy.thinkingOverride = "off";
-        strategy.activeThinkingLevel = "off";
-        const data = strategy.buildRequestData(model, [request], root.instruction, 0.2, null);
-        request.destroy();
-
-        requester.model = model;
-        requester.strategy = strategy;
-        requester.message = root.message;
-        requester.endpoint = strategy.buildEndpoint(model);
-        requester.requestData = data;
-        requester.apiKey = model.requires_key ? (Ai.apiKeys?.[model.key_id] ?? "") : "";
         root.pendingFrom = ShellUpdates.activeCommit;
         root.pendingTo = ShellUpdates.remoteCommit;
-        if (!requester.start()) {
-            root._releaseStrategy();
+        root.attemptedFrom = root.pendingFrom;
+        root.attemptedTo = root.pendingTo;
+        if (!task.start(root.instruction, root.buildPrompt()))
             return false;
-        }
-        root.generating = true;
-        print(`[ShellUpdateSummary] summarising ${ShellUpdates.commits.length} commits with ${model.id}`);
+        print(`[ShellUpdateSummary] summarising ${ShellUpdates.commits.length} commits with ${root.modelId}`);
         return true;
     }
 
-    function _describeFailure(reason: string, status: int): string {
-        const base = status > 0 ? `${reason} (${status})` : reason;
-        const raw = root.lastRawLine.trim().replace(/^data:\s*/, "");
-        try {
-            const parsed = JSON.parse(raw);
-            const message = parsed?.error?.message ?? parsed?.[0]?.error?.message ?? "";
-            if (message) return `${base}: ${String(message).slice(0, 300)}`;
-        } catch (e) {
-            // Not JSON; fall through to the bare status.
-        }
-        return base;
+    function _reject(reason: string) {
+        if (root.tearingDown) return;
+        root.error = reason;
+        print(`[ShellUpdateSummary] failed: ${reason}`);
     }
 
-    function _releaseStrategy() {
-        const strategy = requester.strategy;
-        requester.strategy = null;
-        if (strategy && typeof strategy.destroy === "function")
-            strategy.destroy();
-    }
-
-    function _finish(reason: string, status: int) {
-        root.generating = false;
+    function _accept(result: string) {
+        if (root.tearingDown) return;
         // Inline code renders in a monospace font that sits badly in a
         // release note; the words read fine without it.
-        const answer = String(root.message.content ?? "").replace(/`+/g, "").trim();
-        const stillWanted = root.pendingFrom === ShellUpdates.activeCommit && root.pendingTo === ShellUpdates.remoteCommit;
-        root._releaseStrategy();
-        if (root.tearingDown) return;
-        if (reason !== "done" || answer === "") {
-            root.error = root._describeFailure(reason, status);
-            print(`[ShellUpdateSummary] failed: ${root.error}`);
+        const answer = String(result ?? "").replace(/`+/g, "").trim();
+        if (answer === "") {
+            root._reject(Translation.tr("the model sent an empty answer"));
             return;
         }
-        // Every strategy records the provider's stop reason on the last
-        // frame; none means the stream was cut before it — a shell reload, a
-        // dropped connection — and what arrived is not a summary.
-        if (root.message.finishReason === "") {
-            root.error = Translation.tr("interrupted before the answer was complete");
-            print(`[ShellUpdateSummary] failed: ${root.error} (${answer.length} chars received)`);
-            return;
-        }
-        if (!stillWanted) {
+        if (root.pendingFrom !== ShellUpdates.activeCommit || root.pendingTo !== ShellUpdates.remoteCommit) {
             print("[ShellUpdateSummary] range moved while summarising; answer dropped");
             return;
         }
-        print(`[ShellUpdateSummary] done: ${answer.length} chars, finish reason ${root.message.finishReason}`);
+        print(`[ShellUpdateSummary] done: ${answer.length} chars`);
         root.text = answer;
         root.cachedFrom = root.pendingFrom;
         root.cachedTo = root.pendingTo;
-        root.cachedModel = String(requester.model?.id ?? root.modelId);
+        root.cachedModel = root.modelId;
         root.generatedAt = Date.now();
         root.save();
     }
@@ -217,21 +165,16 @@ Singleton {
         root.save();
     }
 
-    AiRequest {
-        id: requester
-        apiKeyEnvVarName: Ai.apiKeyEnvVarName
-        scriptPath: `/tmp/quickshell-${SystemInfo.username}/ai/update-summary.sh`
+    AiTextTask {
+        id: task
+        taskName: "update-summary"
+        scriptName: "update-summary"
+        // Release notes are not worth paying for reasoning.
+        thinkingLevel: "off"
+        temperature: 0.2
 
-        onLine: data => {
-            root.lastRawLine = data;
-            try {
-                requester.strategy.parseResponseLine(data, root.message);
-            } catch (e) {
-                // A malformed line costs at most part of the summary.
-            }
-        }
-
-        onFinished: (reason, status, code) => root._finish(reason, status)
+        onFinished: result => root._accept(result)
+        onFailed: reason => root._reject(reason)
     }
 
     FileView {
