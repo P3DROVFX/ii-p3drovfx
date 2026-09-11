@@ -179,10 +179,17 @@ def scan_ai_processes():
     return list(grouped.values())
 
 def main():
+    # Adaptive polling: 1 s while agents are active (keeps runtime counters
+    # fresh), backing off to 3 s then 6 s while idle. scan_ai_processes() spawns
+    # pgrep/ps every tick, so a fixed 1 s poll burned CPU forever even with no
+    # agents running; the back-off costs at most a few seconds of extra latency
+    # before an idle indicator lights up, which is fine for a status glyph.
+    idle_ticks = 0
     while True:
         try:
             agents = scan_ai_processes()
             print(json.dumps({"agents": agents}), flush=True)
+            idle_ticks = 0 if agents else idle_ticks + 1
         except BrokenPipeError:
             sys.exit(0)
         except Exception as e:
@@ -190,7 +197,13 @@ def main():
                 print(json.dumps({"agents": [], "error": str(e)}), flush=True)
             except BrokenPipeError:
                 sys.exit(0)
-        time.sleep(1)
+        if idle_ticks == 0:
+            delay = 1
+        elif idle_ticks < 10:
+            delay = 3
+        else:
+            delay = 6
+        time.sleep(delay)
 
 if __name__ == "__main__":
     main()

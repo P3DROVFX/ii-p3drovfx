@@ -29,6 +29,11 @@ Singleton {
     // One-shot service restart when BudsLink is up but never claimed a connected audio device
     property bool _recovering: false
     property bool _recoveryDone: false
+    // Latches once a connected audio candidate has been probed (recovery spent)
+    // and BudsLink still could not claim it: a plain A2DP headset (e.g. Soundcore
+    // Life Q30) is not a BudsLink device, so holding its ~200 MB gjs service alive
+    // is pure waste. Reset when the audio candidate goes away (see below).
+    property bool _candidateUnsupported: false
 
     // Canonical bridge script path
     readonly property string bridgeScriptPath: Quickshell.shellPath("scripts/budslink/bridge.js")
@@ -162,7 +167,9 @@ Singleton {
             Config.options.bluetooth.budsLink && Config.options.bluetooth.budsLink.enabled === false) {
             return false;
         }
-        return root._manualHoldRequested || root._diagnosticsActive || root.hasAudioCandidate || root.hasConnectedClaimedBuds;
+        return root._manualHoldRequested || root._diagnosticsActive
+            || (root.hasAudioCandidate && !root._candidateUnsupported)
+            || root.hasConnectedClaimedBuds;
     }
 
     onShouldBridgeRunChanged: {
@@ -180,8 +187,30 @@ Singleton {
     readonly property bool unclaimedCandidate: root.serviceCompatible && root.serviceHeld && root.hasAudioCandidate && !root.hasConnectedClaimedBuds
 
     onHasAudioCandidateChanged: {
-        if (!hasAudioCandidate)
+        if (!hasAudioCandidate) {
             root._recoveryDone = false;
+            // A fresh audio device deserves a fresh probe next time one connects.
+            root._candidateUnsupported = false;
+        }
+    }
+
+    // Once BudsLink has been given its recovery restart and still hasn't claimed
+    // the connected audio device, wait a beat and conclude it is not a BudsLink
+    // device. That drops shouldBridgeRun, so idleGraceTimer parks the bridge and
+    // its ~200 MB gjs service instead of holding them for a headset it can't use.
+    readonly property bool candidateProbeExhausted: root.serviceCompatible && root.serviceHeld
+        && root.hasAudioCandidate && !root.hasConnectedClaimedBuds
+        && root._recoveryDone && !root._recovering
+
+    Timer {
+        id: unsupportedGiveUpTimer
+        interval: 5000
+        repeat: false
+        running: root.candidateProbeExhausted && !root._candidateUnsupported
+        onTriggered: {
+            console.log("[BudsLinkService] Connected audio device is not BudsLink-manageable after probe; parking bridge");
+            root._candidateUnsupported = true;
+        }
     }
 
     Timer {
