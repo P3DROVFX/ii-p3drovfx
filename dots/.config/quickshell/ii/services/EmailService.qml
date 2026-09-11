@@ -34,6 +34,31 @@ Singleton {
     property bool enablePromotions: true
     property bool enableSocials: true
     property int refreshIntervalMinutes: 1
+
+    // Live-refresh gating: only auto-poll Gmail while the user is actually
+    // looking at email — the cheatsheet Email tab is the visible tab, or a
+    // desktop email widget is enabled. With the tab closed and no widget, the
+    // 1-minute timer was spawning fetch_emails + fetch_all_accounts +
+    // fetch_labels + list_ics_attachments (~150 MB of Python) every minute
+    // forever, feeding nothing on screen. On-demand fetching is unchanged, and
+    // opening the tab kicks a fresh sync immediately (below).
+    property bool cheatsheetVisible: false
+    readonly property bool emailWidgetEnabled: {
+        if (!Config.ready)
+            return false;
+        const w = Config.options?.background?.widgets;
+        if (!w)
+            return false;
+        const glance = (w.at_a_glance?.enable ?? false) && (w.at_a_glance?.enableEmail ?? false);
+        return glance || (w.email_inbox?.enable ?? false) || (w.email_inbox_2x1?.enable ?? false);
+    }
+    readonly property bool backgroundRefreshWanted: root.cheatsheetVisible || root.emailWidgetEnabled
+
+    onCheatsheetVisibleChanged: {
+        if (root.cheatsheetVisible && root.authenticated)
+            root._startDebouncedSync();
+    }
+
     property bool compactMode: false
     property bool stackingEnabled: true
     property bool authenticating: false
@@ -197,7 +222,7 @@ Singleton {
     Timer {
         id: autoRefreshTimer
         interval: root.refreshIntervalMinutes * 60 * 1000
-        running: root.authenticated && root.refreshIntervalMinutes > 0
+        running: root.authenticated && root.refreshIntervalMinutes > 0 && root.backgroundRefreshWanted
         repeat: true
         onTriggered: {
             root.syncAll();
