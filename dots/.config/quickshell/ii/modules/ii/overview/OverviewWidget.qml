@@ -17,6 +17,69 @@ Item {
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
     readonly property bool enableCascade: Config.options.overview.enableCascadeAnimation ?? true
     readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
+    // One clock drives both the workspace cells and their window previews.
+    // The previous implementation created a timer, animation and two signal
+    // connections for every delegate, which made opening the overview compete
+    // with the GNOME-like background and with search input.
+    readonly property int cascadeDelayBase: 80
+    readonly property int cascadeDelayStep: 55
+    readonly property int cascadeItemDuration: Math.round(380 * Appearance.animMultiplier)
+    readonly property int cascadeDuration: cascadeDelayBase
+        + Math.max(0, workspacesShown - 1) * cascadeDelayStep
+        + cascadeItemDuration
+    property real cascadeClock: 1.0
+
+    function cascadeProgressFor(index) {
+        if (!root.enableCascade)
+            return 1.0;
+        const elapsed = root.cascadeClock * root.cascadeDuration;
+        return Math.max(0.0, Math.min(1.0,
+            (elapsed - root.cascadeDelayBase - index * root.cascadeDelayStep)
+            / Math.max(1, root.cascadeItemDuration)));
+    }
+
+    function syncCascade() {
+        if (!cascadeAnimation)
+            return;
+        cascadeAnimation.stop();
+        if (!root.enableCascade || !root.visible || !GlobalStates.overviewOpen) {
+            root.cascadeClock = 1.0;
+            return;
+        }
+        root.cascadeClock = 0.0;
+        cascadeAnimation.start();
+    }
+
+    NumberAnimation {
+        id: cascadeAnimation
+        target: root
+        property: "cascadeClock"
+        from: 0.0
+        to: 1.0
+        duration: root.cascadeDuration
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            root.syncCascade();
+        }
+    }
+
+    onVisibleChanged: {
+        if (!root.visible) {
+            root.syncCascade();
+        } else if (GlobalStates.overviewOpen && root.enableCascade && root.cascadeClock >= 1.0) {
+            // The overview reveal can map this item one frame after the
+            // global open signal. Start the shared clock when pixels become
+            // visible instead of losing the entrance animation.
+            root.syncCascade();
+        }
+    }
+    onEnableCascadeChanged: root.syncCascade()
+    Component.onCompleted: Qt.callLater(root.syncCascade)
+
     readonly property real autoScale: {
         let cols = Math.max(1, Config.options.overview.columns || 5);
         let rows = Math.max(1, Config.options.overview.rows || 2);
@@ -202,68 +265,10 @@ Item {
                             property color hoveredBorderColor: Appearance.colors.colLayer2Hover
                             property bool hoveredWhileDragging: false
 
-                            // Cascading entrance calculation (sequential timer stagger)
+                            // The shared clock keeps the same stagger without
+                            // allocating per-cell timers and animations.
                             property int cellIndex: row.index * Config.options.overview.columns + colIndex
-                            property real animProgress: 0.0
-
-                            Timer {
-                                id: workspaceStaggerTimer
-                                interval: 80 + workspace.cellIndex * 55
-                                repeat: false
-                                onTriggered: {
-                                    if (root.visible)
-                                        workspaceStaggerAnim.restart();
-                                    else
-                                        workspace.animProgress = 1.0;
-                                }
-                            }
-
-                            NumberAnimation {
-                                id: workspaceStaggerAnim
-                                target: workspace
-                                property: "animProgress"
-                                from: 0.0
-                                to: 1.0
-                                duration: Math.round(380 * Appearance.animMultiplier)
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.15
-                            }
-
-                            Connections {
-                                target: root
-                                function onVisibleChanged() {
-                                    // Search retains this grid; hidden cascades have
-                                    // no pixels to animate and must release their timers.
-                                    if (!root.visible) {
-                                        workspaceStaggerTimer.stop();
-                                        workspaceStaggerAnim.stop();
-                                        workspace.animProgress = 1.0;
-                                    }
-                                }
-                            }
-
-                            Connections {
-                                target: GlobalStates
-                                function onOverviewOpenChanged() {
-                                    if (GlobalStates.overviewOpen && root.enableCascade) {
-                                        workspace.animProgress = 0.0;
-                                        workspaceStaggerTimer.restart();
-                                    } else {
-                                        workspaceStaggerTimer.stop();
-                                        workspaceStaggerAnim.stop();
-                                        workspace.animProgress = 1.0;
-                                    }
-                                }
-                            }
-
-                            Component.onCompleted: {
-                                if (GlobalStates.overviewOpen && root.enableCascade) {
-                                    workspace.animProgress = 0.0;
-                                    workspaceStaggerTimer.restart();
-                                } else {
-                                    workspace.animProgress = 1.0;
-                                }
-                            }
+                            readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                             opacity: root.enableCascade ? workspace.animProgress : 1.0
                             transform: [
@@ -376,66 +381,10 @@ Item {
                     windowData: windowByAddress[address]
                     hyprscrollingEnabled: root.hyprscrollingEnabled
 
-                    // Cascading entrance calculation matching workspace cell (sequential timer stagger)
+                    // Cascading entrance calculation matching the workspace
+                    // cell, driven by the monitor-level clock.
                     property int cellIndex: workspaceRowIndex * Config.options.overview.columns + workspaceColIndex
-                    property real animProgress: 0.0
-
-                    Timer {
-                        id: windowStaggerTimer
-                        interval: 80 + window.cellIndex * 55
-                        repeat: false
-                        onTriggered: {
-                            if (root.visible)
-                                windowStaggerAnim.restart();
-                            else
-                                window.animProgress = 1.0;
-                        }
-                    }
-
-                    NumberAnimation {
-                        id: windowStaggerAnim
-                        target: window
-                        property: "animProgress"
-                        from: 0.0
-                        to: 1.0
-                        duration: Math.round(380 * Appearance.animMultiplier)
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.15
-                    }
-
-                    Connections {
-                        target: root
-                        function onVisibleChanged() {
-                            if (!root.visible) {
-                                windowStaggerTimer.stop();
-                                windowStaggerAnim.stop();
-                                window.animProgress = 1.0;
-                            }
-                        }
-                    }
-
-                    Connections {
-                        target: GlobalStates
-                        function onOverviewOpenChanged() {
-                            if (GlobalStates.overviewOpen && root.enableCascade) {
-                                window.animProgress = 0.0;
-                                windowStaggerTimer.restart();
-                            } else {
-                                windowStaggerTimer.stop();
-                                windowStaggerAnim.stop();
-                                window.animProgress = 1.0;
-                            }
-                        }
-                    }
-
-                    Component.onCompleted: {
-                        if (GlobalStates.overviewOpen && root.enableCascade) {
-                            window.animProgress = 0.0;
-                            windowStaggerTimer.restart();
-                        } else {
-                            window.animProgress = 1.0;
-                        }
-                    }
+                    readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                     opacity: root.enableCascade ? window.animProgress : 1.0
                     transform: [

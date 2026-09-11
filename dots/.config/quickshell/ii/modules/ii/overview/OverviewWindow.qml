@@ -167,9 +167,16 @@ Item { // Window
         id: windowPreview
         anchors.fill: parent
         captureSource: (root.toplevel && Config.options.overview.showWindowPreviews) ? root.toplevel : null
-        // Respect live previews only while the grid can actually be seen.
-        live: root.visible && Config.options.background.windowZoomLiveCapture
+        // Respect the configured capture mode. The transition layer uses the
+        // same setting, so a live overview never silently becomes frozen just
+        // because the background animation is active.
+        live: root.visible && GlobalStates.overviewOpen && Config.options.background.windowZoomLiveCapture
         z: 1
+
+        onLiveChanged: {
+            if (!live)
+                root.requestRecapture();
+        }
 
         // Color overlay for interactions
         Rectangle {

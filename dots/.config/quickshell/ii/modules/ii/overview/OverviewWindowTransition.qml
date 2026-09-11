@@ -17,7 +17,8 @@ pragma ComponentBehavior: Bound
 //     layer mapped through the asynchronous handoff, then hides.
 //
 // Flicker prevention:
-//   • ScreencopyView uses live:false for performance; captures are taken once on open.
+//   • Each tile owns one Toplevel screencopy. The configured live flag is
+//     passed through directly; frozen previews are captured once and held.
 //   • captureSource is set BEFORE setting visible=true (QML binding order).
 //   • The controller's progress is the only transition clock.
 
@@ -120,21 +121,47 @@ Scope {
             // ── Monitor / workspace state ───────────────────────────────────
             readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
             readonly property bool monitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
-            readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
+            readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 0
 
             readonly property bool barVertical: BarPlacement.vertical
             readonly property bool barBottom: BarPlacement.bottom
-            readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+            // Keep the transition's transform origin identical to the bar's
+            // compositor reservation.  Appearance.sizes.barHeight includes
+            // two floating gaps and therefore cannot be used as one edge's
+            // inset when the bar is horizontal.
+            readonly property real barSize: barVertical
+                ? Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                : Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
             readonly property int gap: Appearance.gapsOut
 
-            readonly property int padLeft: barVertical && !barBottom ? barSize : gap
-            readonly property int padRight: barVertical && barBottom ? barSize : gap
-            readonly property int padTop: !barVertical && !barBottom ? barSize : gap
-            readonly property int padBottom: !barVertical && barBottom ? barSize : gap
+            readonly property real padLeft: barVertical && !barBottom ? barSize : gap
+            readonly property real padRight: barVertical && barBottom ? barSize : gap
+            readonly property real padTop: !barVertical && !barBottom ? barSize : gap
+            readonly property real padBottom: !barVertical && barBottom ? barSize : gap
 
             readonly property real scaleOriginX: padLeft + (tRoot.screen.width - padLeft - padRight) / 2
             readonly property real scaleOriginY: padTop + (tRoot.screen.height - padTop - padBottom) / 2
             readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(tRoot.screen ? tRoot.screen.name : "")
+            readonly property var monitorData: (HyprlandData.monitors ?? []).find(candidate => Number(candidate?.id) === Number(tRoot.monitor?.id)) ?? null
+            readonly property string visibleSpecialWorkspaceName: {
+                const name = String(tRoot.monitorData?.specialWorkspace?.name ?? "");
+                return name.toLowerCase().indexOf("special:") === 0 ? name.slice(8) : name;
+            }
+            // A scratchpad is a special workspace drawn over the monitor's
+            // normal workspace. Keep it in the same snapshot set so Settings
+            // and scratchpad windows use the exact same path as regular apps.
+            readonly property var visibleWorkspaceIds: {
+                const ids = [];
+                const normalId = Number(tRoot.displayedWsId);
+                if (isFinite(normalId) && normalId > 0)
+                    ids.push(normalId);
+
+                const special = tRoot.monitorData?.specialWorkspace;
+                const specialId = Number(special?.id ?? 0);
+                if (special?.name && specialId !== 0 && isFinite(specialId) && ids.indexOf(specialId) < 0)
+                    ids.push(specialId);
+                return ids;
+            }
             readonly property bool isGnomeLike: overviewController
                 ? overviewController.isGnomeLike
                 : (Config.options.background.overviewBackgroundStyle === "gnome"
@@ -150,33 +177,101 @@ Scope {
 
             // ── Window freezing logic for anti-flicker reload ───────────────
             property list<var> frozenToplevels: []
+            property bool incomingModelReady: true
+            // Hyprland can publish several related list/map changes in the
+            // same frame. Coalesce them so the expensive workspace filter is
+            // evaluated once instead of once per signal.
+            property int windowDataRevision: 0
 
-            function updateToplevels() {
+            Timer {
+                id: toplevelUpdateTimer
+                interval: 16
+                repeat: false
+                onTriggered: tRoot.refreshToplevels()
+            }
+
+            function normalizedAddress(value) {
+                const raw = String(value ?? "").trim();
+                if (raw === "")
+                    return "";
+                return raw.toLowerCase().indexOf("0x") === 0 ? "0x" + raw.slice(2) : "0x" + raw;
+            }
+
+            function clientForToplevel(toplevel, clients) {
+                const raw = String(toplevel?.HyprlandToplevel?.address ?? "").trim();
+                if (raw === "")
+                    return null;
+                const normalized = tRoot.normalizedAddress(raw);
+                const clientMap = clients ?? HyprlandData.windowByAddress ?? ({});
+                // Quickshell versions differ on whether the address already
+                // carries the 0x prefix. Accept both forms without ever
+                // producing the invalid 0x0x... key.
+                return clientMap[normalized] ?? clientMap[raw] ?? null;
+            }
+
+            function scheduleToplevelUpdate() {
+                if (!toplevelUpdateTimer.running)
+                    toplevelUpdateTimer.start();
+            }
+
+            function refreshToplevels() {
                 if (tRoot.exitAnimating) {
                     // Freeze completely during exit transition to protect previews from being destroyed by hyprctl reload!
                     return;
                 }
                 if (!tRoot.shouldBeActive) {
                     tRoot.frozenToplevels = [];
+                    tRoot.incomingModelReady = false;
                     return;
                 }
-                const res = ToplevelManager.toplevels.values.filter(toplevel => {
-                    const addr = "0x" + toplevel.HyprlandToplevel?.address;
-                    const win = HyprlandData.windowByAddress[addr];
-                    if (!win) return false;
-                    return win.workspace?.id == tRoot.displayedWsId &&
-                           win.monitor == tRoot.monitor?.id;
+                const monitorId = Number(tRoot.monitor?.id);
+                const workspaceIds = tRoot.visibleWorkspaceIds;
+                if (!isFinite(monitorId) || workspaceIds.length === 0) {
+                    tRoot.frozenToplevels = [];
+                    tRoot.incomingModelReady = true;
+                    tRoot.windowDataRevision++;
+                    return;
+                }
+                const clients = HyprlandData.windowByAddress ?? ({});
+                const res = (ToplevelManager.toplevels.values ?? []).filter(toplevel => {
+                    const win = tRoot.clientForToplevel(toplevel, clients);
+                    if (!win)
+                        return false;
+                    const workspaceId = Number(win.workspace?.id);
+                    const clientMonitorId = Number(win.monitor);
+                    const workspaceName = String(win.workspace?.name ?? "");
+                    const specialName = tRoot.visibleSpecialWorkspaceName;
+                    const isVisibleSpecial = specialName !== ""
+                        && (workspaceName === specialName
+                            || workspaceName === "special:" + specialName
+                            || workspaceName === tRoot.monitorData?.specialWorkspace?.name);
+                    return ((isFinite(workspaceId) && workspaceIds.indexOf(workspaceId) >= 0) || isVisibleSpecial)
+                        && isFinite(clientMonitorId) && clientMonitorId === monitorId;
                 });
                 tRoot.frozenToplevels = res;
+                // The list is now committed to the incoming Repeater. The
+                // slide timer still waits for each visible tile's first frame.
+                tRoot.incomingModelReady = true;
+                tRoot.windowDataRevision++;
             }
 
-            onShouldBeActiveChanged: updateToplevels()
-            onDisplayedWsIdChanged: updateToplevels()
+            onShouldBeActiveChanged: {
+                // Populate the first frame synchronously so mapping the handoff
+                // layer never exposes an empty transition surface. Later
+                // Hyprland churn is safe to coalesce on the short timer.
+                if (tRoot.shouldBeActive)
+                    refreshToplevels();
+                else
+                    scheduleToplevelUpdate();
+            }
+            onDisplayedWsIdChanged: scheduleToplevelUpdate()
+            onMonitorDataChanged: scheduleToplevelUpdate()
+            onVisibleWorkspaceIdsChanged: scheduleToplevelUpdate()
             
             Connections {
                 target: ToplevelManager.toplevels
                 function onValuesChanged() {
-                    tRoot.updateToplevels();
+                    tRoot.scheduleToplevelUpdate();
                 }
             }
 
@@ -184,12 +279,12 @@ Scope {
                 target: HyprlandData
                 ignoreUnknownSignals: true
                 function onWindowByAddressChanged() {
-                    tRoot.updateToplevels();
+                    tRoot.scheduleToplevelUpdate();
                 }
             }
 
             Component.onCompleted: {
-                updateToplevels();
+                scheduleToplevelUpdate();
                 if (tRoot.isGnomeLike && GlobalStates.overviewOpen && transitionScope.featureEnabled) {
                     tRoot.isOverviewActive = true;
                     openDelayTimer.restart();
@@ -203,6 +298,11 @@ Scope {
             // mapped when the overview surface is already open.
             property bool exitAnimating: false
             property bool isOverviewActive: false
+
+            onExitAnimatingChanged: {
+                if (!tRoot.exitAnimating)
+                    tRoot.windowDataRevision++;
+            }
 
             Timer {
                 id: openDelayTimer
@@ -261,12 +361,16 @@ Scope {
                         && (overviewController.active || overviewController.progress > 0.001)))
 
             readonly property real captureScale: tRoot.isGnomeLike
-                ? GlobalStates.overviewZoomScale
+                ? (overviewController ? overviewController.scale : GlobalStates.overviewZoomScale)
                 : (overviewController && overviewController.windowTransitionMode === "scale-with-background"
                     ? overviewController.scale
                     : (overviewController ? 0.98 + 0.02 * overviewController.progress : 1.0))
-            readonly property real captureOriginX: tRoot.isGnomeLike ? GlobalStates.overviewZoomOriginX : (overviewController ? overviewController.scaleOriginX : tRoot.scaleOriginX)
-            readonly property real captureOriginY: tRoot.isGnomeLike ? GlobalStates.overviewZoomOriginY : (overviewController ? overviewController.scaleOriginY : tRoot.scaleOriginY)
+            // The per-monitor controller owns the usable viewport geometry.
+            // The legacy global origin is only a fallback for the brief
+            // startup window before that controller is registered; otherwise
+            // a top/bottom bar would be ignored by the window captures.
+            readonly property real captureOriginX: overviewController ? overviewController.scaleOriginX : tRoot.scaleOriginX
+            readonly property real captureOriginY: overviewController ? overviewController.scaleOriginY : tRoot.scaleOriginY
             readonly property real captureTranslateX: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateX : 0
             readonly property real captureTranslateY: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateY : 0
             readonly property real captureOpacity: tRoot.isGnomeLike ? 1.0 : (overviewController ? overviewController.progress : 0.0)
@@ -284,10 +388,52 @@ Scope {
             property real transitionProgress: 1.0
             property int transitionDirection: 1 // 1: next, -1: prev
             property bool slideAnimEnabled: false
+            property int slideWaitTicks: 0
+            readonly property int maxSlideWaitTicks: 8
+            // Move the capture container past the complete viewport. A
+            // fractional distance leaves the outermost window visible at the
+            // edge, which is especially obvious on ultrawide monitors. The
+            // extra elevation margin clears the rounded mask and shadow too.
+            readonly property real workspaceSlideDistance:
+                (tRoot.isVertical ? tRoot.height : tRoot.width)
+                + Appearance.sizes.elevationMargin * 2
+
+            readonly property bool incomingCapturesReady: {
+                if (!tRoot.incomingModelReady)
+                    return false;
+                for (let i = 0; i < incomingRepeater.count; i++) {
+                    const item = incomingRepeater.itemAt(i);
+                    if (item && !item.captureReady)
+                        return false;
+                }
+                return true;
+            }
+
+            Timer {
+                id: slideStartTimer
+                // Give newly-created incoming tiles a compositor frame before
+                // they start moving. This removes the blank/blocked first
+                // frames when a workspace switch happens during overview.
+                interval: 8
+                repeat: false
+                onTriggered: {
+                    if (!GlobalStates.overviewOpen || !tRoot.shouldBeActive || tRoot.transitionProgress !== 0.0)
+                        return;
+                    if (!tRoot.incomingCapturesReady && ++tRoot.slideWaitTicks < tRoot.maxSlideWaitTicks) {
+                        restart();
+                        return;
+                    }
+                    tRoot.slideAnimEnabled = true;
+                    tRoot.transitionProgress = 1.0;
+                }
+            }
 
             Behavior on transitionProgress {
                 enabled: tRoot.slideAnimEnabled
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                // GNOME's workspace motion accelerates into the handoff and
+                // settles at the destination instead of using the generic
+                // spatial curve that made the two captures feel detached.
+                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
             }
 
             onTransitionProgressChanged: {
@@ -297,8 +443,26 @@ Scope {
             }
 
             onActiveWsIdChanged: {
+                if (activeWsId <= 0) {
+                    // Hyprland can briefly report no active workspace while
+                    // settling a switch. Keep the last valid outgoing set and
+                    // let the next real id drive the slide; clearing it here
+                    // exposed the wallpaper for a frame and forced a jump.
+                    return
+                }
+                if (displayedWsId <= 0) {
+                    // Recovering from that same transient monitor state is a
+                    // resync, not a visible workspace navigation.
+                    displayedWsId = activeWsId
+                    outgoingToplevels = []
+                    slideAnimEnabled = false
+                    slideStartTimer.stop()
+                    transitionProgress = 1.0
+                    return
+                }
                 if (!GlobalStates.overviewOpen) {
                     // Not in overview — just sync, no animation needed
+                    slideStartTimer.stop()
                     displayedWsId = activeWsId
                     outgoingToplevels = []
                     return
@@ -314,15 +478,15 @@ Scope {
                 slideAnimEnabled = false
                 transitionDirection = direction
                 transitionProgress = 0.0
+                slideWaitTicks = 0
+                incomingModelReady = false
 
                 // 3. Switch model to the new workspace (so frozenToplevels updates)
                 displayedWsId = activeWsId
 
-                // 4. Start the smooth transition one frame later
-                Qt.callLater(() => {
-                    slideAnimEnabled = true
-                    transitionProgress = 1.0
-                })
+                // 4. Start only after the incoming capture has had time to
+                // submit its first frame to the compositor.
+                slideStartTimer.restart()
             }
 
             // ── Overview open/close reactions ───────────────────────────────
@@ -343,11 +507,16 @@ Scope {
                         }
                         // Reset slide to center on fresh open
                         tRoot.slideAnimEnabled = false
+                        slideStartTimer.stop()
                         tRoot.transitionDirection = 1
                         tRoot.transitionProgress = 1.0
+                        tRoot.slideWaitTicks = 0
+                        tRoot.incomingModelReady = true
                         tRoot.outgoingToplevels = []
                         tRoot.displayedWsId = tRoot.activeWsId
+                        Qt.callLater(tRoot.scheduleToplevelUpdate)
                     } else {
+                        slideStartTimer.stop()
                         if (tRoot.isGnomeLike) {
                             openDelayTimer.stop();
                             tRoot.exitAnimating = true;
@@ -366,6 +535,7 @@ Scope {
                         openDelayTimer.stop();
                         restoreWindowsTimer.stop();
                         exitAnimTimer.stop();
+                        slideStartTimer.stop();
                         tRoot.exitAnimating = false;
                         tRoot.isOverviewActive = false;
                         if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
@@ -385,10 +555,9 @@ Scope {
                 // Window captures are already positioned within screen bounds
                 // clip: true
 
-                // The Overview surface is transparent. Keep real windows from
-                // showing through for presets that use a backdrop. Gnome
-                // restores its original handoff by hiding real windows after
-                // the first capture frame.
+                // The Overview surface is transparent. The GNOME handoff hides
+                // real clients after the individual Toplevel captures are
+                // ready, keeping the transition layer gap-free.
                 Rectangle {
                     id: backdropFallback
                     anchors.fill: parent
@@ -424,11 +593,16 @@ Scope {
                     width: parent.width
                     height: parent.height
                     
-                    x: !tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * (tRoot.width * 0.5) : 0
-                    y: tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * (tRoot.height * 0.5) : 0
-                    opacity: (1.0 - tRoot.transitionProgress) * tRoot.captureOpacity
-                    scale: 1.0 - (0.07 * tRoot.transitionProgress)
-                    visible: opacity > 0.0
+                    x: !tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * tRoot.workspaceSlideDistance : 0
+                    y: tRoot.isVertical ? -tRoot.transitionDirection * tRoot.transitionProgress * tRoot.workspaceSlideDistance : 0
+                    // Workspace changes are a spatial handoff. Keep both
+                    // captures opaque so the wallpaper never shows through a
+                    // cross-fade while the incoming frame is settling.
+                    opacity: tRoot.captureOpacity
+                    scale: 1.0 - (0.02 * tRoot.transitionProgress)
+                    visible: tRoot.shouldBeActive
+                        && tRoot.transitionProgress < 1.0
+                        && outgoingRepeater.count > 0
 
                     // Apply the same scale transform as the wallpaper
                     transform: [
@@ -445,6 +619,7 @@ Scope {
                     ]
 
                     Repeater {
+                        id: outgoingRepeater
                         model: ScriptModel {
                             values: tRoot.outgoingToplevels
                         }
@@ -454,9 +629,10 @@ Scope {
                             required property int index
 
                             toplevel: modelData
-                            monitorData: HyprlandData.monitors.find(m => m.id === tRoot.monitor?.id)
+                            monitorData: tRoot.monitorData
                             screenWidth: tRoot.screen.width
                             screenHeight: tRoot.screen.height
+                            freezeGeometry: true
                         }
                     }
                 }
@@ -467,10 +643,11 @@ Scope {
                     width: parent.width
                     height: parent.height
 
-                    x: !tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * (tRoot.width * 0.5) : 0
-                    y: tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * (tRoot.height * 0.5) : 0
-                    opacity: tRoot.transitionProgress * tRoot.captureOpacity
-                    scale: 0.95 + (0.05 * tRoot.transitionProgress)
+                    x: !tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * tRoot.workspaceSlideDistance : 0
+                    y: tRoot.isVertical ? tRoot.transitionDirection * (1.0 - tRoot.transitionProgress) * tRoot.workspaceSlideDistance : 0
+                    opacity: tRoot.captureOpacity
+                    scale: 0.98 + (0.02 * tRoot.transitionProgress)
+                    visible: tRoot.shouldBeActive && incomingRepeater.count > 0
 
                     // Apply the same scale transform as the wallpaper
                     transform: [
@@ -487,6 +664,7 @@ Scope {
                     ]
 
                     Repeater {
+                        id: incomingRepeater
                         model: ScriptModel {
                             values: tRoot.frozenToplevels
                         }
@@ -496,9 +674,10 @@ Scope {
                             required property int index
 
                             toplevel: modelData
-                            monitorData: HyprlandData.monitors.find(m => m.id === tRoot.monitor?.id)
+                            monitorData: tRoot.monitorData
                             screenWidth: tRoot.screen.width
                             screenHeight: tRoot.screen.height
+                            freezeGeometry: false
                         }
                     }
                 }
@@ -514,33 +693,28 @@ Scope {
         required property var monitorData
         required property int screenWidth
         required property int screenHeight
+        property bool freezeGeometry: false
 
-        readonly property string address: `0x${toplevel.HyprlandToplevel?.address}`
+        readonly property string address: tRoot.normalizedAddress(toplevel?.HyprlandToplevel?.address)
         property var windowData: null
+        // Depend on the monitor-level revision instead of installing one
+        // HyprlandData connection per tile. The revision changes once after
+        // the coalesced list refresh above.
+        readonly property int dataRevision: tRoot.windowDataRevision
+        readonly property bool captureReady: tile.windowData !== null
+            && (!tile.visible || capture.hasContent)
 
         function updateWindowData() {
+            if (tile.freezeGeometry && tile.windowData)
+                return;
             if (!tRoot.exitAnimating) {
-                windowData = HyprlandData.windowByAddress[address] || null;
+                windowData = tRoot.clientForToplevel(tile.toplevel);
             }
         }
 
         onAddressChanged: updateWindowData()
-
-        Connections {
-            target: HyprlandData
-            ignoreUnknownSignals: true
-            function onWindowByAddressChanged() {
-                tile.updateWindowData();
-            }
-        }
-
-        Connections {
-            target: tRoot
-            ignoreUnknownSignals: true
-            function onExitAnimatingChanged() {
-                tile.updateWindowData();
-            }
-        }
+        onDataRevisionChanged: updateWindowData()
+        Component.onCompleted: updateWindowData()
 
         // Position and size from hyprland window data (screen-relative coordinates)
         readonly property int monitorOffsetX: monitorData?.x ?? 0
@@ -580,7 +754,6 @@ Scope {
             id: capture
             anchors.fill: parent
             captureSource: tile.visible ? tile.toplevel : null
-            // Performance: live false to avoid continuous screencopy overhead
             live: Config.options.background.windowZoomLiveCapture
             paintCursor: false
             opacity: 1.0

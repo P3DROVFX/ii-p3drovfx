@@ -24,7 +24,13 @@ Item {
 
     readonly property bool barVertical: BarPlacement.vertical
     readonly property bool barBottom: BarPlacement.bottom
-    readonly property real barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
+    // Match the space reserver used by BarWindow.  `barHeight` includes both
+    // floating-bar gaps, while the compositor reserves only one outer gap;
+    // using the former moved the overview's scale origin away from the actual
+    // usable viewport whenever the horizontal bar was at the top or bottom.
+    readonly property real barSize: barVertical
+        ? Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+        : Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
     readonly property real gap: Appearance.gapsOut
 
     readonly property real padLeft: barVertical && !barBottom ? barSize : gap
