@@ -1498,13 +1498,21 @@ Item {
                             width: parent.width
                             spacing: 12
 
-                            SportsEventDetails {
+                            // Built only when an actual sports event is shown.
+                            // SportsEventDetails is ~900 lines; with sports off
+                            // (or any non-sport event) it used to sit here fully
+                            // instantiated but invisible. Loader keeps it out of
+                            // memory until root.sportsEvent is true.
+                            Loader {
                                 Layout.fillWidth: true
-                                visible: root.sportsEvent
-                                game: root.sportsGame
-                                details: root.sportsDetails
-                                loading: root.sportsDetailsLoading
-                                error: root.sportsDetailsError
+                                active: root.sportsEvent
+                                visible: active
+                                sourceComponent: SportsEventDetails {
+                                    game: root.sportsGame
+                                    details: root.sportsDetails
+                                    loading: root.sportsDetailsLoading
+                                    error: root.sportsDetailsError
+                                }
                             }
 
                             ColumnLayout {
