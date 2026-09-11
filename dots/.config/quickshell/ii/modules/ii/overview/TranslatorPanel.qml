@@ -12,6 +12,9 @@ import Quickshell.Io
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 860
@@ -629,7 +632,12 @@ Item {
                             visible: root.secondTranslatedText.length > 0
                             
                             opacity: visible ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Behavior on opacity {
+                        enabled: !root.animationsDisabled
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
 
                             radius: Appearance.rounding.large
                             color: Qt.darker(colResultBox, 1.8)
@@ -672,7 +680,12 @@ Item {
                                 opacity: transliterationBubble.hovered ? 1.0 : 0.0
                                 visible: opacity > 0.01
                                 colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                Behavior on opacity {
+                        enabled: !root.animationsDisabled
+                        NumberAnimation {
+                            duration: 150
+                        }
+                    }
 
                                 contentItem: Item {
                                     anchors.fill: parent

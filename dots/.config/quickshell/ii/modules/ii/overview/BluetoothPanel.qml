@@ -15,6 +15,9 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 860
@@ -486,7 +489,7 @@ Item {
                                     to: 360
                                     duration: 1200
                                     loops: Animation.Infinite
-                                    running: root.isScanning
+                                    running: root.isScanning && !root.animationsDisabled
                                 }
                             }
 
@@ -536,6 +539,7 @@ Item {
                                 radius: 10
                                 color: root.btEnabled ? ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary) : ((root.selectedIndex === -2 || powerBtn.hovered) ? Appearance.colors.colSurfaceContainerHighest : Appearance.colors.colSurfaceContainerHigh)
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: 200
                                     }
@@ -552,12 +556,14 @@ Item {
                                     x: root.btEnabled ? 22 : 2
 
                                     Behavior on x {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation {
                                             duration: 200
                                             easing.type: Easing.OutQuint
                                         }
                                     }
                                     Behavior on color {
+                                        enabled: !root.animationsDisabled
                                         ColorAnimation {
                                             duration: 200
                                         }
@@ -621,7 +627,7 @@ Item {
                                 to: 360
                                 duration: 2000
                                 loops: Animation.Infinite
-                                running: root.isEnabling
+                                running: root.isEnabling && !root.animationsDisabled
                             }
                         }
 
@@ -677,6 +683,7 @@ Item {
                             opacity: 0.8
 
                             SequentialAnimation on scale {
+                                running: !root.animationsDisabled
                                 loops: Animation.Infinite
                                 NumberAnimation {
                                     from: 1.0
@@ -788,6 +795,7 @@ Item {
                         }
 
                         Behavior on contentY {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 id: scrollAnim
                                 alwaysRunToEnd: true
@@ -814,12 +822,14 @@ Item {
                                 property color bottomFadeColor: !deviceListView.atYEnd ? "transparent" : "white"
 
                                 Behavior on topFadeColor {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: 200
                                         easing.type: Easing.OutQuad
                                     }
                                 }
                                 Behavior on bottomFadeColor {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: 200
                                         easing.type: Easing.OutQuad
@@ -903,7 +913,7 @@ Item {
                                     opacity: hasData ? 1.0 : 0.0
 
                                     Behavior on y {
-                                        enabled: slotDelegate.positionAnimationEnabled
+                                        enabled: slotDelegate.positionAnimationEnabled && !root.animationsDisabled
                                         NumberAnimation {
                                             duration: 220
                                             easing.type: Easing.BezierSpline
@@ -912,6 +922,7 @@ Item {
                                     }
 
                                     Behavior on height {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation {
                                             duration: 180
                                             easing.type: Easing.BezierSpline
@@ -920,6 +931,7 @@ Item {
                                     }
 
                                     Behavior on opacity {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation {
                                             duration: 180
                                             easing.type: Easing.BezierSpline
@@ -952,7 +964,7 @@ Item {
                                             running: false
 
                                             PauseAnimation {
-                                                duration: Math.max(0, Math.min(6, slotDelegate.currentPosition) * 30)
+                                                duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, slotDelegate.currentPosition) * 30)
                                             }
 
                                             ParallelAnimation {
@@ -960,21 +972,21 @@ Item {
                                                     target: delegateContainer
                                                     property: "opacity"
                                                     to: 1.0
-                                                    duration: 200
+                                                    duration: root.animationsDisabled ? 0 : 200
                                                     easing.type: Easing.OutQuad
                                                 }
                                                 NumberAnimation {
                                                     target: delegateContainer
                                                     property: "scale"
                                                     to: 1.0
-                                                    duration: 250
+                                                    duration: root.animationsDisabled ? 0 : 250
                                                     easing.type: Easing.OutBack
                                                 }
                                                 NumberAnimation {
                                                     target: devSlide
                                                     property: "y"
                                                     to: 0
-                                                    duration: 200
+                                                    duration: root.animationsDisabled ? 0 : 200
                                                     easing.type: Easing.OutQuad
                                                 }
                                             }
@@ -1074,30 +1086,35 @@ Item {
                                                 bottomRightRadius: bottomLeftRadius
 
                                                 Behavior on topLeftRadius {
+                                                    enabled: !root.animationsDisabled
                                                     NumberAnimation {
                                                         duration: 300
                                                         easing.type: Easing.OutQuad
                                                     }
                                                 }
                                                 Behavior on topRightRadius {
+                                                    enabled: !root.animationsDisabled
                                                     NumberAnimation {
                                                         duration: 300
                                                         easing.type: Easing.OutQuad
                                                     }
                                                 }
                                                 Behavior on bottomLeftRadius {
+                                                    enabled: !root.animationsDisabled
                                                     NumberAnimation {
                                                         duration: 300
                                                         easing.type: Easing.OutQuad
                                                     }
                                                 }
                                                 Behavior on bottomRightRadius {
+                                                    enabled: !root.animationsDisabled
                                                     NumberAnimation {
                                                         duration: 300
                                                         easing.type: Easing.OutQuad
                                                     }
                                                 }
                                                 Behavior on color {
+                                                    enabled: !root.animationsDisabled
                                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                                                 }
                                             }
@@ -1143,7 +1160,7 @@ Item {
                                                             to: 360
                                                             duration: 2000
                                                             loops: Animation.Infinite
-                                                            running: iconContainer.isProcessing
+                                                            running: iconContainer.isProcessing && !root.animationsDisabled
                                                         }
                                                     }
                                                 }
@@ -1279,7 +1296,7 @@ Item {
                         NumberAnimation on opacity {
                             from: 0
                             to: 1
-                            duration: 320
+                            duration: root.animationsDisabled ? 0 : 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
@@ -1289,7 +1306,7 @@ Item {
                             running: true
                             from: -8
                             to: 0
-                            duration: 320
+                            duration: root.animationsDisabled ? 0 : 320
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
@@ -1308,6 +1325,7 @@ Item {
                                 color: root.selectedDevice?.connected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
 
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(backdropShape)
                                 }
 
@@ -1556,7 +1574,7 @@ Item {
                                             to: 360
                                             duration: 2000
                                             loops: Animation.Infinite
-                                            running: connectActionBtn.isProcessing
+                                            running: connectActionBtn.isProcessing && !root.animationsDisabled
                                         }
                                     }
 

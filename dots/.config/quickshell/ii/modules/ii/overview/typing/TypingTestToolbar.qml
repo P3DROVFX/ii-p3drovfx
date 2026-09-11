@@ -16,6 +16,9 @@ import qs.services
  */
 Item {
     id: root
+    // Set by the host: the Overview search hands its "no animations"
+    // setting down, while the cheatsheet page leaves the test animated.
+    property bool animationsDisabled: false
 
     required property var engine
     property bool settingsOpen: false
@@ -47,6 +50,7 @@ Item {
     opacity: root.engine?.state === "running" ? 0.4 : 1
 
     Behavior on opacity {
+        enabled: !root.animationsDisabled
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
             easing.type: Appearance.animation.elementMoveFast.type
@@ -73,6 +77,9 @@ Item {
     }
 
     component PillButton: RippleButton {
+        // An inline component cannot see the file root's id; the host
+        // flag is passed in at each use instead.
+        property bool animationsDisabled: false
         id: pillButton
         property string pillIcon: ""
         property string pillLabel: ""
@@ -104,6 +111,7 @@ Item {
                 color: pillButton.contentColor
 
                 Behavior on color {
+                    enabled: !animationsDisabled
                     ColorAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -120,6 +128,7 @@ Item {
                 color: pillButton.contentColor
 
                 Behavior on color {
+                    enabled: !animationsDisabled
                     ColorAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -147,6 +156,8 @@ Item {
             visible: Boolean(root.engine?.hasTarget)
 
             PillButton {
+
+                animationsDisabled: root.animationsDisabled
                 pillIcon: "format_quote"
                 pillLabel: Translation.tr("punctuation")
                 active: Boolean(root.engine?.punctuation)
@@ -154,6 +165,7 @@ Item {
                 onClicked: root.requestTogglePunctuation()
             }
             PillButton {
+                animationsDisabled: root.animationsDisabled
                 pillIcon: "tag"
                 pillLabel: Translation.tr("numbers")
                 active: Boolean(root.engine?.numbers)
@@ -172,6 +184,8 @@ Item {
                 ]
 
                 delegate: PillButton {
+
+                    animationsDisabled: root.animationsDisabled
                     required property var modelData
                     pillIcon: modelData.icon
                     pillLabel: modelData.label
@@ -189,6 +203,8 @@ Item {
             visible: root.engine?.mode === "zen"
 
             PillButton {
+
+                animationsDisabled: root.animationsDisabled
                 pillIcon: "air"
                 pillLabel: Translation.tr("free")
                 active: !root.engine?.zenGuided
@@ -196,6 +212,7 @@ Item {
                 onClicked: root.requestZenGuided(false)
             }
             PillButton {
+                animationsDisabled: root.animationsDisabled
                 pillIcon: "match_case"
                 pillLabel: Translation.tr("guided")
                 active: Boolean(root.engine?.zenGuided)
@@ -212,6 +229,8 @@ Item {
                 model: root.presets
 
                 delegate: PillButton {
+
+                    animationsDisabled: root.animationsDisabled
                     required property int modelData
                     pillLabel: String(modelData)
                     active: root.engine?.mode === "time"
@@ -236,6 +255,8 @@ Item {
                 ]
 
                 delegate: PillButton {
+
+                    animationsDisabled: root.animationsDisabled
                     id: circleButton
                     required property var modelData
 

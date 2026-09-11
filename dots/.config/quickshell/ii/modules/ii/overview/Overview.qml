@@ -102,22 +102,53 @@ Scope {
                          * `id` that is not yet constructed when the binding is first
                          * evaluated records none at all.
                          */
-                        readonly property bool searchPanelOwned: GlobalStates.searchPanelActive
-                            || (searchWidget?.isAiMode ?? false)
-                            || (searchWidget?.isAnySpecialMode ?? false)
+                        function evaluateSearchPanelOwned() {
+                            return GlobalStates.searchPanelActive
+                                || (searchWidget?.isAiMode ?? false)
+                                || (searchWidget?.isAnySpecialMode ?? false);
+                        }
                         /**
                          * Panel ownership plus an ordinary query. Only the panel half
                          * unloads the grid: destroying it for every keystroke would
                          * rebuild every window thumbnail as soon as the query cleared.
                          */
-                        readonly property bool searchSurfaceOwned: root.searchPanelOwned
-                            || GlobalStates.activeSearchQuery !== ""
-                            || LauncherSearch.query !== ""
-                        readonly property bool overviewShouldShow: !root.searchSurfaceOwned
-                            && !GlobalStates.searchOnlyMode
-                            && !GlobalStates.searchCenterMode
-                            && !Config.options.search.suggestions.enable
-                            && (Config?.options.overview.enable ?? true)
+                        function evaluateSearchSurfaceOwned() {
+                            return root.evaluateSearchPanelOwned()
+                                || GlobalStates.activeSearchQuery !== ""
+                                || LauncherSearch.query !== "";
+                        }
+                        /**
+                         * Read this through the function, never through the property,
+                         * from anything that runs inside a change handler.
+                         *
+                         * The properties below are ordinary bindings, so they are
+                         * refreshed by the same change notification that runs the
+                         * handlers calling `syncOverviewReveal()` — and nothing orders
+                         * a binding ahead of a `Connections` slot on the same signal.
+                         * The `||` chain makes the order observable: while a panel owns
+                         * the search the chain short-circuits, drops its dependency on
+                         * `LauncherSearch.query`, and re-registers it behind the slot
+                         * when the panel closes. From then on the handler saw the
+                         * previous value of `overviewShouldShow`: leaving a panel left
+                         * the grid hidden with an empty query, and the next keystroke
+                         * revealed it underneath the results. Recomputing from the
+                         * primitives cannot be stale, whoever calls it.
+                         */
+                        function evaluateOverviewShouldShow() {
+                            return !root.evaluateSearchSurfaceOwned()
+                                && !GlobalStates.searchOnlyMode
+                                && !GlobalStates.searchCenterMode
+                                && !Config.options.search.suggestions.enable
+                                && (Config?.options.overview.enable ?? true);
+                        }
+                        readonly property bool searchPanelOwned: root.evaluateSearchPanelOwned()
+                        readonly property bool searchSurfaceOwned: root.evaluateSearchSurfaceOwned()
+                        readonly property bool overviewShouldShow: root.evaluateOverviewShouldShow()
+                        // Covers every input that has no explicit Connections of its
+                        // own (search-only, centred search, suggestions, the overview
+                        // toggle): the handler of a property always runs after that
+                        // property holds its new value.
+                        onOverviewShouldShowChanged: root.syncOverviewReveal()
                         property real overviewRevealProgress: 1.0
                         property real overviewFadeProgress: 1.0
                         property bool _overviewRevealInitialized: false
@@ -150,7 +181,7 @@ Scope {
                             if (!GlobalStates.overviewOpen)
                                 return;
 
-                            const shouldShow = root.overviewShouldShow;
+                            const shouldShow = root.evaluateOverviewShouldShow();
                             overviewRevealAnim.stop();
 
                             if (!shouldShow) {
@@ -170,7 +201,7 @@ Scope {
                             root.overviewRevealProgress = 0.0;
                             root.overviewFadeProgress = 0.0;
                             Qt.callLater(() => {
-                                if (GlobalStates.overviewOpen && LauncherSearch.query === "" && root.overviewShouldShow)
+                                if (GlobalStates.overviewOpen && root.evaluateOverviewShouldShow())
                                     overviewRevealAnim.start();
                             });
                         }
@@ -217,7 +248,7 @@ Scope {
 
                         Component.onCompleted: {
                             realOverviewLoader.visualActive = true;
-                            root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
+                            root.overviewRevealProgress = root.evaluateOverviewShouldShow() ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
                             root.consumePendingSearchQuery();

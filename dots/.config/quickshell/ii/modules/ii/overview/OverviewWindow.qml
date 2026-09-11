@@ -13,6 +13,9 @@ import Quickshell.Wayland
 
 Item { // Window
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property int windowRounding
     property var toplevel
     property var windowData
@@ -128,19 +131,19 @@ Item { // Window
     }
 
     Behavior on x {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on y {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on width {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on height {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
 
@@ -221,9 +224,11 @@ Item { // Window
                 sourceSize: Qt.size(iconSize + TaskbarApps.iconThemeRevision, iconSize + TaskbarApps.iconThemeRevision)
 
                 Behavior on width {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on height {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
             }

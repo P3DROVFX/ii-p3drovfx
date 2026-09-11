@@ -32,6 +32,9 @@ import Quickshell.Io
  */
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     signal requestBackToSearch()
     signal requestFocusComposer()
@@ -689,6 +692,7 @@ Item {
                     // The latter is an object and cannot be interpolated
                     // reliably, which made the old page transitions snap.
                     Behavior on x {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -698,6 +702,7 @@ Item {
                 }
 
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
@@ -976,6 +981,7 @@ Item {
                     x: root.historyOpen ? 0 : root.pageSlideDistance
 
                     Behavior on x {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -985,6 +991,7 @@ Item {
                 }
 
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(historyView)
                 }
 
@@ -1158,6 +1165,7 @@ Item {
                     x: root.modelsOpen ? 0 : root.pageSlideDistance
 
                     Behavior on x {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -1167,6 +1175,7 @@ Item {
                 }
 
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(modelsView)
                 }
 
@@ -1368,6 +1377,7 @@ Item {
                 x: root.shortcutsOpen ? 0 : root.pageSlideDistance
 
                 Behavior on x {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
@@ -1377,6 +1387,7 @@ Item {
             }
 
             Behavior on opacity {
+                enabled: !root.animationsDisabled
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(shortcutsView)
             }
 
@@ -1466,6 +1477,7 @@ Item {
                 x: root.capabilitiesOpen ? 0 : root.pageSlideDistance
 
                 Behavior on x {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
@@ -1475,6 +1487,7 @@ Item {
             }
 
             Behavior on opacity {
+                enabled: !root.animationsDisabled
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(capabilitiesView)
             }
 

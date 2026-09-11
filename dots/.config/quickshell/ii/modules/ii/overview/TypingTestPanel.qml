@@ -18,6 +18,11 @@ import qs.services
 Item {
     id: root
 
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None. The cheatsheet shows the
+    // same surface and is not covered by it, so the flag is handed down from
+    // here rather than read inside the shared components.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     readonly property int panelWidth: Config.options.search.appearance.panelWidth
     Component.onCompleted: console.log("[PROBE] parentdir TypingLanguages =", typeof TypingLanguages, "TypingSoundPacks =", typeof TypingSoundPacks) // PROBE
 
@@ -45,6 +50,7 @@ Item {
         TypingTestSurface {
             id: surface
             anchors.fill: parent
+            animationsDisabled: root.animationsDisabled
         }
     }
 }

@@ -56,11 +56,13 @@ Singleton {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
-                // Refresh the idle result set explicitly if results are empty
-                if (root.results.length === 0)
-                    root._scheduleResultsUpdate();
+                // `query` is commonly already empty, so opening Search does not
+                // emit onQueryChanged. Refresh the idle result set explicitly;
+                // otherwise it can retain the empty result computed at boot.
+                root._scheduleResultsUpdate();
             } else {
                 root.rememberQuery(root.query);
+                root.query = "";
                 root.selectedResult = null;
             }
         }

@@ -169,6 +169,7 @@ RippleButton {
     implicitWidth: contentRow.implicitWidth + root.buttonHorizontalPadding * 2
 
     Behavior on implicitHeight {
+        enabled: !root.animationsDisabled
         NumberAnimation {
             duration: root.scaledDuration(250)
             easing.type: Easing.BezierSpline
@@ -258,12 +259,14 @@ RippleButton {
         bottomRightRadius: bottomLeftRadius
 
         Behavior on topLeftRadius {
+            enabled: !root.animationsDisabled
             NumberAnimation {
                 duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
             }
         }
         Behavior on bottomLeftRadius {
+            enabled: !root.animationsDisabled
             NumberAnimation {
                 duration: root.scaledDuration(100)
                 easing.type: Easing.OutQuad
@@ -299,7 +302,7 @@ RippleButton {
             }
 
             Behavior on x {
-                enabled: root._animateWidthChange
+                enabled: root._animateWidthChange && !root.animationsDisabled
                 NumberAnimation {
                     duration: root.scaledDuration(250)
                     easing.type: Easing.BezierSpline
@@ -321,7 +324,7 @@ RippleButton {
                 antialiasing: true
 
                 Behavior on width {
-                    enabled: root._animateWidthChange
+                    enabled: root._animateWidthChange && !root.animationsDisabled
                     NumberAnimation {
                         duration: root.scaledDuration(250)
                         easing.type: Easing.BezierSpline
@@ -332,24 +335,28 @@ RippleButton {
                 // Only animate topLeft - the other radii mirror it and
                 // animating all 4 independently costs 4x animation overhead per item
                 Behavior on topLeftRadius {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on topRightRadius {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomLeftRadius {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
                     }
                 }
                 Behavior on bottomRightRadius {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: root.scaledDuration(100)
                         easing.type: Easing.OutQuad
@@ -393,6 +400,7 @@ RippleButton {
                                 shape: MaterialShape.Shape.Cookie7Sided
                                 color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -406,6 +414,7 @@ RippleButton {
                                 implicitSize: 22
                                 smooth: true
                                 Behavior on implicitSize {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: root.scaledDuration(150)
                                     }
@@ -424,6 +433,7 @@ RippleButton {
                             fill: root.isSelected ? 1.0 : 0.0
                             color: root.colForeground
                             Behavior on iconSize {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: root.scaledDuration(150)
                                 }
@@ -466,6 +476,7 @@ RippleButton {
                                 shape: MaterialShape.Shape.Sunny
                                 color: root.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -683,6 +694,7 @@ RippleButton {
                         implicitHeight: 16
                         opacity: shouldShow ? 1.0 : 0.0
                         Behavior on opacity {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 id: indicatorAnim
                                 duration: root.scaledDuration(100)
@@ -744,6 +756,7 @@ RippleButton {
                     visible: root.actionPanelOpen || opacity > 0.0
                     opacity: root.actionPanelOpen ? 1.0 : 0.0
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(250)
                             easing.type: Easing.OutCubic
@@ -751,29 +764,34 @@ RippleButton {
                     }
 
                     Behavior on color {
+                        enabled: !root.animationsDisabled
                         ColorAnimation {
                             duration: root.scaledDuration(80)
                         }
                     }
                     Behavior on topLeftRadius {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on topRightRadius {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomLeftRadius {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomRightRadius {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
@@ -805,6 +823,7 @@ RippleButton {
                                 shape: actionBtn.isBtnActive ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
                                 color: actionBtn.isBtnActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -827,6 +846,7 @@ RippleButton {
                                 fill: actionBtn.isBtnActive ? 1 : 0
                                 color: actionBtn.isBtnActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnSurfaceVariant
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -843,6 +863,7 @@ RippleButton {
                             elide: Text.ElideRight
                             Layout.maximumWidth: 120
                             Behavior on color {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation {
                                     duration: root.scaledDuration(80)
                                 }
@@ -912,7 +933,7 @@ RippleButton {
         running: false
 
         PauseAnimation {
-            duration: Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
+            duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
         }
 
         ParallelAnimation {
@@ -920,7 +941,7 @@ RippleButton {
                 target: root
                 property: "entryOpacity"
                 to: 1.0
-                duration: Appearance.animation.elementMoveFast.duration
+                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
@@ -928,7 +949,7 @@ RippleButton {
                 target: root
                 property: "entryTranslateY"
                 to: 0
-                duration: Appearance.animation.elementMoveFast.duration
+                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }

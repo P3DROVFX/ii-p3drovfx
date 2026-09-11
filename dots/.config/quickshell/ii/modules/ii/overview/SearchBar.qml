@@ -13,6 +13,9 @@ import qs.modules.ii.bar.shared
 
 RowLayout {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     spacing: 6
     property bool animateWidth: false
     property bool clipboardMode: false
@@ -400,7 +403,7 @@ RowLayout {
             : ColorUtils.transparentize(Appearance.colors.colSubtext)
 
         Behavior on placeholderTextColor {
-            enabled: Config.options.overview.animationStyle !== "none"
+            enabled: !root.animationsDisabled
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline
@@ -409,7 +412,7 @@ RowLayout {
         }
 
         Behavior on implicitHeight {
-            enabled: Config.options.overview.animationStyle !== "none"
+            enabled: !root.animationsDisabled
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline

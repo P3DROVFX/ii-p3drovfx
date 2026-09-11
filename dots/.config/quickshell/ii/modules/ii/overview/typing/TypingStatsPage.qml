@@ -18,6 +18,9 @@ import qs.services
  */
 Item {
     id: root
+    // Set by the host: the Overview search hands its "no animations"
+    // setting down, while the cheatsheet page leaves the test animated.
+    property bool animationsDisabled: false
 
     /** Chart and histogram window, in days. 0 means everything stored. */
     property int rangeDays: 0
@@ -596,6 +599,7 @@ Item {
                                         : ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.9)
 
                                     Behavior on Layout.preferredHeight {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation {
                                             duration: Appearance.animation.elementMoveFast.duration
                                             easing.type: Appearance.animation.elementMoveFast.type

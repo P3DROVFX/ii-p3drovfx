@@ -12,6 +12,9 @@ import "filebrowser"
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     property string searchQuery: ""
     property int selectedIndex: -1
@@ -779,7 +782,7 @@ Item {
         property: "opacity"
         from: 0.35
         to: 1.0
-        duration: Appearance.animation.elementMoveFast.duration
+        duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
         easing.type: Appearance.animation.elementMoveFast.type
         easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
     }
@@ -790,7 +793,7 @@ Item {
         property: "directoryRevealProgress"
         from: 0
         to: 1
-        duration: Appearance.animation.elementMoveSmall.duration
+        duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveSmall.duration
         easing.type: Appearance.animation.elementMoveSmall.type
         easing.bezierCurve: Appearance.animation.elementMoveSmall.bezierCurve
     }
@@ -803,7 +806,7 @@ Item {
             property: "actionMenuVisualOpacity"
             from: 0
             to: 1
-            duration: Appearance.animation.elementMoveFast.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
             easing.type: Appearance.animation.elementMoveFast.type
             easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
@@ -812,7 +815,7 @@ Item {
             property: "actionMenuVisualScale"
             from: 0.82
             to: 1
-            duration: Appearance.animation.elementMoveFast.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
             easing.type: Easing.OutBack
             easing.overshoot: 2.2
         }
@@ -821,7 +824,7 @@ Item {
             property: "actionMenuVisualOffset"
             from: Appearance.sizes.elevationMargin * 5
             to: 0
-            duration: Appearance.animation.elementMoveFast.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
             easing.type: Easing.OutBack
             easing.overshoot: 2.5
         }
@@ -834,7 +837,7 @@ Item {
             target: root
             property: "actionMenuVisualOpacity"
             to: 0
-            duration: Appearance.animation.elementMoveExit.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveExit.duration
             easing.type: Appearance.animation.elementMoveExit.type
             easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
         }
@@ -842,7 +845,7 @@ Item {
             target: root
             property: "actionMenuVisualScale"
             to: 0.94
-            duration: Appearance.animation.elementMoveExit.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveExit.duration
             easing.type: Appearance.animation.elementMoveExit.type
             easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
         }
@@ -850,7 +853,7 @@ Item {
             target: root
             property: "actionMenuVisualOffset"
             to: Appearance.sizes.elevationMargin * 2
-            duration: Appearance.animation.elementMoveExit.duration
+            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveExit.duration
             easing.type: Appearance.animation.elementMoveExit.type
             easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
         }
@@ -1182,7 +1185,7 @@ Item {
                                     }
                                 }
 
-                                add: (Config.options.overview.animationStyle === "none") ? null : fileListAddTransition
+                                add: root.animationsDisabled ? null : fileListAddTransition
 
                                 ScrollEdgeFade {
                                     target: fileList
@@ -1388,6 +1391,7 @@ Item {
                     }
 
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -1505,6 +1509,7 @@ Item {
                     transformOrigin: Item.Center
 
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.editorMode.length > 0
                                 ? Appearance.animation.elementMoveEnter.duration
@@ -1519,6 +1524,7 @@ Item {
                     }
 
                     Behavior on scale {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.editorMode.length > 0
                                 ? Appearance.animation.elementResize.duration
@@ -1575,6 +1581,7 @@ Item {
                     transform: Translate {
                         y: root.confirmTrash ? 0 : Appearance.sizes.elevationMargin * 2
                         Behavior on y {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: root.confirmTrash
                                     ? Appearance.animation.elementMoveEnter.duration
@@ -1590,6 +1597,7 @@ Item {
                     }
 
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.confirmTrash
                                 ? Appearance.animation.elementMoveEnter.duration

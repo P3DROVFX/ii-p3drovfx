@@ -13,9 +13,12 @@ import Quickshell.Hyprland
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property bool hyprscrollingEnabled: false //FIXME
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
-    readonly property bool enableCascade: (Config.options.overview.animationStyle !== "none") && (Config.options.overview.enableCascadeAnimation ?? true)
+    readonly property bool enableCascade: !root.animationsDisabled && (Config.options.overview.enableCascadeAnimation ?? true)
     readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
     // One clock drives both the workspace cells and their window previews.
     // The previous implementation created a timer, animation and two signal
@@ -198,6 +201,7 @@ Item {
     implicitHeight: overviewBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
 
     Behavior on workspaceImplicitWidth {
+        enabled: !root.animationsDisabled
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
@@ -539,9 +543,11 @@ Item {
                             bottomLeftRadius: window.topLeftRadius
 
                             Behavior on x {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                             Behavior on opacity {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                         }
@@ -707,27 +713,35 @@ Item {
                 border.width: 2
                 border.color: root.activeBorderColor
                 Behavior on x {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on y {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on width {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on height {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on topLeftRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on topRightRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomLeftRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomRightRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
             }

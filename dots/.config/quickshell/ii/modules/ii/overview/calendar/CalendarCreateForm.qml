@@ -8,6 +8,9 @@ import qs.services
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     property date initialDate: new Date()
     property int defaultDurationMinutes: 30
@@ -131,10 +134,16 @@ Item {
                 : Appearance.colors.colSurfaceContainerHigh
 
         Behavior on radius {
+            // An inline component cannot see the file root's id, so the switch is
+            // read from the config here instead of through `animationsDisabled`.
+            enabled: Config.options.overview.animationStyle !== "none"
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
         Behavior on color {
+            // An inline component cannot see the file root's id, so the switch is
+            // read from the config here instead of through `animationsDisabled`.
+            enabled: Config.options.overview.animationStyle !== "none"
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 

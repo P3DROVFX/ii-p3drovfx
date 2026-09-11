@@ -37,6 +37,9 @@ import Quickshell.Hyprland
 
 Scope {
     id: transitionScope
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     readonly property bool featureEnabled:
         Config.options.background.zoomOutEnabled &&
@@ -474,7 +477,7 @@ Scope {
             }
 
             Behavior on transitionProgress {
-                enabled: tRoot.slideAnimEnabled
+                enabled: tRoot.slideAnimEnabled && !transitionScope.animationsDisabled
                 // GNOME's workspace motion accelerates into the handoff and
                 // settles at the destination instead of using the generic
                 // spatial curve that made the two captures feel detached.

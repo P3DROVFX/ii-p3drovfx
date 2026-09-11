@@ -15,6 +15,9 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
     property string clipboardPrefix: Config.options.search.prefix.clipboard
 
@@ -499,9 +502,11 @@ Item {
                             property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
 
                             Behavior on topFadeColor {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
                             Behavior on bottomFadeColor {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
 
@@ -568,7 +573,7 @@ Item {
                     }
 
                     Behavior on contentY {
-                        enabled: Config.options.overview.animationStyle !== "none"
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             id: scrollAnim
                             alwaysRunToEnd: true
@@ -618,7 +623,7 @@ Item {
                             running: false
 
                             PauseAnimation {
-                                duration: Math.max(0, Math.min(6, entryDelegate.index) * 30)
+                                duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, entryDelegate.index) * 30)
                             }
 
                             ParallelAnimation {
@@ -626,21 +631,21 @@ Item {
                                     target: entryDelegate
                                     property: "opacity"
                                     to: 1.0
-                                    duration: 200
+                                    duration: root.animationsDisabled ? 0 : 200
                                     easing.type: Easing.OutQuad
                                 }
                                 NumberAnimation {
                                     target: entryDelegate
                                     property: "scale"
                                     to: 1.0
-                                    duration: 250
+                                    duration: root.animationsDisabled ? 0 : 250
                                     easing.type: Easing.OutBack
                                 }
                                 NumberAnimation {
                                     target: entrySlide
                                     property: "y"
                                     to: 0
-                                    duration: 200
+                                    duration: root.animationsDisabled ? 0 : 200
                                     easing.type: Easing.OutQuad
                                 }
                             }
@@ -667,30 +672,35 @@ Item {
                             bottomRightRadius: bottomLeftRadius
 
                             Behavior on topLeftRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on topRightRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomLeftRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomRightRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on color {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
                         }
@@ -896,9 +906,9 @@ Item {
                         }
                     }
 
-                    displaced: (Config.options.overview.animationStyle === "none") ? null : clipDisplacedTransition
-                    add: (Config.options.overview.animationStyle === "none") ? null : clipAddTransition
-                    remove: (Config.options.overview.animationStyle === "none") ? null : clipRemoveTransition
+                    displaced: root.animationsDisabled ? null : clipDisplacedTransition
+                    add: root.animationsDisabled ? null : clipAddTransition
+                    remove: root.animationsDisabled ? null : clipRemoveTransition
                 }
             }
         }
@@ -927,7 +937,7 @@ Item {
                         property: "opacity"
                         from: 0
                         to: 1
-                        duration: 300
+                        duration: root.animationsDisabled ? 0 : 300
                         easing.type: Easing.OutCubic
                     }
                     NumberAnimation {
@@ -935,7 +945,7 @@ Item {
                         property: "x"
                         from: 20
                         to: 0
-                        duration: 300
+                        duration: root.animationsDisabled ? 0 : 300
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -1107,6 +1117,7 @@ Item {
                     rowSpacing: 4
                     opacity: 0
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: 100
                             easing.type: Easing.OutQuad
@@ -1255,6 +1266,7 @@ Item {
                                 color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                                 scale: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1299,6 +1311,7 @@ Item {
                                 color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1362,6 +1375,7 @@ Item {
                                 color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1419,6 +1433,7 @@ Item {
                             color: root.selectedIsPinned ? Appearance.colors.colPrimary : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                             scale: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.08 : 1.0
                             Behavior on scale {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad
@@ -1453,6 +1468,7 @@ Item {
                             color: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                             scale: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.08 : 1.0
                             Behavior on scale {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad

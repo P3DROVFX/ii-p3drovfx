@@ -1801,7 +1801,7 @@ Item {
                             }
 
                             Behavior on topFadeColor {
-                                enabled: !root.inNotchMode
+                                enabled: !root.inNotchMode && !root.animationsDisabled
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.BezierSpline
@@ -1809,7 +1809,7 @@ Item {
                                 }
                             }
                             Behavior on bottomFadeColor {
-                                enabled: !root.inNotchMode
+                                enabled: !root.inNotchMode && !root.animationsDisabled
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.BezierSpline

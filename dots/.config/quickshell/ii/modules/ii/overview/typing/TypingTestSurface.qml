@@ -20,6 +20,9 @@ import qs.services
  */
 Item {
     id: root
+    // Set by the host: the Overview search hands its "no animations"
+    // setting down, while the cheatsheet page leaves the test animated.
+    property bool animationsDisabled: false
 
     readonly property var options: Config.options.search.typingTest
     /** test, settings, history or stats. */
@@ -312,6 +315,7 @@ Item {
             spacing: 0
 
             TypingTestToolbar {
+                animationsDisabled: root.animationsDisabled
                 id: testToolbar
                 Layout.fillWidth: true
                 engine: engine
@@ -419,6 +423,7 @@ Item {
                     }
 
                     TypingWordViewport {
+                        animationsDisabled: root.animationsDisabled
                         id: viewport
                         Layout.fillWidth: true
                         Layout.preferredHeight: implicitHeight
@@ -510,6 +515,7 @@ Item {
                 onClicked: root.restart(false)
 
                 Behavior on implicitWidth {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -600,7 +606,9 @@ Item {
                 Layout.fillHeight: true
                 active: root.page === "stats"
                 visible: active
-                sourceComponent: TypingStatsPage {}
+                sourceComponent: TypingStatsPage {
+                    animationsDisabled: root.animationsDisabled
+                }
             }
         }
 
