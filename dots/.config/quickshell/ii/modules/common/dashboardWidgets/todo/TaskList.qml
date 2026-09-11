@@ -46,8 +46,7 @@ Item {
             transform: Translate { y: todoItem._entranceDone ? 0 : todoItem._entranceOffset }
 
             function finishEntrance() {
-                if (entranceController.item)
-                    entranceController.item.stop();
+                entranceStarter.stop();
                 _entranceDone = true;
                 _entranceOpacity = 1;
                 _entranceOffset = 0;
@@ -61,10 +60,7 @@ Item {
                 _entranceDone = false;
                 _entranceOpacity = 0;
                 _entranceOffset = 20;
-                Qt.callLater(function() {
-                    if (taskListRoot.entranceAnimationsEnabled && entranceController.item)
-                        entranceController.item.restart();
-                });
+                entranceStarter.requestStart();
             }
 
             Component.onCompleted: startEntrance()
@@ -97,6 +93,12 @@ Item {
                         ScriptAction { script: todoItem._entranceDone = true }
                     }
                 }
+            }
+
+            DeferredAnimationStarter {
+                id: entranceStarter
+                controller: entranceController
+                enabled: taskListRoot.entranceAnimationsEnabled
             }
 
             property bool _optimisticDone: modelData.done

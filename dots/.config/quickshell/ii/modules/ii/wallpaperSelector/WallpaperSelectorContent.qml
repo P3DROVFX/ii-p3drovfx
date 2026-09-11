@@ -1384,7 +1384,6 @@ function moveToTrashFile(modelData) {
 
                     ImageOptionsToolbar {
                         z: 20
-                        colBackground: Appearance.colors.colPrimary
                         anchors {
                             bottom: parent.bottom
                             bottomMargin: 8

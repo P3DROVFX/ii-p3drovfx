@@ -43,8 +43,7 @@ Item {
     }
 
     function finishEntrance() {
-        if (entranceController.item)
-            entranceController.item.stop();
+        entranceStarter.stop();
         root.opacity = 1;
         contentTranslate.y = 0;
     }
@@ -56,10 +55,7 @@ Item {
         }
         root.opacity = 0;
         contentTranslate.y = 20;
-        Qt.callLater(function () {
-            if (root.entranceAnimationsEnabled && entranceController.item)
-                entranceController.item.restart();
-        });
+        entranceStarter.requestStart();
     }
 
     onEntranceTriggerChanged: beginEntrance()
@@ -81,6 +77,12 @@ Item {
                 }
             }
         }
+    }
+
+    DeferredAnimationStarter {
+        id: entranceStarter
+        controller: entranceController
+        enabled: root.entranceAnimationsEnabled
     }
 
     ColumnLayout {

@@ -60,8 +60,7 @@ Item {
     }
 
     function finishEntrance() {
-        if (entranceController.item)
-            entranceController.item.stop();
+        entranceStarter.stop();
         _entranceDone = true;
         _entranceScale = 1;
         statusRow.finishEntrance();
@@ -75,10 +74,7 @@ Item {
         _entranceDone = false;
         _entranceScale = 0.94;
         statusRow.resetEntrance();
-        Qt.callLater(function() {
-            if (root.entranceAnimationsEnabled && entranceController.item)
-                entranceController.item.restart();
-        });
+        entranceStarter.requestStart();
     }
 
     onEntranceTriggerChanged: startEntrance()
@@ -111,6 +107,12 @@ Item {
                 }
             }
         }
+    }
+
+    DeferredAnimationStarter {
+        id: entranceStarter
+        controller: entranceController
+        enabled: root.entranceAnimationsEnabled
     }
 
     Timer {

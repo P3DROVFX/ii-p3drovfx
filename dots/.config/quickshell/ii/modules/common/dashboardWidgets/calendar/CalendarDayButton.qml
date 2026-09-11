@@ -36,8 +36,7 @@ RippleButton {
     }
 
     function finishEntrance() {
-        if (entranceController.item)
-            entranceController.item.stop();
+        entranceStarter.stop();
         _entranceDone = true;
         _entranceOpacity = 1;
         _entranceScale = 1;
@@ -57,15 +56,15 @@ RippleButton {
         _entranceTranslateX = -15;
         _entranceTranslateY = -10;
         _taskDotScale = 0;
-        Qt.callLater(function() {
-            if (button.entranceAnimationsEnabled && entranceController.item)
-                entranceController.item.restart();
-        });
+        entranceStarter.requestStart();
     }
 
     onEntranceKeyChanged: resetAndAnimate()
     onEntranceAnimationsEnabledChanged: entranceAnimationsEnabled ? resetAndAnimate() : finishEntrance()
-    Component.onCompleted: finishEntrance()
+    // A day delegate can be incubated after CalendarWidget has already issued
+    // an entrance key. Re-run the setup here so the completion hook does not
+    // cancel the request made while the delegate was being constructed.
+    Component.onCompleted: entranceKey > 0 ? resetAndAnimate() : finishEntrance()
 
     Loader {
         id: entranceController
@@ -89,6 +88,12 @@ RippleButton {
                 SidebarGroupAnimation { target: button; property: "_taskDotScale"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
             }
         }
+    }
+
+    DeferredAnimationStarter {
+        id: entranceStarter
+        controller: entranceController
+        enabled: button.entranceAnimationsEnabled
     }
 
     Layout.fillWidth: false

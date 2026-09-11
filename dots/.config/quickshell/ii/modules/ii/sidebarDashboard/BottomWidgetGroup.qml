@@ -293,8 +293,7 @@ Rectangle {
                         opacity: _navBtnDone ? 1 : _navBtnOpacity
 
                         function finishEntrance() {
-                            if (navEntranceController.item)
-                                navEntranceController.item.stop();
+                            navEntranceStarter.stop();
                             _navBtnDone = true;
                             _navBtnScale = 1;
                             _navBtnOpacity = 1;
@@ -308,13 +307,11 @@ Rectangle {
                             _navBtnDone = false;
                             _navBtnScale = 0.75;
                             _navBtnOpacity = 0;
-                            Qt.callLater(function() {
-                                if (root.entranceAnimationsEnabled && navEntranceController.item)
-                                    navEntranceController.item.restart();
-                            });
+                            navEntranceStarter.requestStart();
                         }
 
-                        Component.onCompleted: finishEntrance()
+                        Component.onCompleted: root.contentEntranceTrigger >= 0
+                            ? startEntrance() : finishEntrance()
 
                         Connections {
                             target: root
@@ -344,6 +341,12 @@ Rectangle {
                                     ScriptAction { script: navButton._navBtnDone = true }
                                 }
                             }
+                        }
+
+                        DeferredAnimationStarter {
+                            id: navEntranceStarter
+                            controller: navEntranceController
+                            enabled: root.entranceAnimationsEnabled
                         }
 
                     }

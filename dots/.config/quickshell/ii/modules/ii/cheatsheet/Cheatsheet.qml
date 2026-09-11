@@ -216,6 +216,13 @@ Scope {
             function hide() {
                 root.requestClose();
             }
+            // The toolbar highlights selectedTab while the SwipeView shows
+            // currentIndex; any drift between them (count clamping during
+            // asynchronous incubation, the dead initial currentIndex binding
+            // while children insert) renders an inactive zero-sized delegate
+            // and the page looks empty with the tab still highlighted. Re-assert
+            // the saved selection on every open so a cold cache cannot persist
+            // the desync across openings.
             exclusiveZone: 0
             implicitWidth: cheatsheetBackground.width + Appearance.sizes.elevationMargin * 2
             implicitHeight: cheatsheetBackground.height + Appearance.sizes.elevationMargin * 2
@@ -239,6 +246,7 @@ Scope {
 
             onVisibleChanged: {
                 if (visible) {
+                    Qt.callLater(swipeView.restoreSelection);
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
                     animInTimer.restart();
