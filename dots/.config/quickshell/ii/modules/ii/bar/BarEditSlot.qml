@@ -94,7 +94,10 @@ Item {
     EditRemoveBadge {
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.margins: -3
+        // Keep the action inside the widget bounds.  The previous negative
+        // margin placed half of the badge in the bar's clipping edge, so the
+        // top-bar and right-bar layouts could cut it against the wallpaper.
+        anchors.margins: Appearance.sizes.editModeEdgeMargin / 4
         visible: !root.dragging
         onClicked: root.controller?.removeSlot(root)
     }

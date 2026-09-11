@@ -896,7 +896,6 @@ PanelWindow {
         anchors.fill: parent
         card: Qt.rect(root.cardGeometry.x, root.cardGeometry.y, root.cardGeometry.width, root.cardGeometry.height)
         area: Qt.rect(root.areaGeometry.x, root.areaGeometry.y, root.areaGeometry.width, root.areaGeometry.height)
-        bandFraction: EditModeLogic.chromeBandFraction(root.viewport)
         // The second stand-down gate, the loader that creates this window
         // being the first. Either alone hides the chrome; both are kept so a
         // lost gate is not a lost chrome.

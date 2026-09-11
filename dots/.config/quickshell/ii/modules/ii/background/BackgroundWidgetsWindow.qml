@@ -504,6 +504,7 @@ PanelWindow {
             id: lockPreview
             anchors.fill: parent
             z: 5
+            asynchronous: true
             // Kept alive by the tab's SCALAR, not by its boolean: the surface
             // fades in over the desktop and has to outlive the flip back long
             // enough to fade out again. Built on the boolean alone, it
@@ -511,8 +512,14 @@ PanelWindow {
             // that had no motion, while the widgets and the wallpaper's own
             // treatments were already cross-fading around it.
             opacity: GlobalStates.editTabProgress
-            active: GlobalStates.editTabProgress > 0.001 && bgWidgetsWindow.isTargetMonitor
+            // Build the preview while Edit Mode is already open, instead of
+            // constructing the complete lock surface on the first tab click.
+            // It stays out of the scene while the desktop tab is active, so
+            // preloading does not add another full-screen composition pass.
+            active: (GlobalStates.editMode || GlobalStates.editTabProgress > 0.001)
+                && bgWidgetsWindow.isTargetMonitor
                 && GlobalStates.editModeMonitor === (bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+            visible: status === Loader.Ready && opacity > 0.001
             sourceComponent: LockSurface {
                 interactive: false
                 context: LockPreviewContext {}
@@ -521,6 +528,17 @@ PanelWindow {
 
         WidgetCanvas {
             id: widgetCanvas
+            // Cross-fade the two faces from the same scalar.  Hiding the
+            // desktop once the lock preview is settled avoids rendering a
+            // complete widget canvas underneath an opaque lock surface, while
+            // the threshold leaves a clean hand-off in both directions.
+            // Keep the desktop visible at full opacity until an asynchronous
+            // lock preview has a real frame.  Otherwise a slow first load can
+            // reach progress 1 with both faces hidden for a frame.
+            opacity: lockPreview.status === Loader.Ready
+                ? 1.0 - GlobalStates.editTabProgress : 1.0
+            visible: GlobalStates.editTabProgress < 0.999
+                || lockPreview.status !== Loader.Ready
             layer.enabled: false
             antialiasing: true
             smooth: true

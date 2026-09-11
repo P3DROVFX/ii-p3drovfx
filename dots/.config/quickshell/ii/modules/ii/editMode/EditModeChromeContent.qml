@@ -32,16 +32,35 @@ Item {
     // arbitrary.
     property rect card: Qt.rect(0, 0, root.width, root.height)
     // The screen minus what the bar and the dock occupy, interpolated on the
-    // same progress as `card`: the band the toolbar sits in is the gap between
-    // the two rectangles, so a bar of any height pushes the chrome rather than
-    // being drawn over by it.
+    // same progress as `card`. The toolbar clamps itself to this area and to
+    // the card's top edge.
     property rect area: Qt.rect(0, 0, root.width, root.height)
-    // Where in its band the toolbar sits, as a fraction of the band's slack
-    // (edit_mode.js's chromeBandFraction): the tight gap on the outside, the
-    // generous one between it and the desktop. A fraction rather than a pixel
-    // offset because the band has no height at progress 0 and the piece has to
-    // be parked off the edge there.
-    property real bandFraction: 0.5
+    // The toolbar belongs to the card, not to the empty band above it.  Keep a
+    // small clearance from the usable edge and from the drawer when a narrow
+    // monitor leaves very little room for the chrome.
+    readonly property real toolbarGap: Math.max(4, Math.min(
+        Appearance.sizes.editModeEdgeMargin,
+        Appearance.rounding.small))
+    readonly property real toolbarLeftLimit: root.area.x + root.toolbarGap
+    readonly property real toolbarRightLimit: Math.max(root.toolbarLeftLimit,
+        (root.drawer.width > 0 ? root.drawer.x : root.area.x + root.area.width)
+        - root.toolbarGap)
+    readonly property real toolbarAvailableWidth: Math.max(1,
+        root.toolbarRightLimit - root.toolbarLeftLimit)
+    readonly property real toolbarScale: toolbar.implicitWidth > 0
+        ? Math.min(1, root.toolbarAvailableWidth / toolbar.implicitWidth) : 1
+    readonly property real toolbarVisualWidth: toolbar.implicitWidth * root.toolbarScale
+    readonly property real toolbarVisualHeight: toolbar.implicitHeight * root.toolbarScale
+    readonly property real toolbarX: Math.max(root.toolbarLeftLimit,
+        Math.min(root.toolbarRightLimit - root.toolbarVisualWidth,
+            root.card.x + (root.card.width - root.toolbarVisualWidth) / 2))
+    readonly property real toolbarTopLimit: root.area.y + root.toolbarGap
+    readonly property real toolbarBottomLimit: Math.max(root.toolbarTopLimit,
+        root.area.y + root.area.height - root.toolbarVisualHeight - root.toolbarGap)
+    readonly property real toolbarYFromCard: root.card.y
+        - root.toolbarVisualHeight - root.toolbarGap
+    readonly property real toolbarY: Math.max(root.toolbarTopLimit,
+        Math.min(root.toolbarBottomLimit, root.toolbarYFromCard))
 
     signal doneRequested()
     signal undoRequested()
@@ -83,14 +102,19 @@ Item {
 
     // Published for the surface's input mask: the only pixels of a
     // screen-sized layer surface that may take a click.
-    readonly property alias toolbarItem: toolbar
+    // The layer-shell Region must receive an untransformed item.  The visual
+    // toolbar may be scaled on a narrow monitor, but handing that transformed
+    // item to Region can make the overlay claim a much larger area and swallow
+    // the bar's drag surface.
+    readonly property alias toolbarItem: toolbarFrame
     // The guide's card is the other one, while a guided session is on.
     readonly property alias guideItem: guide.cardItem
 
     // The toolbar's rectangle, for a surface that is not this one. The
     // Welcome's collapsed pill parks beside the toolbar and has no other way
     // to know where it ended up.
-    readonly property rect toolbarRect: Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
+    readonly property rect toolbarRect: Qt.rect(root.toolbarX, root.toolbarY,
+        root.toolbarVisualWidth, root.toolbarVisualHeight)
     // The chrome only exists on the screen the mode is on, so there is never a
     // second one racing this write.
     onToolbarRectChanged: GlobalStates.editToolbarRect = root.toolbarRect
@@ -132,47 +156,59 @@ Item {
     // of every real click, and it sits under the toolbar so each button's own
     // hand still wins over it.
     MouseArea {
-        x: toolbar.x
-        y: toolbar.y
-        width: toolbar.width
-        height: toolbar.height
+        x: root.toolbarX
+        y: root.toolbarY
+        width: root.toolbarVisualWidth
+        height: root.toolbarVisualHeight
         z: -1
         acceptedButtons: Qt.NoButton
         hoverEnabled: true
         cursorShape: Qt.ArrowCursor
     }
 
-    Toolbar {
-        id: toolbar
-        // Centred on the CARD rather than on the screen: the two are the same
-        // point until the drawer translates the desktop, and the chrome
-        // belongs to the desktop.
-        x: root.card.x + (root.card.width - width) / 2
-        y: root.area.y + (root.card.y - root.area.y - height) * root.bandFraction
-        spacing: 6
+    Item {
+        id: toolbarFrame
+        x: root.toolbarX
+        y: root.toolbarY
+        width: root.toolbarVisualWidth
+        height: root.toolbarVisualHeight
 
-        // Desktop | Lockscreen. Indices are the tab list's own order; the
-        // names come back through EditModeLogic so this bar and the state
-        // agree on one spelling.
-        ToolbarTabBar {
-            id: tabBar
-            opacity: root.slotReveal(0)
-            scale: root.slotScale(0)
-            Layout.alignment: Qt.AlignVCenter
-            implicitHeight: Appearance.sizes.toolbarHeight - 12
-            tabButtonList: [
-                { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },
-                { "name": Translation.tr("Lock screen"), "icon": "lock" }
-            ]
-            requestOnly: true
-            currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
-            onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
-        }
+        Toolbar {
+            id: toolbar
+            // Stay attached to the card's top edge.  The old placement used
+            // a fraction of the whole top band, which left a large dead gap
+            // on tall monitors and made the toolbar appear centred between
+            // the bar and the wallpaper instead of belonging to the wallpaper.
+            x: 0
+            y: 0
+            width: implicitWidth
+            height: implicitHeight
+            scale: root.toolbarScale
+            transformOrigin: Item.TopLeft
+            spacing: 6
 
-        // Which screen the mode is on, with more than one: a click moves the
+            // Desktop | Lockscreen. Indices are the tab list's own order; the
+            // names come back through EditModeLogic so this bar and the state
+            // agree on one spelling.
+            ToolbarTabBar {
+                id: tabBar
+                opacity: root.slotReveal(0)
+                scale: root.slotScale(0)
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: Appearance.sizes.toolbarHeight - 12
+                tabButtonList: [
+                    { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },
+                    { "name": Translation.tr("Lock screen"), "icon": "lock" }
+                ]
+                requestOnly: true
+                currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
+                onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
+            }
+
+            // Which screen the mode is on, with more than one: a click moves the
         // mode to the next. Named by the screen's own name - the only name
         // the user has for it in the compositor's config too.
-        IconAndTextToolbarButton {
+            IconAndTextToolbarButton {
             id: monitorButton
             readonly property var screens: Quickshell.screens
             visible: monitorButton.screens.length > 1
@@ -196,7 +232,7 @@ Item {
             }
         }
 
-        Rectangle {
+            Rectangle {
             opacity: root.slotReveal(1)
             scale: root.slotScale(1)
             Layout.alignment: Qt.AlignVCenter
@@ -223,7 +259,7 @@ Item {
         // read as unrelated actions ("Add widgets", "Bar", "Dock"), and a
         // fourth would have made the toolbar wider than the card on a small
         // screen. Grouped, they are one control with one job: which catalogue.
-        Rectangle {
+            Rectangle {
             id: sectionGroup
             opacity: root.slotReveal(2)
             scale: root.slotScale(2)
@@ -316,7 +352,7 @@ Item {
         // already offers rather than a switch of its own. Icon-only: the
         // toolbar's width is the card's inset and the labels beside it already
         // spend the words.
-        IconToolbarButton {
+            IconToolbarButton {
             id: snapButton
             opacity: root.slotReveal(3)
             scale: (snapButton.down ? 0.92 : 1) * root.slotScale(3)
@@ -337,7 +373,7 @@ Item {
             }
         }
 
-        Rectangle {
+            Rectangle {
             opacity: root.slotReveal(4)
             scale: root.slotScale(4)
             Layout.alignment: Qt.AlignVCenter
@@ -353,7 +389,7 @@ Item {
         // empty: a button that comes and goes moves every other button on the
         // toolbar with it, and the toolbar is centred on the card, so the whole
         // row would slide under the pointer on the first edit.
-        IconToolbarButton {
+            IconToolbarButton {
             id: undoButton
             // RippleButton dims a disabled button through this same property,
             // and an outer binding replaces its rule rather than joining it -
@@ -371,7 +407,7 @@ Item {
             }
         }
 
-        IconToolbarButton {
+            IconToolbarButton {
             id: redoButton
             opacity: root.slotReveal(6) * (redoButton.enabled ? 1 : 0.4)
             scale: (redoButton.down ? 0.92 : 1) * root.slotScale(6)
@@ -390,7 +426,7 @@ Item {
         // cannot see how to leave costs them the whole session, and a checkmark
         // is not a word - and it is FILLED on the primary role, because
         // rendered flat beside the title it read as a second label.
-        IconAndTextToolbarButton {
+            IconAndTextToolbarButton {
             id: doneButton
             opacity: root.slotReveal(7)
             scale: (doneButton.down ? 0.92 : 1) * root.slotScale(7)
@@ -402,6 +438,7 @@ Item {
             colRipple: Appearance.colors.colPrimaryActive
             colText: Appearance.colors.colOnPrimary
             onClicked: root.doneRequested()
+        }
         }
     }
 
