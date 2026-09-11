@@ -81,8 +81,12 @@ Scope {
             return;
         const index = root.indexOfTab(pendingTab);
         GlobalStates.cheatsheetPendingTab = "";
-        if (index >= 0)
+        if (index >= 0) {
             Persistent.states.cheatsheet.tabIndex = index;
+            if (cheatsheetLoader.item && typeof cheatsheetLoader.item.selectTab === "function") {
+                cheatsheetLoader.item.selectTab(index);
+            }
+        }
     }
 
     Connections {

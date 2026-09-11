@@ -1,9 +1,21 @@
-#!/usr/bin/env python3
 import os
 import json
+import socket
 import urllib.request
 import urllib.parse
 import urllib.error
+
+# Force IPv4 preference to avoid hanging on networks where IPv6 is configured
+# locally but has no route to Google endpoints (causing SYN_SENT hangs).
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_first_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if family == 0 or family == socket.AF_UNSPEC:
+        try:
+            return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+        except Exception:
+            pass
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _ipv4_first_getaddrinfo
 
 def _load_env():
     # .env is located in the shell root (two levels up from scripts/google)
@@ -51,7 +63,7 @@ def refresh_token_exchange(refresh_token):
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
             body = json.loads(resp.read().decode('utf-8'))
             return body
     except urllib.error.HTTPError as e:

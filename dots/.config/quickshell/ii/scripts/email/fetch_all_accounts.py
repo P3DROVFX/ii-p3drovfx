@@ -7,13 +7,18 @@ import concurrent.futures
 import gmail_config
 
 def api_get(url, token):
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except Exception:
+        return {}
 
 def fetch_detail(msg_id, token, account_email):
     url = f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date"
     detail = api_get(url, token)
+    if not detail or "id" not in detail:
+        return None
     headers = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
     label_ids = detail.get("labelIds", [])
     subject = headers.get("Subject", "")

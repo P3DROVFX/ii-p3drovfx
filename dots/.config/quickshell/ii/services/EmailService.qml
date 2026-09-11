@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.modules.common
 import qs.modules.common.functions
 import qs.services
@@ -43,21 +44,37 @@ Singleton {
     // fetch_labels + list_ics_attachments (~150 MB of Python) every minute
     // forever, feeding nothing on screen. On-demand fetching is unchanged, and
     // opening the tab kicks a fresh sync immediately (below).
-    property bool cheatsheetVisible: false
+    property bool cheatsheetTabActive: false
+    readonly property bool cheatsheetVisible: (GlobalStates?.cheatsheetOpen ?? false) && root.cheatsheetTabActive
     readonly property bool emailWidgetEnabled: {
         if (!Config.ready)
             return false;
-        const w = Config.options?.background?.widgets;
-        if (!w)
-            return false;
-        const glance = (w.at_a_glance?.enable ?? false) && (w.at_a_glance?.enableEmail ?? false);
-        return glance || (w.email_inbox?.enable ?? false) || (w.email_inbox_2x1?.enable ?? false);
+        const glance = Config.isWidgetActive("at_a_glance") && (Config.options?.background?.widgets?.at_a_glance?.enableEmail ?? false);
+        return glance || Config.isWidgetActive("email_inbox") || Config.isWidgetActive("email_inbox_2x1");
     }
     readonly property bool backgroundRefreshWanted: root.cheatsheetVisible || root.emailWidgetEnabled
 
-    onCheatsheetVisibleChanged: {
-        if (root.cheatsheetVisible && root.authenticated)
-            root._startDebouncedSync();
+    onBackgroundRefreshWantedChanged: {
+        if (root.backgroundRefreshWanted) {
+            if (!root.authenticated && root._refreshToken !== "") {
+                root._refreshAndFetch();
+            } else if (root.authenticated) {
+                root._startDebouncedSync();
+            }
+        } else {
+            debounceSyncTimer.stop();
+            inboxFetcher.running = false;
+            sentFetcher.running = false;
+            trashFetcher.running = false;
+            spamFetcher.running = false;
+            starredFetcher.running = false;
+            importantFetcher.running = false;
+            purchasesFetcher.running = false;
+            searchFetcher.running = false;
+            labelFetcher.running = false;
+            allInboxesFetcher.running = false;
+            tokenRefresher.running = false;
+        }
     }
 
     property bool compactMode: false
@@ -215,7 +232,7 @@ Singleton {
         interval: 1000
         repeat: false
         onTriggered: {
-            if (root.authenticated)
+            if (root.authenticated && root.backgroundRefreshWanted)
                 root.syncAll();
         }
     }
@@ -226,7 +243,8 @@ Singleton {
         running: root.authenticated && root.refreshIntervalMinutes > 0 && root.backgroundRefreshWanted
         repeat: true
         onTriggered: {
-            root.syncAll();
+            if (root.backgroundRefreshWanted)
+                root.syncAll();
         }
     }
 
@@ -235,7 +253,7 @@ Singleton {
         interval: 15000 // 15 seconds
         repeat: false
         onTriggered: {
-            if (!root.authenticated && root._refreshToken !== "") {
+            if (!root.authenticated && root._refreshToken !== "" && root.backgroundRefreshWanted) {
                 root._refreshAndFetch();
             }
         }
@@ -244,7 +262,7 @@ Singleton {
     Connections {
         target: Network
         function onWifiStatusChanged() {
-            if (Network.wifiStatus === "connected" && !root.authenticated && root._refreshToken !== "") {
+            if (Network.wifiStatus === "connected" && !root.authenticated && root._refreshToken !== "" && root.backgroundRefreshWanted) {
                 root._refreshAndFetch();
             }
         }
@@ -288,7 +306,7 @@ Singleton {
     }
 
     function _startDebouncedSync() {
-        if (!authenticated)
+        if (!authenticated || !root.backgroundRefreshWanted)
             return;
         debounceSyncTimer.restart();
     }
@@ -456,7 +474,9 @@ Singleton {
             }
 
             _updateActiveAccount();
-            _refreshAndFetch();
+            if (root.backgroundRefreshWanted) {
+                _refreshAndFetch();
+            }
             return;
         }
 
@@ -476,7 +496,9 @@ Singleton {
             KeyringStorage.setNestedField(["gmail_accounts"], root.accounts);
 
             _updateActiveAccount();
-            _refreshAndFetch();
+            if (root.backgroundRefreshWanted) {
+                _refreshAndFetch();
+            }
         }
     }
 
@@ -575,16 +597,20 @@ Singleton {
     }
 
     function syncAll() {
+        if (!root.backgroundRefreshWanted)
+            return;
         if (root._refreshToken && root._refreshToken !== "") {
             root._refreshAndFetch();
         }
     }
 
     function _refreshAndFetch() {
-        if (_refreshToken === "")
+        if (_refreshToken === "" || !root.backgroundRefreshWanted)
             return;
 
-        // First refresh the token, then fetch all labels in parallel
+        // First refresh the token, then fetch all mailboxes
+        if (tokenRefresher.running)
+            tokenRefresher.running = false;
         tokenRefresher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/token_refresh.py", _refreshToken]);
         tokenRefresher.running = true;
     }
@@ -605,8 +631,10 @@ Singleton {
                     root._accessToken = data.access_token;
                     root._tokenExpiry = Math.floor(Date.now() / 1000) + data.expires_in - 60;
                     root.authenticated = true;
-                    // Now fetch all mailboxes
-                    root._startFetchAll();
+                    // Only fetch if background refresh is still wanted
+                    if (root.backgroundRefreshWanted) {
+                        root._startFetchAll();
+                    }
                 } catch (e) {
                     root.authenticated = false;
                     console.warn("[Gmail] Token parse error:", e);
@@ -685,6 +713,8 @@ Singleton {
         if (!authenticated || !root.accounts || root.accounts.length === 0)
             return;
 
+        if (allInboxesFetcher.running)
+            allInboxesFetcher.running = false;
         allInboxesFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_all_accounts.py", JSON.stringify(root.accounts), maxEmails.toString()]);
         allInboxesFetcher.running = true;
     }
@@ -714,36 +744,50 @@ Singleton {
             inboxFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "INBOX", maxEmails.toString(), catFlags, token, hId]);
             inboxFetcher._currentTab = tab;
             inboxFetcher._currentPage = pageIndex;
+            if (inboxFetcher.running)
+                inboxFetcher.running = false;
             inboxFetcher.running = true;
         } else if (tab === "sent") {
             sentFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "SENT", maxEmails.toString(), token, hId]);
             sentFetcher._currentTab = tab;
             sentFetcher._currentPage = pageIndex;
+            if (sentFetcher.running)
+                sentFetcher.running = false;
             sentFetcher.running = true;
         } else if (tab === "trash") {
             trashFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "TRASH", maxEmails.toString(), token, hId]);
             trashFetcher._currentTab = tab;
             trashFetcher._currentPage = pageIndex;
+            if (trashFetcher.running)
+                trashFetcher.running = false;
             trashFetcher.running = true;
         } else if (tab === "spam") {
             spamFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "SPAM", maxEmails.toString(), token, hId]);
             spamFetcher._currentTab = tab;
             spamFetcher._currentPage = pageIndex;
+            if (spamFetcher.running)
+                spamFetcher.running = false;
             spamFetcher.running = true;
         } else if (tab === "starred") {
             starredFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "STARRED", maxEmails.toString(), token, hId]);
             starredFetcher._currentTab = tab;
             starredFetcher._currentPage = pageIndex;
+            if (starredFetcher.running)
+                starredFetcher.running = false;
             starredFetcher.running = true;
         } else if (tab === "important") {
             importantFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "IMPORTANT", maxEmails.toString(), token, hId]);
             importantFetcher._currentTab = tab;
             importantFetcher._currentPage = pageIndex;
+            if (importantFetcher.running)
+                importantFetcher.running = false;
             importantFetcher.running = true;
         } else if (tab === "purchases") {
             purchasesFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "CATEGORY_PURCHASES", maxEmails.toString(), token, hId]);
             purchasesFetcher._currentTab = tab;
             purchasesFetcher._currentPage = pageIndex;
+            if (purchasesFetcher.running)
+                purchasesFetcher.running = false;
             purchasesFetcher.running = true;
         } else if (tab.indexOf("label_") === 0) {
             for (let i = 0; i < labels.count; i++) {
@@ -758,10 +802,12 @@ Singleton {
 
     function _startFetchAll() {
         syncLabel("inbox");
-        if (root.enableAllInboxes)
-            syncLabel("all_inboxes");
-        labelFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_labels.py", _getBestToken(), enabledLabels.join(",")]);
-        labelFetcher.running = true;
+        if (root.cheatsheetVisible) {
+            if (labelFetcher.running)
+                labelFetcher.running = false;
+            labelFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_labels.py", _getBestToken(), enabledLabels.join(",")]);
+            labelFetcher.running = true;
+        }
     }
 
     Process {

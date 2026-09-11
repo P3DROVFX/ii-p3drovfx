@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -24,12 +25,16 @@ Item {
             return true;
         }
     }
-    readonly property bool isTabActive: root.visible && root.isCurrentTab
+    readonly property bool isTabActive: (GlobalStates?.cheatsheetOpen ?? false) && root.visible && root.isCurrentTab
 
     Binding {
         target: EmailService
-        property: "cheatsheetVisible"
+        property: "cheatsheetTabActive"
         value: root.isTabActive
+    }
+
+    Component.onDestruction: {
+        EmailService.cheatsheetTabActive = false;
     }
 
     property string activeTab: "inbox"
