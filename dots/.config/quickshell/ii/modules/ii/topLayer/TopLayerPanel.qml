@@ -51,8 +51,17 @@ PanelWindow {
     }
 
     Component {
-        id: dashboardContentComponent
-        Dashboard.SidebarDashboardContent {}
+        id: leftDashboardContentComponent
+        Dashboard.SidebarDashboardContent {
+            keepWarm: topPanel.keepLeftSidebarContentLoaded
+        }
+    }
+
+    Component {
+        id: rightDashboardContentComponent
+        Dashboard.SidebarDashboardContent {
+            keepWarm: topPanel.keepRightSidebarContentLoaded
+        }
     }
 
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
@@ -793,10 +802,10 @@ PanelWindow {
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
-                    return dashboardContentComponent;
+                    return leftDashboardContentComponent;
                 } else if (pos === "left") {
                     if (GlobalStates.dashboardPanelOpen) {
-                        return dashboardContentComponent;
+                        return leftDashboardContentComponent;
                     } else {
                         return policiesContentComponent;
                     }
@@ -920,10 +929,10 @@ PanelWindow {
                     if (GlobalStates.sidebarLeftOpen) {
                         return policiesContentComponent;
                     } else {
-                        return dashboardContentComponent;
+                        return rightDashboardContentComponent;
                     }
                 } else {
-                    return dashboardContentComponent;
+                    return rightDashboardContentComponent;
                 }
             }
             onLoaded: {

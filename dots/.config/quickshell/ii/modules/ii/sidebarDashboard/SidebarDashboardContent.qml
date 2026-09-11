@@ -36,6 +36,9 @@ Item {
     id: root
     property int sidebarWidth: Appearance.sizes.sidebarWidth
     property int sidebarPadding: 10
+    // When the outer dashboard tree is retained, preheat its async children
+    // while hidden so the next open does not compete with the width animation.
+    property bool keepWarm: false
     property bool showAudioOutputDialog: false
     property bool showAudioInputDialog: false
     property bool showBluetoothDialog: false
@@ -135,16 +138,15 @@ Item {
 
     onCompactModeRequiredChanged: compactBottomRequestedExpanded = false
 
-    // The optimized default incubates heavy delegates after the outer motion.
-    // The explicit animation opt-in instead loads them with the open request,
-    // so their entrance choreography starts while the sidebar itself slides.
+    // Retained dashboards preheat heavy delegates while hidden. Cold dashboards
+    // start their asynchronous Loaders at the open request, regardless of the
+    // optional decorative entrance choreography.
     property bool deferredContentReady: false
     function activateDeferredContent() {
         deferredContentReady = PerformancePolicy.nextDeferredContentReady(
             deferredContentReady,
             GlobalStates.sidebarRightOpen,
-            root.dashboardSidebarAnimating,
-            root.entranceAnimationsEnabled
+            root.keepWarm
         );
     }
 
@@ -177,8 +179,7 @@ Item {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
-                // Let target-width bindings start the outer animation first.
-                Qt.callLater(root.activateDeferredContent);
+                root.activateDeferredContent();
                 root.queueContentEntrance();
             } else {
                 root.entrancePending = false;
@@ -433,6 +434,7 @@ Item {
                     anchors.bottom: parent.bottom
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
+                    keepWarm: root.keepWarm
                     outerSidebarAnimating: root.dashboardSidebarAnimating
                     entranceTrigger: root.entranceTrigger
                     onCollapseRequested: shouldCollapse => {

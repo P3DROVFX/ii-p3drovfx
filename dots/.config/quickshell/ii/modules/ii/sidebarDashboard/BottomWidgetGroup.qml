@@ -30,6 +30,7 @@ Rectangle {
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed
     property bool forceCollapsed: false
     readonly property bool effectivelyCollapsed: collapsed || forceCollapsed
+    property bool keepWarm: false
     property int entranceTrigger: -1
     property int contentEntranceTrigger: -1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
@@ -85,9 +86,9 @@ Rectangle {
         NotesDashboardWidget {}
     }
 
-    // The optimized default loads the selected widget after the outer slide.
-    // The explicit entrance-animation opt-in loads it with the open request;
-    // either way it stays warm for this dashboard instance afterwards.
+    // A retained dashboard loads the selected widget while hidden. A cold
+    // dashboard starts its asynchronous Loader at the open request, so the
+    // outer width motion never becomes a reason for a visible blank group.
     property bool contentActivated: false
     property bool outerSidebarAnimating: GlobalStates.rightSidebarAnimating
 
@@ -95,8 +96,7 @@ Rectangle {
         contentActivated = PerformancePolicy.nextDeferredContentReady(
             contentActivated,
             GlobalStates.sidebarRightOpen,
-            root.outerSidebarAnimating,
-            root.entranceAnimationsEnabled
+            root.keepWarm
         );
     }
 
@@ -105,12 +105,7 @@ Rectangle {
             root.activateContentWhenSafe();
     }
 
-    Component.onCompleted: {
-        if (root.entranceAnimationsEnabled)
-            root.activateContentWhenSafe();
-        else
-            Qt.callLater(root.activateContentWhenSafe);
-    }
+    Component.onCompleted: root.activateContentWhenSafe()
 
     onEffectivelyCollapsedChanged: {
         if (!effectivelyCollapsed)
@@ -162,13 +157,8 @@ Rectangle {
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
-            if (GlobalStates.sidebarRightOpen) {
-                if (root.entranceAnimationsEnabled)
-                    root.activateContentWhenSafe();
-                else
-                // Let target-width bindings start the outer animation first.
-                    Qt.callLater(root.activateContentWhenSafe);
-            }
+            if (GlobalStates.sidebarRightOpen)
+                root.activateContentWhenSafe();
         }
     }
 
