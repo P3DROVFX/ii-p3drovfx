@@ -15,6 +15,19 @@ Item {
 
     default property alias content: contentHost.data
 
+    // Lazy alternative to `content`: pass an icon as `deferredContent: Component {…}`
+    // and it is only instantiated while the slot is revealed (or animating in/out).
+    // The status icons are ~18 Canvas-backed MaterialShapes with eager JS polygon
+    // math; most reveals are false almost all the time, so building them all up
+    // front wasted ~40 MiB for glyphs nobody was looking at. A consumer that wants
+    // the driver to reach the loaded glyph exposes it as `property alias iconRef`
+    // on the deferred root; `registeredIcon` republishes it (null while unloaded,
+    // which the driver's playIconCue already tolerates).
+    property Component deferredContent: null
+    readonly property Item registeredIcon: deferredLoader.item
+        ? (deferredLoader.item.iconRef ?? deferredLoader.item)
+        : null
+
     // AnimatedIcon walks its ancestors looking for this marker. Keeping the
     // cue queue here makes the glyph animation follow the same lifecycle as
     // the slot that is revealing it, without coupling every icon to the bar.
@@ -222,5 +235,15 @@ Item {
         opacity: root.contentProgress
         scale: root.collapsedScale + (1.0 - root.collapsedScale) * root.contentProgress
         transformOrigin: Item.Center
+
+        // Synchronous on purpose: the slot animation reads the glyph's size the
+        // same frame the reveal starts, so an async build would animate an empty
+        // slot. Stays loaded through the exit animation, unloads once collapsed.
+        Loader {
+            id: deferredLoader
+            active: root.deferredContent !== null
+                && (root.reveal || root.contentProgress > 0.001 || root.layoutProgress > 0.001)
+            sourceComponent: root.deferredContent
+        }
     }
 }
