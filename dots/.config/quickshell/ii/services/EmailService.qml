@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 import qs.services
 import QtCore
 
@@ -169,7 +170,7 @@ Singleton {
     }
     Process {
         id: credentialsChecker
-        command: ["python3", Directories.scriptPath + "/email/check_credentials.py"]
+        command: ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/check_credentials.py"])
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -584,7 +585,7 @@ Singleton {
             return;
 
         // First refresh the token, then fetch all labels in parallel
-        tokenRefresher.command = ["python3", Directories.scriptPath + "/email/token_refresh.py", _refreshToken];
+        tokenRefresher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/token_refresh.py", _refreshToken]);
         tokenRefresher.running = true;
     }
 
@@ -624,7 +625,7 @@ Singleton {
     // Fetch processes — one per label
     Process {
         id: authProcess
-        command: ["python3", Directories.scriptPath + "/email/oauth_server.py"]
+        command: ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/oauth_server.py"])
         onRunningChanged: {
             if (!running)
                 root.authenticating = false;
@@ -684,7 +685,7 @@ Singleton {
         if (!authenticated || !root.accounts || root.accounts.length === 0)
             return;
 
-        allInboxesFetcher.command = ["python3", Directories.scriptPath + "/email/fetch_all_accounts.py", JSON.stringify(root.accounts), maxEmails.toString()];
+        allInboxesFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_all_accounts.py", JSON.stringify(root.accounts), maxEmails.toString()]);
         allInboxesFetcher.running = true;
     }
 
@@ -710,37 +711,37 @@ Singleton {
         let bestToken = _getBestToken();
         if (tab === "inbox") {
             let catFlags = (enableUpdates ? "1" : "0") + "," + (enablePromotions ? "1" : "0") + "," + (enableSocials ? "1" : "0");
-            inboxFetcher.command = ["python3", _fetchScript, bestToken, "INBOX", maxEmails.toString(), catFlags, token, hId];
+            inboxFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "INBOX", maxEmails.toString(), catFlags, token, hId]);
             inboxFetcher._currentTab = tab;
             inboxFetcher._currentPage = pageIndex;
             inboxFetcher.running = true;
         } else if (tab === "sent") {
-            sentFetcher.command = ["python3", _fetchScript, bestToken, "SENT", maxEmails.toString(), token, hId];
+            sentFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "SENT", maxEmails.toString(), token, hId]);
             sentFetcher._currentTab = tab;
             sentFetcher._currentPage = pageIndex;
             sentFetcher.running = true;
         } else if (tab === "trash") {
-            trashFetcher.command = ["python3", _fetchScript, bestToken, "TRASH", maxEmails.toString(), token, hId];
+            trashFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "TRASH", maxEmails.toString(), token, hId]);
             trashFetcher._currentTab = tab;
             trashFetcher._currentPage = pageIndex;
             trashFetcher.running = true;
         } else if (tab === "spam") {
-            spamFetcher.command = ["python3", _fetchScript, bestToken, "SPAM", maxEmails.toString(), token, hId];
+            spamFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "SPAM", maxEmails.toString(), token, hId]);
             spamFetcher._currentTab = tab;
             spamFetcher._currentPage = pageIndex;
             spamFetcher.running = true;
         } else if (tab === "starred") {
-            starredFetcher.command = ["python3", _fetchScript, bestToken, "STARRED", maxEmails.toString(), token, hId];
+            starredFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "STARRED", maxEmails.toString(), token, hId]);
             starredFetcher._currentTab = tab;
             starredFetcher._currentPage = pageIndex;
             starredFetcher.running = true;
         } else if (tab === "important") {
-            importantFetcher.command = ["python3", _fetchScript, bestToken, "IMPORTANT", maxEmails.toString(), token, hId];
+            importantFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "IMPORTANT", maxEmails.toString(), token, hId]);
             importantFetcher._currentTab = tab;
             importantFetcher._currentPage = pageIndex;
             importantFetcher.running = true;
         } else if (tab === "purchases") {
-            purchasesFetcher.command = ["python3", _fetchScript, bestToken, "CATEGORY_PURCHASES", maxEmails.toString(), token, hId];
+            purchasesFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "CATEGORY_PURCHASES", maxEmails.toString(), token, hId]);
             purchasesFetcher._currentTab = tab;
             purchasesFetcher._currentPage = pageIndex;
             purchasesFetcher.running = true;
@@ -759,7 +760,7 @@ Singleton {
         syncLabel("inbox");
         if (root.enableAllInboxes)
             syncLabel("all_inboxes");
-        labelFetcher.command = ["python3", Directories.scriptPath + "/email/fetch_labels.py", _getBestToken(), enabledLabels.join(",")];
+        labelFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_labels.py", _getBestToken(), enabledLabels.join(",")]);
         labelFetcher.running = true;
     }
 
@@ -1093,7 +1094,7 @@ Singleton {
             root.emailSent(false, "Not authenticated");
             return;
         }
-        let cmd = ["python3", Directories.scriptPath + "/email/send_email.py", _refreshToken, to, subject, bodyHtml];
+        let cmd = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/send_email.py", _refreshToken, to, subject, bodyHtml]);
         if (cc)
             cmd.push("--cc", cc);
         if (bcc)
@@ -1241,7 +1242,7 @@ Singleton {
         let token = _getToken("search", pageIndex);
         let bestToken = _getBestToken();
 
-        searchFetcher.command = ["python3", _fetchScript, bestToken, "SEARCH:" + query, maxEmails.toString(), token];
+        searchFetcher.command = ProcUtils.pdeath(["python3", _fetchScript, bestToken, "SEARCH:" + query, maxEmails.toString(), token]);
         searchFetcher._currentTab = "search";
         searchFetcher._currentPage = pageIndex;
         searchFetcher.running = true;
@@ -1287,7 +1288,7 @@ Singleton {
         currentEmailBody = "";
         loadingEmailBody = true;
         let bestToken = _getBestToken();
-        emailBodyFetcher.command = ["python3", Directories.scriptPath + "/email/fetch_email_body.py", bestToken, messageId];
+        emailBodyFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_email_body.py", bestToken, messageId]);
         emailBodyFetcher.running = true;
     }
 
@@ -1314,7 +1315,7 @@ Singleton {
         if (_refreshToken === "")
             return;
         var bestToken = _getBestToken();
-        var cmd = ["python3", Directories.scriptPath + "/email/download_email_attachment.py", bestToken, messageId, attachmentId, filename];
+        var cmd = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/download_email_attachment.py", bestToken, messageId, attachmentId, filename]);
         if (targetDir) {
             cmd.push(targetDir);
         }
@@ -1367,7 +1368,7 @@ Singleton {
         currentThreadMessages.clear();
         loadingEmailBody = true;
         var bestToken = _getBestToken();
-        threadFetcher.command = ["python3", Directories.scriptPath + "/email/fetch_thread.py", bestToken, threadId];
+        threadFetcher.command = ProcUtils.pdeath(["python3", Directories.scriptPath + "/email/fetch_thread.py", bestToken, threadId]);
         threadFetcher.running = true;
     }
 }
