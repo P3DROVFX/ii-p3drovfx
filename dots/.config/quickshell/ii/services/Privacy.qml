@@ -5,6 +5,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * Who is using the camera, the microphone, the screen or the location right now.
@@ -167,14 +168,18 @@ Singleton {
     Process {
         id: probe
 
-        command: [
+        // pdeath: this poller runs for the whole session, so it must die with
+        // the shell. Without it, a SIGKILL'd/crashed Quickshell left the probe
+        // reparented to init, and the next instance spawned a second one
+        // (the duplicate privacy_probe processes seen after a manual restart).
+        command: ProcUtils.pdeath([
             "python3",
             Directories.scriptPath + "/privacy_probe.py",
             "--interval",
             String(root.pollInterval),
             "--kinds",
             root.watchedKinds.join(",")
-        ]
+        ])
 
         // process-lifecycle: restart-safe -- capped backoff; no running binding,
         // so a settings change restarts it deliberately instead of thrashing.

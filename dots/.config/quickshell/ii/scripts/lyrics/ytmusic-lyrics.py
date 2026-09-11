@@ -3,10 +3,33 @@
 # Usage: ytmusic-lyrics.py <artist> <title>
 # Outputs lyrics to stdout, errors to stderr, exits 1 on failure.
 
+import signal
 import sys
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
+# ytmusicapi sets no network timeout, so a single slow YouTube Music response
+# used to leave this one-shot alive for minutes (and, when the shell was killed
+# mid-fetch, orphaned). A hard SIGALRM cap bounds the whole run no matter where
+# it stalls; the per-request timeout below handles the common slow case cleanly.
+def _timed_out(*_):
+    eprint("[YTMusic Lyrics] Timed out")
+    sys.exit(1)
+
+signal.signal(signal.SIGALRM, _timed_out)
+signal.alarm(25)
+
+def _timeout_session():
+    """A requests session that forces a timeout on every ytmusicapi call."""
+    import requests
+
+    class TimeoutSession(requests.Session):
+        def request(self, *args, **kwargs):
+            kwargs.setdefault("timeout", 12)
+            return super().request(*args, **kwargs)
+
+    return TimeoutSession()
 
 def main():
     if len(sys.argv) < 3:
@@ -23,7 +46,7 @@ def main():
         sys.exit(1)
 
     try:
-        yt = YTMusic()
+        yt = YTMusic(requests_session=_timeout_session())
     except Exception as e:
         eprint(f"[YTMusic Lyrics] Failed to initialize YTMusic: {e}")
         sys.exit(1)

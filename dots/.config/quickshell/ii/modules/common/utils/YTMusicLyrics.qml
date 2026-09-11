@@ -27,7 +27,11 @@ Item {
         _lastQueryKey = key
         console.log("[YTMusic Lyrics] Fetching lyrics for", queryArtist, "-", queryTitle)
         fetchLyricsProcess.running = false
-        fetchLyricsProcess.command = [Directories.ytmusicLyricsScriptPath, queryArtist, queryTitle]
+        // pdeath: ytmusicapi can stall on a slow response, so even this
+        // "one-shot" must die with the shell instead of orphaning (the script
+        // also self-caps with SIGALRM, and the wrapper execs Python so the
+        // signal reaches it).
+        fetchLyricsProcess.command = ProcUtils.pdeath([Directories.ytmusicLyricsScriptPath, queryArtist, queryTitle])
         fetchLyricsProcess.running = true
     }
 
