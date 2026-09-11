@@ -55,18 +55,18 @@ Item {
             opacity: isActive ? 1.0 : 0.0
 
             transform: Translate {
-                y: (1.0 - panelLoader.opacity) * 16
+                y: (Config.options.overview.animationStyle === "none") ? 0 : ((1.0 - panelLoader.opacity) * 16)
             }
 
-            layer.enabled: opacity > 0.001 && opacity < 0.999
+            layer.enabled: (Config.options.overview.animationStyle !== "none") && opacity > 0.001 && opacity < 0.999
             layer.effect: MultiEffect {
-                blurEnabled: (1.0 - panelLoader.opacity) > 0.001
+                blurEnabled: (Config.options.overview.animationStyle !== "none") && ((1.0 - panelLoader.opacity) > 0.001)
                 blurMax: 32.0
                 blur: (1.0 - panelLoader.opacity) * 0.5
             }
 
             Behavior on opacity {
-                enabled: !root.inNotchMode
+                enabled: !root.inNotchMode && (Config.options.overview.animationStyle !== "none")
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type

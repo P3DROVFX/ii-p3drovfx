@@ -135,11 +135,13 @@ Item {
         active: root.isOpen
     }
 
+    readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
+
     // ── Shared animation spec ────────────────────────────────────────────────
     // Open:  emphasizedDecel [0.05,0.7,0.1,1] — fast-start, slow-settle (EaseOut).
     // Close: same curve but shorter — panel snaps shut quickly then eases out.
-    readonly property int _animDurationOpen: Math.round(450 * Appearance.animMultiplier)
-    readonly property int _animDurationClose: Math.round(280 * Appearance.animMultiplier)
+    readonly property int _animDurationOpen: root.animStyle === "none" ? 0 : Math.round(450 * Appearance.animMultiplier)
+    readonly property int _animDurationClose: root.animStyle === "none" ? 0 : Math.round(280 * Appearance.animMultiplier)
     readonly property var _openBezier: Appearance.animationCurves.emphasizedDecel
     readonly property var _closeBezier: Appearance.animationCurves.emphasizedDecel
 
@@ -172,6 +174,7 @@ Item {
         Transition {
             from: "closed"
             to: "open"
+            enabled: root.animStyle !== "none"
             NumberAnimation {
                 target: root
                 property: "openProgress"
@@ -183,6 +186,7 @@ Item {
         Transition {
             from: "open"
             to: "closed"
+            enabled: root.animStyle !== "none"
             NumberAnimation {
                 target: root
                 property: "openProgress"
@@ -244,7 +248,9 @@ Item {
 
                 Loader {
                     id: searchWidgetLoader
-                    active: root.isWidgetActive
+                    property bool loadedOnce: false
+                    active: loadedOnce || root.isWidgetActive
+                    onLoaded: loadedOnce = true
                     focus: root.isOpen
                     anchors.fill: parent
                     sourceComponent: Component {
@@ -255,8 +261,6 @@ Item {
                                 if (GlobalStates.activeSearchQuery) {
                                     searchWidget.setSearchingText(GlobalStates.activeSearchQuery);
                                     GlobalStates.activeSearchQuery = "";
-                                } else {
-                                    searchWidget.cancelSearch();
                                 }
                                 Qt.callLater(() => searchWidget.focusSearchInput());
                             }
@@ -289,9 +293,6 @@ Item {
                 }
             } else {
                 GlobalFocusGrab.removeDismissable(root);
-                if (root.searchWidgetRef) {
-                    root.searchWidgetRef.cancelSearch();
-                }
             }
         }
     }
@@ -316,16 +317,16 @@ Item {
         }
     }
 
-    readonly property string animStyle: Config.options.overview.animationStyle ?? "bounce"
-
     Loader { // Classic overview
         id: overviewLoader
+        property bool loadedOnce: false
         y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
-        active: root.isWidgetActive && !root.isScrollingLayout
+        active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout
+        onLoaded: loadedOnce = true
         visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? root.openProgress : 0.0
+        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
 
         transform: [
             Translate {
@@ -347,17 +348,19 @@ Item {
 
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
+        property bool loadedOnce: false
         y: root.isBottomBar ? 0 : (dropContainer.y + dropContainer.height)
         height: root.isBottomBar ? dropContainer.y : (parent.height - y)
         anchors.left: parent.left
         anchors.right: parent.right
-        active: root.isWidgetActive && root.isScrollingLayout
+        active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout
+        onLoaded: loadedOnce = true
         visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? root.openProgress : 0.0
+        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
 
         transform: [
             Translate {
-                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
+                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
             },
             Scale {
                 origin.x: scrollingOverviewLoader.width / 2

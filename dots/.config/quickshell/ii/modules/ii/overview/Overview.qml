@@ -94,6 +94,7 @@ Scope {
                         property int animDurationExit: root.animStyle === "none" ? 0 : Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
+                        property bool isClosing: false
                         /**
                          * Whether a panel (AI or hosted) owns the search surface.
                          * `GlobalStates` is read first on purpose: it is a singleton,

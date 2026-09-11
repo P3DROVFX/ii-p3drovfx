@@ -568,6 +568,7 @@ Item {
                     }
 
                     Behavior on contentY {
+                        enabled: Config.options.overview.animationStyle !== "none"
                         NumberAnimation {
                             id: scrollAnim
                             alwaysRunToEnd: true
@@ -857,7 +858,8 @@ Item {
                         }
                     }
 
-                    displaced: Transition {
+                    Transition {
+                        id: clipDisplacedTransition
                         NumberAnimation {
                             properties: "y"
                             duration: 220
@@ -866,7 +868,8 @@ Item {
                         }
                     }
 
-                    add: Transition {
+                    Transition {
+                        id: clipAddTransition
                         ParallelAnimation {
                             NumberAnimation {
                                 property: "opacity"
@@ -883,7 +886,8 @@ Item {
                         }
                     }
 
-                    remove: Transition {
+                    Transition {
+                        id: clipRemoveTransition
                         NumberAnimation {
                             property: "opacity"
                             to: 0.0
@@ -891,6 +895,10 @@ Item {
                             easing.type: Easing.OutQuad
                         }
                     }
+
+                    displaced: (Config.options.overview.animationStyle === "none") ? null : clipDisplacedTransition
+                    add: (Config.options.overview.animationStyle === "none") ? null : clipAddTransition
+                    remove: (Config.options.overview.animationStyle === "none") ? null : clipRemoveTransition
                 }
             }
         }

@@ -1174,12 +1174,15 @@ Item {
                                     }
                                 }
 
-                                add: Transition {
+                                Transition {
+                                    id: fileListAddTransition
                                     ParallelAnimation {
                                         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Appearance.animation.elementMoveFast.duration }
                                         NumberAnimation { property: "y"; from: Appearance.sizes.elevationMargin; duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve }
                                     }
                                 }
+
+                                add: (Config.options.overview.animationStyle === "none") ? null : fileListAddTransition
 
                                 ScrollEdgeFade {
                                     target: fileList

@@ -400,6 +400,7 @@ RowLayout {
             : ColorUtils.transparentize(Appearance.colors.colSubtext)
 
         Behavior on placeholderTextColor {
+            enabled: Config.options.overview.animationStyle !== "none"
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline
@@ -408,6 +409,7 @@ RowLayout {
         }
 
         Behavior on implicitHeight {
+            enabled: Config.options.overview.animationStyle !== "none"
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline

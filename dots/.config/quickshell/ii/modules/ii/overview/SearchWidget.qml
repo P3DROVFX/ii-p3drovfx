@@ -21,6 +21,7 @@ Item {
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     // The host owns the actual opening/closing clocks; typing cadence must not
     // override them when the first key arrives before the surface has settled.
     property bool surfaceAnimating: false
@@ -1415,6 +1416,7 @@ Item {
              : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on color {
+            enabled: !root.animationsDisabled
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
@@ -1425,7 +1427,7 @@ Item {
         Behavior on implicitWidth {
             id: searchWidthBehavior
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode
+            enabled: !root.inNotchMode && !root.animationsDisabled
             NumberAnimation {
                 id: widthAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1437,7 +1439,7 @@ Item {
         Behavior on implicitHeight {
             id: searchHeightBehavior
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode
+            enabled: !root.inNotchMode && !root.animationsDisabled
             NumberAnimation {
                 id: heightAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1470,7 +1472,7 @@ Item {
                 Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 visible: !root.isAiMode
-                animateWidth: true
+                animateWidth: !root.animationsDisabled
                 aiModeActive: root.isAiMode
                 Binding {
                     target: searchBar
@@ -1498,6 +1500,7 @@ Item {
                 opacity: root.isAiMode ? 0 : 1
 
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -1506,6 +1509,7 @@ Item {
                 }
 
                 Behavior on Layout.preferredHeight {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveSmall.duration
                         easing.type: Appearance.animation.elementMoveSmall.type
@@ -1623,6 +1627,7 @@ Item {
                             : appResults.measuredContentExtent))
 
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
@@ -1645,7 +1650,7 @@ Item {
                     visible: opacity > 0 && !root.showEmptySearchState
                     opacity: root.showSkeletons || root.showEmptySearchState ? 0.0 : 1.0
                     Behavior on opacity {
-                        enabled: !root.inNotchMode
+                        enabled: !root.inNotchMode && !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -1885,6 +1890,7 @@ Item {
                     }
 
                     Behavior on contentY {
+                        enabled: !root.animationsDisabled
                         // No alwaysRunToEnd: contentY is a Flickable's own
                         // property, and refusing to be interrupted made the
                         // animation fight both the native flick and the clamp
@@ -1966,7 +1972,7 @@ Item {
                             return;
                         }
 
-                        if (resultModel.count === 0 && !root.surfaceAnimating && !root.suppressItemTransitions) {
+                        if (resultModel.count === 0 && !root.animationsDisabled && !root.surfaceAnimating && !root.suppressItemTransitions) {
                             appResults.staggerReveal = true;
                             staggerRevealWindow.restart();
                         }
@@ -2134,10 +2140,10 @@ Item {
                         // than a row that never animates. `y` is left entirely to
                         // the view — a Behavior here raced the move/displaced
                         // transitions and let rows drift over each other.
-                        property real revealProgress: 0
+                        property real revealProgress: root.animationsDisabled ? 1 : 0
                         opacity: revealProgress
                         transform: Translate {
-                            y: (1 - resultDelegate.revealProgress) * -6
+                            y: root.animationsDisabled ? 0 : ((1 - resultDelegate.revealProgress) * -6)
                         }
 
                         SequentialAnimation {
@@ -2146,7 +2152,7 @@ Item {
                                 // `index` is briefly -1 while a delegate is being
                                 // torn down, and PauseAnimation rejects a negative
                                 // duration outright.
-                                duration: appResults.staggerReveal
+                                duration: (!root.animationsDisabled && appResults.staggerReveal)
                                     ? Math.max(0, Math.min(5, resultDelegate.index)) * appResults.staggerStep
                                     : 0
                             }
@@ -2154,7 +2160,7 @@ Item {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: Appearance.animation.elementMoveFast.duration
+                                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
                                 easing.type: Appearance.animation.elementMoveFast.type
                                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                             }
@@ -2178,7 +2184,7 @@ Item {
                         }
 
                         Component.onCompleted: {
-                            if (root.surfaceAnimating || root.suppressItemTransitions)
+                            if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions)
                                 resultDelegate.finishReveal();
                             else
                                 revealAnim.start();
@@ -2434,11 +2440,12 @@ Item {
                     // Captions and rows now share one positioning path, so a caption
                     // can no longer snap to its final spot while the rows around it
                     // are still travelling.
-                    readonly property int reorderDuration: root.suppressItemTransitions || root.surfaceAnimating
+                    readonly property int reorderDuration: (root.animationsDisabled || root.suppressItemTransitions || root.surfaceAnimating)
                         ? 0
                         : Appearance.animation.elementMoveFast.duration
 
-                    move: Transition {
+                    Transition {
+                        id: resultMoveTransition
                         NumberAnimation {
                             properties: "y"
                             duration: appResults.reorderDuration
@@ -2447,7 +2454,8 @@ Item {
                         }
                     }
 
-                    displaced: Transition {
+                    Transition {
+                        id: resultDisplacedTransition
                         NumberAnimation {
                             properties: "y"
                             duration: appResults.reorderDuration
@@ -2455,6 +2463,9 @@ Item {
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
                     }
+
+                    move: root.animationsDisabled ? null : resultMoveTransition
+                    displaced: root.animationsDisabled ? null : resultDisplacedTransition
 
                     // No `remove` transition, deliberately.
                     //
@@ -2482,10 +2493,11 @@ Item {
                     opacity: root.showEmptySearchState && !root.showSkeletons ? 1.0 : 0.0
 
                     transform: Translate {
-                        y: emptySearchState.opacity > 0 ? 0 : Appearance.sizes.elevationMargin
+                        y: (root.animationsDisabled || emptySearchState.opacity > 0) ? 0 : Appearance.sizes.elevationMargin
                     }
 
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -2583,12 +2595,14 @@ Item {
                     visible: opacity > 0.01
 
                     transform: Translate {
-                        y: root.actionFeedbackText.length > 0 ? 0 : Appearance.sizes.elevationMargin
+                        y: (root.animationsDisabled || root.actionFeedbackText.length > 0) ? 0 : Appearance.sizes.elevationMargin
                         Behavior on y {
+                            enabled: !root.animationsDisabled
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                     }
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
@@ -2622,7 +2636,7 @@ Item {
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
                     Behavior on opacity {
-                        enabled: !root.inNotchMode
+                        enabled: !root.inNotchMode && !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -2713,10 +2727,10 @@ Item {
                     // used to run on exactly the frames where the container is also
                     // animating its height. The motion already reads as arrival.
                     transform: Translate {
-                        y: (1.0 - aiPanelLoader.opacity) * 16
+                        y: root.animationsDisabled ? 0 : ((1.0 - aiPanelLoader.opacity) * 16)
                     }
                     Behavior on opacity {
-                        enabled: !root.inNotchMode
+                        enabled: !root.inNotchMode && !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type

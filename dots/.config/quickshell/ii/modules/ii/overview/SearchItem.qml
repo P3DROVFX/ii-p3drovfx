@@ -88,14 +88,18 @@ RippleButton {
      * animated — so they take the multiplier directly instead of ignoring it,
      * which is the part that actually mattered.
      */
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
+
     function scaledDuration(milliseconds: int): int {
+        if (root.animationsDisabled)
+            return 0;
         return Math.max(0, Math.round(milliseconds * (Appearance.animMultiplier ?? 1.0)));
     }
 
     property bool keyboardDown: false
     // Hosts that already animate their rows (the launcher list animates the
     // delegate) turn this off rather than stacking a second fade underneath.
-    property bool animateEntrance: true
+    property bool animateEntrance: !root.animationsDisabled
     property real entryOpacity: root.animateEntrance ? 0.0 : 1.0
     property real entryTranslateY: root.animateEntrance ? -Appearance.sizes.elevationMargin : 0
 
@@ -266,6 +270,7 @@ RippleButton {
             }
         }
         Behavior on color {
+            enabled: !root.animationsDisabled
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
             }
@@ -351,6 +356,7 @@ RippleButton {
                     }
                 }
                 Behavior on color {
+                    enabled: !root.animationsDisabled
                     ColorAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                     }
