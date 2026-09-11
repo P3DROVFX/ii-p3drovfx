@@ -121,7 +121,7 @@ Singleton {
     Timer {
         id: pollingTimer
         interval: 15000
-        running: root.available && (GlobalStates.dashboardPanelOpen || root.active)
+        running: root.available && (GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen || root.active)
         repeat: true
         onTriggered: {
             root.fetchActiveState()

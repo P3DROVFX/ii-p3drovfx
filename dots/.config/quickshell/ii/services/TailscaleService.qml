@@ -52,9 +52,18 @@ Singleton {
     property bool componentReady: false
     property bool daemonOperationPending: false
 
+    // perf: Tailscale status only needs to be live while the user is on a surface
+    // that shows it — the sidebar dashboard (toggle + dialog) or Settings. The
+    // bar's dashboard status dot is a *passive* reader of the last-known `active`
+    // and must not keep the `tailscale status` poll alive at idle. Instantiating
+    // this singleton no longer probes/polls; opening a real surface (or
+    // autoConnect) does.
+    readonly property bool wanted: GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen
+    onWantedChanged: { if (root.wanted && root.enabled && root.componentReady) root.refresh() }
+
     onEnabledChanged: { if (!root.componentReady) return; if (root.enabled) { if (root.stopDaemonWhenDisabled) root.requestDaemon("start"); root.refresh() } else { if (root.active) Quickshell.execDetached(["tailscale", "down"]); if (root.stopDaemonWhenDisabled) root.requestDaemon("stop"); root.operationQueue = []; root.currentOperation = null; root.refreshQueued = false; root.resetDisabled() } }
-    Component.onCompleted: { root.componentReady = true; root.refresh() }
-    Connections { target: Config; function onReadyChanged() { if (Config.ready) { root.autoConnectAttempted = false; root.refresh() } } }
+    Component.onCompleted: { root.componentReady = true; if (root.autoConnect || root.wanted) root.refresh() }
+    Connections { target: Config; function onReadyChanged() { if (Config.ready) { root.autoConnectAttempted = false; if (root.autoConnect || root.wanted) root.refresh() } } }
 
     function enqueue(kind: string, command: list<string>, data: var): void { const q = root.operationQueue.slice(); q.push({ kind: kind, command: command, data: data }); root.operationQueue = q; root.startNext() }
     function startNext(): void { if (root.currentOperation !== null || !root.operationQueue.length) return; const q = root.operationQueue.slice(); root.currentOperation = q.shift(); root.operationQueue = q; commandProc.command = root.currentOperation.command; commandProc.running = true }
@@ -181,5 +190,5 @@ Singleton {
             root.refresh()
         }
     }
-    Timer { id: pollTimer; interval: 12000; repeat: true; running: root.enabled && root.available; onTriggered: if (!root.loading) root.refresh() }
+    Timer { id: pollTimer; interval: 12000; repeat: true; running: root.enabled && root.available && root.wanted; onTriggered: if (!root.loading) root.refresh() }
 }

@@ -54,10 +54,20 @@ Singleton {
     property bool autoConnectAttempted: false
     property string importPath: ""
     property bool componentReady: false
+
+    // perf: VPN status only needs to be live while the user is on a surface that
+    // shows it — the sidebar dashboard (toggle + dialog) or Settings. The bar's
+    // dashboard status dot is a *passive* reader: it reads the last-known `active`
+    // and must not keep the nmcli/provider poll (and its subprocess churn) alive
+    // at idle. Merely instantiating this singleton no longer probes or polls;
+    // opening a real surface (or autoConnect) does.
+    readonly property bool wanted: GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen
+    onWantedChanged: { if (root.wanted && root.enabled && root.componentReady) root.refresh() }
+
     onEnabledChanged: { if (!root.componentReady) return; if (root.enabled) root.refresh(); else { if (Config.options?.vpn?.disconnectOnDisable && root.active) root.disconnectOnDisableNow(); root.operationQueue = []; root.currentOperation = null; root.refreshQueued = false; root.resetDisabled() } }
 
-    Component.onCompleted: { root.componentReady = true; root.refresh() }
-    Connections { target: Config; function onReadyChanged() { if (Config.ready) { root.autoConnectAttempted = false; root.refresh() } } }
+    Component.onCompleted: { root.componentReady = true; if (root.autoConnect || root.wanted) root.refresh() }
+    Connections { target: Config; function onReadyChanged() { if (Config.ready) { root.autoConnectAttempted = false; if (root.autoConnect || root.wanted) root.refresh() } } }
 
     function parseNmcliLine(line: string): list<string> {
         const fields = []; let field = ""; let escaped = false
@@ -167,7 +177,7 @@ Singleton {
             root.finishOperation()
         }
     }
-    Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0; onTriggered: root.pollStatus() }
+    Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0 && root.wanted; onTriggered: root.pollStatus() }
     Process {
         id: filePickerProc
         running: false
