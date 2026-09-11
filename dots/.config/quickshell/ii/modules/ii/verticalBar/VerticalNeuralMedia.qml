@@ -230,28 +230,27 @@ MouseArea {
             }
         }
 
-        Column {
-            id: visualizerColumn
-            anchors.centerIn: parent
-            spacing: root.barGap
+    }
 
-            Repeater {
-                model: 4
-                Rectangle {
-                    required property int index
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: root.getBarLength(index)
-                    height: root.barThickness
-                    radius: root.barThickness / 2
-                    color: Appearance.colors.colPrimary
+    // Visualizer bars kept OUTSIDE pillContainer's masked layer so a 30 Hz Cava
+    // sample no longer forces the whole pill FBO + OpacityMask to re-render each
+    // sample. Widths are applied straight from the sample (no per-bar Behavior),
+    // matching ModernVisualizerBar — at 30 Hz the sampling already is the motion,
+    // and a per-bar width tween only added retarget churn.
+    Column {
+        id: visualizerColumn
+        anchors.centerIn: parent
+        spacing: root.barGap
 
-                    Behavior on width {
-                        NumberAnimation {
-                            duration: 85
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                }
+        Repeater {
+            model: 4
+            Rectangle {
+                required property int index
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: root.getBarLength(index)
+                height: root.barThickness
+                radius: root.barThickness / 2
+                color: Appearance.colors.colPrimary
             }
         }
     }

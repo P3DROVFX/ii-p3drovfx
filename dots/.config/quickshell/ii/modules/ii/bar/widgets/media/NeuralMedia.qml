@@ -263,101 +263,80 @@ Item {
 
     // ── CONTRACTED LAYOUT (album-art full background, matching FloatingNotchMedia) ──
 
-    // Rounded clip mask
-    Rectangle {
-        id: contractedMaskRect
-        anchors.fill: parent
-        radius: Appearance.rounding.small
-        visible: false
-    }
-
-    layer.enabled: true
-    layer.effect: OpacityMask {
-        maskSource: contractedMaskRect
-    }
-
-    // Vignette mask (horizontal + vertical gradients combined)
+    // Album-art card. Everything that only changes on track/art/play-state
+    // change is rendered into ONE masked layer here. The 30 Hz visualizer and
+    // the text are kept OUT of this layer (below, as direct children of root),
+    // so a Cava sample changing a bar height no longer forces the whole
+    // album-art FBO + OpacityMask to re-render 30x/s — the steady-state cost
+    // the 2026-09-09 GPU audit and the 2026-09-10 pass traced to this widget.
     Item {
-        id: contractedVignetteMask
+        id: artCard
         anchors.fill: parent
-        visible: true
 
-        Rectangle {
-            id: contractedHMask
-            anchors.fill: parent
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 0.08; color: "transparent" }
-                GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
-                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                GradientStop { position: 0.45; color: "white" }
-                GradientStop { position: 0.55; color: "white" }
-                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
-                GradientStop { position: 0.92; color: "transparent" }
-                GradientStop { position: 1.0; color: "transparent" }
-            }
+        layer.enabled: true
+        layer.effect: OpacityMask {
+            maskSource: contractedMaskRect
         }
 
+        // Rounded clip mask
         Rectangle {
+            id: contractedMaskRect
             anchors.fill: parent
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
-                GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
-                GradientStop { position: 0.5; color: "white" }
-                GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
-                GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
-                GradientStop { position: 1.0; color: "transparent" }
-            }
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: contractedHMask
-            }
+            radius: Appearance.rounding.small
+            visible: false
         }
-    }
 
-    // Album art layers (background blurred + sharp foreground with vignette)
-    Item {
-        anchors.fill: parent
-
-        // Current art (visible when no transition in progress)
+        // Vignette mask (horizontal + vertical gradients combined)
         Item {
+            id: contractedVignetteMask
             anchors.fill: parent
-            visible: root.artSource !== ""
+            visible: true
 
-            Image {
+            Rectangle {
+                id: contractedHMask
                 anchors.fill: parent
-                source: root.artSource
-                fillMode: Image.PreserveAspectCrop
-                smooth: true
-                asynchronous: true
-                cache: false
-                sourceSize.width: root.artSize * 2
-                sourceSize.height: root.artSize * 2
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    blurEnabled: true
-                    blurMax: 128
-                    blur: root.playing ? 50 / 128 : 90 / 128
-
-                    Behavior on blur {
-                        NumberAnimation {
-                            duration: 500
-                            easing.type: Easing.OutCubic
-                        }
-                    }
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.08; color: "transparent" }
+                    GradientStop { position: 0.2; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.45; color: "white" }
+                    GradientStop { position: 0.55; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.8; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.92; color: "transparent" }
+                    GradientStop { position: 1.0; color: "transparent" }
                 }
             }
 
-            Item {
+            Rectangle {
                 anchors.fill: parent
+                gradient: Gradient {
+                    orientation: Gradient.Vertical
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 0.15; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.5; color: "white" }
+                    GradientStop { position: 0.65; color: Qt.rgba(1, 1, 1, 0.7) }
+                    GradientStop { position: 0.85; color: Qt.rgba(1, 1, 1, 0.3) }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
                 layer.enabled: true
                 layer.effect: OpacityMask {
-                    maskSource: contractedVignetteMask
+                    maskSource: contractedHMask
                 }
+            }
+        }
+
+        // Album art layers (background blurred + sharp foreground with vignette)
+        Item {
+            anchors.fill: parent
+
+            // Current art (visible when no transition in progress)
+            Item {
+                anchors.fill: parent
+                visible: root.artSource !== ""
 
                 Image {
                     anchors.fill: parent
@@ -368,76 +347,108 @@ Item {
                     cache: false
                     sourceSize.width: root.artSize * 2
                     sourceSize.height: root.artSize * 2
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                        blurEnabled: true
+                        blurMax: 128
+                        blur: root.playing ? 50 / 128 : 90 / 128
+
+                        Behavior on blur {
+                            NumberAnimation {
+                                duration: 500
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    anchors.fill: parent
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: contractedVignetteMask
+                    }
+
+                    Image {
+                        anchors.fill: parent
+                        source: root.artSource
+                        fillMode: Image.PreserveAspectCrop
+                        smooth: true
+                        asynchronous: true
+                        cache: false
+                        sourceSize.width: root.artSize * 2
+                        sourceSize.height: root.artSize * 2
+                    }
                 }
             }
         }
-    }
 
-    // Fallback gradient when no art
-    Rectangle {
-        anchors.fill: parent
-        visible: root.artSource === ""
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-                position: 0.0
-                color: Appearance.colors.colSurfaceContainerHighest
-            }
-            GradientStop {
-                position: 1.0
-                color: Appearance.colors.colSurfaceContainer
-            }
-        }
-    }
-
-    // Music note icon centered when no art
-    MaterialSymbol {
-        anchors.centerIn: parent
-        visible: root.artSource === ""
-        text: "music_note"
-        iconSize: Appearance.font.pixelSize.large
-        color: Appearance.colors.colOnSurface
-        opacity: 0.5
-    }
-
-    // ── Radial gradient dimming overlay ──
-    Item {
-        anchors.fill: parent
-        opacity: root.playing ? 0.7 : 0.85
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 400
-                easing.type: Easing.OutQuad
-            }
-        }
-
+        // Fallback gradient when no art
         Rectangle {
             anchors.fill: parent
+            visible: root.artSource === ""
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                orientation: Gradient.Horizontal
+                GradientStop {
+                    position: 0.0
+                    color: Appearance.colors.colSurfaceContainerHighest
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Appearance.colors.colSurfaceContainer
+                }
             }
         }
 
-        // Extra dim layer when paused
-        Rectangle {
+        // Music note icon centered when no art
+        MaterialSymbol {
+            anchors.centerIn: parent
+            visible: root.artSource === ""
+            text: "music_note"
+            iconSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnSurface
+            opacity: 0.5
+        }
+
+        // ── Radial gradient dimming overlay ──
+        Item {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.3)
-            opacity: root.playing ? 0.0 : 0.5
+            opacity: root.playing ? 0.7 : 0.85
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 500
-                    easing.type: Easing.OutCubic
+                    duration: 400
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
+                    GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
+                    GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
+                    GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                }
+            }
+
+            // Extra dim layer when paused
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0, 0, 0, 0.3)
+                opacity: root.playing ? 0.0 : 0.5
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 500
+                        easing.type: Easing.OutCubic
+                    }
                 }
             }
         }
     }
 
-    // ── Content row ──
+    // ── Content row (text + visualizer) — kept OUTSIDE artCard's layer ──
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 12
