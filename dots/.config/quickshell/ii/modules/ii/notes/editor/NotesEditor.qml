@@ -60,6 +60,10 @@ Item {
 
     property bool aiMenuOpen: false
     property bool aiCompareOpen: false
+    // Latches true the first time AI is invoked, then gates the deferred AI
+    // Loader below. Keeps the AI task/menu/compare tree (N1: ~78 MiB PSS) out
+    // of the eager editor for the common case of editing without AI.
+    property bool aiLoaded: false
 
     function openAiMenu(requestedScope = ""): void {
         let scope = requestedScope;
@@ -85,9 +89,11 @@ Item {
             text = doc ? Doc.contentString(doc) : "";
         }
 
-        aiMenu.targetScope = scope;
-        aiMenu.targetText = text;
-        aiMenu.targetBlockId = blockId;
+        root.aiLoaded = true; // builds aiLoader synchronously so the menu exists
+        const menu = aiLoader.item.aiMenu;
+        menu.targetScope = scope;
+        menu.targetText = text;
+        menu.targetBlockId = blockId;
         root.aiMenuOpen = true;
     }
 
@@ -106,11 +112,12 @@ Item {
     }
 
     function onAiReplace(newText): void {
-        const mode = aiCompareSheet.mode;
+        const cs = aiLoader.item.aiCompareSheet;
+        const mode = cs.mode;
         if (mode === "selection" && root.hasSelection) {
             root.replaceActiveSelection(newText);
-        } else if (mode === "block" && aiCompareSheet.targetBlockId) {
-            root.apply([{ op: "update", id: aiCompareSheet.targetBlockId, patch: { text: newText } }]);
+        } else if (mode === "block" && cs.targetBlockId) {
+            root.apply([{ op: "update", id: cs.targetBlockId, patch: { text: newText } }]);
         } else if (mode === "title") {
             NotesService.updateMeta(root.noteId, { title: newText.trim() });
         } else if (mode === "tags") {
@@ -119,7 +126,7 @@ Item {
             if (tags.length > 0)
                 NotesService.updateMeta(root.noteId, { tags: tags });
         } else {
-            if (aiCompareSheet.taskTitle.indexOf("Resumo") !== -1 || aiCompareSheet.taskTitle.indexOf("Summary") !== -1) {
+            if (cs.taskTitle.indexOf("Resumo") !== -1 || cs.taskTitle.indexOf("Summary") !== -1) {
                 root.apply([{ op: "insert", index: 0, block: { type: "callout", tone: "info", text: newText } }]);
             } else {
                 if (root.activeBlockId)
@@ -131,7 +138,7 @@ Item {
     }
 
     function onAiInsertBelow(newText): void {
-        const targetId = aiCompareSheet.targetBlockId || root.activeBlockId;
+        const targetId = aiLoader.item.aiCompareSheet.targetBlockId || root.activeBlockId;
         const at = targetId.length > 0
             ? root.indexOfBlock(targetId) + 1
             : root.blocks.length;
@@ -756,75 +763,91 @@ Item {
         }
     }
 
-    AiTextTask {
-        id: aiTask
-    }
-
     NotesSelectionBar {
         id: selectionBar
         editor: root
         onAiRequested: root.openAiMenu("selection")
     }
 
-    Rectangle {
-        id: aiMenuBackdrop
+    // Deferred AI subsystem: task + menu + compare sheet. Built on the first
+    // openAiMenu() (aiLoaded latch) instead of eagerly with the editor. The
+    // aliases let root's AI handlers reach the ids once it exists.
+    Loader {
+        id: aiLoader
         anchors.fill: parent
-        z: 40
-        visible: root.aiMenuOpen
-        color: Qt.rgba(0, 0, 0, 0.45)
+        active: root.aiLoaded
 
-        MouseArea {
+        sourceComponent: Item {
             anchors.fill: parent
-            onClicked: root.aiMenuOpen = false
-        }
+            property alias aiTask: aiTask
+            property alias aiMenu: aiMenu
+            property alias aiCompareSheet: aiCompareSheet
 
-        NotesAiMenu {
-            id: aiMenu
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 32, 420)
-            height: Math.min(parent.height - 32, 520)
-            editor: root
-
-            onActionRequested: (taskName, systemPrompt, userText, meta) => {
-                root.aiMenuOpen = false;
-                aiTask.start(systemPrompt, userText);
-                aiCompareSheet.taskTitle = taskName;
-                aiCompareSheet.originalText = userText;
-                aiCompareSheet.proposedText = "";
-                aiCompareSheet.task = aiTask;
-                aiCompareSheet.targetBlockId = meta.blockId ?? "";
-                aiCompareSheet.mode = meta.mode ?? "selection";
-                root.aiCompareOpen = true;
+            AiTextTask {
+                id: aiTask
             }
 
-            onChatRequested: contextText => {
-                if (contextText.length > 0)
-                    Quickshell.execDetached(["wl-copy", "--", contextText]);
-                GlobalStates.sidebarLeftOpen = true;
+            Rectangle {
+                id: aiMenuBackdrop
+                anchors.fill: parent
+                z: 40
+                visible: root.aiMenuOpen
+                color: Qt.rgba(0, 0, 0, 0.45)
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.aiMenuOpen = false
+                }
+
+                NotesAiMenu {
+                    id: aiMenu
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 32, 420)
+                    height: Math.min(parent.height - 32, 520)
+                    editor: root
+
+                    onActionRequested: (taskName, systemPrompt, userText, meta) => {
+                        root.aiMenuOpen = false;
+                        aiTask.start(systemPrompt, userText);
+                        aiCompareSheet.taskTitle = taskName;
+                        aiCompareSheet.originalText = userText;
+                        aiCompareSheet.proposedText = "";
+                        aiCompareSheet.task = aiTask;
+                        aiCompareSheet.targetBlockId = meta.blockId ?? "";
+                        aiCompareSheet.mode = meta.mode ?? "selection";
+                        root.aiCompareOpen = true;
+                    }
+
+                    onChatRequested: contextText => {
+                        if (contextText.length > 0)
+                            Quickshell.execDetached(["wl-copy", "--", contextText]);
+                        GlobalStates.sidebarLeftOpen = true;
+                    }
+
+                    onClosed: root.aiMenuOpen = false
+                }
             }
 
-            onClosed: root.aiMenuOpen = false
-        }
-    }
+            NotesAiCompareSheet {
+                id: aiCompareSheet
+                anchors.fill: parent
+                z: 50
+                visible: root.aiCompareOpen
 
-    NotesAiCompareSheet {
-        id: aiCompareSheet
-        anchors.fill: parent
-        z: 50
-        visible: root.aiCompareOpen
+                onReplaceRequested: (newText) => {
+                    root.onAiReplace(newText);
+                    root.aiCompareOpen = false;
+                }
 
-        onReplaceRequested: (newText) => {
-            root.onAiReplace(newText);
-            root.aiCompareOpen = false;
-        }
+                onInsertBelowRequested: (newText) => {
+                    root.onAiInsertBelow(newText);
+                    root.aiCompareOpen = false;
+                }
 
-        onInsertBelowRequested: (newText) => {
-            root.onAiInsertBelow(newText);
-            root.aiCompareOpen = false;
-        }
-
-        onDiscardRequested: {
-            root.aiCompareOpen = false;
+                onDiscardRequested: {
+                    root.aiCompareOpen = false;
+                }
+            }
         }
     }
 
