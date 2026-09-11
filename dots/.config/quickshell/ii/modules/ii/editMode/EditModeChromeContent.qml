@@ -159,7 +159,6 @@ Item {
             opacity: root.slotReveal(0)
             scale: root.slotScale(0)
             Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 4
             implicitHeight: Appearance.sizes.toolbarHeight - 12
             tabButtonList: [
                 { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },

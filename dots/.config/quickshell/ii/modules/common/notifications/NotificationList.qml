@@ -155,6 +155,7 @@ Item {
         PagePlaceholder {
             anchors.fill: parent
             shown: Notifications.list.length === 0
+            fitToParent: true
             sizeScale: root.placeholderScale
             icon: "notifications_active"
             description: Translation.tr("Nothing")

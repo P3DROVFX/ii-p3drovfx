@@ -20,6 +20,10 @@ Item {
     property real sizeScale: 1.0
     property real titlePixelSize: Appearance.font.pixelSize.larger
     property real descriptionPixelSize: Appearance.font.pixelSize.small
+    /// Fit the whole composition to the available height by scaling it down
+    /// around its center when the host is shorter than the content. The ratio
+    /// uses the unscaled implicitHeight, so `scale` never feeds back into it.
+    property bool fitToParent: false
 
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -183,12 +187,23 @@ Item {
     }
 
     ColumnLayout {
+        id: contentColumn
         anchors.centerIn: parent
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: 20
         anchors.rightMargin: 20
         spacing: 5
+        scale: root.fitToParent && implicitHeight > 0 && root.height > 0
+            ? Math.min(1.0, root.height / implicitHeight)
+            : 1.0
+        Behavior on scale {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
 
         Item {
             Layout.alignment: Qt.AlignHCenter

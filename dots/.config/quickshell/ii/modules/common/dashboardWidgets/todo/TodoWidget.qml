@@ -41,7 +41,7 @@ Item {
     // both buttons by the same 260/350 the bottom group itself lost.
     property int fabSize: root.dense ? 40 : (root.compact ? 42 : 56)
     property int fabMargins: root.dense ? 6 : (root.compact ? 10 : 14)
-    property int syncButtonSize: root.dense ? 36 : (root.compact ? 27 : 36)
+    property int syncButtonSize: root.dense ? 32 : (root.compact ? 36 : 40)
 
     readonly property var unfinishedTasks: {
         const source = Todo.list ?? [];
@@ -166,18 +166,71 @@ Item {
             }
         }
 
-        Toolbar {
+        // The tab pill and the TickTick sync circle share one centered row, so
+        // the circle reads as an attachment of the toolbar instead of a
+        // floating control over the list.
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredHeight: Appearance.sizes.toolbarHeight
-            enableShadow: false
-            colBackground: Appearance.colors.colSurfaceContainer
-            ToolbarTabBar {
-                id: tabBar
-                tabButtonList: root.tabButtonList
-                collapseInactiveLabels: root.dense
-                requestOnly: true
-                currentIndex: root.selectedTab
-                onIndexSelected: index => root.selectTab(index)
+            spacing: 6
+
+            Toolbar {
+                enableShadow: false
+                colBackground: Appearance.colors.colSurfaceContainer
+                ToolbarTabBar {
+                    id: tabBar
+                    tabButtonList: root.tabButtonList
+                    collapseInactiveLabels: root.dense
+                    requestOnly: true
+                    currentIndex: root.selectedTab
+                    onIndexSelected: index => root.selectTab(index)
+                }
+            }
+
+            // Provider sync / status action — TickTick only
+            RippleButton {
+                id: syncButton
+                visible: Todo.provider === "ticktick"
+                implicitWidth: root.syncButtonSize
+                implicitHeight: root.syncButtonSize
+                Layout.alignment: Qt.AlignVCenter
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSecondaryContainer
+                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+                colRipple: Appearance.colors.colOnSecondaryContainer
+
+                onClicked: {
+                    if (Todo.connected) {
+                        Todo.refresh();
+                    } else {
+                        GlobalStates.openSettingsPage("tasksAccounts");
+                    }
+                }
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "refresh"
+                    fill: 1
+                    iconSize: root.dense
+                        ? Appearance.font.pixelSize.normal
+                        : Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colOnSecondaryContainer
+                    opacity: Todo.connected ? 1.0 : 0.4
+                }
+
+                StyledToolTip {
+                    text: {
+                        if (!Todo.connected) {
+                            return Todo.providerName + " · " + Translation.tr("Not connected. Click to setup.");
+                        }
+                        if (Todo.syncing) {
+                            return Todo.providerName + " · " + Translation.tr("Syncing...");
+                        }
+                        return Todo.providerName + " · " + Translation.tr("Synced");
+                    }
+                }
             }
         }
 
@@ -215,78 +268,6 @@ Item {
                 emptyPlaceholderText: Translation.tr("Finished tasks will go here")
                 entranceTrigger: root.entranceTrigger
                 taskList: root.doneTasks
-            }
-        }
-    }
-
-    // Provider sync / status indicator
-    RippleButton {
-        id: syncButton
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: root.fabMargins
-        anchors.bottomMargin: root.fabMargins
-        implicitWidth: root.syncButtonSize
-        implicitHeight: root.syncButtonSize
-        buttonRadius: Appearance.rounding.full
-        opacity: root.viewOpen ? 0 : 1
-        visible: opacity > 0.001
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-            }
-        }
-
-        onClicked: {
-            if (Todo.remoteEnabled && Todo.connected) {
-                Todo.refresh();
-            } else {
-                GlobalStates.openSettingsPage("tasksAccounts");
-            }
-        }
-
-        contentItem: MaterialSymbol {
-            anchors.centerIn: parent
-            horizontalAlignment: Text.AlignHCenter
-            text: {
-                if (!Todo.remoteEnabled) {
-                    return "save";
-                }
-                if (!Todo.connected) {
-                    return "cloud_off";
-                }
-                return Todo.syncing ? "sync" : "cloud_done";
-            }
-            font.pixelSize: root.dense
-                ? Appearance.font.pixelSize.normal
-                : (root.compact ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.larger)
-            color: {
-                if (!Todo.remoteEnabled) {
-                    return Appearance.colors.colOnSurfaceVariant;
-                }
-                if (!Todo.connected) {
-                    return Appearance.colors.colOnSurfaceVariant;
-                }
-                return Todo.syncing ? Appearance.colors.colPrimary : Appearance.colors.colPrimary;
-            }
-            opacity: (!Todo.remoteEnabled || Todo.connected) ? 1.0 : 0.4
-        }
-
-        StyledToolTip {
-            text: {
-                if (Todo.provider === "local") {
-                    return Translation.tr("Tasks are stored locally.");
-                }
-                if (!Todo.connected) {
-                    return Todo.providerName + " · " + Translation.tr("Not connected. Click to setup.");
-                }
-                if (Todo.syncing) {
-                    return Todo.providerName + " · " + Translation.tr("Syncing...");
-                }
-                return Todo.providerName + " · " + Translation.tr("Synced");
             }
         }
     }

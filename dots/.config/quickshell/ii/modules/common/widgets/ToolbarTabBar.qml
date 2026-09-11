@@ -105,6 +105,11 @@ Item {
         anchors.fill: parent
         z: 2
         acceptedButtons: Qt.NoButton
+        // Without hover the hand above never applies: a NoButton area that
+        // never hovers contributes neither cursor nor wheel, so the tabs
+        // underneath would be the only hand left. Clicks still fall through
+        // to the delegates below.
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
 
         property bool throttleActive: false

@@ -17,24 +17,17 @@ Rectangle {
     property bool collapsed: false
     property int entranceTrigger: -1
     readonly property real contentMargin: 5
-    property real verticalContentMargin: collapsed ? 0 : contentMargin
-    readonly property real collapsedHeight: notificationList.collapsedHeight
+    // The collapsed pill keeps the same inset on every edge; the collapsed
+    // height therefore carries the vertical margins too, otherwise the status
+    // row would be clipped by the card's clip.
+    readonly property real collapsedHeight: notificationList.collapsedHeight + contentMargin * 2
     readonly property real minimumExpandedHeight: notificationList.minimumExpandedHeight + contentMargin * 2
     implicitHeight: collapsed ? collapsedHeight : 250
-
-    Behavior on verticalContentMargin {
-        SidebarGroupAnimation {
-            animationSpec: Appearance.animation.elementMove
-        }
-    }
 
     NotificationList {
         id: notificationList
         anchors.fill: parent
-        anchors.leftMargin: root.contentMargin
-        anchors.rightMargin: root.contentMargin
-        anchors.topMargin: root.verticalContentMargin
-        anchors.bottomMargin: root.verticalContentMargin
+        anchors.margins: root.contentMargin
         collapsed: root.collapsed
         entranceTrigger: root.entranceTrigger
     }
