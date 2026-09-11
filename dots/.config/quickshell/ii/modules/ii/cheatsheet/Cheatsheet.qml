@@ -109,9 +109,10 @@ Scope {
     property bool cachePrepared: false
     // Opt-in diagnostic; normal sessions have no sampler or diagnostic timers.
     readonly property bool cacheProbeEnabled: Quickshell.env("II_CHEATSHEET_CACHE_PROBE") === "1"
-    readonly property bool cacheWanted: Config.ready && Persistent.ready
-        && Config.options.cheatsheet.keepLastTabLoaded
-    function prepareCache() { root.cachePrepared = true; }
+    readonly property bool cacheWanted: Config.ready && Persistent.ready && Config.options.cheatsheet.keepLastTabLoaded
+    function prepareCache() {
+        root.cachePrepared = true;
+    }
     readonly property bool cacheReady: cheatsheetLoader.item?.pageReady ?? false
 
     Timer {
@@ -120,7 +121,8 @@ Scope {
         running: root.cacheWanted && !root.cachePrepared && !root.cacheProbeEnabled
         onTriggered: root.prepareCache()
     }
-    onCacheWantedChanged: if (!cacheWanted) cachePrepared = false
+    onCacheWantedChanged: if (!cacheWanted)
+        cachePrepared = false
 
     Loader {
         active: root.cacheProbeEnabled && Config.ready && Persistent.ready
@@ -182,16 +184,14 @@ Scope {
             id: cheatsheetRoot
             visible: root.activeState
             property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1, Persistent.states.cheatsheet.tabIndex))
-            readonly property bool pageReady: swipeView.selectionReady
-                && swipeView.currentItem?.isCurrent === true
-                && swipeView.currentItem?.status === Loader.Ready
-                && (swipeView.currentItem.item?.lookupReady ?? true)
+            readonly property bool pageReady: swipeView.selectionReady && swipeView.currentItem?.isCurrent === true && swipeView.currentItem?.status === Loader.Ready && (swipeView.currentItem.item?.lookupReady ?? true)
 
             // Persistence is changed only by a navigation request. SwipeView
             // adjusts its index while Repeater inserts children asynchronously;
             // those intermediate indices are not a user selection.
             function selectTab(index) {
-                if (index < 0 || index >= root.tabButtonList.length) return;
+                if (index < 0 || index >= root.tabButtonList.length)
+                    return;
                 if (Persistent.states.cheatsheet.tabIndex !== index)
                     Persistent.states.cheatsheet.tabIndex = index;
                 swipeView.restoreSelection();
@@ -483,8 +483,7 @@ Scope {
                                 // A row of every cheatsheet page is wider than a
                                 // compact display. Keep every destination as an
                                 // icon, while only the current one keeps its label.
-                                collapseInactiveLabels: cheatsheetRoot.screen
-                                    && cheatsheetRoot.screen.width < 1100
+                                collapseInactiveLabels: cheatsheetRoot.screen && cheatsheetRoot.screen.width < 1100
 
                                 requestOnly: true
                                 currentIndex: cheatsheetRoot.selectedTab
@@ -499,17 +498,42 @@ Scope {
                             Layout.fillHeight: true
                             property bool selectionReady: false
                             function restoreSelection() {
-                                if (count !== root.tabButtonList.length) return;
+                                if (count !== root.tabButtonList.length)
+                                    return;
                                 selectionReady = false;
                                 setCurrentIndex(cheatsheetRoot.selectedTab);
+                                alignViewport();
                                 selectionReady = true;
                             }
+                            // A SwipeView scrolls its viewport only when the current
+                            // index *changes*, and the saved index is already set while
+                            // the window incubates hidden, with no screen to size
+                            // against. The pages are laid out at placeholder widths
+                            // then, so the viewport settles on whichever page sits at
+                            // offset zero; when the real geometry arrives the pages move
+                            // and the viewport does not. The toolbar then highlights a
+                            // page parked off-screen and the sheet reads as empty until
+                            // the next tab switch moves the index. Re-snapping the
+                            // viewport to the selected page keeps the two in step.
+                            function alignViewport() {
+                                const view = swipeView.contentItem;
+                                if (!view || typeof view.positionViewAtIndex !== "function")
+                                    return;
+                                if (count !== root.tabButtonList.length)
+                                    return;
+                                if (view.moving || view.dragging)
+                                    return;
+                                view.positionViewAtIndex(cheatsheetRoot.selectedTab, ListView.SnapPosition);
+                            }
+                            onWidthChanged: Qt.callLater(alignViewport)
+                            onHeightChanged: Qt.callLater(alignViewport)
                             onCountChanged: {
                                 selectionReady = false;
                                 Qt.callLater(restoreSelection);
                             }
                             Component.onCompleted: {
-                                if (contentItem) contentItem.highlightMoveDuration = 0;
+                                if (contentItem)
+                                    contentItem.highlightMoveDuration = 0;
                                 Qt.callLater(restoreSelection);
                             }
 
@@ -525,10 +549,7 @@ Scope {
                             Layout.maximumHeight: calculatedHeight
                             spacing: 10
                             currentIndex: cheatsheetRoot.selectedTab
-                            readonly property bool currentPageLocksHorizontalSwipe: currentItem
-                                && currentItem.status === Loader.Ready
-                                && currentItem.item
-                                && currentItem.item.timetableDragActive === true
+                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && currentItem.item.timetableDragActive === true
                             interactive: !swipeView.currentPageLocksHorizontalSwipe
                             onCurrentIndexChanged: {
                                 if (selectionReady && count === root.tabButtonList.length && cheatsheetRoot.selectedTab !== currentIndex)
