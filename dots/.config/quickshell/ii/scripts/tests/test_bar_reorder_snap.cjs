@@ -177,4 +177,156 @@ function at(cells, bucket, index) {
     assert.equal(r.cell.index, 2);
 }
 
+// ── reorderShift contract (1D widget shift preview) ─────────────────────────
+{
+    function computeReorderShift(fromBucket, fromIndex, dragExtent, targetBucket, targetIndex, bucket, index) {
+        const step = dragExtent;
+        if (fromBucket === targetBucket) {
+            if (bucket !== fromBucket || index === fromIndex)
+                return 0;
+            const dest = E.moveTargetForInsertion(fromIndex, targetIndex);
+            if (dest === fromIndex)
+                return 0;
+            if (fromIndex < dest) {
+                return (index > fromIndex && index <= dest) ? -step : 0;
+            } else if (fromIndex > dest) {
+                return (index >= dest && index < fromIndex) ? step : 0;
+            }
+            return 0;
+        }
+        if (bucket === fromBucket) {
+            return index > fromIndex ? -step : 0;
+        } else if (bucket === targetBucket) {
+            return index >= targetIndex ? step : 0;
+        }
+        return 0;
+    }
+
+    const extent = 48;
+
+    // Moving slot 0 forward to slot 2 (targetIndex 2):
+    // dest = moveTargetForInsertion(0, 2) = 1
+    assert.equal(computeReorderShift(0, 0, extent, 0, 2, 0, 0), 0); // dragged item itself
+    assert.equal(computeReorderShift(0, 0, extent, 0, 2, 0, 1), -extent); // slot 1 shifts up to slot 0
+    assert.equal(computeReorderShift(0, 0, extent, 0, 2, 0, 2), 0); // slot 2 untouched
+
+    // Moving slot 2 backward to slot 0 (targetIndex 0):
+    // dest = moveTargetForInsertion(2, 0) = 0
+    assert.equal(computeReorderShift(0, 2, extent, 0, 0, 0, 0), extent); // slot 0 shifts down
+    assert.equal(computeReorderShift(0, 2, extent, 0, 0, 0, 1), extent); // slot 1 shifts down
+    assert.equal(computeReorderShift(0, 2, extent, 0, 0, 0, 2), 0); // slot 2 dragged
+
+    // Neutral / hovering original slot (from 1 to 1):
+    assert.equal(computeReorderShift(0, 1, extent, 0, 1, 0, 0), 0);
+    assert.equal(computeReorderShift(0, 1, extent, 0, 1, 0, 1), 0);
+    assert.equal(computeReorderShift(0, 1, extent, 0, 1, 0, 2), 0);
+
+    // Cross-bucket: leaving bucket 0, entering bucket 2 at index 1:
+    assert.equal(computeReorderShift(0, 1, extent, 2, 1, 0, 0), 0); // slot 0 before it stays
+    assert.equal(computeReorderShift(0, 1, extent, 2, 1, 0, 2), -extent); // slot 2 shifts up to close hole
+    assert.equal(computeReorderShift(0, 1, extent, 2, 1, 2, 0), 0); // bucket 2 slot 0 stays
+    assert.equal(computeReorderShift(0, 1, extent, 2, 1, 2, 1), extent); // bucket 2 slot 1 shifts down
+    assert.equal(computeReorderShift(0, 1, extent, 2, 1, 2, 2), extent); // bucket 2 slot 2 shifts down
+}
+
+// ── checkNeighborSwapTarget contract (extremity and unequal size swap) ──────
+{
+    function checkNeighborSwap(dragSlot, dragOriginAlong, dragOffset, dragExtent, restingGroups, currentDropTarget) {
+        if (!dragSlot || !restingGroups)
+            return null;
+        const fromBucket = dragSlot.bucket;
+        const fromIndex = dragSlot.storedIndex;
+        const group = restingGroups.find(g => g.bucket === fromBucket);
+        if (!group || !group.slots || group.slots.length < 2)
+            return null;
+
+        const slots = group.slots.slice().sort((a, b) => a.at - b.at);
+        const currentIndex = slots.findIndex(s => s.index === fromIndex);
+        if (currentIndex < 0)
+            return null;
+
+        const visualStart = dragOriginAlong + dragOffset;
+        const visualEnd = visualStart + dragExtent;
+
+        if (dragOffset > 0 && currentIndex < slots.length - 1) {
+            for (let i = slots.length - 1; i > currentIndex; i--) {
+                const targetSlot = slots[i];
+                const targetStart = targetSlot.at - targetSlot.extent / 2;
+                const overlap = visualEnd - targetStart;
+                const minExtent = Math.min(dragExtent, targetSlot.extent);
+
+                const isCurrentlyTarget = currentDropTarget
+                    && currentDropTarget.bucket === fromBucket
+                    && currentDropTarget.index === targetSlot.index + 1;
+
+                const enterThreshold = minExtent * 0.35;
+                const exitThreshold = minExtent * 0.15;
+
+                if (isCurrentlyTarget ? (overlap >= exitThreshold) : (overlap >= enterThreshold)) {
+                    return { "bucket": fromBucket, "index": targetSlot.index + 1 };
+                }
+            }
+        }
+
+        if (dragOffset < 0 && currentIndex > 0) {
+            for (let i = 0; i < currentIndex; i++) {
+                const targetSlot = slots[i];
+                const targetEnd = targetSlot.at + targetSlot.extent / 2;
+                const overlap = targetEnd - visualStart;
+                const minExtent = Math.min(dragExtent, targetSlot.extent);
+
+                const isCurrentlyTarget = currentDropTarget
+                    && currentDropTarget.bucket === fromBucket
+                    && currentDropTarget.index === targetSlot.index;
+
+                const enterThreshold = minExtent * 0.35;
+                const exitThreshold = minExtent * 0.15;
+
+                if (isCurrentlyTarget ? (overlap >= exitThreshold) : (overlap >= enterThreshold)) {
+                    return { "bucket": fromBucket, "index": targetSlot.index };
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Two widgets in bucket 2:
+    // Slot 0: Dashboard (extent 240, resting start 0, resting center 120)
+    // Slot 1: Power (extent 36, resting start 240, resting center 258) - trailing extremity
+    const restingGroups = [{
+        bucket: 2,
+        slots: [
+            { index: 0, at: 120, extent: 240 },
+            { index: 1, at: 258, extent: 36 }
+        ]
+    }];
+
+    const dashboardSlot = { bucket: 2, storedIndex: 0 };
+    const powerSlot = { bucket: 2, storedIndex: 1 };
+
+    // Case 1: Dragging Dashboard (240px) right over Power (36px)
+    // threshold = 36 * 0.35 = 12.6px
+    assert.equal(checkNeighborSwap(dashboardSlot, 0, 10, 240, restingGroups, null), null);
+    const swapped = checkNeighborSwap(dashboardSlot, 0, 14, 240, restingGroups, null);
+    assert.deepEqual(swapped, { bucket: 2, index: 2 }); // after Power (index 1 + 1)
+
+    // Hysteresis test: once swapped, dragging back to 10px (exitThreshold 5.4px) holds the swap
+    assert.deepEqual(checkNeighborSwap(dashboardSlot, 0, 10, 240, restingGroups, swapped), { bucket: 2, index: 2 });
+    // When dragged back below 5.4px, swap reverts to null
+    assert.equal(checkNeighborSwap(dashboardSlot, 0, 4, 240, restingGroups, swapped), null);
+
+    // Case 2: Dragging Power (36px) left over Dashboard (240px)
+    // resting start = 240. threshold = 36 * 0.35 = 12.6px
+    assert.equal(checkNeighborSwap(powerSlot, 240, -10, 36, restingGroups, null), null);
+    const swappedLeft = checkNeighborSwap(powerSlot, 240, -14, 36, restingGroups, null);
+    assert.deepEqual(swappedLeft, { bucket: 2, index: 0 }); // before Dashboard (index 0)
+
+    // Hysteresis test: once swapped left, dragging back to -10px holds the swap
+    assert.deepEqual(checkNeighborSwap(powerSlot, 240, -10, 36, restingGroups, swappedLeft), { bucket: 2, index: 0 });
+    // When dragged back below 5.4px (-4px), swap reverts to null
+    assert.equal(checkNeighborSwap(powerSlot, 240, -4, 36, restingGroups, swappedLeft), null);
+}
+
 console.log('bar reorder snap: all assertions passed');
+

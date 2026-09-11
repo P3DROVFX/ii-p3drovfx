@@ -94,6 +94,11 @@ Item {
     required property bool hasWindowsInActiveWorkspace
     required property var widgetStateManager
 
+    // The quality switch is also the opt-in for the reduced wallpaper render
+    // targets.  With it off, keep the original full-resolution composition so
+    // the wallpaper never goes through the cached low-resolution path.
+    readonly property bool reduceVramUsage: Config.options.background.scaleLargeWallpapers === true
+
     // Output aliases
     property alias wallpaperItem: wallpaper
     property alias clipRectItem: centralWallpaperClipRect
@@ -210,9 +215,9 @@ Item {
         opacity: 1.0
         mipmap: false
         antialiasing: false
-        // The original blurred backings use a reduced source because they do
-        // not need the detail budget of the central wallpaper plane.
-        sourceSize: wallpaperImageRoot.overviewController.useBackingBlur
+        // The reduced backing source is part of the opt-in VRAM-saving path;
+        // with the toggle off it follows the native-size branch below.
+        sourceSize: wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.reduceVramUsage
             ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
             : (Config.options.background.scaleLargeWallpapers
                 ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
@@ -220,8 +225,10 @@ Item {
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
         // This image is already decoded at 1/8 resolution for blur. Preserve
         // its crop in a small texture instead of MultiEffect's fullscreen proxy.
-        layer.enabled: overviewBackingBlurLoader.active
-        layer.textureSize: Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
+        layer.enabled: wallpaperImageRoot.reduceVramUsage && overviewBackingBlurLoader.active
+        layer.textureSize: wallpaperImageRoot.reduceVramUsage
+            ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
+            : Qt.size(0, 0)
         layer.smooth: true
     }
 
@@ -230,8 +237,10 @@ Item {
         anchors.fill: overviewBackingImage
         // Cache the final blur as well as its input. Gnome's blur is static;
         // Card Lift changes it per frame, but now renders only 1/16 the pixels.
-        layer.enabled: active
-        layer.textureSize: Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
+        layer.enabled: wallpaperImageRoot.reduceVramUsage && active
+        layer.textureSize: wallpaperImageRoot.reduceVramUsage
+            ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
+            : Qt.size(0, 0)
         layer.smooth: true
         // The backing must survive until the closing zoom covers it again.
         // Gating Gnome on active alone destroyed its blur on the first close frame.
@@ -524,11 +533,12 @@ Item {
                         // headroom (decodeSizeFor). A 5320x3136 file decoded native
                         // costs ~64 MiB of RGBA texture per Image for pixels the plane
                         // can never show; the cap only fires when the file is larger
-                        // than the plane and never upscales. scaleLargeWallpapers keeps
-                        // its legacy explicit cap.
-                        sourceSize: Config.options.background.scaleLargeWallpapers
-                            ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
-                            : wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
+                        // than the plane and never upscales. The helper is only
+                        // selected while the VRAM reduction toggle is enabled;
+                        // disabling it restores the native decode size.
+                        sourceSize: wallpaperImageRoot.reduceVramUsage
+                            ? wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
+                            : Qt.size(-1, -1)
 
                         imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges

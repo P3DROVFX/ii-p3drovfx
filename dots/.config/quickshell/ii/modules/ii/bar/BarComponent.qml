@@ -40,6 +40,7 @@ import qs.modules.ii.verticalBar as Vertical
 Item {
     id: rootItem
 
+    z: rootItem.isBeingDragged ? 1000 : (rootItem.highlighted ? 10 : 1)
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
     // Edit Mode's drop preview: the room this widget stands aside to open.
@@ -119,6 +120,16 @@ Item {
         Translate {
             id: verticalTranslation
             y: 0
+        },
+        Translate {
+            id: dragTranslation
+            x: (!rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
+            y: (rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
+        },
+        Translate {
+            id: reorderTranslation
+            x: (!rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
+            y: (rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
         }
     ]
 
@@ -397,8 +408,7 @@ Item {
     onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
     onIsNotchModeChanged: rootItem.beginBoxResize()
 
-    implicitWidth: rootItem.editLifted ? 0
-        : (rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth)
+    implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
     Behavior on implicitWidth {
         enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -408,8 +418,7 @@ Item {
         }
     }
 
-    implicitHeight: (rootItem.editLifted && rootItem.vertical) ? 0
-        : (rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight)
+    implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
     Behavior on implicitHeight {
         enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -419,14 +428,8 @@ Item {
         }
     }
 
-    // Transparent, not hidden: the drag's own MouseArea is inside this widget
-    // and has the pointer grab, so it has to stay alive until the release.
-    opacity: rootItem.editLifted ? 0.0 : (targetWidth > 0 ? 1.0 : 0.0)
-    // ...and it fades on the same clock its hole closes on, rather than
-    // blinking out in one frame and leaving an empty gap to animate shut
-    // behind it. Gated on the mode, because outside it this property is owned
-    // by the notch's own states and transitions (below) and a Behavior on a
-    // property a Transition is driving fights it for every frame.
+    opacity: (rootItem.vertical ? (rootItem.hasLayoutContent && wrapper.implicitHeight > 0) : targetWidth > 0)
+        ? (rootItem.isBeingDragged ? 0.94 : 1.0) : 0.0
     Behavior on opacity {
         enabled: !Appearance.reducedMotion && GlobalStates.editMode && !rootItem.isNotchMode
         animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
@@ -601,6 +604,8 @@ Item {
     BarGroup {
         id: wrapper
         vertical: rootItem.vertical
+        width: rootItem.vertical ? rootItem.width : (rootItem.targetWidth > 0 ? rootItem.targetWidth : wrapper.implicitWidth)
+        height: rootItem.vertical ? (rootItem.hasLayoutContent ? wrapper.implicitHeight : 0) : rootItem.height
         // The cross axis always fills; the growth axis is pinned to the edge
         // this widget's section grows away from (see growthEdge above). Notch
         // mode keeps neither: it positions the wrapper by `x` below.
@@ -615,7 +620,7 @@ Item {
 
         x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0
 
-        transform: [entryTranslation, moveTranslation, verticalTranslation]
+        transform: [entryTranslation, moveTranslation, verticalTranslation, dragTranslation, reorderTranslation]
 
         readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
@@ -885,27 +890,27 @@ Item {
     }
 
     // ── Edit Mode drop preview ─────────────────────────────────────────────
-    // Answered by the bar's controller in pixels. Dependency capture reaches
-    // inside a called function, so these re-run whenever the carried widget or
-    // its landing place changes.
-    readonly property real editGapBeforeTarget: rootItem.editController
-        ? rootItem.editController.gapBefore(rootItem.barSection, rootItem.originalIndex) : 0
-    readonly property real editGapAfterTarget: rootItem.editController
-        ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
-    // This is the widget being carried: it leaves its place, and the row
-    // closes over it, so what the bar is worth stays what it was.
-    readonly property bool editLifted: rootItem.editController
-        ? rootItem.editController.isLifted(rootItem.barSection, rootItem.originalIndex) : false
-    onEditLiftedChanged: rootItem.beginBoxResize()
+    readonly property bool isBeingDragged: rootItem.editController !== null
+        && rootItem.editController.dragActive
+        && rootItem.editController.dragSlot !== null
+        && rootItem.editController.dragSlot.barComponent === rootItem
 
-    // Both halves of the gesture on ONE clock, which is the bar's own
-    // ([[bar-resize-single-clock]]). The hole the carried widget leaves closes
-    // through `implicitWidth` on `barResize` (280ms, expressiveFastSpatial);
-    // these two open the hole it would land in, and they were on
-    // `elementMoveFast` (200ms, expressiveEffects). Two clocks and two curves
-    // for one movement do not add - the row parts faster than the widget
-    // collapses, so the bar's total width wobbles mid-drag and the widgets
-    // between the two ends drift instead of sliding.
+    readonly property real reorderShiftTarget: rootItem.editController
+        ? rootItem.editController.reorderShift(rootItem.barSection, rootItem.originalIndex) : 0
+    property real reorderShift: rootItem.reorderShiftTarget
+    Behavior on reorderShift {
+        enabled: !Appearance.reducedMotion && GlobalStates.editMode
+        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
+    }
+
+    readonly property real dragOffset: rootItem.isBeingDragged && rootItem.editController
+        ? rootItem.editController.dragOffset : 0
+
+    // External drop preview gaps (from catalogue drawer)
+    readonly property real editGapBeforeTarget: (rootItem.editController && rootItem.editController.externalActive)
+        ? rootItem.editController.gapBefore(rootItem.barSection, rootItem.originalIndex) : 0
+    readonly property real editGapAfterTarget: (rootItem.editController && rootItem.editController.externalActive)
+        ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
     property real editGapBefore: rootItem.editGapBeforeTarget
     Behavior on editGapBefore {
         enabled: !Appearance.reducedMotion
@@ -917,8 +922,11 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
     }
 
+    readonly property bool editLifted: false
+
     Loader {
-        anchors.fill: wrapper
+        parent: wrapper
+        anchors.fill: parent
         z: 5
         active: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion) && rootItem.hasLayoutContent && rootItem.editController !== null
         sourceComponent: BarEditSlot {
@@ -926,6 +934,7 @@ Item {
             bucket: rootItem.barSection
             storedIndex: rootItem.originalIndex
             widgetId: modelData.id
+            barComponent: rootItem
             // The hole beside this widget AS IT IS RIGHT NOW. The controller
             // draws the drop indicator in it and cannot see the animated
             // margin from where it sits, so the widget hands it over.

@@ -49,7 +49,79 @@ Item {
     // on frozen cells". The hold window is the bar's own resize clock.
     property var dragCells: null
     property var dragState: null
+    property var restingGroups: null
     readonly property real settleWindow: Appearance.animation.barResize.duration + 140
+
+    property real dragPointerStart: 0
+    property real dragOriginAlong: 0
+    property real dragCurrentAlong: 0
+    property real dragOffset: 0
+
+    function isLifted(bucket, index) {
+        return false;
+    }
+
+    function checkNeighborSwapTarget() {
+        if (!root.dragActive || !root.dragSlot || !root.restingGroups)
+            return null;
+        const fromBucket = root.dragSlot.bucket;
+        const fromIndex = root.dragSlot.storedIndex;
+        const group = root.restingGroups.find(g => g.bucket === fromBucket);
+        if (!group || !group.slots || group.slots.length < 2)
+            return null;
+
+        const slots = group.slots.slice().sort((a, b) => a.at - b.at);
+        const currentIndex = slots.findIndex(s => s.index === fromIndex);
+        if (currentIndex < 0)
+            return null;
+
+        const visualStart = root.dragOriginAlong + root.dragOffset;
+        const visualEnd = visualStart + root.dragExtent;
+
+        // Check forward movement (towards higher indices / trailing extremity)
+        if (root.dragOffset > 0 && currentIndex < slots.length - 1) {
+            for (let i = slots.length - 1; i > currentIndex; i--) {
+                const targetSlot = slots[i];
+                const targetStart = targetSlot.at - targetSlot.extent / 2;
+                const overlap = visualEnd - targetStart;
+                const minExtent = Math.min(root.dragExtent, targetSlot.extent);
+
+                const isCurrentlyTarget = root.dropTarget
+                    && root.dropTarget.bucket === fromBucket
+                    && root.dropTarget.index === targetSlot.index + 1;
+
+                const enterThreshold = minExtent * 0.35;
+                const exitThreshold = minExtent * 0.15;
+
+                if (isCurrentlyTarget ? (overlap >= exitThreshold) : (overlap >= enterThreshold)) {
+                    return { "bucket": fromBucket, "index": targetSlot.index + 1 };
+                }
+            }
+        }
+
+        // Check backward movement (towards lower indices / leading extremity)
+        if (root.dragOffset < 0 && currentIndex > 0) {
+            for (let i = 0; i < currentIndex; i++) {
+                const targetSlot = slots[i];
+                const targetEnd = targetSlot.at + targetSlot.extent / 2;
+                const overlap = targetEnd - visualStart;
+                const minExtent = Math.min(root.dragExtent, targetSlot.extent);
+
+                const isCurrentlyTarget = root.dropTarget
+                    && root.dropTarget.bucket === fromBucket
+                    && root.dropTarget.index === targetSlot.index;
+
+                const enterThreshold = minExtent * 0.35;
+                const exitThreshold = minExtent * 0.15;
+
+                if (isCurrentlyTarget ? (overlap >= exitThreshold) : (overlap >= enterThreshold)) {
+                    return { "bucket": fromBucket, "index": targetSlot.index };
+                }
+            }
+        }
+
+        return null;
+    }
 
     // The window this bar is drawn in, published for the chrome: a catalogue
     // row dragged over here arrives in screen coordinates and has to be
@@ -146,15 +218,18 @@ Item {
             if (b === 1 && root.centreBlocked)
                 continue;
             const list = root.slots
-                .filter(s => s !== excludeSlot && s.bucket === b && s.width > 0 && s.height > 0)
+                .filter(s => s.bucket === b)
                 .map(s => {
-                    const at = s.mapToItem(root, s.width / 2, s.height / 2);
+                    const w = (s.realWidth && s.realWidth > 0) ? s.realWidth : (s.width > 0 ? s.width : (s.barComponent ? s.barComponent.width : 36));
+                    const h = (s.realHeight && s.realHeight > 0) ? s.realHeight : (s.height > 0 ? s.height : (s.barComponent ? s.barComponent.height : 36));
+                    const at = s.mapToItem(root, w / 2, h / 2);
                     return {
                         "index": s.storedIndex,
                         "at": root.vertical ? at.y : at.x,
-                        "extent": root.vertical ? s.height : s.width
+                        "extent": root.vertical ? h : w
                     };
-                });
+                })
+                .filter(s => s.extent > 0);
             if (list.length === 0) {
                 const a = root.anchorFor(b);
                 if (a) {
@@ -165,22 +240,37 @@ Item {
             }
             groups.push({ "bucket": b, "slots": list });
         }
+        root.restingGroups = groups;
         return EditModeLogic.buildBarGapCells(groups, empties);
     }
 
-    function beginDrag(slot) {
+    function beginDrag(slot, scenePoint) {
         if (!GlobalStates.editMode)
             return;
         root.dragCells = root.restingCells(slot);
         root.dragState = EditModeLogic.createBarDragState();
         root.dragSlot = slot;
-        root.dropTarget = null;
-        // What the row has to make room for, measured off the widget itself
-        // plus the layout's own spacing, so the gap that opens is the size of
-        // the hole the widget left.
-        root.dragExtent = (root.vertical ? slot.height : slot.width) + 4;
+        root.dropTarget = { "bucket": slot.bucket, "index": slot.storedIndex };
+
+        const ext = (slot.realExtent && slot.realExtent > 0) ? slot.realExtent : (root.vertical ? (slot.height > 0 ? slot.height : 36) : (slot.width > 0 ? slot.width : 36));
+        root.dragExtent = ext + 4;
+
+        const origin = slot.mapToItem(root, 0, 0);
+        root.dragOriginAlong = root.vertical ? origin.y : origin.x;
+
+        if (scenePoint) {
+            const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
+            root.dragPointerStart = root.vertical ? local.y : local.x;
+        } else {
+            root.dragPointerStart = root.dragOriginAlong;
+        }
+        root.dragCurrentAlong = root.dragPointerStart;
+        root.dragOffset = 0;
+
         GlobalStates.clearEditBarHover(null);
         GlobalStates.editBarDragActive = true;
+        ghost.shown = false;
+        indicator.shown = false;
     }
 
     function endDrag() {
@@ -189,9 +279,41 @@ Item {
         root.dropTarget = null;
         root.dragCells = null;
         root.dragState = null;
+        root.restingGroups = null;
+        root.dragOffset = 0;
         GlobalStates.editBarDragActive = false;
         ghost.shown = false;
         indicator.shown = false;
+    }
+
+    function reorderShift(bucket, index) {
+        if (!root.dragActive || !root.dragSlot || !root.dropTarget)
+            return 0;
+        const fromBucket = root.dragSlot.bucket;
+        const fromIndex = root.dragSlot.storedIndex;
+        const target = root.dropTarget;
+        const step = root.dragExtent;
+
+        if (fromBucket === target.bucket) {
+            if (bucket !== fromBucket || index === fromIndex)
+                return 0;
+            const dest = EditModeLogic.moveTargetForInsertion(fromIndex, target.index);
+            if (dest === fromIndex)
+                return 0;
+            if (fromIndex < dest) {
+                return (index > fromIndex && index <= dest) ? -step : 0;
+            } else if (fromIndex > dest) {
+                return (index >= dest && index < fromIndex) ? step : 0;
+            }
+            return 0;
+        }
+
+        if (bucket === fromBucket) {
+            return index > fromIndex ? -step : 0;
+        } else if (bucket === target.bucket) {
+            return index >= target.index ? step : 0;
+        }
+        return 0;
     }
 
     // The drawn widgets other than the one being carried, in the shape
@@ -217,7 +339,26 @@ Item {
             root.dragCells = root.restingCells(root.dragSlot);
         if (!root.dragState)
             root.dragState = EditModeLogic.createBarDragState();
-        if (root.dragCells.length > 0) {
+
+        // 1. If pointer has moved into a DIFFERENT bucket, honor cross-bucket navigation
+        if (root.dragCells && root.dragCells.length > 0) {
+            const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
+            const r = EditModeLogic.resolveBarGap(root.dragCells,
+                root.vertical ? local.y : local.x, root.dragState,
+                { "now": Date.now(), "hysteresis": 0.25, "settleMs": root.settleWindow });
+            if (r && root.dragSlot && r.cell.bucket !== root.dragSlot.bucket) {
+                return (r.cell.bucket === 1 && root.centreBlocked) ? null
+                    : { "bucket": r.cell.bucket, "index": r.cell.index };
+            }
+        }
+
+        // 2. Neighbor & extremity swap check (eases extremity swaps and handles unequal sizes)
+        const neighbor = root.checkNeighborSwapTarget();
+        if (neighbor)
+            return neighbor;
+
+        // 3. Fallback within current bucket
+        if (root.dragCells && root.dragCells.length > 0) {
             const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
             const r = EditModeLogic.resolveBarGap(root.dragCells,
                 root.vertical ? local.y : local.x, root.dragState,
@@ -234,6 +375,11 @@ Item {
     // what the pointer last asked for, so letting go inside the hold still
     // lands on the gap the user was aiming at.
     function settledTarget() {
+        const neighbor = root.checkNeighborSwapTarget();
+        if (neighbor) {
+            root.dropTarget = neighbor;
+            return root.dropTarget;
+        }
         if (EditModeLogic.flushBarGap(root.dragState) && root.dragState && root.dragState.chosen) {
             const c = root.dragState.chosen;
             if (c.bucket === 1 && root.centreBlocked)
@@ -246,13 +392,21 @@ Item {
     function dragMoved(scenePoint) {
         if (!root.dragActive)
             return;
+        const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
+        const current = root.vertical ? local.y : local.x;
+        root.dragCurrentAlong = current;
+
+        // Strictly 1D movement, clamped within bar bounds
+        const maxAlong = root.vertical ? root.height : root.width;
+        const rawOffset = current - root.dragPointerStart;
+        root.dragOffset = Math.max(-root.dragOriginAlong, Math.min(maxAlong - root.dragOriginAlong - (root.dragExtent - 4), rawOffset));
+
         root.rearmPreview();
         root.dropTarget = root.targetAt(scenePoint);
-        const local = root.mapFromItem(null, scenePoint.x, scenePoint.y);
-        ghost.x = local.x - ghost.width / 2;
-        ghost.y = local.y - ghost.height / 2;
-        ghost.shown = true;
-        root.placeIndicator(root.dropTarget);
+
+        // For bar widget reordering, the widget itself is moving; keep indicator and ghost hidden.
+        indicator.shown = false;
+        ghost.shown = false;
     }
 
     // ── A catalogue row carried over the bar ─────────────────────────────────
@@ -380,7 +534,7 @@ Item {
     }
 
     function placeIndicator(target) {
-        if (!target) {
+        if (!target || root.dragActive) {
             indicator.shown = false;
             root.settledTicks = root.settledTicks + 1;
             return;
@@ -538,23 +692,22 @@ Item {
         }
     }
 
-    // The room the drop reserves, drawn as the widget-shaped hole it is.
+    // The room the drop reserves, drawn as the widget-shaped hole it is (used for external drops).
     Rectangle {
         id: indicator
         property bool shown: false
-        visible: root.previewActive && shown
+        visible: root.previewActive && shown && !root.dragActive
         radius: Appearance.rounding.small
         color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.85)
         border.width: 1
         border.color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.4)
     }
 
-    // The chip riding the pointer: a drag between distant lists carries its
-    // name with it.
+    // The chip riding the pointer: kept hidden since the widget itself moves.
     Rectangle {
         id: ghost
         property bool shown: false
-        visible: root.dragActive && shown
+        visible: false
         z: 1
         width: ghostLabel.implicitWidth + 20
         height: 26

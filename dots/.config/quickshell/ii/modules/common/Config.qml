@@ -75,24 +75,49 @@ Singleton {
     function validateNestedValue(nestedKey, value): var {
         const keys = String(nestedKey ?? "").split(".").filter(part => part.length > 0);
         if (keys.length === 0)
-            return { ok: false, reason: "No key given.", value: undefined, kind: "unset" };
+            return {
+                ok: false,
+                reason: "No key given.",
+                value: undefined,
+                kind: "unset"
+            };
 
         let node = root.options;
         for (let i = 0; i < keys.length - 1; ++i) {
             if (node === undefined || node === null || typeof node !== "object")
-                return { ok: false, reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`, value: undefined, kind: "unset" };
+                return {
+                    ok: false,
+                    reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`,
+                    value: undefined,
+                    kind: "unset"
+                };
             node = node[keys[i]];
         }
         if (node === undefined || node === null || typeof node !== "object")
-            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: "unset" };
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` does not exist.`,
+                value: undefined,
+                kind: "unset"
+            };
 
         const leaf = keys[keys.length - 1];
         const current = node[leaf];
         const kind = root.valueKind(current);
         if (kind === "unset")
-            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: kind };
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` does not exist.`,
+                value: undefined,
+                kind: kind
+            };
         if (kind === "group")
-            return { ok: false, reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`, value: undefined, kind: kind };
+            return {
+                ok: false,
+                reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`,
+                value: undefined,
+                kind: kind
+            };
 
         const raw = typeof value === "string" ? value.trim() : value;
         let converted = raw;
@@ -103,16 +128,31 @@ Singleton {
             else if (raw === "true" || raw === "false")
                 converted = raw === "true";
             else
-                return { ok: false, reason: `\`${nestedKey}\` is a switch. It takes true or false.`, value: undefined, kind: kind };
+                return {
+                    ok: false,
+                    reason: `\`${nestedKey}\` is a switch. It takes true or false.`,
+                    value: undefined,
+                    kind: kind
+                };
         } else if (kind === "int" || kind === "real") {
             if (typeof raw === "number")
                 converted = raw;
             else if (typeof raw === "string" && /^-?(?:\d+|\d*\.\d+)$/.test(raw))
                 converted = Number(raw);
             else
-                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+                return {
+                    ok: false,
+                    reason: `\`${nestedKey}\` is a number.`,
+                    value: undefined,
+                    kind: kind
+                };
             if (!isFinite(converted))
-                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
+                return {
+                    ok: false,
+                    reason: `\`${nestedKey}\` is a number.`,
+                    value: undefined,
+                    kind: kind
+                };
             // Whole against fractional is deliberately not enforced. The kind
             // comes from the value the option happens to hold, and a `real`
             // sitting at 1 is indistinguishable from an `int` — rejecting 1.5
@@ -129,15 +169,30 @@ Singleton {
                         throw new Error("not a list");
                     converted = parsed;
                 } catch (e) {
-                    return { ok: false, reason: `\`${nestedKey}\` is a list. Give it a JSON array.`, value: undefined, kind: kind };
+                    return {
+                        ok: false,
+                        reason: `\`${nestedKey}\` is a list. Give it a JSON array.`,
+                        value: undefined,
+                        kind: kind
+                    };
                 }
             } else
-                return { ok: false, reason: `\`${nestedKey}\` is a list.`, value: undefined, kind: kind };
+                return {
+                    ok: false,
+                    reason: `\`${nestedKey}\` is a list.`,
+                    value: undefined,
+                    kind: kind
+                };
         } else if (kind === "string") {
             // Deliberately no conversion: a string option keeps what it was
             // given, leading zeroes and all.
             if (typeof raw === "object")
-                return { ok: false, reason: `\`${nestedKey}\` is text.`, value: undefined, kind: kind };
+                return {
+                    ok: false,
+                    reason: `\`${nestedKey}\` is text.`,
+                    value: undefined,
+                    kind: kind
+                };
             converted = String(raw);
         }
 
@@ -150,7 +205,12 @@ Singleton {
                 kind: kind
             };
 
-        return { ok: true, reason: "", value: converted, kind: kind };
+        return {
+            ok: true,
+            reason: "",
+            value: converted,
+            kind: kind
+        };
     }
 
     /**
@@ -172,8 +232,7 @@ Singleton {
             if (paths.length > 4000)
                 return;
             for (const name in node) {
-                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
-                    || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children") || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
                     continue;
                 const value = node[name];
                 if (typeof value === "function")
@@ -194,21 +253,37 @@ Singleton {
     function summariseValue(value, maxLength = 120): var {
         const kind = root.valueKind(value);
         if (kind === "group")
-            return { kind: kind, value: "…" };
+            return {
+                kind: kind,
+                value: "…"
+            };
         if (kind === "list") {
             const list = Array.from(value ?? []);
             const text = JSON.stringify(list);
-            return text.length <= maxLength
-                ? { kind: kind, value: list }
-                : { kind: kind, value: `${list.length} entries`, truncated: true };
+            return text.length <= maxLength ? {
+                kind: kind,
+                value: list
+            } : {
+                kind: kind,
+                value: `${list.length} entries`,
+                truncated: true
+            };
         }
         if (kind === "string") {
             const text = String(value);
-            return text.length <= maxLength
-                ? { kind: kind, value: text }
-                : { kind: kind, value: `${text.slice(0, maxLength)}…`, truncated: true };
+            return text.length <= maxLength ? {
+                kind: kind,
+                value: text
+            } : {
+                kind: kind,
+                value: `${text.slice(0, maxLength)}…`,
+                truncated: true
+            };
         }
-        return { kind: kind, value: value };
+        return {
+            kind: kind,
+            value: value
+        };
     }
 
     /**
@@ -229,8 +304,7 @@ Singleton {
             const lower = path.toLowerCase();
             // A key path is camelCase, so the words in it need separating
             // before "automatic suspend" can match "battery.automaticSuspend".
-            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
-                + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
+            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase() + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
             let score = 0;
             let matchedAll = true;
             for (let w = 0; w < words.length; w++) {
@@ -251,12 +325,19 @@ Singleton {
             // A short path that matched is more likely the option itself than
             // a long one that merely contains the word.
             score -= path.length;
-            scored.push({ path: path, score: score });
+            scored.push({
+                path: path,
+                score: score
+            });
         }
         scored.sort((a, b) => b.score - a.score);
         return scored.slice(0, Math.max(1, limit)).map(entry => {
             const summary = root.summariseValue(root.getNestedValue(root.options, entry.path.split(".")));
-            return { key: entry.path, type: summary.kind, value: summary.value };
+            return {
+                key: entry.path,
+                type: summary.kind,
+                value: summary.value
+            };
         });
     }
 
@@ -268,15 +349,17 @@ Singleton {
             return null;
         const entries = [];
         for (const name in node) {
-            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
-                || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children") || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
                 continue;
             const value = node[name];
             if (typeof value === "function")
                 continue;
             const path = keys.length > 0 ? `${keys.join(".")}.${name}` : name;
             const summary = root.summariseValue(value, 60);
-            const entry = { key: path, type: summary.kind };
+            const entry = {
+                key: path,
+                type: summary.kind
+            };
             if (summary.kind !== "group")
                 entry.value = summary.value;
             entries.push(entry);
@@ -516,20 +599,26 @@ Singleton {
         const next = hidden ? current.concat([id]) : current.filter(entry => entry !== id);
         root.options.lock.islands.hidden = next;
         GlobalStates.editHistoryPush({
-            "undo": () => { root.options.lock.islands.hidden = current; },
-            "redo": () => { root.options.lock.islands.hidden = next; }
+            "undo": () => {
+                root.options.lock.islands.hidden = current;
+            },
+            "redo": () => {
+                root.options.lock.islands.hidden = next;
+            }
         });
     }
 
     function setLockIslandOrder(island, list) {
         const islands = root.options.lock.islands;
-        const before = EditModeLogic.listCopy(island === "main" ? islands.main
-            : island === "left" ? islands.left : islands.right);
+        const before = EditModeLogic.listCopy(island === "main" ? islands.main : island === "left" ? islands.left : islands.right);
         const after = EditModeLogic.listCopy(list);
         const write = l => {
-            if (island === "main") islands.main = l;
-            else if (island === "left") islands.left = l;
-            else islands.right = l;
+            if (island === "main")
+                islands.main = l;
+            else if (island === "left")
+                islands.left = l;
+            else
+                islands.right = l;
         };
         write(after);
         GlobalStates.editHistoryPush({
@@ -543,9 +632,7 @@ Singleton {
             return;
         if (JSON.stringify(before) === JSON.stringify(after))
             return;
-        const restore = snapshot => snapshot === null
-            ? (() => root._removeWidgetEntry(instanceId))
-            : (() => root._replaceWidgetEntry(instanceId, snapshot, index));
+        const restore = snapshot => snapshot === null ? (() => root._removeWidgetEntry(instanceId)) : (() => root._replaceWidgetEntry(instanceId, snapshot, index));
         GlobalStates.editHistoryPush({
             "undo": restore(before),
             "redo": restore(after)
@@ -926,11 +1013,7 @@ Singleton {
         // independent rendering switches. Older presets predate the new
         // switch, so default them to the safe, low-overhead path. Users can
         // still opt back into scroll effects after the migration.
-        if (from < 5 && raw.appearance !== undefined
-                && raw.appearance !== null
-                && typeof raw.appearance === "object"
-                && !Array.isArray(raw.appearance)
-                && raw.appearance.settingsPerformanceMode === undefined) {
+        if (from < 5 && raw.appearance !== undefined && raw.appearance !== null && typeof raw.appearance === "object" && !Array.isArray(raw.appearance) && raw.appearance.settingsPerformanceMode === undefined) {
             raw.appearance.settingsPerformanceMode = true;
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
@@ -941,11 +1024,12 @@ Singleton {
         // duplicate handling, or allowed sizes.
         // The v7 branch of this PR used the same version number for the AI
         // schema, so a missing layoutVersion remains a reliable migration cue.
-        if (raw.sidebar?.quickToggles?.android !== undefined
-                && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
+        if (raw.sidebar?.quickToggles?.android !== undefined && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
             const android = raw.sidebar.quickToggles.android;
             android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
-                warn: function(message) { console.warn(message); }
+                warn: function (message) {
+                    console.warn(message);
+                }
             });
             android.layoutVersion = 2;
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
@@ -954,17 +1038,19 @@ Singleton {
         // Originally v6 -> v7: the bar gained the Modes & Routines indicator.
         // It hides itself while no mode is active, so appending it to an
         // existing layout changes nothing visible until a mode starts.
-        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
-                && typeof raw.bar.layouts === "object") {
+        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null && typeof raw.bar.layouts === "object") {
             const layouts = raw.bar.layouts;
             const sections = ["left", "center", "right"];
-            const present = sections.some(k => Array.isArray(layouts[k])
-                && layouts[k].some(e => e && e.id === "mode_indicator"));
+            const present = sections.some(k => Array.isArray(layouts[k]) && layouts[k].some(e => e && e.id === "mode_indicator"));
             if (!present) {
                 if (!Array.isArray(layouts.left))
                     layouts.left = [];
                 const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
-                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
+                const entry = {
+                    "centered": false,
+                    "id": "mode_indicator",
+                    "visible": false
+                };
                 layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
                 console.log("[Config] Migrated bar layout: added mode_indicator");
             }
@@ -1033,17 +1119,19 @@ Singleton {
         // one it takes no space until dictation is actually running, so adding
         // it to an existing layout is invisible to anyone who never turns
         // dictation on.
-        if (from < 9 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
-                && typeof raw.bar.layouts === "object") {
+        if (from < 9 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null && typeof raw.bar.layouts === "object") {
             const dictationLayouts = raw.bar.layouts;
             const dictationSections = ["left", "center", "right"];
-            const dictationPresent = dictationSections.some(k => Array.isArray(dictationLayouts[k])
-                && dictationLayouts[k].some(e => e && e.id === "dictation_indicator"));
+            const dictationPresent = dictationSections.some(k => Array.isArray(dictationLayouts[k]) && dictationLayouts[k].some(e => e && e.id === "dictation_indicator"));
             if (!dictationPresent) {
                 if (!Array.isArray(dictationLayouts.left))
                     dictationLayouts.left = [];
                 const afterRecord = dictationLayouts.left.findIndex(e => e && e.id === "record_indicator");
-                const entry = { "centered": false, "id": "dictation_indicator", "visible": true };
+                const entry = {
+                    "centered": false,
+                    "id": "dictation_indicator",
+                    "visible": true
+                };
                 dictationLayouts.left.splice(afterRecord === -1 ? dictationLayouts.left.length : afterRecord + 1, 0, entry);
                 console.log("[Config] Migrated bar layout: added dictation_indicator");
             }
@@ -1053,8 +1141,7 @@ Singleton {
         // synthesises one keystroke per character, which several applications
         // drop under load — the words arrive a letter short. Only the old
         // default is moved; anyone who picked "clipboard" keeps it.
-        if (from < 10 && raw.dictation !== undefined && raw.dictation !== null
-                && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
+        if (from < 10 && raw.dictation !== undefined && raw.dictation !== null && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
             raw.dictation.outputMode = "paste";
             console.log("[Config] Migrated dictation output mode: type -> paste");
         }
@@ -1064,8 +1151,7 @@ Singleton {
         // recorder now derives it from the picture size, the frame rate and a
         // three-step quality choice. An existing bitrate is read as the intent
         // behind it and mapped onto that choice.
-        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null
-                && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
+        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
             const oldBitrate = raw.screenRecord.bitrate;
             raw.screenRecord.quality = oldBitrate <= 6 ? "low" : (oldBitrate >= 16 ? "high" : "balanced");
             delete raw.screenRecord.bitrate;
@@ -1079,37 +1165,117 @@ Singleton {
             if (raw.search === undefined || raw.search === null || typeof raw.search !== "object")
                 raw.search = {};
             if (raw.search.favorites === undefined)
-                raw.search.favorites = { enable: true };
+                raw.search.favorites = {
+                    enable: true
+                };
             if (raw.search.fallbacks === undefined)
-                raw.search.fallbacks = { enable: true, actions: ["ai", "web", "tasks", "calendar"] };
+                raw.search.fallbacks = {
+                    enable: true,
+                    actions: ["ai", "web", "tasks", "calendar"]
+                };
             if (raw.search.history === undefined)
-                raw.search.history = { enable: true, maxItems: 50 };
+                raw.search.history = {
+                    enable: true,
+                    maxItems: 50
+                };
             if (raw.search.keybindings === undefined)
                 raw.search.keybindings = [
-                    { actionId: "actions", shortcut: "Ctrl+K" },
-                    { actionId: "favorite", shortcut: "Ctrl+P" },
-                    { actionId: "historyPrevious", shortcut: "Up" },
-                    { actionId: "historyNext", shortcut: "Down" },
-                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
-                    { actionId: "copy", shortcut: "Ctrl+C" },
-                    { actionId: "save", shortcut: "Ctrl+S" },
-                    { actionId: "edit", shortcut: "Ctrl+E" },
-                    { actionId: "ocr", shortcut: "Ctrl+O" },
-                    { actionId: "create", shortcut: "Ctrl+N" },
-                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
-                    { actionId: "delete", shortcut: "Shift+Delete" },
-                    { actionId: "section", shortcut: "Tab" },
-                    { actionId: "select", shortcut: "Ctrl+Space" },
-                    { actionId: "cut", shortcut: "Ctrl+X" },
-                    { actionId: "paste", shortcut: "Ctrl+V" },
-                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
-                    { actionId: "duplicate", shortcut: "Ctrl+D" },
-                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
-                    { actionId: "refresh", shortcut: "Ctrl+R" },
-                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
-                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
-                    { actionId: "goHome", shortcut: "Ctrl+Home" },
-                    { actionId: "forward", shortcut: "Alt+Right" }
+                    {
+                        actionId: "actions",
+                        shortcut: "Ctrl+K"
+                    },
+                    {
+                        actionId: "favorite",
+                        shortcut: "Ctrl+P"
+                    },
+                    {
+                        actionId: "historyPrevious",
+                        shortcut: "Up"
+                    },
+                    {
+                        actionId: "historyNext",
+                        shortcut: "Down"
+                    },
+                    {
+                        actionId: "secondary",
+                        shortcut: "Ctrl+Enter"
+                    },
+                    {
+                        actionId: "copy",
+                        shortcut: "Ctrl+C"
+                    },
+                    {
+                        actionId: "save",
+                        shortcut: "Ctrl+S"
+                    },
+                    {
+                        actionId: "edit",
+                        shortcut: "Ctrl+E"
+                    },
+                    {
+                        actionId: "ocr",
+                        shortcut: "Ctrl+O"
+                    },
+                    {
+                        actionId: "create",
+                        shortcut: "Ctrl+N"
+                    },
+                    {
+                        actionId: "copyDispatch",
+                        shortcut: "Ctrl+Shift+K"
+                    },
+                    {
+                        actionId: "delete",
+                        shortcut: "Shift+Delete"
+                    },
+                    {
+                        actionId: "section",
+                        shortcut: "Tab"
+                    },
+                    {
+                        actionId: "select",
+                        shortcut: "Ctrl+Space"
+                    },
+                    {
+                        actionId: "cut",
+                        shortcut: "Ctrl+X"
+                    },
+                    {
+                        actionId: "paste",
+                        shortcut: "Ctrl+V"
+                    },
+                    {
+                        actionId: "createFolder",
+                        shortcut: "Ctrl+Shift+N"
+                    },
+                    {
+                        actionId: "duplicate",
+                        shortcut: "Ctrl+D"
+                    },
+                    {
+                        actionId: "toggleHidden",
+                        shortcut: "Ctrl+H"
+                    },
+                    {
+                        actionId: "refresh",
+                        shortcut: "Ctrl+R"
+                    },
+                    {
+                        actionId: "stageCopy",
+                        shortcut: "Ctrl+Shift+C"
+                    },
+                    {
+                        actionId: "sortFiles",
+                        shortcut: "Ctrl+Shift+S"
+                    },
+                    {
+                        actionId: "goHome",
+                        shortcut: "Ctrl+Home"
+                    },
+                    {
+                        actionId: "forward",
+                        shortcut: "Alt+Right"
+                    }
                 ];
             console.log("[Config] Added Search v2 content defaults");
         }
@@ -1119,8 +1285,7 @@ Singleton {
         // orders receive the new section exactly once; after this migration the
         // stored v11 order is authoritative, so removing Sites stays removed.
         if (from < 11) {
-            if (raw.search === undefined || raw.search === null
-                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             if (raw.search.browserSites === undefined) {
                 raw.search.browserSites = {
@@ -1140,9 +1305,10 @@ Singleton {
                 if (!hasSites) {
                     const appsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "apps");
                     const settingsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "settings");
-                    const insertAt = appsIndex >= 0 ? appsIndex + 1
-                        : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
-                    sectionOrder.splice(insertAt, 0, { "id": "sites" });
+                    const insertAt = appsIndex >= 0 ? appsIndex + 1 : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
+                    sectionOrder.splice(insertAt, 0, {
+                        "id": "sites"
+                    });
                 }
             }
             console.log("[Config] Added Browser Sites search provider");
@@ -1153,14 +1319,15 @@ Singleton {
         // insertion every upgraded user would keep filtering aliases out. Put
         // exact alias intent before every broader fuzzy result class.
         if (from < 12) {
-            if (raw.search === undefined || raw.search === null
-                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasAliases = sectionOrder.some(entry => String(entry?.id ?? entry) === "aliases");
                 if (!hasAliases)
-                    sectionOrder.unshift({ "id": "aliases" });
+                    sectionOrder.unshift({
+                        "id": "aliases"
+                    });
             }
             console.log("[Config] Added Aliases search result group");
         }
@@ -1170,8 +1337,7 @@ Singleton {
         // stays unchanged. If Content had been removed, both providers remain
         // disabled and are merely offered by the Settings add selector.
         if (from < 13) {
-            if (raw.search === undefined || raw.search === null
-                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
@@ -1180,7 +1346,11 @@ Singleton {
                     const hasQuicklinks = sectionOrder.some(entry => String(entry?.id ?? entry) === "quicklinks");
                     const hasTextSnippets = sectionOrder.some(entry => String(entry?.id ?? entry) === "textSnippets");
                     if (!hasQuicklinks && !hasTextSnippets)
-                        sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" });
+                        sectionOrder.splice(contentIndex, 1, {
+                            "id": "quicklinks"
+                        }, {
+                            "id": "textSnippets"
+                        });
                     else
                         sectionOrder.splice(contentIndex, 1);
                 }
@@ -1193,14 +1363,15 @@ Singleton {
         // it — but it shares the same reorder/on-off list as every other
         // result class, so an upgraded order needs the id too.
         if (from < 14) {
-            if (raw.search === undefined || raw.search === null
-                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasSuggested = sectionOrder.some(entry => String(entry?.id ?? entry) === "suggested");
                 if (!hasSuggested)
-                    sectionOrder.unshift({ "id": "suggested" });
+                    sectionOrder.unshift({
+                        "id": "suggested"
+                    });
             }
             console.log("[Config] Added idle Suggestions search result group");
         }
@@ -1209,11 +1380,9 @@ Singleton {
         // userProfile one. Existing configs kept a single shape for both, so
         // seed the new key from it to leave the sidebar looking untouched.
         if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
-            if (raw.sidebar === undefined || raw.sidebar === null
-                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+            if (raw.sidebar === undefined || raw.sidebar === null || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
                 raw.sidebar = {};
-            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
-                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
                 raw.sidebar.dashboardHeader = {};
             if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
                 raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
@@ -1226,15 +1395,16 @@ Singleton {
         // a section missing from the order is a section that never renders — so
         // without this the row silently disappeared the moment it was reclassed.
         if (from < 16) {
-            if (raw.search === undefined || raw.search === null
-                    || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasMedia = sectionOrder.some(entry => String(entry?.id ?? entry) === "media");
                 if (!hasMedia) {
                     const aliasesIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "aliases");
-                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, { "id": "media" });
+                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, {
+                        "id": "media"
+                    });
                 }
             }
             console.log("[Config] Added Now playing search result group");
@@ -1264,8 +1434,7 @@ Singleton {
 
         // v18 -> v19: cache follows the last cheatsheet tab, not only Keybinds.
         // Preserve an explicit opt-out and prefer an already configured new key.
-        if (from < 19 && raw.cheatsheet && typeof raw.cheatsheet === "object"
-                && !Array.isArray(raw.cheatsheet)) {
+        if (from < 19 && raw.cheatsheet && typeof raw.cheatsheet === "object" && !Array.isArray(raw.cheatsheet)) {
             const cheatsheet = raw.cheatsheet;
             if (cheatsheet.keepLastTabLoaded === undefined && typeof cheatsheet.keepKeybindsLoaded === "boolean")
                 cheatsheet.keepLastTabLoaded = cheatsheet.keepKeybindsLoaded;
@@ -1941,10 +2110,7 @@ Singleton {
                         // is the wide bar at the top of the sheet rather than one square
                         // among eight. A pen comes out mid-thought and the control for it
                         // has to be the one that cannot be missed.
-                        "liveDraw",
-                        "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot",
-                        "sidebarRight", "recents", "appDrawer"
-                    ]
+                        "liveDraw", "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot", "sidebarRight", "recents", "appDrawer"]
                 }
 
                 /**
@@ -1998,10 +2164,7 @@ Singleton {
                     /// lags further behind the tip; 0 draws the raw samples, tremble and
                     /// all.
                     property int smoothing: 55
-                    property list<string> palette: [
-                        "#ffffff", "#111111", "#e53935", "#fb8c00",
-                        "#fdd835", "#43a047", "#1e88e5", "#8e24aa"
-                    ]
+                    property list<string> palette: ["#ffffff", "#111111", "#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa"]
                     /**
                      * Whether the ink slides with the workspace it belongs to.
                      *
@@ -3785,24 +3948,24 @@ Singleton {
                     property bool showWC: true
                     property bool showWWC: false
                     property list<var> monitoredLeagues: [
-                            {
-                                "enabled": true,
-                                "league": "bra.1",
-                                "name": "Brasileir\u00e3o",
-                                "sport": "soccer"
-                            },
-                            {
-                                "enabled": true,
-                                "league": "eng.1",
-                                "name": "Premier League",
-                                "sport": "soccer"
-                            },
-                            {
-                                "enabled": true,
-                                "league": "uefa.champions",
-                                "name": "Champions League",
-                                "sport": "soccer"
-                            }
+                        {
+                            "enabled": true,
+                            "league": "bra.1",
+                            "name": "Brasileir\u00e3o",
+                            "sport": "soccer"
+                        },
+                        {
+                            "enabled": true,
+                            "league": "eng.1",
+                            "name": "Premier League",
+                            "sport": "soccer"
+                        },
+                        {
+                            "enabled": true,
+                            "league": "uefa.champions",
+                            "name": "Champions League",
+                            "sport": "soccer"
+                        }
                     ]
                     property string teamFilter: ""
                     property int updateInterval: 60
@@ -3911,55 +4074,55 @@ Singleton {
                     // Only storing id and layout-specific flags (visible, centered)
                     // Component display info (icon, title) comes from BarComponentRegistry
                     property list<var> left: [
-                            {
-                                "centered": false,
-                                "id": "policies_panel_button",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "workspaces",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "record_indicator",
-                                "visible": false
-                            },
-                            {
-                                "centered": false,
-                                "id": "mode_indicator",
-                                "visible": false
-                            }
+                        {
+                            "centered": false,
+                            "id": "policies_panel_button",
+                            "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "workspaces",
+                            "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "record_indicator",
+                            "visible": false
+                        },
+                        {
+                            "centered": false,
+                            "id": "mode_indicator",
+                            "visible": false
+                        }
                     ]
                     property list<var> center: [
-                            {
-                                "centered": false,
-                                "id": "clock",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "weather",
-                                "visible": true
-                            }
+                        {
+                            "centered": false,
+                            "id": "clock",
+                            "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "weather",
+                            "visible": true
+                        }
                     ]
                     property list<var> right: [
-                            {
-                                "centered": false,
-                                "id": "system_tray",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "dashboard_panel_button",
-                                "visible": true
-                            },
-                            {
-                                "centered": false,
-                                "id": "power",
-                                "visible": true
-                            }
+                        {
+                            "centered": false,
+                            "id": "system_tray",
+                            "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "dashboard_panel_button",
+                            "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "power",
+                            "visible": true
+                        }
                     ]
                 }
                 property JsonObject tooltips: JsonObject {
@@ -4862,21 +5025,51 @@ Singleton {
                 // order and the on/off switch. Reordered from Settings; the
                 // catalogue of ids lives in SearchResultSectionRegistry.
                 property list<var> sectionOrder: [
-                    { "id": "suggested" },
-                    { "id": "aliases" },
-                    { "id": "media" },
-                    { "id": "best" },
-                    { "id": "apps" },
-                    { "id": "sites" },
-                    { "id": "controls" },
-                    { "id": "tools" },
-                    { "id": "actions" },
-                    { "id": "quicklinks" },
-                    { "id": "textSnippets" },
-                    { "id": "other" },
-                    { "id": "settings" },
-                    { "id": "files" },
-                    { "id": "continue" }
+                    {
+                        "id": "suggested"
+                    },
+                    {
+                        "id": "aliases"
+                    },
+                    {
+                        "id": "media"
+                    },
+                    {
+                        "id": "best"
+                    },
+                    {
+                        "id": "apps"
+                    },
+                    {
+                        "id": "sites"
+                    },
+                    {
+                        "id": "controls"
+                    },
+                    {
+                        "id": "tools"
+                    },
+                    {
+                        "id": "actions"
+                    },
+                    {
+                        "id": "quicklinks"
+                    },
+                    {
+                        "id": "textSnippets"
+                    },
+                    {
+                        "id": "other"
+                    },
+                    {
+                        "id": "settings"
+                    },
+                    {
+                        "id": "files"
+                    },
+                    {
+                        "id": "continue"
+                    }
                 ]
                 property string fileSearchDirectory: "/home"
                 // Image and vector hits draw themselves in the row's icon slot.
@@ -5092,12 +5285,26 @@ Singleton {
                         property int lookaheadHours: 72
                         property list<string> leagues: []
                     }
-                    property JsonObject snippets: JsonObject { property bool enable: true; property list<var> items: [] }
-                    property JsonObject notes: JsonObject { property bool enable: true }
-                    property JsonObject processes: JsonObject { property bool enable: true }
-                    property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
-                    property JsonObject tools: JsonObject { property bool enable: true }
-                    property JsonObject generators: JsonObject { property bool enable: true }
+                    property JsonObject snippets: JsonObject {
+                        property bool enable: true
+                        property list<var> items: []
+                    }
+                    property JsonObject notes: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject processes: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject converter: JsonObject {
+                        property bool enable: true
+                        property string baseCurrency: "BRL"
+                    }
+                    property JsonObject tools: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject generators: JsonObject {
+                        property bool enable: true
+                    }
                 }
                 property JsonObject frecencyData: JsonObject {
                     property bool trackApps: true
@@ -5118,30 +5325,102 @@ Singleton {
                 // Search-only bindings. They remain local to the focused Search
                 // field and therefore cannot collide with Hyprland global binds.
                 property list<var> keybindings: [
-                    { actionId: "actions", shortcut: "Ctrl+K" },
-                    { actionId: "favorite", shortcut: "Ctrl+P" },
-                    { actionId: "historyPrevious", shortcut: "Up" },
-                    { actionId: "historyNext", shortcut: "Down" },
-                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
-                    { actionId: "copy", shortcut: "Ctrl+C" },
-                    { actionId: "save", shortcut: "Ctrl+S" },
-                    { actionId: "edit", shortcut: "Ctrl+E" },
-                    { actionId: "ocr", shortcut: "Ctrl+O" },
-                    { actionId: "create", shortcut: "Ctrl+N" },
-                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
-                    { actionId: "delete", shortcut: "Shift+Delete" },
-                    { actionId: "section", shortcut: "Tab" },
-                    { actionId: "select", shortcut: "Ctrl+Space" },
-                    { actionId: "cut", shortcut: "Ctrl+X" },
-                    { actionId: "paste", shortcut: "Ctrl+V" },
-                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
-                    { actionId: "duplicate", shortcut: "Ctrl+D" },
-                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
-                    { actionId: "refresh", shortcut: "Ctrl+R" },
-                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
-                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
-                    { actionId: "goHome", shortcut: "Ctrl+Home" },
-                    { actionId: "forward", shortcut: "Alt+Right" }
+                    {
+                        actionId: "actions",
+                        shortcut: "Ctrl+K"
+                    },
+                    {
+                        actionId: "favorite",
+                        shortcut: "Ctrl+P"
+                    },
+                    {
+                        actionId: "historyPrevious",
+                        shortcut: "Up"
+                    },
+                    {
+                        actionId: "historyNext",
+                        shortcut: "Down"
+                    },
+                    {
+                        actionId: "secondary",
+                        shortcut: "Ctrl+Enter"
+                    },
+                    {
+                        actionId: "copy",
+                        shortcut: "Ctrl+C"
+                    },
+                    {
+                        actionId: "save",
+                        shortcut: "Ctrl+S"
+                    },
+                    {
+                        actionId: "edit",
+                        shortcut: "Ctrl+E"
+                    },
+                    {
+                        actionId: "ocr",
+                        shortcut: "Ctrl+O"
+                    },
+                    {
+                        actionId: "create",
+                        shortcut: "Ctrl+N"
+                    },
+                    {
+                        actionId: "copyDispatch",
+                        shortcut: "Ctrl+Shift+K"
+                    },
+                    {
+                        actionId: "delete",
+                        shortcut: "Shift+Delete"
+                    },
+                    {
+                        actionId: "section",
+                        shortcut: "Tab"
+                    },
+                    {
+                        actionId: "select",
+                        shortcut: "Ctrl+Space"
+                    },
+                    {
+                        actionId: "cut",
+                        shortcut: "Ctrl+X"
+                    },
+                    {
+                        actionId: "paste",
+                        shortcut: "Ctrl+V"
+                    },
+                    {
+                        actionId: "createFolder",
+                        shortcut: "Ctrl+Shift+N"
+                    },
+                    {
+                        actionId: "duplicate",
+                        shortcut: "Ctrl+D"
+                    },
+                    {
+                        actionId: "toggleHidden",
+                        shortcut: "Ctrl+H"
+                    },
+                    {
+                        actionId: "refresh",
+                        shortcut: "Ctrl+R"
+                    },
+                    {
+                        actionId: "stageCopy",
+                        shortcut: "Ctrl+Shift+C"
+                    },
+                    {
+                        actionId: "sortFiles",
+                        shortcut: "Ctrl+Shift+S"
+                    },
+                    {
+                        actionId: "goHome",
+                        shortcut: "Ctrl+Home"
+                    },
+                    {
+                        actionId: "forward",
+                        shortcut: "Alt+Right"
+                    }
                 ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true
@@ -5180,10 +5459,10 @@ Singleton {
                     }
                 }
                 property JsonObject nowPlaying: JsonObject {
-                    property bool enable: false          
+                    property bool enable: false
                     property bool showInlineControls: true
                     property bool tintFromArtwork: false
-                    property bool showPlayerName: true  
+                    property bool showPlayerName: true
                 }
                 property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
@@ -5358,58 +5637,56 @@ Singleton {
                     property JsonObject android: JsonObject {
                         property int columns: 4
                         property int layoutVersion: 2
-                        property list<var> pages: [
-                                [
-                                    {
-                                        "id": "brightnessSlider",
-                                        "sizeH": 1,
-                                        "sizeW": 4,
-                                        "type": "brightnessSlider"
-                                    },
-                                    {
-                                        "id": "volumeSlider",
-                                        "sizeH": 1,
-                                        "sizeW": 4,
-                                        "type": "volumeSlider"
-                                    },
-                                    {
-                                        "id": "network",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "network"
-                                    },
-                                    {
-                                        "id": "bluetooth",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "bluetooth"
-                                    },
-                                    {
-                                        "id": "mic",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "mic"
-                                    },
-                                    {
-                                        "id": "audio",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "audio"
-                                    },
-                                    {
-                                        "id": "nightLight",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "nightLight"
-                                    },
-                                    {
-                                        "id": "darkMode",
-                                        "sizeH": 1,
-                                        "sizeW": 2,
-                                        "type": "darkMode"
-                                    }
-                                ]
-                        ]
+                        property list<var> pages: [[
+                                {
+                                    "id": "brightnessSlider",
+                                    "sizeH": 1,
+                                    "sizeW": 4,
+                                    "type": "brightnessSlider"
+                                },
+                                {
+                                    "id": "volumeSlider",
+                                    "sizeH": 1,
+                                    "sizeW": 4,
+                                    "type": "volumeSlider"
+                                },
+                                {
+                                    "id": "network",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "network"
+                                },
+                                {
+                                    "id": "bluetooth",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "bluetooth"
+                                },
+                                {
+                                    "id": "mic",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "mic"
+                                },
+                                {
+                                    "id": "audio",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "audio"
+                                },
+                                {
+                                    "id": "nightLight",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "nightLight"
+                                },
+                                {
+                                    "id": "darkMode",
+                                    "sizeH": 1,
+                                    "sizeW": 2,
+                                    "type": "darkMode"
+                                }
+                            ]]
                     }
                 }
 
