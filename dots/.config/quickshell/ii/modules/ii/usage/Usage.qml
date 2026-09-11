@@ -81,7 +81,10 @@ Scope {
     Timer {
         id: closeTimer
         interval: 400
-        onTriggered: root.activeState = false
+        onTriggered: {
+            root.activeState = false;
+            AppStats.releaseCache();
+        }
     }
 
     function requestOpen() {

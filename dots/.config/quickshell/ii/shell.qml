@@ -6,6 +6,7 @@
 // output is identical without it; it only trades a little GPU time on heavy overdraw for ~20 MB per
 // fullscreen window on HiDPI.
 //@ pragma Env QSG_NO_DEPTH_BUFFER=1
+//@ pragma Env MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000,background_thread:true
 
 // Remove two slashes below and adjust the value to change the UI scale
 ////@ pragma Env QT_SCALE_FACTOR=1
@@ -46,38 +47,54 @@ ShellRoot {
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
         ShellUpdateSummary.load(); // Same: the automatic summary hooks the probe from startup
         DarkModeService.automatic;
-        SoundService.indexReady; // Instantiate: scans sound themes, plays login sound if enabled
-        VideoColorSampler.active; // Touch singleton to initialize
-        WaterReminderService.enabled; // Touch singleton: drives water reminder notifications
-        CalendarNotifier.enabled; // Touch singleton: evaluates calendar VALARMs every minute
+        if (Config.options?.sounds?.enable)
+            SoundService.indexReady; // Instantiate only if sound themes/effects are enabled
+        if (Config.options?.background?.mediaMode?.musicVideo?.enable)
+            VideoColorSampler.active;
+        if (Config.options?.waterReminder?.enable)
+            WaterReminderService.enabled;
+        if (Config.options?.calendar?.timetable?.notifications?.enable)
+            CalendarNotifier.enabled;
         Todo.list; // Touch singleton: monitors due task notifications and done history
         CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
-        GmailCalendarImport.enabled; // Touch singleton: imports opted-in Gmail ICS attachments idempotently
-        OutlookCalendarImport.enabled; // Touch singleton: mirrors opted-in Outlook events into a read-only calendar
-        OutlookIcsImport.enabled; // Touch singleton: imports opted-in Outlook ICS attachments idempotently
-        BirthdaysService.enabled; // Touch singleton: projects contact birthdays into timetable items
-        GoogleDriveService.configured; // Touch singleton: keeps scheduled backups independent of Settings
+        if (Config.options?.calendar?.timetable?.imports?.enable) {
+            if (Config.options?.calendar?.timetable?.imports?.gmailIcs?.enable)
+                GmailCalendarImport.enabled;
+            if (Config.options?.calendar?.timetable?.imports?.outlook?.enable)
+                OutlookCalendarImport.enabled;
+            if (Config.options?.calendar?.timetable?.imports?.outlook?.icsAttachments?.enable)
+                OutlookIcsImport.enabled;
+        }
+        if (Config.options?.calendar?.timetable?.birthdays?.enable)
+            BirthdaysService.enabled;
+        if (Config.options?.googleDrive?.enabled)
+            GoogleDriveService.configured;
         AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
         NotesService.ready; // Touch singleton: the notes store migrates once, on its own schedule rather than
                             // whenever a surface happens to ask for a note first — the game overlay, the desktop
                             // widgets and the AI tools all read it, and none of them should be the one waiting
                             // for a migration to finish mid-interaction.
         Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
-        TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
+        if (Config.options?.tiling?.enable)
+            TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         TypeToSearch.armed; // Touch singleton: registers the type-to-search binds, does nothing while disabled
         TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
         WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
         IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
-        DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
-        BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
+        if (Config.options?.dictation?.enabled)
+            DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
+        if (Config.options?.budsLink?.enabled)
+            BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
         EarbudsControlService.connected; // Touch singleton: provider-priority earbuds router
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
             PhoneScrcpyService.available;
         }
-        LocalMediaService.hasSession; // Touch singleton: local media player service
-        LocalMediaSelection.lastSelectionDescription; // Touch singleton: local media picker
+        if (Config.options?.localMedia?.enabled) {
+            LocalMediaService.hasSession; // Touch singleton: local media player service
+            LocalMediaSelection.lastSelectionDescription; // Touch singleton: local media picker
+        }
         root.applyOpenRgbIfEnabled();
     }
 

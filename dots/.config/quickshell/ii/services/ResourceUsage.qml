@@ -105,6 +105,8 @@ Singleton {
         }
     }
     function updateHistories() {
+        if (!resourcePopupMonitoringEnabled)
+            return;
         updateMemoryUsageHistory()
         updateSwapUsageHistory()
         updateCpuUsageHistory()
