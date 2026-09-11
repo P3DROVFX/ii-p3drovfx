@@ -329,7 +329,7 @@ Item {
 
         transform: [
             Translate {
-                y: (1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30)
+                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
             },
             Scale {
                 origin.x: overviewLoader.implicitWidth / 2

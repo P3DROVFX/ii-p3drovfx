@@ -427,7 +427,7 @@ PanelWindow {
     readonly property bool overviewOpen: GlobalStates.overviewOpen
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },

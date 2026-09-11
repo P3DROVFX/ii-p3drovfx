@@ -15,7 +15,7 @@ Item {
     id: root
     property bool hyprscrollingEnabled: false //FIXME
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
-    readonly property bool enableCascade: Config.options.overview.enableCascadeAnimation ?? true
+    readonly property bool enableCascade: (Config.options.overview.animationStyle !== "none") && (Config.options.overview.enableCascadeAnimation ?? true)
     readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
     // One clock drives both the workspace cells and their window previews.
     // The previous implementation created a timer, animation and two signal

@@ -178,6 +178,11 @@ ContentPage {
                                 displayName: Translation.tr("Zoom In"),
                                 icon: "zoom_in",
                                 value: "zoom"
+                            },
+                            {
+                                displayName: Translation.tr("None"),
+                                icon: "block",
+                                value: "none"
                             }
                         ]
                     }
@@ -191,12 +196,14 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none"
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Cascade Workspace Entrance")
-                checked: Config.options.overview.enableCascadeAnimation ?? true
+                description: Config.options.overview.animationStyle === "none" ? Translation.tr("Disabled while Animation Style is set to None") : ""
+                checked: Config.options.overview.animationStyle !== "none" && (Config.options.overview.enableCascadeAnimation ?? true)
                 onCheckedChanged: {
-                    Config.options.overview.enableCascadeAnimation = checked;
+                    if (Config.options.overview.animationStyle !== "none")
+                        Config.options.overview.enableCascadeAnimation = checked;
                 }
             }
         }

@@ -179,7 +179,7 @@ Item {
     // presets remain driven exclusively by OverviewBackgroundController.
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
         "out": { default: 1, zoomed: 1.01 }
@@ -215,17 +215,22 @@ Item {
         opacity: 1.0
         mipmap: false
         antialiasing: false
-        // The reduced backing source is part of the opt-in VRAM-saving path;
-        // with the toggle off it follows the native-size branch below.
-        sourceSize: wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.reduceVramUsage
-            ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
-            : (Config.options.background.scaleLargeWallpapers
-                ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
+        // A blurred backing never needs the native wallpaper detail. Keep this
+        // input compact even when the quality toggle is off: the visible
+        // wallpaper below still follows the native-resolution path, while the
+        // fullscreen blur avoids a huge source texture that can be uploaded in
+        // mismatched tiles and appear as moving quadrants during overview.
+        sourceSize: wallpaperImageRoot.overviewController.useBackingBlur
+            ? Qt.size(screen.width > 0 ? Math.max(1, Math.round(screen.width / 8)) : 240,
+                     screen.height > 0 ? Math.max(1, Math.round(screen.height / 8)) : 135)
+            : (wallpaperImageRoot.reduceVramUsage
+                ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920,
+                          screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
                 : Qt.size(-1, -1))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-        // In the reduced path this image is decoded at 1/8 for blur and keeps
-        // its crop in a small texture instead of a fullscreen proxy. The layer
-        // is disabled when native wallpaper quality is selected.
+        // The blur input above is always compact, so its crop stays in a small
+        // texture instead of a fullscreen proxy. The extra render-target cache
+        // remains disabled when native wallpaper quality is selected.
         layer.enabled: wallpaperImageRoot.reduceVramUsage && overviewBackingBlurLoader.active
         layer.textureSize: wallpaperImageRoot.reduceVramUsage
             ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))

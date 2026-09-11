@@ -4836,7 +4836,7 @@ Singleton {
                 property bool enableManualScale: false
                 property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)
                 property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
-                property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom"
+                property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom", "none"
                 property bool enableCascadeAnimation: true
                 property real rows: 2
                 property real columns: 5

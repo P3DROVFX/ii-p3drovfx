@@ -159,8 +159,9 @@ Singleton {
     }
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
+        const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && background.zoomOutEnabled
-            && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
+            && ((root.overviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces

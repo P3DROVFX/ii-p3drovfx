@@ -3,7 +3,6 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -49,12 +48,25 @@ Scope {
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
+                    property bool loadedOnce: false
 
                     onMonitorIsFocusedChanged: {
-                        if (!monitorIsFocused)
+                        if (!monitorIsFocused) {
                             visualActive = false;
+                            loadedOnce = false;
+                        }
                     }
+
+                    Connections {
+                        target: GlobalStates
+                        function onOverviewOpenChanged() {
+                            if (GlobalStates.overviewOpen && realOverviewLoader.monitorIsFocused) {
+                                realOverviewLoader.loadedOnce = true;
+                            }
+                        }
+                    }
+
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || loadedOnce || (TypeToSearch.armed && (Config.options?.launcher?.typeToSearch?.enable ?? false)))
 
                     component: PanelWindow {
                         id: root
@@ -69,7 +81,7 @@ Scope {
                         readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
                         readonly property bool backgroundAnimating: backgroundController
                             && backgroundController.progress > 0.001 && backgroundController.progress < 0.999
-                        readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
+                        readonly property string animStyle: (Config.options.overview.animationStyle === "none") ? "none" : ((GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce"))
 
                         WlrLayershell.namespace: "quickshell:overview"
                         WlrLayershell.layer: WlrLayer.Overlay
@@ -78,8 +90,8 @@ Scope {
                             : WlrKeyboardFocus.None
                         color: "transparent"
 
-                        property int animDurationEnter: Math.round(420 * Appearance.animMultiplier)
-                        property int animDurationExit: Math.round(260 * Appearance.animMultiplier)
+                        property int animDurationEnter: root.animStyle === "none" ? 0 : Math.round(420 * Appearance.animMultiplier)
+                        property int animDurationExit: root.animStyle === "none" ? 0 : Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
                         /**
@@ -143,6 +155,12 @@ Scope {
                             if (!shouldShow) {
                                 root.overviewRevealProgress = 0.0;
                                 root.overviewFadeProgress = 0.0;
+                                return;
+                            }
+
+                            if (root.animStyle === "none") {
+                                root.overviewRevealProgress = 1.0;
+                                root.overviewFadeProgress = 1.0;
                                 return;
                             }
 
@@ -250,7 +268,6 @@ Scope {
                                     const hasIncomingQuery = GlobalStates.activeSearchQuery.length > 0;
                                     if (!hasIncomingQuery) {
                                         overviewScope.dontAutoCancelSearch = false;
-                                        searchWidget.cancelSearch();
                                     }
                                     root.consumePendingSearchQuery();
                                     delayedGrabTimer.start();
@@ -327,7 +344,7 @@ Scope {
 
                                 // Slide from top/bottom — direction matches top bar / bottom bar
                                 readonly property real slideOffset: (root.isBottomBar ? 1 : -1) * (implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
-                                readonly property real initialYOffset: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? 0 : (root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset)
+                                readonly property real initialYOffset: (root.animStyle === "none" || GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? 0 : (root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset)
 
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
                                 property real slideY: initialYOffset
@@ -346,16 +363,7 @@ Scope {
                                     }
                                 ]
 
-                                // Once a query expands the surface, keep slide/fade but stop
-                                // blurring it: otherwise every height tick reallocates the
-                                // offscreen target and blur pyramid while results are arriving.
-                                layer.enabled: !isNotchMode && !root.searchSurfaceOwned
-                                    && slideOpacity > 0.001 && slideOpacity < 0.999
-                                layer.effect: MultiEffect {
-                                    blurEnabled: true
-                                    blurMax: 64.0
-                                    blur: (1.0 - searchWidgetWrapper.slideOpacity) * 1.0
-                                }
+
 
                                 Timer {
                                     id: slideInStartTimer
@@ -374,6 +382,11 @@ Scope {
                                     slideOutParallel.stop();
                                     slideInParallel.stop();
                                     slideInStartTimer.stop();
+                                    if (root.animStyle === "none") {
+                                        searchWidgetWrapper.slideY = 0;
+                                        searchWidgetWrapper.slideOpacity = 1.0;
+                                        return;
+                                    }
                                     searchWidgetWrapper.slideY = searchWidgetWrapper.initialYOffset;
                                     searchWidgetWrapper.slideOpacity = 0.0;
                                     slideInYAnim.from = searchWidgetWrapper.initialYOffset;
@@ -386,6 +399,13 @@ Scope {
                                 function triggerSlideOut() {
                                     slideInParallel.stop();
                                     slideOutParallel.stop();
+                                    slideInStartTimer.stop();
+                                    if (root.animStyle === "none") {
+                                        searchWidgetWrapper.slideY = 0;
+                                        searchWidgetWrapper.slideOpacity = 0.0;
+                                        root.isClosing = false;
+                                        return;
+                                    }
                                     slideOutYAnim.from = searchWidgetWrapper.slideY;
                                     slideOutYAnim.to = searchWidgetWrapper.initialYOffset;
                                     slideOutOpacityAnim.from = searchWidgetWrapper.slideOpacity;
@@ -478,7 +498,7 @@ Scope {
 
                                 SearchWidget {
                                     id: searchWidget
-                                    surfaceAnimating: slideInParallel.running || slideOutParallel.running || root.backgroundAnimating
+                                    surfaceAnimating: (root.animStyle !== "none") && (slideInParallel.running || slideOutParallel.running || root.backgroundAnimating)
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
                                     surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -503,16 +523,11 @@ Scope {
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
                                 visible: opacity > 0.001
 
-                                layer.enabled: overviewLoader.opacity > 0.001 && overviewLoader.opacity < 0.999
-                                layer.effect: MultiEffect {
-                                    blurEnabled: true
-                                    blurMax: 64.0
-                                    blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
-                                }
+
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
+                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)))
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
@@ -536,16 +551,11 @@ Scope {
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
                                 visible: opacity > 0.001
 
-                                layer.enabled: scrollingOverviewLoader.opacity > 0.001 && scrollingOverviewLoader.opacity < 0.999
-                                layer.effect: MultiEffect {
-                                    blurEnabled: true
-                                    blurMax: 64.0
-                                    blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
-                                }
+
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
+                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)))
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2

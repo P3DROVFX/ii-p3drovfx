@@ -530,10 +530,8 @@ Item {
                 root.resultCategoryId = "all";
                 // Suppress transitions while panel is animating open
                 root.suppressItemTransitions = true;
-                // Wipe stale results immediately so panel opens empty (no ghost expansion)
-                resultModel.clear();
                 root.loadedResultsCount = root.resultPageSize;
-                if (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel) {
+                if (resultModel.count === 0 && (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel)) {
                     Qt.callLater(() => {
                         appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
@@ -542,19 +540,15 @@ Item {
                 // Re-enable transitions after open animation
                 enableTransitionsTimer.restart();
             } else {
-                // Freeze the size *before* anything below can shrink it: the
-                // query is cleared by another handler on this same signal.
+                // Freeze the size *before* anything below can shrink it
                 if (!GlobalStates.searchConnectActive) {
                     root.exitWidth = searchWidgetContent.width;
                     root.exitHeight = searchWidgetContent.height;
                     root.exiting = true;
                     exitHoldTimer.restart();
                 }
-                // Suppress transitions then clear immediately.
-                // Since suppressItemTransitions=true, remove transitions run at duration:0
-                // (instantaneous/invisible), so no flicker even though model clears now.
+                // Suppress transitions on exit
                 root.suppressItemTransitions = true;
-                resultModel.clear();
             }
         }
     }
@@ -1972,7 +1966,7 @@ Item {
                             return;
                         }
 
-                        if (resultModel.count === 0) {
+                        if (resultModel.count === 0 && !root.surfaceAnimating && !root.suppressItemTransitions) {
                             appResults.staggerReveal = true;
                             staggerRevealWindow.restart();
                         }

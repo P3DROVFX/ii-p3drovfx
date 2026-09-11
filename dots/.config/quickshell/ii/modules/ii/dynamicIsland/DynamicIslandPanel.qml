@@ -115,7 +115,7 @@ Scope {
 
     Behavior on overviewRevealProgress {
         NumberAnimation {
-            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: root.isOverviewVisible ? root.overviewAnimCurveEnter : root.overviewAnimCurveExit
         }
@@ -123,7 +123,7 @@ Scope {
 
     Behavior on overviewFadeProgress {
         NumberAnimation {
-            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
             easing.type: root.isOverviewVisible ? Easing.OutCubic : Easing.InCubic
         }
     }

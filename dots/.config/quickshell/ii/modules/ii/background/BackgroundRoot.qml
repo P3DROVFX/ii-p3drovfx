@@ -335,7 +335,7 @@ PanelWindow {
     property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
 
     property bool overviewOpen: GlobalStates.overviewOpen
 
