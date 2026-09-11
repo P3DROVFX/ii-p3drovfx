@@ -123,7 +123,35 @@ resolução. **Ganho zero; código intacto.**
 
 ## 3. O que FALTA (próxima sessão, por ordem de evidência)
 
-### 3.1 Visualizer da bar — O item aberto mais quente (CPU, confirmado pelo usuário)
+### 3.1 Visualizer da bar — RESOLVIDO 2026-09-11 (commit `efac0a813`)
+**A causa era arquitetural, como suspeitado abaixo.** Cada amostra do Cava (30 Hz)
+mudava a altura de uma barra que vivia **dentro** do mesmo `Item` que carrega
+`layer.enabled` + `OpacityMask` (cantos arredondados do card de arte). Isso
+forçava o re-render + recomposição do FBO mascarado inteiro (arte borrada,
+gradientes, vinheta, dimming, texto) 30×/s. Diagnóstico A/B: desligar o `layer`
+da raiz do `NeuralMedia` levou `qs` de ~28% → ~15,7% de um núcleo com mídia
+tocando; confirma que o custo é o re-render do FBO disparado pelas barras.
+
+**Correção:** o card de arte foi para um `Item` interno com o `layer`/máscara;
+a linha de conteúdo (texto + visualizer) passou a ser irmã por cima, **fora** do
+layer. Uma mudança de barra agora repinta só as barrinhas; o FBO da arte fica em
+cache até track/arte/estado-de-reprodução mudar. Cantos arredondados idênticos
+(verificado por screenshot). Medido: `qs` com mídia tocando **~28% → ~14%** de um
+núcleo (idle inalterado ~4%). Aplicado nas três superfícies:
+- `NeuralMedia.qml` (estilo ativo aqui) — medido acima.
+- `FloatingNotchMedia.qml` (mídia contraída do notch) — mesma correção; a linha
+  de conteúdo espelha `opacity`/`scale` de `contractedLayout`, então a animação
+  expand/contract fica inalterada e em repouso renderiza idêntico.
+- `VerticalNeuralMedia.qml` (barra vertical) — coluna do visualizer fora do layer
+  da pill e `Behavior on width` por barra removido (30 Hz já é o movimento).
+
+**Aberto ainda:** dos ~14% tocando, ~10% não é o FBO da arte (o diagnóstico
+layer-off deu ~15,7%). Candidato barato restante (auditoria path 3, não aplicado
+para não mexer na suavidade do MediaMode): baixar a taxa efetiva do Cava
+(`scripts/cava/raw_output_config.txt` `framerate = 30` → 20/15, ou throttle 2:1)
+— indistinguível a olho para 4 barras.
+
+### 3.1-histórico Visualizer da bar — (contexto original, item aberto mais quente)
 O usuário identificou: `qs` a ~38–39% de um núcleo com mídia tocando cai
 drasticamente ao trocar o estilo do widget de media da bar para um **sem
 visualizer**. Presente em três superfícies com o mesmo padrão
