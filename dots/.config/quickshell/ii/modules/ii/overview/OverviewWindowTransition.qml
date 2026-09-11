@@ -120,7 +120,13 @@ Scope {
 
             // ── Monitor / workspace state ───────────────────────────────────
             readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
-            readonly property bool monitorFocused: Hyprland.focusedMonitor?.name == monitor?.name
+            // Do not compare nullable Hyprland monitor objects here. During
+            // screen hotplug/reload `monitorFor()` can be null, and
+            // `undefined == undefined` would activate every transition layer.
+            readonly property string screenName: modelData ? modelData.name : ""
+            readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+            readonly property bool monitorFocused: Quickshell.screens.length <= 1
+                || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
             readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 0
 
             readonly property bool barVertical: BarPlacement.vertical
@@ -285,7 +291,7 @@ Scope {
 
             Component.onCompleted: {
                 scheduleToplevelUpdate();
-                if (tRoot.isGnomeLike && GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                if (tRoot.isGnomeLike && tRoot.monitorFocused && GlobalStates.overviewOpen && transitionScope.featureEnabled) {
                     tRoot.isOverviewActive = true;
                     openDelayTimer.restart();
                 }
@@ -302,6 +308,44 @@ Scope {
             onExitAnimatingChanged: {
                 if (!tRoot.exitAnimating)
                     tRoot.windowDataRevision++;
+            }
+
+            onMonitorFocusedChanged: {
+                if (!tRoot.monitorFocused) {
+                    // A transition belongs to the monitor under the pointer.
+                    // Tear down its visual state as soon as focus leaves so a
+                    // second layer cannot remain mapped on another output.
+                    slideStartTimer.stop();
+                    exitAnimTimer.stop();
+                    if (Quickshell.screens.length === 0 || tRoot.screen !== Quickshell.screens[0]) {
+                        openDelayTimer.stop();
+                        restoreWindowsTimer.stop();
+                    }
+                    tRoot.exitAnimating = false;
+                    tRoot.isOverviewActive = false;
+                    tRoot.slideAnimEnabled = false;
+                    tRoot.transitionProgress = 1.0;
+                    tRoot.outgoingToplevels = [];
+                    if (tRoot.activeWsId > 0)
+                        tRoot.displayedWsId = tRoot.activeWsId;
+                    return;
+                }
+
+                if (!GlobalStates.overviewOpen || !transitionScope.featureEnabled)
+                    return;
+
+                tRoot.exitAnimating = false;
+                tRoot.isOverviewActive = tRoot.isGnomeLike;
+                exitAnimTimer.stop();
+                restoreWindowsTimer.stop();
+                slideStartTimer.stop();
+                tRoot.slideAnimEnabled = false;
+                tRoot.transitionProgress = 1.0;
+                tRoot.outgoingToplevels = [];
+                tRoot.displayedWsId = tRoot.activeWsId;
+                if (tRoot.isGnomeLike && Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
+                    openDelayTimer.restart();
+                Qt.callLater(tRoot.scheduleToplevelUpdate);
             }
 
             Timer {
@@ -333,7 +377,7 @@ Scope {
                     transitionScope.setWindowHandoffActive(false);
                 } else if (GlobalStates.overviewOpen && transitionScope.featureEnabled) {
                     tRoot.exitAnimating = false;
-                    tRoot.isOverviewActive = true;
+                    tRoot.isOverviewActive = tRoot.monitorFocused;
                     exitAnimTimer.stop();
                     restoreWindowsTimer.stop();
                     openDelayTimer.restart();
@@ -355,6 +399,7 @@ Scope {
             // window transition.
             readonly property bool shouldBeActive:
                 transitionScope.featureEnabled &&
+                tRoot.monitorFocused &&
                 (tRoot.isGnomeLike
                     ? tRoot.isOverviewActive
                     : (overviewController && overviewController.windowTransitionMode !== "none"
@@ -450,6 +495,14 @@ Scope {
                     // exposed the wallpaper for a frame and forced a jump.
                     return
                 }
+                if (!tRoot.monitorFocused) {
+                    // Keep an unfocused instance in sync without allowing it
+                    // to start a visible slide. The focus handler performs a
+                    // clean resync when this monitor becomes active again.
+                    if (!GlobalStates.overviewOpen || tRoot.displayedWsId <= 0)
+                        tRoot.displayedWsId = activeWsId;
+                    return;
+                }
                 if (displayedWsId <= 0) {
                     // Recovering from that same transient monitor state is a
                     // resync, not a visible workspace navigation.
@@ -499,9 +552,10 @@ Scope {
                         if (tRoot.isGnomeLike) {
                             // Start the legacy handoff only after the capture
                             // layer has had a frame to render.
-                            openDelayTimer.restart();
+                            if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0])
+                                openDelayTimer.restart();
                             tRoot.exitAnimating = false;
-                            tRoot.isOverviewActive = true;
+                            tRoot.isOverviewActive = tRoot.monitorFocused;
                             exitAnimTimer.stop();
                             restoreWindowsTimer.stop();
                         }
@@ -514,14 +568,20 @@ Scope {
                         tRoot.incomingModelReady = true
                         tRoot.outgoingToplevels = []
                         tRoot.displayedWsId = tRoot.activeWsId
-                        Qt.callLater(tRoot.scheduleToplevelUpdate)
+                        if (tRoot.monitorFocused)
+                            Qt.callLater(tRoot.scheduleToplevelUpdate);
                     } else {
                         slideStartTimer.stop()
                         if (tRoot.isGnomeLike) {
-                            openDelayTimer.stop();
-                            tRoot.exitAnimating = true;
-                            restoreWindowsTimer.restart();
-                            exitAnimTimer.restart();
+                            if (Quickshell.screens.length > 0 && tRoot.screen === Quickshell.screens[0]) {
+                                openDelayTimer.stop();
+                                restoreWindowsTimer.restart();
+                            }
+                            tRoot.exitAnimating = tRoot.monitorFocused;
+                            if (tRoot.monitorFocused)
+                                exitAnimTimer.restart();
+                            else
+                                exitAnimTimer.stop();
                         }
                         tRoot.outgoingToplevels = []
                     }

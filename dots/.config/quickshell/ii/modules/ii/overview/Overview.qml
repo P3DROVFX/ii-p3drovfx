@@ -34,14 +34,22 @@ Scope {
                     required property var modelData
                     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
                     property int monitorIndex: overviewVariant.variantModel.indexOf(modelData)
-                    property bool monitorIsFocused: (Hyprland.focusedMonitor?.name === monitor?.name) || (Hyprland.focusedMonitor?.id == monitorIndex)
+                    // `monitorFor()` can briefly be null while the screen list
+                    // is settling. Comparing two undefined names made every
+                    // per-screen loader look focused during that window. Use
+                    // the stable ShellScreen name and require a real focused
+                    // monitor so only one surface can be active.
+                    readonly property string screenName: modelData ? modelData.name : ""
+                    readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
+                    property bool monitorIsFocused: Quickshell.screens.length <= 1
+                        || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
                     property bool contentKeepAlive: false
                     // Keep the focused window alive while it is visible or
                     // while its closing animation still has pixels on screen.
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    active: contentKeepAlive || (monitorIsFocused && (GlobalStates.overviewOpen || visualActive))
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
 
                     onMonitorIsFocusedChanged: {
                         if (!monitorIsFocused)
@@ -65,7 +73,9 @@ Scope {
 
                         WlrLayershell.namespace: "quickshell:overview"
                         WlrLayershell.layer: WlrLayer.Overlay
-                        WlrLayershell.keyboardFocus: GlobalStates.overviewOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+                        WlrLayershell.keyboardFocus: root.monitorIsFocused && GlobalStates.overviewOpen
+                            ? WlrKeyboardFocus.OnDemand
+                            : WlrKeyboardFocus.None
                         color: "transparent"
 
                         property int animDurationEnter: Math.round(420 * Appearance.animMultiplier)
@@ -197,7 +207,8 @@ Scope {
                         onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive
                         Component.onDestruction: realOverviewLoader.contentKeepAlive = false
 
-                        visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
+                        visible: root.monitorIsFocused
+                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
                         onVisibleChanged: {
                             if (root.visible)
                                 realOverviewLoader.visualActive = true;
@@ -206,7 +217,7 @@ Scope {
                         }
 
                         mask: Region {
-                            item: GlobalStates.overviewOpen ? contentItem : null
+                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : null
                         }
 
                         anchors {
@@ -227,6 +238,11 @@ Scope {
                         Connections {
                             target: GlobalStates
                             function onOverviewOpenChanged() {
+                                if (!root.monitorIsFocused) {
+                                    delayedGrabTimer.stop();
+                                    grab.active = false;
+                                    return;
+                                }
                                 if (!GlobalStates.overviewOpen) {
                                     searchWidget.disableExpandAnimation();
                                     overviewScope.dontAutoCancelSearch = false;
@@ -284,6 +300,8 @@ Scope {
                         }
 
                         function setSearchingText(text) {
+                            if (!root.monitorIsFocused)
+                                return;
                             searchWidget.setSearchingText(text);
                             searchWidget.focusFirstItem();
                         }
@@ -294,7 +312,7 @@ Scope {
 
                             MouseArea { // We could have used PanelWindow.mask to detect this, but this is more stable
                                 anchors.fill: parent
-                                enabled: GlobalStates.overviewOpen
+                                enabled: root.monitorIsFocused && GlobalStates.overviewOpen
                                 onClicked: GlobalStates.overviewOpen = false
                             }
 
