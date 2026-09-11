@@ -45,6 +45,16 @@ DOCK_BLACKLIST_KEYS = {
     "showPinButton",
 }
 
+SEARCH_APPEARANCE_KEYS = {
+    "positionStyle",
+    "centerVerticalRatio",
+    "bestMatch",
+    "baseWidth",
+    "baseHeight",
+    "connectStyle",
+    "appearance",
+}
+
 # ---------------------------------------------------------------------------
 # Machine-local and personal config paths
 #
@@ -119,6 +129,42 @@ LOCAL_FOLDER_PATHS = (
 )
 
 # Choices a theme has no business overriding.
+SEARCH_LOCAL_PREFERENCE_PATHS = (
+    "search.modules",
+    "search.frecency",
+    "search.frecencyData",
+    "search.sectionOrder",
+    "search.aliases",
+    "search.prefix",
+    "search.keybindings",
+    "search.typingTest",
+    "search.fileSearch",
+    "search.fileSearchDirectory",
+    "search.browserSites",
+    "search.typoTolerance",
+    "search.suggestions",
+    "search.enableSystemControls",
+    "search.enableMathPreview",
+    "search.showSettings",
+    "search.alwaysListApps",
+    "search.nonAppResultDelay",
+    "search.sloppy",
+    "search.levenshtein",
+    "search.fuzzyThreshold",
+    "search.fuzzyRelativeCutoff",
+    "search.blurFileSearchResultPreviews",
+    "search.fileBrowser",
+    "search.ai",
+    "search.favorites",
+    "search.fallbacks",
+    "search.history",
+    "search.clipboard",
+    "search.nowPlaying",
+    "search.showNowPlayingBubble",
+    "search.imageSearch.useCircleSelection",
+    "search.excludedSites",
+)
+
 LOCAL_PREFERENCE_PATHS = (
     "appearance.iconTheme",
     "appearance.icons.enableThemed",
@@ -126,7 +172,7 @@ LOCAL_PREFERENCE_PATHS = (
     "bar.weather.useUSCS",
     "policies",
     "workSafety",
-)
+) + SEARCH_LOCAL_PREFERENCE_PATHS
 
 # Everything merge() hands back to the importer.
 LOCAL_ONLY_PATHS = (
@@ -429,12 +475,13 @@ def remove_secrets_and_userdata(data, is_root=True):
             if k == 'search' and isinstance(v, dict):
                 search_copy = {}
                 for sk, sv in v.items():
-                    if sk == 'aliases':
+                    if sk not in SEARCH_APPEARANCE_KEYS:
                         continue
                     if is_sensitive_key(sk):
                         continue
                     search_copy[sk] = remove_secrets_and_userdata(sv, is_root=False)
-                cleaned[k] = search_copy
+                if search_copy:
+                    cleaned[k] = search_copy
                 continue
             if k == 'dock' and isinstance(v, dict):
                 dock_copy = {}
@@ -690,6 +737,15 @@ def expand(input_path, output_path, presets_dir, preset_name):
                 for key in DOCK_BLACKLIST_KEYS:
                     if key in existing_config['dock']:
                         data['dock'][key] = existing_config['dock'][key]
+            if isinstance(existing_config, dict) and isinstance(existing_config.get('search'), dict):
+                if 'search' not in data or not isinstance(data['search'], dict):
+                    data['search'] = {}
+                for key in list(data['search'].keys()):
+                    if key not in SEARCH_APPEARANCE_KEYS:
+                        del data['search'][key]
+                for key, val in existing_config['search'].items():
+                    if key not in SEARCH_APPEARANCE_KEYS:
+                        data['search'][key] = copy.deepcopy(val)
         except Exception:
             pass
 
@@ -721,6 +777,12 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
             raise ValueError('existing config is not a JSON object')
 
     preset = expand_val(preset, user_home())
+    if isinstance(preset.get('search'), dict):
+        preset['search'] = {
+            sk: copy.deepcopy(sv)
+            for sk, sv in preset['search'].items()
+            if sk in SEARCH_APPEARANCE_KEYS and not is_sensitive_key(sk)
+        }
     merged = deep_merge(current, preset)
     restore_local_only(merged, current)
     resolve_asset_paths(merged, current, presets_dir, preset_name)

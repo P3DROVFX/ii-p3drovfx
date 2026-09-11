@@ -223,8 +223,9 @@ Item {
                 ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
                 : Qt.size(-1, -1))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-        // This image is already decoded at 1/8 resolution for blur. Preserve
-        // its crop in a small texture instead of MultiEffect's fullscreen proxy.
+        // In the reduced path this image is decoded at 1/8 for blur and keeps
+        // its crop in a small texture instead of a fullscreen proxy. The layer
+        // is disabled when native wallpaper quality is selected.
         layer.enabled: wallpaperImageRoot.reduceVramUsage && overviewBackingBlurLoader.active
         layer.textureSize: wallpaperImageRoot.reduceVramUsage
             ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))

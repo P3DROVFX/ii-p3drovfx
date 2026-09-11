@@ -25,12 +25,24 @@ class TestPresetsHelper(unittest.TestCase):
         self.home_dir = "/home/testuser"
 
     def test_user_data_removal(self):
-        """Teste 1: Confirm that googleDrive and search.aliases are removed, while visual search settings remain."""
+        """Teste 1: Confirm that googleDrive, search aliases and behavioral search preferences are removed, while overview search appearance remains."""
         input_data = {
             "search": {
                 "enableSystemControls": True,
                 "enableMathPreview": True,
                 "engineBaseUrl": "https://www.google.com/search?q=",
+                "positionStyle": "center",
+                "centerVerticalRatio": 0.35,
+                "baseWidth": 620,
+                "bestMatch": {
+                    "enable": True,
+                    "secondaryActions": 3,
+                    "uniformList": True
+                },
+                "appearance": {
+                    "accentPanels": True,
+                    "panelWidth": 900
+                },
                 "aliases": [
                     {"trigger": "g", "command": "google"},
                     {"trigger": "y", "command": "youtube"}
@@ -50,8 +62,14 @@ class TestPresetsHelper(unittest.TestCase):
         self.assertNotIn("googleDrive", sanitized)
         self.assertIn("search", sanitized)
         self.assertNotIn("aliases", sanitized["search"])
-        self.assertTrue(sanitized["search"]["enableSystemControls"])
-        self.assertTrue(sanitized["search"]["enableMathPreview"])
+        self.assertNotIn("enableSystemControls", sanitized["search"])
+        self.assertNotIn("enableMathPreview", sanitized["search"])
+        self.assertNotIn("engineBaseUrl", sanitized["search"])
+        self.assertEqual(sanitized["search"]["positionStyle"], "center")
+        self.assertEqual(sanitized["search"]["centerVerticalRatio"], 0.35)
+        self.assertEqual(sanitized["search"]["baseWidth"], 620)
+        self.assertTrue(sanitized["search"]["bestMatch"]["enable"])
+        self.assertEqual(sanitized["search"]["appearance"]["panelWidth"], 900)
         self.assertEqual(sanitized["bar"]["height"], 48)
 
     def test_secrets_removal(self):
@@ -1167,6 +1185,167 @@ class TestBlacklistAndWidgetNormalization(unittest.TestCase):
         self.assertIn("referenceResolution", sanitized["background"])
         self.assertIn("width", sanitized["background"]["referenceResolution"])
         self.assertIn("height", sanitized["background"]["referenceResolution"])
+
+    def test_search_launcher_preferences_blacklisted_on_sanitize(self):
+        """Ensure search launcher preferences (frecency, modules, sectionOrder, prefix, etc.) are stripped on export."""
+        input_data = {
+            "appearance": {"palette": "vynx"},
+            "search": {
+                # Behavioral / user preferences (must be blacklisted)
+                "frecency": True,
+                "frecencyData": {"trackApps": True, "trackPanels": True, "trackActions": True},
+                "sectionOrder": [{"id": "apps"}, {"id": "tools"}, {"id": "files"}],
+                "modules": {
+                    "clipboard": True,
+                    "bluetooth": False,
+                    "snippets": {
+                        "enable": True,
+                        "items": [{"alias": "email", "name": "email", "text": "secret.email@example.com"}]
+                    },
+                    "webSearch": True,
+                    "shellCommand": True
+                },
+                "prefix": {"action": "-", "app": "~", "webSearch": "?"},
+                "keybindings": [{"actionId": "actions", "shortcut": "Ctrl+K"}],
+                "typingTest": {"language": "english_1k", "time": 30},
+                "fileSearchDirectory": "/home/testuser/MyFiles",
+                "fileSearch": {"includeHidden": True, "threads": 4},
+                "browserSites": {"enable": True, "profilePath": "/home/testuser/.mozilla"},
+                "typoTolerance": {"enable": True, "threshold": 0.3},
+                "suggestions": {"enable": True, "showFrecency": True},
+                "engineBaseUrl": "https://custom.engine.example/?q=",
+                "nowPlaying": {"enable": True, "showInlineControls": True},
+                "showNowPlayingBubble": True,
+                # Overview search appearance (must be preserved)
+                "positionStyle": "center",
+                "centerVerticalRatio": 0.28,
+                "bestMatch": {
+                    "enable": True,
+                    "secondaryActions": 4,
+                    "uniformList": True
+                },
+                "baseWidth": 640,
+                "baseHeight": 540,
+                "connectStyle": "connect",
+                "appearance": {
+                    "accentPanels": True,
+                    "accentStrength": 0.15,
+                    "showKeyHints": True,
+                    "showKeyHintBar": False,
+                    "panelWidth": 880,
+                    "panelBodyHeight": 440
+                }
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
+        search = sanitized.get("search", {})
+
+        # Blacklisted behavioral items MUST NOT survive
+        self.assertNotIn("frecency", search)
+        self.assertNotIn("frecencyData", search)
+        self.assertNotIn("sectionOrder", search)
+        self.assertNotIn("modules", search)
+        self.assertNotIn("prefix", search)
+        self.assertNotIn("keybindings", search)
+        self.assertNotIn("typingTest", search)
+        self.assertNotIn("fileSearchDirectory", search)
+        self.assertNotIn("fileSearch", search)
+        self.assertNotIn("browserSites", search)
+        self.assertNotIn("typoTolerance", search)
+        self.assertNotIn("suggestions", search)
+        self.assertNotIn("engineBaseUrl", search)
+        self.assertNotIn("nowPlaying", search)
+        self.assertNotIn("showNowPlayingBubble", search)
+
+        # Overview search appearance MUST be preserved
+        self.assertEqual(search["positionStyle"], "center")
+        self.assertEqual(search["centerVerticalRatio"], 0.28)
+        self.assertEqual(search["baseWidth"], 640)
+        self.assertEqual(search["baseHeight"], 540)
+        self.assertEqual(search["connectStyle"], "connect")
+        self.assertTrue(search["bestMatch"]["enable"])
+        self.assertEqual(search["bestMatch"]["secondaryActions"], 4)
+        self.assertTrue(search["bestMatch"]["uniformList"])
+        self.assertTrue(search["appearance"]["accentPanels"])
+        self.assertEqual(search["appearance"]["accentStrength"], 0.15)
+        self.assertTrue(search["appearance"]["showKeyHints"])
+        self.assertFalse(search["appearance"]["showKeyHintBar"])
+        self.assertEqual(search["appearance"]["panelWidth"], 880)
+        self.assertEqual(search["appearance"]["panelBodyHeight"], 440)
+
+    def test_search_launcher_preferences_preserved_on_merge_and_expand(self):
+        """Ensure merge() and expand() preserve local search launcher preferences while applying search appearance."""
+        preset_data = {
+            "appearance": {"palette": "catppuccin"},
+            "search": {
+                # Foreign preset trying to impose search behavior
+                "frecency": False,
+                "sectionOrder": [{"id": "files"}],
+                "modules": {"clipboard": False, "bluetooth": False},
+                "prefix": {"app": "!!!"},
+                # Foreign preset overview search appearance
+                "positionStyle": "center",
+                "centerVerticalRatio": 0.25,
+                "bestMatch": {"enable": True, "secondaryActions": 2, "uniformList": False},
+                "baseWidth": 700,
+                "baseHeight": 560
+            }
+        }
+        local_user_config = {
+            "appearance": {"palette": "nord"},
+            "search": {
+                # User's existing preferred search launcher configuration
+                "frecency": True,
+                "sectionOrder": [{"id": "suggested"}, {"id": "apps"}],
+                "modules": {"clipboard": True, "bluetooth": True, "webSearch": True},
+                "prefix": {"app": "~"},
+                "positionStyle": "default",
+                "baseWidth": 580
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            preset_file = os.path.join(tmp_dir, "preset.json")
+            config_file = os.path.join(tmp_dir, "config.json")
+            with open(preset_file, "w", encoding="utf-8") as f:
+                json.dump(preset_data, f)
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(local_user_config, f)
+
+            # Test merge()
+            presets_helper.merge(preset_file, config_file, config_file)
+            with open(config_file, "r", encoding="utf-8") as f:
+                merged = json.load(f)
+
+            # User's launcher preferences MUST be preserved
+            self.assertTrue(merged["search"]["frecency"])
+            self.assertEqual(merged["search"]["sectionOrder"], [{"id": "suggested"}, {"id": "apps"}])
+            self.assertTrue(merged["search"]["modules"]["clipboard"])
+            self.assertTrue(merged["search"]["modules"]["bluetooth"])
+            self.assertEqual(merged["search"]["prefix"]["app"], "~")
+
+            # Preset appearance MUST be applied
+            self.assertEqual(merged["search"]["positionStyle"], "center")
+            self.assertEqual(merged["search"]["centerVerticalRatio"], 0.25)
+            self.assertTrue(merged["search"]["bestMatch"]["enable"])
+            self.assertEqual(merged["search"]["bestMatch"]["secondaryActions"], 2)
+            self.assertEqual(merged["search"]["baseWidth"], 700)
+            self.assertEqual(merged["search"]["baseHeight"], 560)
+
+            # Test expand() with a second target config
+            expand_target = os.path.join(tmp_dir, "expand_target.json")
+            with open(expand_target, "w", encoding="utf-8") as f:
+                json.dump(local_user_config, f)
+
+            presets_helper.expand(preset_file, expand_target, tmp_dir, "preset")
+            with open(expand_target, "r", encoding="utf-8") as f:
+                expanded = json.load(f)
+
+            self.assertTrue(expanded["search"]["frecency"])
+            self.assertEqual(expanded["search"]["sectionOrder"], [{"id": "suggested"}, {"id": "apps"}])
+            self.assertTrue(expanded["search"]["modules"]["clipboard"])
+            self.assertEqual(expanded["search"]["positionStyle"], "center")
+            self.assertEqual(expanded["search"]["baseWidth"], 700)
 
 
 if __name__ == "__main__":
