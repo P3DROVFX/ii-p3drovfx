@@ -621,11 +621,13 @@ Item {
         }
     }
 
-    WorkspaceProfileForm {
+    // Deferred: the ~1.3k-line form builds on first openForAdd/openForEdit
+    // instead of on every switch to this tab (the tab is rebuilt each switch
+    // because the cheatsheet keeps only the last tab). This was the stutter.
+    DeferredWorkspaceProfileForm {
         id: workspaceProfileForm
         anchors.fill: parent
         z: 10
-        visible: isOpen || isAnimating
     }
 
     // ── keyboard shortcuts ───────────────────────────────────────────────────
