@@ -50,8 +50,8 @@ SONGREC_PID=$!
 ( sleep "$TOTAL_DURATION" && kill "$SONGREC_PID" 2>/dev/null ) &
 
 while IFS= read -r line; do
-    if echo "$line" | grep -q '"matches": \['; then
-        if echo "$line" | grep -q '"matches": \[\]'; then
+    if echo "$line" | grep -q '"matches" *: *\['; then
+        if echo "$line" | grep -q '"matches" *: *\[\]'; then
             continue
         fi
         echo "$line"
