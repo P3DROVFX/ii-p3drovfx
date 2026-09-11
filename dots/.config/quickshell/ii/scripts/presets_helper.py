@@ -94,8 +94,9 @@ PERSONAL_PATHS = (
     # in the same way a monitor name is, and applying it silently stops touch
     # gestures working on everyone else's.
     "interactions.touchGestures.deviceId",
-    "todo.googleTasks.taskListId",
-    "todo.googleTasks.taskListTitle",
+    "todo",
+    "googleDrive",
+    "cheatsheet",
     "tailscale.exitNode",
     "tailscale.advertiseRoutes",
     "vpn.defaultProfile",
@@ -408,11 +409,20 @@ def atomic_write_json(path, data):
         raise
 
 
-def remove_secrets_and_userdata(data):
+ROOT_PRESET_BLACKLIST_KEYS = {
+    "googleDrive",
+    "todo",
+    "ai",
+    "cheatsheet",
+}
+
+def remove_secrets_and_userdata(data, is_root=True):
     if isinstance(data, dict):
         cleaned = {}
         for k, v in data.items():
-            if k == 'googleDrive':
+            if is_root and k in ROOT_PRESET_BLACKLIST_KEYS:
+                continue
+            if not is_root and k == 'googleDrive':
                 continue
             if is_sensitive_key(k):
                 continue
@@ -423,7 +433,7 @@ def remove_secrets_and_userdata(data):
                         continue
                     if is_sensitive_key(sk):
                         continue
-                    search_copy[sk] = remove_secrets_and_userdata(sv)
+                    search_copy[sk] = remove_secrets_and_userdata(sv, is_root=False)
                 cleaned[k] = search_copy
                 continue
             if k == 'dock' and isinstance(v, dict):
@@ -431,13 +441,13 @@ def remove_secrets_and_userdata(data):
                 for dk, dv in v.items():
                     if dk in DOCK_BLACKLIST_KEYS or is_sensitive_key(dk):
                         continue
-                    dock_copy[dk] = remove_secrets_and_userdata(dv)
+                    dock_copy[dk] = remove_secrets_and_userdata(dv, is_root=False)
                 cleaned[k] = dock_copy
                 continue
-            cleaned[k] = remove_secrets_and_userdata(v)
+            cleaned[k] = remove_secrets_and_userdata(v, is_root=False)
         return cleaned
     elif isinstance(data, list):
-        return [remove_secrets_and_userdata(x) for x in data]
+        return [remove_secrets_and_userdata(x, is_root=False) for x in data]
     return data
 
 def sanitize_val(val, home_dir):
@@ -512,6 +522,54 @@ def reset_monitor_bindings(data):
         notifications['monitor']['enable'] = False
         notifications['monitor']['name'] = ''
 
+def detect_display_resolution():
+    try:
+        import subprocess
+        out = subprocess.check_output(['hyprctl', 'monitors', '-j'], timeout=1, stderr=subprocess.DEVNULL)
+        monitors = json.loads(out.decode('utf-8'))
+        if isinstance(monitors, list) and monitors:
+            focused = next((m for m in monitors if m.get('focused')), monitors[0])
+            w = focused.get('width')
+            h = focused.get('height')
+            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
+                return {'width': int(w), 'height': int(h)}
+    except Exception:
+        pass
+    return {'width': 1920, 'height': 1080}
+
+def normalize_active_widgets(data):
+    background = data.get('background')
+    if not isinstance(background, dict):
+        return
+    active_widgets = background.get('activeWidgets')
+    if not isinstance(active_widgets, list):
+        return
+
+    for entry in active_widgets:
+        if not isinstance(entry, dict):
+            continue
+        positions = entry.get('positions')
+        if isinstance(positions, dict) and positions:
+            first_key = next(iter(positions))
+            forked = positions[first_key]
+            if isinstance(forked, dict):
+                if 'x' in forked:
+                    entry['x'] = forked['x']
+                if 'y' in forked:
+                    entry['y'] = forked['y']
+                if 'scale' in forked:
+                    entry['scale'] = forked['scale']
+
+        lock_positions = entry.get('lockPositions')
+        if isinstance(lock_positions, dict) and lock_positions:
+            first_key = next(iter(lock_positions))
+            forked_lock = lock_positions[first_key]
+            if isinstance(forked_lock, dict):
+                if 'lockX' in forked_lock:
+                    entry['lockX'] = forked_lock['lockX']
+                if 'lockY' in forked_lock:
+                    entry['lockY'] = forked_lock['lockY']
+
 def sanitize_data(data, home_dir):
     data = remove_secrets_and_userdata(data)
 
@@ -539,6 +597,12 @@ def sanitize_data(data, home_dir):
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)
+
+    if 'background' in data and isinstance(data['background'], dict):
+        if 'referenceResolution' not in data['background']:
+            data['background']['referenceResolution'] = detect_display_resolution()
+        normalize_active_widgets(data)
+
     return data
 
 def sanitize(input_path, output_path):

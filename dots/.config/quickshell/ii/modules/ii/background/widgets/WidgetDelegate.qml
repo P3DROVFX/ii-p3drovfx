@@ -37,7 +37,7 @@ Item {
     // the lock fork is read, which follows the desktop until forked.
     readonly property var placement: {
         const list = Config.options.background.activeWidgets;
-        return WidgetPlacement.resolveIn(list, delegateRoot.instanceId, delegateRoot.monitorName, GlobalStates.lockLookActive);
+        return WidgetPlacement.resolveIn(list, delegateRoot.instanceId, delegateRoot.monitorName, GlobalStates.lockLookActive, delegateRoot.screenWidth, delegateRoot.screenHeight);
     }
     // The entry itself, for the flags that are not placement (pinned).
     readonly property var configEntry: WidgetPlacement.findEntry(Config.options.background.activeWidgets, delegateRoot.instanceId)

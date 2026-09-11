@@ -1066,11 +1066,107 @@ class TestApplyBackstop(unittest.TestCase):
         ours = presets_helper.current_config_version()
         with open(os.path.join(self.presets, "Future.json"), "w", encoding="utf-8") as f:
             json.dump({"configVersion": ours + 1, "bar": {"height": 99}}, f)
-        before = open(self.config, encoding="utf-8").read()
+        with open(self.config, encoding="utf-8") as f:
+            before = f.read()
         proc = self.run_load("Future")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("newer version", proc.stderr)
-        self.assertEqual(open(self.config, encoding="utf-8").read(), before)
+        with open(self.config, encoding="utf-8") as f:
+            self.assertEqual(f.read(), before)
+
+
+class TestBlacklistAndWidgetNormalization(unittest.TestCase):
+    """Verify blacklist of cheatsheet, ai, todo, googleDrive and activeWidgets normalization."""
+
+    def setUp(self):
+        self.home_dir = "/home/testuser"
+
+    def test_cheatsheet_ai_todo_gdrive_blacklisted_on_export(self):
+        input_data = {
+            "appearance": {"palette": "vynx"},
+            "bar": {"height": 48},
+            "cheatsheet": {
+                "enableCommands": True,
+                "enableGmail": False,
+                "enableTimetable": True
+            },
+            "ai": {
+                "systemPrompt": "Custom prompt",
+                "customModels": [{"title": "Custom"}]
+            },
+            "todo": {
+                "provider": "ticktick",
+                "refreshIntervalMinutes": 5,
+                "googleTasks": {"taskListId": "abc"}
+            },
+            "googleDrive": {
+                "enabled": True,
+                "backupFolders": ["/path/to/backup"]
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
+        self.assertNotIn("cheatsheet", sanitized)
+        self.assertNotIn("ai", sanitized)
+        self.assertNotIn("todo", sanitized)
+        self.assertNotIn("googleDrive", sanitized)
+        self.assertEqual(sanitized["appearance"]["palette"], "vynx")
+        self.assertEqual(sanitized["bar"]["height"], 48)
+
+    def test_cheatsheet_todo_gdrive_survive_merge(self):
+        preset = {
+            "appearance": {"palette": "nord"},
+            "cheatsheet": {"enableCommands": False, "enableGmail": True},
+            "todo": {"provider": "googleTasks"},
+            "googleDrive": {"enabled": False}
+        }
+        local_config = {
+            "appearance": {"palette": "vynx"},
+            "cheatsheet": {"enableCommands": True, "enableGmail": False},
+            "todo": {"provider": "ticktick"},
+            "googleDrive": {"enabled": True, "backupFolders": ["/my/backups"]}
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            preset_file = os.path.join(tmp_dir, "preset.json")
+            config_file = os.path.join(tmp_dir, "config.json")
+            with open(preset_file, "w", encoding="utf-8") as f:
+                json.dump(preset, f)
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(local_config, f)
+            presets_helper.merge(preset_file, config_file, config_file)
+            with open(config_file, "r", encoding="utf-8") as f:
+                merged = json.load(f)
+
+        self.assertEqual(merged["appearance"]["palette"], "nord")
+        self.assertTrue(merged["cheatsheet"]["enableCommands"])
+        self.assertFalse(merged["cheatsheet"]["enableGmail"])
+        self.assertEqual(merged["todo"]["provider"], "ticktick")
+        self.assertTrue(merged["googleDrive"]["enabled"])
+        self.assertEqual(merged["googleDrive"]["backupFolders"], ["/my/backups"])
+
+    def test_active_widgets_position_promotion_and_resolution(self):
+        input_data = {
+            "background": {
+                "activeWidgets": [
+                    {
+                        "id": "widget_clock_flex_1",
+                        "widgetId": "clock_flex",
+                        "x": 200,
+                        "y": 200,
+                        "positions": {
+                            "DP-1": {"x": 1590, "y": 710, "scale": 1.25}
+                        }
+                    }
+                ]
+            }
+        }
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(input_data), self.home_dir)
+        widgets = sanitized["background"]["activeWidgets"]
+        self.assertEqual(widgets[0]["x"], 1590)
+        self.assertEqual(widgets[0]["y"], 710)
+        self.assertEqual(widgets[0]["scale"], 1.25)
+        self.assertIn("referenceResolution", sanitized["background"])
+        self.assertIn("width", sanitized["background"]["referenceResolution"])
+        self.assertIn("height", sanitized["background"]["referenceResolution"])
 
 
 if __name__ == "__main__":

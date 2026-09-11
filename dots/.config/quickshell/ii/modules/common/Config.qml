@@ -2636,6 +2636,10 @@ Singleton {
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
+                property JsonObject referenceResolution: JsonObject {
+                    property int width: 1920
+                    property int height: 1080
+                }
                 property JsonObject widgets: JsonObject {
                     // Standard snap step for the desktop wallpaper canvas is 10px.
                     property int gridStep: 10
