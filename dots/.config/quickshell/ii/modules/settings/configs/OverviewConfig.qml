@@ -147,10 +147,26 @@ ContentPage {
                 }
             }
 
+            ConfigSwitch {
+                enabled: Config.options.overview.enable
+                buttonIcon: "block"
+                text: Translation.tr("Disable all animations")
+                description: Translation.tr("Disables entrance, sliding and cascade motion, opening the overview and search instantly.")
+                checked: Config.options.overview.animationStyle === "none"
+                onCheckedChanged: {
+                    if (checked) {
+                        Config.options.overview.animationStyle = "none";
+                    } else if (Config.options.overview.animationStyle === "none") {
+                        Config.options.overview.animationStyle = "bounce";
+                    }
+                }
+            }
+
             ContentSubsection {
                 title: Translation.tr("Animation Style")
                 icon: "animation"
                 Layout.fillWidth: true
+                opacity: Config.options.overview.animationStyle === "none" ? 0.6 : 1.0
 
                 RowLayout {
                     Layout.fillWidth: true

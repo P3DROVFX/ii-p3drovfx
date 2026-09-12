@@ -174,6 +174,32 @@ Item {
             }
         }
 
+        // ── Motion & Animations ───────────────────────────────────────────────
+        ContentSection {
+            icon: "motion_mode"
+            title: Translation.tr("Motion & Animations")
+            tooltip: Translation.tr("Control launcher and panel animation behaviors.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "block"
+                    text: Translation.tr("Disable all animations")
+                    description: Translation.tr("Disables entrance, panel, and search motion, opening instantly without animation.")
+                    checked: Config.options.overview.animationStyle === "none"
+                    onCheckedChanged: {
+                        if (checked) {
+                            Config.options.overview.animationStyle = "none";
+                        } else if (Config.options.overview.animationStyle === "none") {
+                            Config.options.overview.animationStyle = "bounce";
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Visual Accents & Hints ────────────────────────────────────────────
         ContentSection {
             icon: "palette"
