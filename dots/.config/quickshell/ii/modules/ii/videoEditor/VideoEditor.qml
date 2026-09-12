@@ -209,11 +209,12 @@ FloatingWindow {
         return Math.round(18 + (100 - Math.max(10, Math.min(100, root.compressionPercent))) * 0.35)
     }
 
-    function exportSpec(replace) {
+    function exportSpec(replace, format = "mp4") {
         const uiWidth = Math.max(1, videoOutput.contentRect.width)
         const uiHeight = Math.max(1, videoOutput.contentRect.height)
         return {
             input: GlobalStates.videoEditorPath,
+            format: format || "mp4",
             startSeconds: root.startTime / 1000,
             endSeconds: root.effectiveEndTime / 1000,
             crop: {
@@ -330,10 +331,10 @@ FloatingWindow {
         root.muteAudio = false
     }
 
-    function save(replace) {
+    function save(replace, format = "mp4") {
         if (videoOutput.contentRect.width <= 0) return
 
-        Quickshell.execDetached(["python3", Directories.processVideoScriptPath, "export", JSON.stringify(root.exportSpec(replace))])
+        Quickshell.execDetached(["python3", Directories.processVideoScriptPath, "export", JSON.stringify(root.exportSpec(replace, format))])
         GlobalStates.videoEditorOpen = false
     }
 
@@ -911,20 +912,40 @@ FloatingWindow {
                                 onClicked: root.isCompressMode = true
                             }
 
-                            RippleButton {
-                                implicitWidth: 180
-                                implicitHeight: 56
-                                buttonRadius: 28
+                            MaterialSplitButton {
+                                buttonHeight: 56
                                 colBackground: Appearance.colors.colSurfaceContainerHighest
-                                contentItem: Item {
-                                    RowLayout {
-                                        anchors.centerIn: parent
-                                        spacing: 12
-                                        MaterialSymbol { text: "content_copy"; iconSize: 24; color: Appearance.colors.colOnSurface }
-                                        StyledText { text: Translation.tr("Save Copy"); font.pixelSize: 16; font.weight: Font.Bold; color: Appearance.colors.colOnSurface }
+                                colForeground: Appearance.colors.colOnSurface
+                                colBackgroundHover: Appearance.colors.colSurfaceContainerHigh
+                                colBackgroundActive: Appearance.colors.colSurfaceContainer
+                                colRipple: Appearance.colors.colSurfaceContainer
+                                text: Translation.tr("Save Copy")
+                                icon: "content_copy"
+                                popupDirection: "up"
+                                model: [
+                                    {
+                                        id: "mp4",
+                                        label: Translation.tr("Video (MP4)"),
+                                        icon: "movie",
+                                        description: Translation.tr("Standard video export")
+                                    },
+                                    {
+                                        id: "mp3",
+                                        label: Translation.tr("Audio (MP3)"),
+                                        icon: "music_note",
+                                        description: Translation.tr("Extract audio track")
+                                    },
+                                    {
+                                        id: "gif",
+                                        label: Translation.tr("GIF Animation"),
+                                        icon: "gif",
+                                        description: Translation.tr("High-quality animated GIF")
                                     }
+                                ]
+                                onClicked: root.save(false, "mp4")
+                                onActionSelected: (id, item) => {
+                                    root.save(false, id);
                                 }
-                                onClicked: root.save(false)
                             }
 
                             RippleButton {

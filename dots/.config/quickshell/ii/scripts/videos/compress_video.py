@@ -140,8 +140,13 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
         end = start + duration
 
     crop = raw.get("crop") or {}
+    export_format = str(raw.get("format", "mp4")).strip().lower()
+    if export_format not in ("mp4", "mp3", "gif"):
+        export_format = "mp4"
+
     return {
         "input": input_file,
+        "format": export_format,
         "startSeconds": start,
         "endSeconds": max(start, end),
         "crop": {
@@ -158,7 +163,7 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
         "flipHorizontal": bool(raw.get("flipHorizontal", False)),
         "flipVertical": bool(raw.get("flipVertical", False)),
         "mute": bool(raw.get("mute", False)),
-        "audioBitrate": str(raw.get("audioBitrate", "128k")),
+        "audioBitrate": str(raw.get("audioBitrate", "192k")),
         "replaceOriginal": bool(raw.get("replaceOriginal", False)),
         "outputPath": str(raw.get("outputPath", "")).strip(),
     }
@@ -224,7 +229,64 @@ def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
 
 
 def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, progress: bool = False) -> list[str]:
+    fmt = spec.get("format", "mp4")
     duration = selected_duration(spec, as_float(metadata.get("duration")))
+    start_sec = f"{spec['startSeconds']:.3f}"
+    dur_sec = f"{duration:.3f}"
+
+    if fmt == "mp3":
+        if not (metadata.get("audio") or {}).get("present"):
+            raise ValueError("Input video does not contain an audio track to export as MP3")
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            start_sec,
+            "-t",
+            dur_sec,
+            "-i",
+            spec["input"],
+            "-vn",
+            "-map",
+            "0:a:0?",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            str(spec.get("audioBitrate", "192k")),
+        ]
+        if progress:
+            command.extend(["-progress", "pipe:1", "-nostats"])
+        command.append(output)
+        return command
+
+    if fmt == "gif":
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            start_sec,
+            "-t",
+            dur_sec,
+            "-i",
+            spec["input"],
+        ]
+        filters = filter_chain(spec, metadata)
+        fps = "fps=15"
+        vf_chain = f"{filters},{fps}" if filters else fps
+        filter_complex = f"{vf_chain},split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
+        command.extend(["-vf", filter_complex])
+        if progress:
+            command.extend(["-progress", "pipe:1", "-nostats"])
+        command.append(output)
+        return command
+
+    # Default: MP4
     command = [
         "ffmpeg",
         "-hide_banner",
@@ -234,9 +296,9 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
         "-i",
         spec["input"],
         "-ss",
-        f"{spec['startSeconds']:.3f}",
+        start_sec,
         "-t",
-        f"{duration:.3f}",
+        dur_sec,
     ]
     filters = filter_chain(spec, metadata)
     if filters:
@@ -255,20 +317,23 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
 
 def output_path_for(spec: dict[str, Any]) -> tuple[Path, bool]:
     source = Path(spec["input"]).expanduser()
+    fmt = spec.get("format", "mp4")
+    ext = f".{fmt}"
+
     requested = Path(spec["outputPath"]).expanduser() if spec["outputPath"] else None
     if requested:
-        if requested.suffix.lower() != ".mp4":
-            requested = requested.with_suffix(".mp4")
+        if requested.suffix.lower() != ext:
+            requested = requested.with_suffix(ext)
         return requested, False
 
-    if spec["replaceOriginal"] and source.suffix.lower() == ".mp4":
+    if fmt == "mp4" and spec["replaceOriginal"] and source.suffix.lower() == ".mp4":
         return source, True
     if spec["replaceOriginal"]:
-        return source.with_name(f"{source.stem}_edited.mp4"), False
+        return source.with_name(f"{source.stem}_edited{ext}"), False
 
     index = 1
     while True:
-        candidate = source.with_name(f"{source.stem}_edited_{index}.mp4")
+        candidate = source.with_name(f"{source.stem}_edited_{index}{ext}")
         if not candidate.exists():
             return candidate, False
         index += 1
@@ -276,12 +341,31 @@ def output_path_for(spec: dict[str, Any]) -> tuple[Path, bool]:
 
 def temporary_output_path(final_path: Path) -> Path:
     final_path.parent.mkdir(parents=True, exist_ok=True)
-    return final_path.parent / f".{final_path.stem}.ii-{os.getpid()}-{next(tempfile._get_candidate_names())}.mp4"
+    return final_path.parent / f".{final_path.stem}.ii-{os.getpid()}-{next(tempfile._get_candidate_names())}{final_path.suffix}"
 
 
 def estimate(spec: dict[str, Any]) -> dict[str, Any]:
     metadata = probe_video(spec["input"])
     duration = selected_duration(spec, as_float(metadata.get("duration")))
+    fmt = spec.get("format", "mp4")
+
+    if fmt == "mp3":
+        raw_bitrate = spec.get("audioBitrate", "192k")
+        bitrate_kbps = 192.0
+        if str(raw_bitrate).endswith("k"):
+            bitrate_kbps = as_float(str(raw_bitrate)[:-1], 192.0)
+        estimate_bytes = max(1, int((bitrate_kbps * 1000 / 8) * duration))
+        return {
+            "ok": True,
+            "estimatedSize": estimate_bytes,
+            "low": max(1, int(estimate_bytes * 0.95)),
+            "high": int(estimate_bytes * 1.05),
+            "sampleCount": 1,
+            "sampleDuration": duration,
+            "confidence": "high",
+            "method": "bitrate-exact",
+        }
+
     sample_duration = min(4.0, duration)
     if duration <= sample_duration:
         starts = [0.0]
@@ -295,7 +379,7 @@ def estimate(spec: dict[str, Any]) -> dict[str, Any]:
             sample_spec = dict(spec)
             sample_spec["startSeconds"] = spec["startSeconds"] + offset
             sample_spec["endSeconds"] = sample_spec["startSeconds"] + sample_duration
-            sample_output = sample_root / f"sample-{index}.mp4"
+            sample_output = sample_root / f"sample-{index}{f'.{fmt}' if fmt != 'mp4' else '.mp4'}"
             result = subprocess.run(
                 ffmpeg_command(sample_spec, metadata, str(sample_output)),
                 stdout=subprocess.DEVNULL,
@@ -345,13 +429,21 @@ def estimate(spec: dict[str, Any]) -> dict[str, Any]:
 
 def export_video(spec: dict[str, Any]) -> int:
     metadata = probe_video(spec["input"])
+    fmt = spec.get("format", "mp4")
+    format_titles = {
+        "mp3": ("Exporting Audio…", "Exporting audio track as MP3…", "Audio Exported", "Audio Export Failed"),
+        "gif": ("Exporting GIF…", "Generating GIF animation…", "GIF Exported", "GIF Export Failed"),
+        "mp4": ("Editing Video…", "Exporting the selected video segment…", "Video Edited", "Video Edit Failed"),
+    }
+    start_title, start_msg, finish_title, error_title = format_titles.get(fmt, format_titles["mp4"])
+
     final_path, replaces_source = output_path_for(spec)
     if final_path.resolve() == Path(spec["input"]).expanduser().resolve() and not spec["replaceOriginal"]:
         raise ValueError("Output path cannot be the input path")
     temporary_path = temporary_output_path(final_path)
     duration = selected_duration(spec, as_float(metadata.get("duration")))
-    notify("Editing Video…", "Exporting the selected video segment…")
-    emit({"event": "started", "duration": duration, "outputPath": str(final_path)})
+    notify(start_title, start_msg)
+    emit({"event": "started", "duration": duration, "outputPath": str(final_path), "format": fmt})
 
     command = ffmpeg_command(spec, metadata, str(temporary_path), progress=True)
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
@@ -373,9 +465,9 @@ def export_video(spec: dict[str, Any]) -> int:
     return_code = process.wait()
     if return_code != 0 or not temporary_path.exists():
         temporary_path.unlink(missing_ok=True)
-        message = stderr.strip() or "ffmpeg could not export the video"
+        message = stderr.strip() or f"ffmpeg could not export as {fmt}"
         emit({"event": "error", "message": message})
-        notify("Video Edit Failed", message[:240], "critical")
+        notify(error_title, message[:240], "critical")
         return 1
 
     os.replace(temporary_path, final_path)
@@ -384,8 +476,9 @@ def export_video(spec: dict[str, Any]) -> int:
         "outputPath": str(final_path),
         "size": final_path.stat().st_size,
         "replacedSource": replaces_source,
+        "format": fmt,
     })
-    notify("Video Edited", f"Saved to {final_path}")
+    notify(finish_title, f"Saved to {final_path}")
     return 0
 
 
