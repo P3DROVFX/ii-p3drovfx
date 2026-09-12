@@ -28,8 +28,10 @@ RippleButton {
     property real _taskDotScale: 1
     property bool _entranceDone: true
 
+    opacityBehaviorEnabled: _entranceDone
+    scaleBehaviorEnabled: _entranceDone
     opacity: _entranceDone ? 1 : _entranceOpacity
-    scale: _entranceDone ? 1 : _entranceScale
+    visualScale: _entranceDone ? 1 : _entranceScale
     transform: Translate {
         x: button._entranceDone ? 0 : button._entranceTranslateX
         y: button._entranceDone ? 0 : button._entranceTranslateY
@@ -114,13 +116,8 @@ RippleButton {
         scale: button._taskDotScale
         visible: taskList.length > 0 && isToday !== -1 && !bold
         color: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
-        anchors {
-            top: button.compactCell ? undefined : parent.top
-            left: button.compactCell ? undefined : parent.left
-            bottom: button.compactCell ? parent.bottom : undefined
-            horizontalCenter: button.compactCell ? parent.horizontalCenter : undefined
-            margins: button.compactCell ? 1 : 4
-        }
+        x: button.compactCell ? Math.round((button.width - width) / 2) : 4
+        y: button.compactCell ? button.height - height - 1 : 4
     }
 
     LazyLoader {
@@ -139,10 +136,9 @@ RippleButton {
 
         component: CalendarPopup {
             id: popup
-            parent: button.QsWindow?.contentItem // i cant believe this works..
+            parent: button.QsWindow?.contentItem
             scale: popupLoader.itemScale
             opacity: popupLoader.itemOpacity
-            
 
             x: {
                 if (!button.QsWindow) return 0;
@@ -161,7 +157,6 @@ RippleButton {
                 return Math.max(0, Math.min(preferred, parent.height - popup.height));
             }
         }
-        
     }
     
     MouseArea {

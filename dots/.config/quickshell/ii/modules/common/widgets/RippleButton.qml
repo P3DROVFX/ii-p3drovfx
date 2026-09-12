@@ -23,6 +23,13 @@ Button {
     readonly property bool isPressed: root.down
     property int rippleDuration: 1200
     property bool rippleEnabled: true
+    // Some dense, static widgets do not need any motion. Keep the animated
+    // Material behavior as the default, while allowing those widgets to opt
+    // out without duplicating the button implementation.
+    property bool animationsEnabled: true
+    property bool opacityBehaviorEnabled: true
+    property bool scaleBehaviorEnabled: true
+    property real visualScale: 1.0
     property var downAction
     property var releaseAction
     property var altAction
@@ -199,19 +206,19 @@ Button {
     property real bottomRightRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
 
     Behavior on topLeftRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on topRightRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on bottomLeftRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on bottomRightRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
@@ -227,6 +234,7 @@ Button {
     property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
+        enabled: root.animationsEnabled
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
@@ -235,11 +243,16 @@ Button {
     property color rippleColor: root.toggled ? colRippleToggled : colRipple
 
     Behavior on opacity {
+        enabled: root.animationsEnabled && root.opacityBehaviorEnabled
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
-    scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
-    Behavior on scale {
+    property real interactionScale: root.animationsEnabled
+        ? (root.down ? 0.96 : (root.hovered ? 1.01 : 1.0))
+        : 1.0
+    scale: root.interactionScale * root.visualScale
+    Behavior on interactionScale {
+        enabled: root.animationsEnabled && root.scaleBehaviorEnabled
         NumberAnimation {
             duration: 150
             easing.type: Easing.OutQuad
@@ -249,6 +262,8 @@ Button {
     property bool rippleEverStarted: false
 
     function startRipple(x, y) {
+        if (!root.animationsEnabled)
+            return;
         root.rippleEverStarted = true;
         const stateY = buttonBackground.y;
         rippleAnim.x = x;
@@ -321,7 +336,7 @@ Button {
                 root.pressedAction(event);
             if (root.downAction)
                 root.downAction();
-            if (!root.rippleEnabled)
+            if (!root.rippleEnabled || !root.animationsEnabled)
                 return;
             const {
                 x,
@@ -343,14 +358,14 @@ Button {
                 // release then dismissed what had just opened.
                 if (root.altAction)
                     root.altAction();
-                if (root.rippleEnabled)
+                if (root.rippleEnabled && root.animationsEnabled)
                     rippleFadeAnim.restart();
                 return;
             }
             if (root.releaseAction)
                 root.releaseAction();
             root.click();
-            if (!root.rippleEnabled)
+            if (!root.rippleEnabled || !root.animationsEnabled)
                 return;
             rippleFadeAnim.restart();
         }
@@ -444,11 +459,12 @@ Button {
         border.width: root.borderWidth
         border.color: root.borderColor
         Behavior on color {
+            enabled: root.animationsEnabled
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
         // The mask exists only to clip the ripple to the rounded corners, so
         // the layer is worth its cost only while a ripple is actually painted.
-        layer.enabled: root.rippleEnabled && ripple.rippling
+        layer.enabled: root.animationsEnabled && root.rippleEnabled && ripple.rippling
         layer.samples: 8
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -467,11 +483,12 @@ Button {
             width: ripple.implicitWidth
             height: ripple.implicitHeight
             opacity: 0
-            visible: ripple.rippling
+            visible: root.animationsEnabled && ripple.rippling
             readonly property bool rippling: opacity > 0 && width > 0 && height > 0
             property real implicitWidth: 0
             property real implicitHeight: 0
             Behavior on opacity {
+                enabled: root.animationsEnabled
                 animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
             }
             // Built on the first press instead of with the button: a settings

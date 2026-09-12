@@ -71,19 +71,27 @@ Rectangle {
 
     Component {
         id: calendarWidgetComponent
-        CalendarWidget {}
+        CalendarWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
     }
     Component {
         id: todoWidgetComponent
-        TodoWidget {}
+        TodoWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
     }
     Component {
         id: timerWidgetComponent
-        PomodoroWidget {}
+        PomodoroWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
     }
     Component {
         id: notesWidgetComponent
-        NotesDashboardWidget {}
+        NotesDashboardWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
     }
 
     // A retained dashboard loads the selected widget while hidden. A cold
@@ -91,6 +99,7 @@ Rectangle {
     // outer width motion never becomes a reason for a visible blank group.
     property bool contentActivated: false
     property bool outerSidebarAnimating: GlobalStates.rightSidebarAnimating
+    property bool entrancePending: false
 
     function activateContentWhenSafe() {
         contentActivated = PerformancePolicy.nextDeferredContentReady(
@@ -101,8 +110,13 @@ Rectangle {
     }
 
     onOuterSidebarAnimatingChanged: {
-        if (!outerSidebarAnimating)
+        if (!outerSidebarAnimating) {
             root.activateContentWhenSafe();
+            if (root.entrancePending && !root.effectivelyCollapsed) {
+                root.entrancePending = false;
+                root.triggerContentEntrance();
+            }
+        }
     }
 
     Component.onCompleted: root.activateContentWhenSafe()
@@ -164,12 +178,17 @@ Rectangle {
 
     onStateChanged: {
         if (state === "collapsed") {
+            root.entrancePending = false;
             chevronUpAnim.start();
         } else if (state === "expanded") {
             chevronDownAnim.start();
-            if (GlobalStates.sidebarRightOpen && !root.outerSidebarAnimating
-                    && root.entranceTrigger >= 0)
-                root.triggerContentEntrance();
+            if (GlobalStates.sidebarRightOpen) {
+                if (root.outerSidebarAnimating) {
+                    root.entrancePending = true;
+                } else if (root.entranceTrigger >= 0) {
+                    root.triggerContentEntrance();
+                }
+            }
         }
     }
 
@@ -407,17 +426,8 @@ Rectangle {
                     root.previousIndex = idx;
                 }
 
-                onLoaded: {
-                    if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger"))
-                        tabStack.item.entranceTrigger = root.contentEntranceTrigger;
-                }
-
                 Connections {
                     target: root
-                    function onContentEntranceTriggerChanged() {
-                        if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger"))
-                            tabStack.item.entranceTrigger = root.contentEntranceTrigger;
-                    }
                     function onSelectedTabChanged() {
                         const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
                         if (!root.contentActivated || !tabStack.item) {
