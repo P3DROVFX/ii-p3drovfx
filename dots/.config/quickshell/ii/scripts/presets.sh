@@ -80,17 +80,12 @@ newest_backups() {
 # yields the CPU to the shell's staged transition animation instead of stealing
 # frames from it.
 apply_colors() {
-    local color_engine switch_script nice_cmd
-    color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
-    switch_script="switchwall.sh"
-    if [[ "$color_engine" == "fork" ]]; then
-        switch_script="switchwall_vynx.sh"
-    fi
+    local nice_cmd
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
     "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
-        "$SCRIPTS_DIR/colors/$switch_script" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+        "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch > /tmp/presets_switchwall.log 2>&1 &
 }
 
 action=$1

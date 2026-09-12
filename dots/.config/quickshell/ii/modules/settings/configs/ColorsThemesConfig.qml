@@ -343,32 +343,6 @@ Item {
             title: Translation.tr("Integrations & Engines")
             icon: "science"
 
-            ContentSubsection {
-                title: Translation.tr("Color generation mode")
-                icon: "settings_brightness"
-                tooltip: Translation.tr("ii-vynx: uses the original switchwall pipeline.\n\nFork: uses the fork's color generation pipeline, use this if vynx doesn't work.")
-                Layout.fillWidth: true
-
-                ConfigSelectionArray {
-                    currentValue: Config.options.appearance.colorEngine ?? "vynx"
-                    onSelected: newValue => {
-                        Config.options.appearance.colorEngine = newValue;
-                    }
-                    options: [
-                        {
-                            displayName: Translation.tr("ii-vynx"),
-                            value: "vynx",
-                            icon: "verified"
-                        },
-                        {
-                            displayName: Translation.tr("Fork"),
-                            value: "fork",
-                            icon: "build"
-                        }
-                    ]
-                }
-            }
-
             ConfigSwitch {
                 buttonIcon: "palette"
                 text: Translation.tr("OpenRGB integration")

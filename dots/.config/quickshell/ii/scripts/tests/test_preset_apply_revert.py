@@ -31,7 +31,7 @@ class TestPresetApplyRevert(unittest.TestCase):
             shutil.copyfile(SCRIPTS / name, self.scripts / name)
         script = self.scripts / 'presets.sh'
         script.write_text(script.read_text().replace('/tmp/presets_switchwall.log', str(self.root / 'colors.log')))
-        for name in ['colors/switchwall.sh', 'colors/switchwall_vynx.sh', 'notify-send']:
+        for name in ['colors/switchwall.sh', 'notify-send']:
             target = self.scripts / name
             target.parent.mkdir(exist_ok=True)
             target.write_text('#!/bin/sh\nexit 0\n')

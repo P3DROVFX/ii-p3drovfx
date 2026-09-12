@@ -1562,7 +1562,6 @@ Singleton {
             "phone.webcam.rotateDegrees": [0, 90, 180, 270],
             "phone.webcam.connection": ["wifi", "usb"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
-            "appearance.colorEngine": ["vynx", "fork"],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
@@ -2646,7 +2645,6 @@ Singleton {
                 }
                 property string borderColorType: "primary" // Options: primary, secondary, tertiary, primaryContainer, surface
                 property bool borderless: true
-                property string colorEngine: "vynx" // "vynx" | "fork" — color generation engine
                 property string iconTheme: "Papirus"
                 property JsonObject palette: JsonObject {
                     property string type: "scheme-intense" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant

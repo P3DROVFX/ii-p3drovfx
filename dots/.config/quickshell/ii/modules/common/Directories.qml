@@ -126,7 +126,7 @@ Singleton {
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
     property string screenshotTemp: `/tmp/quickshell-${SystemInfo.username}/media/screenshot`
     property string wallpaperSwitchScriptPath: FileUtils.trimFileProtocol(
-        `${Directories.scriptPath}/colors/${(Config.options.appearance.colorEngine ?? "vynx") === "fork" ? "switchwall_vynx" : "switchwall"}.sh`
+        `${Directories.scriptPath}/colors/switchwall.sh`
     )
     property string defaultAiPrompts: Quickshell.shellPath("defaults/ai/prompts")
     property string defaultThemes: Quickshell.shellPath("defaults/themes")

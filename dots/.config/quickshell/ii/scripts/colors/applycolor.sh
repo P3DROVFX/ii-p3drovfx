@@ -163,10 +163,6 @@ apply_term() {
   apply_kitty &
 }
 
-apply_openrgb() {
-    python3 "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py"
-}
-
 # Check if terminal theming is enabled in config
 CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
 if [ -f "$CONFIG_FILE" ]; then
@@ -177,7 +173,10 @@ if [ -f "$CONFIG_FILE" ]; then
   fi
   if [ "$enable_openrgb" = "true" ]; then
     openrgb_duration=$(jq -r '.appearance.openrgb.fadeDuration' "$CONFIG_FILE")
-    python3 "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py" -d $openrgb_duration
+    # OpenRGB drives peripherals over a socket and can stall; it already only
+    # runs when explicitly enabled, and is backgrounded so it never holds up the
+    # rest of the theming (or, via presets.sh, the shell recolour).
+    python3 "$CONFIG_DIR/scripts/colors/openRGB/apply_openrgb.py" -d $openrgb_duration & disown
   fi
 else
   echo "Config file not found at $CONFIG_FILE. Applying terminal theming by default."
