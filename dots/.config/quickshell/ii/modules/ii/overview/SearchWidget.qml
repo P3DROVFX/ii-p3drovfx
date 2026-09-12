@@ -508,9 +508,28 @@ Item {
     // settled; those refreshes must not move the user's selection.
     property string selectionAnchorQuery: "\u0000"
 
+    /**
+     * A burst keeps every transition and only shortens it.
+     *
+     * Switching motion off for the burst is what made results pop: the
+     * keystroke that ends a burst is itself part of the burst, so the list the
+     * user finally reads — and any group, like Files, arriving with it — landed
+     * with no motion at all. `burstMotionDuration` is short enough that a row is
+     * never late by more than a couple of frames, and the entrance stagger is
+     * dropped while it lasts. `suppressItemTransitions` stays reserved for the
+     * surface opening and closing, where rows must simply be there.
+     */
+    property bool burstTyping: false
+    readonly property int burstMotionDuration: Math.round(Appearance.animation.elementMoveFast.duration * 0.6)
+
     function noteQueryEdit() {
         const now = Date.now();
-        root.suppressItemTransitions = (now - root.lastQueryEditTime) < root.burstTypingThreshold;
+        // Clearing the query suppresses transitions so the emptied list leaves
+        // at once; the next edit is a new list and must animate again. The
+        // opening window keeps its own suppression until its timer ends.
+        if (!enableTransitionsTimer.running && !root.exiting)
+            root.suppressItemTransitions = false;
+        root.burstTyping = (now - root.lastQueryEditTime) < root.burstTypingThreshold;
         root.lastQueryEditTime = now;
         typingSettleTimer.restart();
     }
@@ -519,7 +538,7 @@ Item {
         id: typingSettleTimer
         interval: root.burstTypingThreshold
         repeat: false
-        onTriggered: root.suppressItemTransitions = false
+        onTriggered: root.burstTyping = false
     }
 
     Connections {
@@ -1359,7 +1378,10 @@ Item {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
                 height: searchWidgetContent.height
-                radius: searchWidgetContent.radius
+                topLeftRadius: searchWidgetContent.topLeftRadius
+                topRightRadius: searchWidgetContent.topRightRadius
+                bottomLeftRadius: searchWidgetContent.bottomLeftRadius
+                bottomRightRadius: searchWidgetContent.bottomRightRadius
             }
         }
 
@@ -1390,25 +1412,43 @@ Item {
                 desiredHeight = gridLayout.implicitHeight;
             return Math.min(desiredHeight, root.maximumSurfaceHeight);
         }
-        // The collapsed field needs a pill; expanded content must use the same
-        // corner as the other shell windows. Switching on `showResults` flipped
-        // the corner the instant the flag changed, so a still-tall panel wore the
-        // collapsed pill radius for the whole height animation — the fat-corner
-        // frame visible mid-collapse.
-        //
-        // Deriving it from the live (already animated) height instead keeps the
-        // two in step in both directions, with no second animation to sync.
+        /**
+         * The top corners never change.
+         *
+         * They are the collapsed field's own pill radius, concentric with the
+         * input inside it, whether the surface is a bare field or a full result
+         * list. The previous corner blended from that pill to the window radius
+         * over the first 72px of growth, so every expansion visibly reshaped the
+         * corners right under the text the user was typing into.
+         *
+         * Normal results keep the same radius at the bottom too: the last row's
+         * rounding, inset by the row margin, sits concentric with it, so there is
+         * nothing to morph. Hosted panels and AI draw to their own edges and wear
+         * the shell's window corner at the bottom; that change animates, and it
+         * can never pass through a pill because both ends are at most half the
+         * collapsed height.
+         */
         readonly property real collapsedHeight: searchBar.implicitHeight + searchBar.verticalPadding * 2
-        readonly property real cornerBlendDistance: 72
-        radius: {
-            const pill = Appearance.rounding.verylarge;
-            const panel = Appearance.rounding.windowRounding;
-            if (pill === panel)
-                return pill;
-            const grown = searchWidgetContent.height - searchWidgetContent.collapsedHeight;
-            const t = Math.max(0, Math.min(1, grown / searchWidgetContent.cornerBlendDistance));
-            return pill + (panel - pill) * t;
+        readonly property real fieldCornerRadius: Math.min(Appearance.rounding.verylarge, searchWidgetContent.collapsedHeight / 2)
+        readonly property real panelCornerRadius: Math.min(Appearance.rounding.windowRounding, searchWidgetContent.fieldCornerRadius)
+        // With the bar at the bottom the field is the last row, so "the field's
+        // corners" are the bottom ones and the far edge is the top.
+        readonly property bool fieldAtBottom: root.overviewPosition == "bottom"
+        property real farCornerRadius: (root.activePanel || root.isAiMode)
+            ? searchWidgetContent.panelCornerRadius
+            : searchWidgetContent.fieldCornerRadius
+        Behavior on farCornerRadius {
+            enabled: !root.animationsDisabled
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveSmall.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
         }
+        topLeftRadius: searchWidgetContent.fieldAtBottom ? searchWidgetContent.farCornerRadius : searchWidgetContent.fieldCornerRadius
+        topRightRadius: searchWidgetContent.topLeftRadius
+        bottomLeftRadius: searchWidgetContent.fieldAtBottom ? searchWidgetContent.fieldCornerRadius : searchWidgetContent.farCornerRadius
+        bottomRightRadius: searchWidgetContent.bottomLeftRadius
         // The appearance setting is for every panel routed from Search. Some
         // older registry entries opted out individually, making the control
         // look broken for common prefixes such as Clipboard and Translator.
@@ -1692,18 +1732,10 @@ Item {
                     onBottomMarginChanged: resultsExtentSyncTimer.restart()
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
-                    // The cascade is a reveal gesture for a list that just appeared.
-                    // Replaying it per keystroke made the seventh row wait half a
-                    // second to paint, which is the whole "it feels slow" report.
-                    property bool staggerReveal: false
-                    readonly property int staggerStep: 22
-
-                    Timer {
-                        id: staggerRevealWindow
-                        interval: 320
-                        repeat: false
-                        onTriggered: appResults.staggerReveal = false
-                    }
+                    // Cascade step between rows inserted by the same diff. It is
+                    // capped at five steps and dropped while typing in a burst, so
+                    // no row ever waits long enough to read as slow.
+                    readonly property int staggerStep: 18
 
                     // Rows are selectable results only; section captions live
                     // in the model and are skipped by keyboard navigation.
@@ -1723,7 +1755,73 @@ Item {
 
                     function selectFirst() {
                         const target = appResults.selectableIndex(0, 1);
+                        // A new query is a new list: the pill lands on its first
+                        // row instead of travelling there from the old one.
+                        appResults.snapNextSelection = true;
                         appResults.currentIndex = target;
+                        appResults.snapNextSelection = false;
+                    }
+
+                    /**
+                     * One selection pill for the whole list, sliding between rows.
+                     *
+                     * It lives in list-content coordinates and is drawn by each
+                     * row as the part of it that overlaps the row, so only one
+                     * pill exists at a time: no fill growing inside a row, no
+                     * fading copy left behind on the row the cursor just left.
+                     *
+                     * The pill follows the current row's live geometry (reorders,
+                     * scroll) and only its offset from that row animates, from
+                     * wherever it was painted when the cursor moved — so holding an
+                     * arrow key keeps one continuous motion instead of restarts.
+                     */
+                    property int lastSelectionIndex: -1
+                    property bool snapNextSelection: false
+                    property real selectionSlideOffset: 0
+                    property real selectionSlideHeightDelta: 0
+                    readonly property real selectionIndicatorY: appResults.currentItem
+                        ? appResults.currentItem.y + appResults.selectionSlideOffset
+                        : -100000
+                    readonly property real selectionIndicatorHeight: appResults.currentItem
+                        ? appResults.currentItem.height + appResults.selectionSlideHeightDelta
+                        : 0
+
+                    ParallelAnimation {
+                        id: selectionSlideAnim
+                        NumberAnimation {
+                            target: appResults
+                            property: "selectionSlideOffset"
+                            to: 0
+                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                        NumberAnimation {
+                            target: appResults
+                            property: "selectionSlideHeightDelta"
+                            to: 0
+                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+                    }
+
+                    function startSelectionSlide(fromIndex: int, slide: bool) {
+                        const from = fromIndex >= 0 ? appResults.itemAtIndex(fromIndex) : null;
+                        const to = appResults.currentItem;
+                        selectionSlideAnim.stop();
+                        if (!slide || root.animationsDisabled || !from || !to || from === to) {
+                            appResults.selectionSlideOffset = 0;
+                            appResults.selectionSlideHeightDelta = 0;
+                            return;
+                        }
+                        // Where the pill is painted right now, relative to the row
+                        // it was attached to until this change.
+                        const visibleY = from.y + appResults.selectionSlideOffset;
+                        const visibleHeight = from.height + appResults.selectionSlideHeightDelta;
+                        appResults.selectionSlideOffset = visibleY - to.y;
+                        appResults.selectionSlideHeightDelta = visibleHeight - to.height;
+                        selectionSlideAnim.start();
                     }
 
                     /**
@@ -1786,7 +1884,7 @@ Item {
                             property color topFadeColor: {
                                 if (appResults.currentItem) {
                                     const visY = appResults.currentItem.y - appResults.contentY;
-                                    if (visY <= appResults.topMargin + 36)
+                                    if (visY <= appResults.topMargin + maskRoot.topFadeHeight)
                                         return "white";
                                 }
                                 return appResults.atYBeginning ? "white" : "transparent";
@@ -1794,7 +1892,7 @@ Item {
                             property color bottomFadeColor: {
                                 if (appResults.currentItem) {
                                     const visBottom = appResults.currentItem.y - appResults.contentY + appResults.currentItem.height;
-                                    if (visBottom >= appResults.height - appResults.bottomMargin - 36)
+                                    if (visBottom >= appResults.height - appResults.bottomMargin - maskRoot.bottomFadeHeight)
                                         return "white";
                                 }
                                 return appResults.atYEnd ? "white" : "transparent";
@@ -1817,13 +1915,18 @@ Item {
                                 }
                             }
 
+                            // Edge fades long enough to read as depth rather than a
+                            // clipped line: 46/56px only softened the last few pixels.
+                            readonly property real topFadeHeight: Math.min(80, height / 3)
+                            readonly property real bottomFadeHeight: Math.min(110, height / 3)
+
                             Column {
                                 anchors.fill: parent
                                 spacing: 0
 
                                 Rectangle {
                                     width: parent.width
-                                    height: Math.min(46, parent.height / 2)
+                                    height: maskRoot.topFadeHeight
                                     color: "transparent"
                                     gradient: Gradient {
                                         GradientStop {
@@ -1839,13 +1942,13 @@ Item {
 
                                 Rectangle {
                                     width: parent.width
-                                    height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
+                                    height: Math.max(0, parent.height - maskRoot.topFadeHeight - maskRoot.bottomFadeHeight)
                                     color: "white"
                                 }
 
                                 Rectangle {
                                     width: parent.width
-                                    height: Math.min(56, parent.height / 2)
+                                    height: maskRoot.bottomFadeHeight
                                     color: "transparent"
                                     gradient: Gradient {
                                         GradientStop {
@@ -1921,6 +2024,11 @@ Item {
                             appResults.currentIndex = recovered !== -1 ? recovered : appResults.selectableIndex(currentIndex, -1);
                             return;
                         }
+                        // A diff renumbers rows under the cursor without the user
+                        // moving it; only a real move travels.
+                        appResults.startSelectionSlide(appResults.lastSelectionIndex,
+                            !appResults.applyingDiff && !appResults.snapNextSelection);
+                        appResults.lastSelectionIndex = currentIndex;
                         const selected = currentIndex >= 0 && currentIndex < resultModel.count
                             ? resultModel.get(currentIndex)?.modelRef ?? null
                             : null;
@@ -1972,10 +2080,8 @@ Item {
                             return;
                         }
 
-                        if (resultModel.count === 0 && !root.animationsDisabled && !root.surfaceAnimating && !root.suppressItemTransitions) {
-                            appResults.staggerReveal = true;
-                            staggerRevealWindow.restart();
-                        }
+                        // Insertion order for this pass; see `revealOrder` on the delegate.
+                        let insertedCount = 0;
 
                         const currentKeys = [];
                         for (let i = 0; i < resultModel.count; i++)
@@ -2015,6 +2121,8 @@ Item {
                                     isHero: rowData.isHero,
                                     isFirst: rowData.isFirst,
                                     isLast: rowData.isLast,
+                                    revealOrder: insertedCount++,
+                                    insertedAt: Date.now(),
                                     modelRef: rowData.ref
                                 });
                                 currentKeys.splice(newIndex, 0, rowData.key);
@@ -2146,23 +2254,32 @@ Item {
                             y: root.animationsDisabled ? 0 : ((1 - resultDelegate.revealProgress) * -6)
                         }
 
+                        /**
+                         * Rows inserted by one diff cascade in the order they
+                         * were inserted, not by list position. A group that
+                         * arrives in the middle of a settled list (Files landing
+                         * after the apps) enters as a unit — caption first, rows
+                         * after it — instead of every row waiting on how far down
+                         * the list it happens to sit. `revealOrder` is written by
+                         * the diff; a first fill is simply orders 0..n.
+                         */
+                        readonly property int revealOrder: Math.max(0, Number(resultDelegate.modelData.revealOrder ?? 0))
+                        readonly property bool revealStaggers: !root.animationsDisabled && !root.burstTyping
+
                         SequentialAnimation {
                             id: revealAnim
                             PauseAnimation {
-                                // `index` is briefly -1 while a delegate is being
-                                // torn down, and PauseAnimation rejects a negative
-                                // duration outright.
-                                duration: (!root.animationsDisabled && appResults.staggerReveal)
-                                    ? Math.max(0, Math.min(5, resultDelegate.index)) * appResults.staggerStep
+                                duration: resultDelegate.revealStaggers
+                                    ? Math.min(5, resultDelegate.revealOrder) * appResults.staggerStep
                                     : 0
                             }
                             NumberAnimation {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                duration: root.animationsDisabled ? 0 : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
                         }
 
@@ -2184,7 +2301,12 @@ Item {
                         }
 
                         Component.onCompleted: {
-                            if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions)
+                            // The view also builds delegates for rows scrolled back
+                            // into view. Those rows were already on screen once: only
+                            // a row the latest diff actually inserted gets an entrance.
+                            const insertedAt = Number(resultDelegate.modelData.insertedAt ?? 0);
+                            const freshlyInserted = Date.now() - insertedAt < 250;
+                            if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions || !freshlyInserted)
                                 resultDelegate.finishReveal();
                             else
                                 revealAnim.start();
@@ -2384,6 +2506,9 @@ Item {
                                 isFirst: resultDelegate.modelData.isFirst === true
                                 isLast: resultDelegate.modelData.isLast === true
                                 horizontalMargin: root.rowSideMargin
+                                // This row's slice of the list-wide selection pill.
+                                indicatorTop: appResults.selectionIndicatorY - resultDelegate.y
+                                indicatorBottom: appResults.selectionIndicatorY + appResults.selectionIndicatorHeight - resultDelegate.y
                                 // The delegate owns the entrance for every row kind,
                                 // captions included; a second fade underneath it only
                                 // muddies the curve.
@@ -2442,7 +2567,7 @@ Item {
                     // are still travelling.
                     readonly property int reorderDuration: (root.animationsDisabled || root.suppressItemTransitions || root.surfaceAnimating)
                         ? 0
-                        : Appearance.animation.elementMoveFast.duration
+                        : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
 
                     Transition {
                         id: resultMoveTransition

@@ -63,6 +63,8 @@ Item {
  property bool surfaceAnimating: false
  property bool searchSurfaceOwned: false
  property bool suppressItemTransitions: true
+ property bool burstTyping: false
+ property int burstMotionDuration: 72
  property bool exiting: false
  property double lastQueryEditTime: 0
  property int burstTypingThreshold: 120
@@ -169,8 +171,12 @@ Item {
    function test_deliberate_edit_after_open_keeps_motion() {
      root.noteQueryEdit();
      verify(policy.reorderDuration>0);
+     const settled=policy.reorderDuration;
+     // A burst shortens the motion; it never switches it off, or the list
+     // the burst ends on lands without any.
      root.noteQueryEdit();
-     compare(policy.reorderDuration,0);
+     verify(policy.reorderDuration>0);
+     verify(policy.reorderDuration<settled);
    }
    function test_typing_expands_without_blur_target() {
      verify(searchWidgetWrapper.layer.enabled);

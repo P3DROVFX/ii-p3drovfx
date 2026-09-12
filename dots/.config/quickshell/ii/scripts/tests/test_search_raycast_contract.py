@@ -706,12 +706,13 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("? 0", widget)
         self.assertIn("rowSpacing: 0", widget)
         self.assertIn("topMargin: 0", widget)
-        # The corner blends across the container's own (already animated) height
-        # instead of snapping on a flag, so a still-tall panel never wears the
-        # collapsed pill radius mid-collapse.
-        self.assertIn("const pill = Appearance.rounding.verylarge", widget)
-        self.assertIn("const panel = Appearance.rounding.windowRounding", widget)
-        self.assertIn("cornerBlendDistance", widget)
+        # The field's corners are the collapsed pill radius at every height, so
+        # expanding never reshapes the corners around the input. Only the far
+        # edge changes, for panels, and neither end can exceed half the collapsed
+        # height — so no intermediate frame is a capsule covering the list.
+        self.assertIn("readonly property real fieldCornerRadius: Math.min(Appearance.rounding.verylarge, searchWidgetContent.collapsedHeight / 2)", widget)
+        self.assertIn("Math.min(Appearance.rounding.windowRounding, searchWidgetContent.fieldCornerRadius)", widget)
+        self.assertNotIn("cornerBlendDistance", widget)
         self.assertNotIn("radius: root.showResults", widget)
         self.assertNotIn("Behavior on radius", widget)
         self.assertIn("showIdleNowPlaying", widget)

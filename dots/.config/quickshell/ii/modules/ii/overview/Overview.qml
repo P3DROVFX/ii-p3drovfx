@@ -152,6 +152,77 @@ Scope {
                         property real overviewRevealProgress: 1.0
                         property real overviewFadeProgress: 1.0
                         property bool _overviewRevealInitialized: false
+                        /**
+                         * How far the grid has left because the search took the screen.
+                         *
+                         * Typing used to zero the reveal on the spot, so the grid did
+                         * not leave at all — it vanished under a panel that was only
+                         * starting to grow. It is now pushed out the way the search
+                         * grows, away from the bar: the classic grid's anchor carries
+                         * it along with the growing surface, and `overviewExitShift`
+                         * adds a push while it fades. Pulling it up towards the bar
+                         * instead read as the grid fleeing into the search. Clearing
+                         * the query plays the push backwards.
+                         */
+                        property real overviewExitProgress: 0.0
+                        // The grid is pushed the way the search grows: away from
+                        // the bar. Its anchor already carries it along with the
+                        // growing surface; this is the extra push it gets while it
+                        // fades, so it reads as shoved aside rather than pulled up.
+                        readonly property real overviewExitShift: root.overviewExitProgress
+                            * (root.isBottomBar ? -1 : 1) * Appearance.sizes.elevationMargin * 6
+
+                        /**
+                         * The push runs on the search surface's own height animation
+                         * (duration and curve), so grid and surface move as one.
+                         *
+                         * The fade spans the same duration on OutCubic. The surface's
+                         * growth — which carries the grid — does most of its travel in
+                         * the first frames: a linear fade left the grid opaque while it
+                         * was already far down, and one on the growth's own curve over
+                         * half the span made it vanish before it had visibly moved.
+                         */
+                        readonly property int overviewPushDuration: root.animStyle === "none" ? 0 : Appearance.animation.elementMoveSmall.duration
+                        ParallelAnimation {
+                            id: overviewExitAnim
+                            NumberAnimation {
+                                target: root
+                                property: "overviewExitProgress"
+                                to: 1.0
+                                duration: root.overviewPushDuration
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            }
+                            NumberAnimation {
+                                target: root
+                                property: "overviewFadeProgress"
+                                to: 0.0
+                                // Between the two extremes already tried: linear over
+                                // the push left the grid opaque far down the screen,
+                                // emphasizedDecel over half of it was gone almost at once.
+                                duration: root.overviewPushDuration
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        ParallelAnimation {
+                            id: overviewReturnAnim
+                            NumberAnimation {
+                                target: root
+                                property: "overviewExitProgress"
+                                to: 0.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: root.animCurveEnter
+                            }
+                            NumberAnimation {
+                                target: root
+                                property: "overviewFadeProgress"
+                                to: 1.0
+                                duration: root.animDurationEnter
+                                easing.type: Easing.OutCubic
+                            }
+                        }
 
                         ParallelAnimation {
                             id: overviewRevealAnim
@@ -182,19 +253,49 @@ Scope {
                                 return;
 
                             const shouldShow = root.evaluateOverviewShouldShow();
-                            overviewRevealAnim.stop();
+                            // Only a slide style has somewhere to leave to; "zoom"
+                            // never shows the grid and "none" must stay instant.
+                            const slides = root.animStyle !== "none" && root.animStyle !== "zoom";
 
                             if (!shouldShow) {
-                                root.overviewRevealProgress = 0.0;
-                                root.overviewFadeProgress = 0.0;
+                                overviewRevealAnim.stop();
+                                overviewReturnAnim.stop();
+                                if (!slides || root.overviewFadeProgress <= 0.001) {
+                                    overviewExitAnim.stop();
+                                    root.overviewRevealProgress = 0.0;
+                                    root.overviewFadeProgress = 0.0;
+                                    root.overviewExitProgress = 0.0;
+                                    return;
+                                }
+                                // A keystroke per frame calls this repeatedly: let the
+                                // exit that is already running finish.
+                                if (overviewExitAnim.running)
+                                    return;
+                                overviewExitAnim.start();
                                 return;
                             }
 
+                            overviewExitAnim.stop();
+
                             if (root.animStyle === "none") {
+                                overviewRevealAnim.stop();
+                                overviewReturnAnim.stop();
                                 root.overviewRevealProgress = 1.0;
                                 root.overviewFadeProgress = 1.0;
+                                root.overviewExitProgress = 0.0;
                                 return;
                             }
+
+                            // The grid left because of the search: bring it back along
+                            // the path it took, from wherever the exit got to.
+                            if (root.overviewExitProgress > 0) {
+                                overviewRevealAnim.stop();
+                                root.overviewRevealProgress = 1.0;
+                                if (!overviewReturnAnim.running)
+                                    overviewReturnAnim.start();
+                                return;
+                            }
+                            overviewRevealAnim.stop();
 
                             // Force a real 0 -> 1 transition. This is intentionally
                             // explicit instead of relying on a Behavior over a binding.
@@ -239,6 +340,14 @@ Scope {
                                 root.syncOverviewReveal();
                             }
                             function onOverviewOpenChanged() {
+                                // A grid that left for the search last session must
+                                // enter with the window, not slide back from the bar
+                                // on top of the window's own entrance.
+                                if (GlobalStates.overviewOpen) {
+                                    overviewExitAnim.stop();
+                                    overviewReturnAnim.stop();
+                                    root.overviewExitProgress = 0.0;
+                                }
                                 // The reveal is decided while the surface is open;
                                 // every change that led up to the open was rejected
                                 // by the guard at the top of syncOverviewReveal.
@@ -559,7 +668,7 @@ Scope {
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)))
+                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift)
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
@@ -587,7 +696,8 @@ Scope {
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)))
+                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
+                                            + root.overviewExitShift)
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2

@@ -243,6 +243,49 @@ Item {
         radius: root.largeWorkspaceRadius + padding
         color: Appearance.colors.colBackgroundSurfaceContainer
 
+        /**
+         * Static workspace surfaces, painted from the first frame.
+         *
+         * The cascade used to fade each cell's own background in. Until a cell
+         * arrived, only the translucent panel covered that spot, and on its own
+         * the panel stays under the overview layer's `ignore_alpha` threshold —
+         * so the compositor left those spots unblurred and the grid opened as a
+         * frosted sheet with clear holes in it. The surfaces never animate now;
+         * the cascade moves only what sits on them (numbers and windows).
+         */
+        Column {
+            id: workspaceBackdropLayout
+            anchors.centerIn: parent
+            spacing: workspaceSpacing
+
+            Repeater {
+                model: Config.options.overview.rows
+                delegate: Row {
+                    id: backdropRow
+                    required property int index
+                    spacing: workspaceSpacing
+
+                    Repeater {
+                        model: Config.options.overview.columns
+                        Rectangle {
+                            required property int index
+                            readonly property bool atLeft: index === 0
+                            readonly property bool atRight: index === Config.options.overview.columns - 1
+                            readonly property bool atTop: backdropRow.index === 0
+                            readonly property bool atBottom: backdropRow.index === Config.options.overview.rows - 1
+                            implicitWidth: root.workspaceImplicitWidth
+                            implicitHeight: root.workspaceImplicitHeight
+                            color: Appearance.colors.colSurfaceContainerLow
+                            topLeftRadius: (atLeft && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            topRightRadius: (atRight && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            bottomLeftRadius: (atLeft && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            bottomRightRadius: (atRight && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                        }
+                    }
+                }
+            }
+        }
+
         Column { // Workspaces
             id: workspaceColumnLayout
 
@@ -290,7 +333,9 @@ Item {
 
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
-                            color: hoveredWhileDragging ? hoveredWorkspaceColor : defaultWorkspaceColor
+                            // The surface itself is the static backdrop underneath;
+                            // this cell only adds the drag-hover tint on top of it.
+                            color: hoveredWhileDragging ? ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.9) : "transparent"
                             property bool workspaceAtLeft: colIndex === 0
                             property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
                             property bool workspaceAtTop: row.index === 0
