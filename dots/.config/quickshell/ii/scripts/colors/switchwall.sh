@@ -160,36 +160,6 @@ is_video() {
     [[ "$extension" == "mp4" || "$extension" == "webm" || "$extension" == "mkv" || "$extension" == "avi" || "$extension" == "mov" ]] && return 0 || return 1
 }
 
-# Color extraction never needs a full-resolution wallpaper. matugen and
-# materialyoucolor both downsample internally, so feeding them a 5504x3072 27MB
-# PNG only pays a ~0.6s decode for a palette a 512px thumbnail produces in ~0.01s
-# with visually identical colors. This matters most on preset switch, where the
-# palette should land instantly. Returns a cached downscaled copy for static
-# raster images and the path untouched for anything else (videos, previews and
-# odd formats keep their existing handling). Cache key includes mtime+size so an
-# edited wallpaper regenerates on its own.
-COLOR_THUMB_DIR="$STATE_DIR/user/generated/color_thumbs"
-make_color_thumb() {
-    local src="$1"
-    case "${src,,}" in
-        *.png|*.jpg|*.jpeg|*.webp|*.bmp|*.tif|*.tiff) ;;
-        *) printf '%s' "$src"; return ;;
-    esac
-    [[ -f "$src" ]] || { printf '%s' "$src"; return; }
-    command -v magick >/dev/null 2>&1 || { printf '%s' "$src"; return; }
-    mkdir -p "$COLOR_THUMB_DIR" 2>/dev/null
-    local key thumb
-    key=$(printf '%s|%s' "$src" "$(stat -c '%Y-%s' "$src" 2>/dev/null)" | md5sum | cut -d' ' -f1)
-    thumb="$COLOR_THUMB_DIR/$key.png"
-    if [[ ! -f "$thumb" ]]; then
-        # '>' resizes only when larger than the box, so small art is left alone.
-        if ! magick "$src" -strip -resize '512x512>' "$thumb" 2>/dev/null; then
-            printf '%s' "$src"; return
-        fi
-    fi
-    printf '%s' "$thumb"
-}
-
 # mpvpaper paints the *desktop* background layer. The lockscreen and the
 # light-mode variant are only ever stored paths — they never own that layer. So
 # picking a video for one of them must not take the live desktop over, and
@@ -674,11 +644,8 @@ done"
             if is_desktop_target; then
                 kill_existing_mpvpaper
             fi
-            # Extract colors from a small thumbnail; the wallpaper itself is still
-            # displayed at full resolution (its path in config is untouched here).
-            color_img="$(make_color_thumb "$imgpath")"
-            matugen_args+=(image "$color_img")
-            generate_colors_material_args=(--path "$color_img")
+            matugen_args+=(image "$imgpath")
+            generate_colors_material_args=(--path "$imgpath")
             # Update wallpaper path in config
             if [[ -z "$colors_only_flag" && -z "$noswitch_flag" ]]; then
                 set_wallpaper_path "$imgpath" "${lockscreen_flag:+lockscreen}"
@@ -977,7 +944,7 @@ main() {
     # If type_flag is 'auto', detect scheme type from image (after imgpath is set)
     if [[ "$type_flag" == "auto" ]]; then
         if [[ -n "$imgpath" && -f "$imgpath" ]]; then
-            detected_type="$(detect_scheme_type_from_image "$(make_color_thumb "$imgpath")")"
+            detected_type="$(detect_scheme_type_from_image "$imgpath")"
             # Only use detected_type if it's valid
             valid_detected=0
             for t in "${allowed_types[@]}"; do

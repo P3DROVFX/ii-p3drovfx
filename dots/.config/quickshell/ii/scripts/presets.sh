@@ -73,10 +73,9 @@ newest_backups() {
 
 # Re-run the colour pipeline against whatever config.json now says.
 #
-# matugen writes the shell's colors.json first and, since switchwall now feeds
-# it a downscaled thumbnail, that happens in ~10ms — the shell recolours almost
-# instantly via its colors.json watcher. The heavier secondary theming that
-# follows in the same run (terminal scheme, GTK, icons, KDE) is niced so it
+# matugen writes the shell's colors.json first, so the shell recolours as soon
+# as that lands via its colors.json watcher. The whole run is niced so the
+# heavier secondary theming that follows (terminal scheme, GTK, icons, KDE)
 # yields the CPU to the shell's staged transition animation instead of stealing
 # frames from it.
 apply_colors() {
