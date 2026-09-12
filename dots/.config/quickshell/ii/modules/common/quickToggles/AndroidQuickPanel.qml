@@ -202,20 +202,20 @@ AbstractQuickPanel {
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
         if (pageIndex < 0 || pageIndex >= root.pages.length)
-            return baseCellHeight + 8;
+            return baseCellHeight;
         var packedPage = packedPages[pageIndex];
         var rows = packedPage ? packedPage.rowsUsed : 0;
         var rowHeights = QuickToggleLayout.rowPixelHeights(
             packedPage, baseCellHeight, spacing, compactRowHeight, compactToggleTypes);
         if (!rowHeights)
-            return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
+            return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing);
         var total = 0;
         for (var i = 0; i < rowHeights.length; i++)
             total += rowHeights[i] + spacing;
-        return Math.max(baseCellHeight, total - spacing) + 8;
+        return Math.max(baseCellHeight, total - spacing);
     }
 
-    // Dynamic height based on current page + page indicators
+    // Dynamic height based on current page
     readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
 
     // How tall the panel is allowed to get, handed down by whoever hosts it.
@@ -314,6 +314,7 @@ AbstractQuickPanel {
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.gridWidth
             spacing: root.spacing
+            visible: fixedSlidersModel.count > 0
 
             readonly property real reveal: root.stageReveal(0)
             opacity: reveal

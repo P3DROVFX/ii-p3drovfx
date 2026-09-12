@@ -72,4 +72,14 @@ Singleton {
         var cell = cellHeight > 0 ? cellHeight : track;
         return Math.min(cell, track + 2 * scaled(cellHeight, 6));
     }
+
+    /**
+     * Horizontal inset for a horizontal slider quick toggle. The widget height includes
+     * vertical breathing room around the track (see sliderWidgetHeight) to accommodate
+     * the drag handle. Mirroring that inset horizontally ensures the track fill does
+     * not stretch edge-to-edge against the panel's lateral boundary.
+     */
+    function sliderHorizontalMargin(cellHeight: real): real {
+        return scaled(cellHeight, 6);
+    }
 }

@@ -130,11 +130,17 @@ Item {
         ? 0
         : Math.min(effectiveTrackThickness / 2, Appearance.rounding.windowRounding * 0.3)
 
+    readonly property real horizontalMargin: root.isVertical ? 0 : QuickToggleMetrics.sliderHorizontalMargin(root.baseCellHeight)
+
     implicitWidth: baseWidth
     implicitHeight: root.isVertical ? baseHeight : Math.min(baseHeight, compactHeight)
     
     Rectangle {
-        anchors.fill: parent
+        anchors {
+            fill: parent
+            leftMargin: root.horizontalMargin
+            rightMargin: root.horizontalMargin
+        }
         radius: Appearance.rounding.large
         color: Appearance.colors.colSurfaceContainer
         border.color: Appearance.colors.colOutlineVariant
@@ -146,9 +152,12 @@ Item {
     Item {
         id: visualButton
 
-        x: 0
+        x: root.horizontalMargin
         y: 0
         
+        Behavior on x {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
+        }
         Behavior on width {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
@@ -156,7 +165,7 @@ Item {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton)
         }
         
-        width: root.width
+        width: Math.max(1, root.width - root.horizontalMargin * 2)
         height: root.height
 
         scale: (root.isDragging ? 1.05 : 1.0) * (0.85 + 0.15 * entranceProgress.progress)
@@ -323,5 +332,10 @@ Item {
         id: editableItem
         target: root
         visualItem: visualButton
+        anchors {
+            fill: parent
+            leftMargin: root.horizontalMargin
+            rightMargin: root.horizontalMargin
+        }
     }
 }

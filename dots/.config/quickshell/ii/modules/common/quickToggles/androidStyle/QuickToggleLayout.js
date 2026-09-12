@@ -161,6 +161,9 @@ function resizeSpanFromDelta(startSpan, deltaPixels, cellSize, spacing, maximumS
 function isCompactItem(item, compactTypes) {
     if (!item || !compactTypes || compactTypes.length === 0)
         return false;
+    var span = Math.max(1, Math.floor(finiteOrZero(item.rowSpan !== undefined ? item.rowSpan : item.sizeH)));
+    if (span > 1)
+        return false;
     return compactTypes.indexOf(item.type) !== -1;
 }
 
@@ -227,9 +230,15 @@ function positionedItems(items, packed, cellWidth, cellHeight, spacing, compactH
             positioned.sizeW = geometry.sizeW;
             positioned.sizeH = geometry.sizeH;
             positioned.layoutX = geometry.column * stepX;
-            positioned.layoutY = (rowY && geometry.row < rowY.length)
+            var itemY = (rowY && geometry.row < rowY.length)
                 ? rowY[geometry.row]
                 : geometry.row * stepY;
+            if (rowHeights && geometry.row < rowHeights.length && isCompactItem(geometry, compactTypes)) {
+                var rowHeight = rowHeights[geometry.row];
+                if (rowHeight > compactHeight)
+                    itemY += Math.round((rowHeight - compactHeight) / 2);
+            }
+            positioned.layoutY = itemY;
         }
         result.push(positioned);
     }

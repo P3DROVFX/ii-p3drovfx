@@ -300,4 +300,28 @@ TestCase {
             compare(JSON.stringify(packed), JSON.stringify(Layout.pack(source, 4 + (run % 2))));
         }
     }
+
+    function test_compact_slider_is_vertically_centered_when_sharing_row_with_toggle() {
+        var items = [
+            item("volumeSlider", 2, 1),
+            item("network", 2, 1)
+        ];
+        var packed = Layout.pack(items, 4);
+        var positioned = Layout.positionedItems(items, packed, 80, 56, 6, 42, ["volumeSlider"]);
+
+        // Network toggle fills full cell height (56), layoutY = 0
+        compare(positioned[1].layoutY, 0);
+        // Slider is compact (42), vertically centered in 56px row: (56 - 42) / 2 = 7
+        compare(positioned[0].layoutY, 7);
+
+        // Row of only sliders reserves compactHeight (42), both start at layoutY = 0
+        var sliderOnly = [
+            item("volumeSlider", 2, 1),
+            item("micSlider", 2, 1)
+        ];
+        var packedSliderOnly = Layout.pack(sliderOnly, 4);
+        var positionedSliderOnly = Layout.positionedItems(sliderOnly, packedSliderOnly, 80, 56, 6, 42, ["volumeSlider", "micSlider"]);
+        compare(positionedSliderOnly[0].layoutY, 0);
+        compare(positionedSliderOnly[1].layoutY, 0);
+    }
 }
