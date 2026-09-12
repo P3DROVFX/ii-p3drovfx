@@ -16,6 +16,13 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
+    // Driven by PresetTransition while a preset is being applied. The bar slides
+    // off its edge (presetBarHidden) during the reload + widget stages and the
+    // palette crossfades (presetRecoloring) instead of snapping. They live here,
+    // not on PresetTransition, because the bar and MaterialThemeLoader already
+    // react to GlobalStates reliably.
+    property bool presetBarHidden: false
+    property bool presetRecoloring: false
     property bool phoneCameraRunning: false
     property bool phoneMicRunning: false
     property int mediaModeCount: 0
@@ -1757,6 +1764,11 @@ Singleton {
         animatedLeftSidebarWidth = leftSidebarTargetWidth;
         animatedRightSidebarWidth = rightSidebarTargetWidth;
         root.enforceSidebarStyle();
+        // Warm the preset chain: touching PresetTransition instantiates it (and,
+        // through its Connections, PresetStore), so the staged transition is
+        // ready to catch applyFinished and the `presetStore` IPC is callable
+        // whether or not the settings window has been opened yet.
+        void PresetTransition.active;
         // Instantiate sidebars immediately on startup on the primary/focused screen to keep them warm
         Qt.callLater(() => {
             root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";

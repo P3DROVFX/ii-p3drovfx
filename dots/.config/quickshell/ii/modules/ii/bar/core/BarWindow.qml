@@ -132,7 +132,17 @@ Scope {
         Behavior on fullscreenHide {
             animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
         }
-        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress)
+        // ── Preset switch slide-out ───────────────────────────────────────
+        // The last stage of a preset apply: the bar leaves through its edge so
+        // the heavy config reload and restyle happen off-screen, then slides
+        // back in wearing the new look. It rides the same shellHide as the
+        // fullscreen slide, so the slide, the fade and the exclusive-zone
+        // release all come for free.
+        property real presetHide: GlobalStates.presetBarHidden ? 1 : 0
+        Behavior on presetHide {
+            animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
+        }
+        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress, presetHide)
         readonly property real shellSlideY: (Config.options.bar.bottom ? 1 : -1)
             * shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
         readonly property bool shellSeated: shellHide < 0.999
@@ -217,7 +227,7 @@ Scope {
             active: Config.options.appearance.fakeScreenRounding == 3
             anchors.fill: parent
             visible: barRoot.shellSeated
-            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
+            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
             sourceComponent: Component {
                 Item {
                     anchors.fill: parent
@@ -248,7 +258,7 @@ Scope {
                 GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, "bar");
             }
             visible: barRoot.shellSeated
-            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
+            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
             transform: Translate {
                 y: (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress) + barRoot.shellSlideY
             }

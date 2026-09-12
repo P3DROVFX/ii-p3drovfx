@@ -38,6 +38,92 @@ Item {
     required property real minSafeScale
     readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
+    // Latched once the wallpaper has been shown at least once. Switching to a
+    // preset whose wallpaper has different pixel dimensions changes the decode
+    // `sourceSize`, which makes the displayed Image re-decode and briefly report
+    // status Loading. Without this latch the opacity gate below would blank the
+    // whole wallpaper for that instant — the flicker seen when switching between
+    // presets with differently sized wallpapers. TransitionImage already keeps
+    // the previous frame on screen while the new one decodes, so once anything
+    // has been shown we never need to hide again except under work-safety.
+    property bool wallpaperEverReady: false
+
+    // When the wallpaper changes, its new pixel dimensions change the centred
+    // parallax offset, and the 450ms parallax Behavior animates that shift as a
+    // slide — the wallpaper visibly drifts (e.g. top → bottom → centre) before
+    // settling on a preset switch. Snap the re-centring while a switch settles;
+    // ordinary parallax (workspace / cursor) keeps its animation.
+    property bool wallpaperSettling: false
+    onWallpaperPathChanged: {
+        wallpaperImageRoot.wallpaperSettling = true;
+        wallpaperSettleTimer.restart();
+    }
+    Timer {
+        id: wallpaperSettleTimer
+        interval: 700
+        repeat: false
+        onTriggered: wallpaperImageRoot.wallpaperSettling = false
+    }
+
+    // A config reload (as a preset merges) momentarily resets nested config
+    // objects, which can flip wallpaperSafetyTriggered / wallpaperIsVideo true
+    // for a single frame and drive the wallpaper source to "" — the blank flash
+    // seen the instant a preset is clicked, before the new wallpaper even loads.
+    // Debounce the empty state: a non-empty source applies immediately (normal
+    // crossfade), but "" only lands if it persists, so a one-frame transient
+    // never reaches the crossfade. A genuine work-safety clear still blanks
+    // after the short delay.
+    readonly property string rawWallpaperSource: wallpaperSafetyTriggered ? "" : wallpaperPath
+    // Never a live binding to rawWallpaperSource: only _syncWallpaperSource writes
+    // it, so a transient "" cannot slip through before the handler debounces it.
+    property string stableWallpaperSource: ""
+    function _syncWallpaperSource() {
+        if (rawWallpaperSource !== "") {
+            wallpaperClearTimer.stop();
+            wallpaperImageRoot.stableWallpaperSource = rawWallpaperSource;
+        } else {
+            wallpaperClearTimer.restart();
+        }
+    }
+    onRawWallpaperSourceChanged: _syncWallpaperSource()
+    Timer {
+        id: wallpaperClearTimer
+        interval: 250
+        repeat: false
+        onTriggered: if (wallpaperImageRoot.rawWallpaperSource === "")
+            wallpaperImageRoot.stableWallpaperSource = "";
+    }
+
+    // decodeSizeFor() depends on the plane size, which settles through several
+    // values in the same frame when a preset switch changes the wallpaper, its
+    // pixel dimensions and its zoom at once — and one of those intermediates is
+    // momentarily 0x0. Bound straight to sourceSize, each value re-decodes the
+    // Image and the 0x0 decodes to a blank texture, so the wallpaper goes black
+    // for the length of the decode: the flicker on preset switch. Hold the
+    // decode size and commit it once the burst settles (never an empty size), so
+    // the shown wallpaper decodes once and never blanks.
+    readonly property size rawDecodeSize: wallpaperImageRoot.reduceVramUsage
+        ? wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
+        : Qt.size(-1, -1)
+    property size stableDecodeSize: Qt.size(-1, -1)
+    function _commitDecodeSize() {
+        const s = wallpaperImageRoot.rawDecodeSize;
+        if (s.width !== 0 && s.height !== 0)
+            wallpaperImageRoot.stableDecodeSize = s;
+    }
+    onRawDecodeSizeChanged: decodeSizeDebounce.restart()
+    Timer {
+        id: decodeSizeDebounce
+        interval: 140
+        repeat: false
+        onTriggered: wallpaperImageRoot._commitDecodeSize()
+    }
+
+    Component.onCompleted: {
+        _syncWallpaperSource();
+        _commitDecodeSize();
+    }
+
     required property real parallaxX
     required property real parallaxY
     property real effectiveValueX: 0.5
@@ -504,6 +590,7 @@ Item {
                         Behavior on x {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
                                 && wallpaperImageRoot.editProgress <= 0.001
+                                && !wallpaperImageRoot.wallpaperSettling
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
@@ -512,6 +599,7 @@ Item {
                         Behavior on y {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
                                 && wallpaperImageRoot.editProgress <= 0.001
+                                && !wallpaperImageRoot.wallpaperSettling
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
@@ -534,7 +622,10 @@ Item {
                         anchors.fill: parent
 
                         visible: opacity > 0
-                        opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
+                        // Stay visible through a re-decode once shown (see wallpaperEverReady),
+                        // but still hide before the first load and whenever work-safety blanks it.
+                        onStatusChanged: if (wallpaper.status === Image.Ready) wallpaperImageRoot.wallpaperEverReady = true
+                        opacity: (((wallpaper.status === Image.Ready) || (wallpaperImageRoot.wallpaperEverReady && !wallpaperSafetyTriggered)) && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
                         // GPU: cap the decode at the plane's device size with zoom
                         // headroom (decodeSizeFor). A 5320x3136 file decoded native
                         // costs ~64 MiB of RGBA texture per Image for pixels the plane
@@ -542,11 +633,9 @@ Item {
                         // than the plane and never upscales. The helper is only
                         // selected while the VRAM reduction toggle is enabled;
                         // disabling it restores the native decode size.
-                        sourceSize: wallpaperImageRoot.reduceVramUsage
-                            ? wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
-                            : Qt.size(-1, -1)
+                        sourceSize: wallpaperImageRoot.stableDecodeSize
 
-                        imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
+                        imageSource: wallpaperImageRoot.stableWallpaperSource
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")

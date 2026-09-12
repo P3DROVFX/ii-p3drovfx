@@ -211,11 +211,26 @@ Item {
         }
     }
 
+    // Each image decodes its source exactly once, at the size captured the
+    // moment the source is set, and never re-decodes afterwards. A later
+    // root.sourceSize change — the plane dimensions settling as a wallpaper
+    // switches, briefly passing through 0x0 — must not re-decode an image that
+    // is on screen: doing so blanks it to a black texture (the flicker) or
+    // updates it in a visible band (the "stretched duplicate"). An empty size
+    // falls back to native. sourceSize is already stable when the incoming image
+    // is set, so it captures a sound size at once.
+    function _captureDecodeSize() {
+        const s = root.sourceSize;
+        return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
+    }
+
     Image {
         id: imgA
         anchors.fill: parent
         fillMode: root.fillMode
-        sourceSize: root.sourceSize
+        property size frozenSize: Qt.size(-1, -1)
+        sourceSize: frozenSize
+        onSourceChanged: imgA.frozenSize = root._captureDecodeSize()
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
@@ -229,7 +244,9 @@ Item {
         anchors.fill: parent
         opacity: 0
         fillMode: root.fillMode
-        sourceSize: root.sourceSize
+        property size frozenSize: Qt.size(-1, -1)
+        sourceSize: frozenSize
+        onSourceChanged: imgB.frozenSize = root._captureDecodeSize()
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous

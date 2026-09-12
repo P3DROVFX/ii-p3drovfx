@@ -284,6 +284,9 @@ Singleton {
     function applyPreset(name) {
         if (!name || root._pending("apply", name))
             return;
+        // Start the staged transition at the click — the earliest point, so the
+        // bar is already sliding off its edge by the time the reload lands.
+        PresetTransition.begin();
         root._enqueue({
             action: "apply",
             name: name,

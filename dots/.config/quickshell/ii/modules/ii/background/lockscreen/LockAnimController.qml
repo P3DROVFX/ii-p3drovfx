@@ -47,8 +47,15 @@ Item {
         Qt.callLater(() => controller.adoptingLockedState = false);
     }
 
+    // The 860ms zoom is the lock/unlock animation. A wallpaper or preset change
+    // also moves baseScale (different preferred zoom / geometry), and letting the
+    // Behavior animate that produced the "tremido" — the new wallpaper visibly
+    // zooming from one scale to another on every preset switch. Those changes
+    // snap instead; only the lock paths, which drive effectiveWallpaperScale
+    // directly, keep the animation.
+    property bool snapScale: false
     Behavior on effectiveWallpaperScale {
-        enabled: !controller.adoptingLockedState
+        enabled: !controller.adoptingLockedState && !controller.snapScale
         NumberAnimation {
             duration: Math.round(860 * Appearance.animMultiplier)
             easing.type: Easing.OutCubic
@@ -57,7 +64,9 @@ Item {
 
     onBaseScaleChanged: {
         if (!GlobalStates.screenLocked) {
+            controller.snapScale = true;
             effectiveWallpaperScale = baseScale;
+            controller.snapScale = false;
         }
     }
 
