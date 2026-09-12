@@ -512,9 +512,9 @@ def generate_thumbnails(input_file: str, count: int, base_dir: str) -> int:
             "-frames:v",
             "1",
             "-vf",
-            "scale=320:-2",
+            "scale=1280:-2",
             "-q:v",
-            "5",
+            "2",
             str(output),
         ]
         result = subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)

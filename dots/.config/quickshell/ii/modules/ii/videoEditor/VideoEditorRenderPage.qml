@@ -2,16 +2,22 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 
 /**
  * Render screen for the Video Editor.
- * Displays live export progress (or MaterialLoadingIndicator fallback),
- * video preview on the left, destination path, and completion action buttons.
+ * Follows Google Material 3 Expressive guidelines:
+ * - Pure tonal containers without redundant wireframe borders
+ * - Generous corner rounding (Appearance.rounding.large / full)
+ * - Centered icons and text for toggles/stat tiles
+ * - Rounded, masked 16:9 media preview
+ * - Zero duplicated information, clean top path pill
  */
 Item {
     id: root
@@ -20,7 +26,7 @@ Item {
     property real renderProgress: 0.0
     property real renderElapsed: 0.0
     property real renderDuration: 0.0
-    property string renderFormat: "mp4"
+    property string renderFormat: "mp4" // "mp4", "mp3", "gif"
     property string renderOutputPath: ""
     property int renderOutputSize: 0
     property string renderErrorMessage: ""
@@ -28,11 +34,26 @@ Item {
     property string videoPath: ""
     property int videoWidth: 0
     property int videoHeight: 0
+    property string videoFps: ""
+    property string videoBitrate: ""
+    property int originalSize: 0
+    property bool muteAudio: false
 
+    property bool copiedFeedback: false
+
+    signal closeRequested()
+    signal backRequested()
+    signal cancelRequested()
     signal openFileRequested()
     signal openFolderRequested()
     signal copyPathRequested()
-    signal cancelRequested()
+
+    Timer {
+        id: copiedTimer
+        interval: 2200
+        repeat: false
+        onTriggered: root.copiedFeedback = false
+    }
 
     function formatFileSize(bytes) {
         if (!bytes || bytes <= 0) return "—";
@@ -53,18 +74,13 @@ Item {
         return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     }
 
-    readonly property string displayTitle: {
-        if (root.renderOutputPath && root.renderOutputPath.length > 0) {
-            return FileUtils.fileNameForPath(root.renderOutputPath);
-        }
-        return FileUtils.fileNameForPath(root.videoPath) || Translation.tr("Video");
-    }
-
     readonly property string displayDestination: {
         if (root.renderOutputPath && root.renderOutputPath.length > 0) {
             return root.renderOutputPath;
         }
-        return FileUtils.parentDirectory(root.videoPath) || Directories.recordingsPath;
+        const parentDir = FileUtils.parentDirectory(root.videoPath) || (Config.options.screenRecord.savePath || Directories.videos);
+        const name = FileUtils.fileNameForPath(root.videoPath) || "render";
+        return `${parentDir}/${name}.${root.renderFormat}`;
     }
 
     readonly property string statusText: {
@@ -73,117 +89,282 @@ Item {
         return Translation.tr("Rendering Video (MP4)…");
     }
 
-    opacity: 0
-    scale: 0.96
-    Component.onCompleted: {
-        opacity = 1;
-        scale = 1.0;
-    }
-    Behavior on opacity {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.standardDecel
-        }
-    }
-    Behavior on scale {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.standardDecel
+    // ==========================================
+    // TOP HEADER ROW (Material 3 Expressive)
+    // ==========================================
+    Item {
+        id: topHeader
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 52
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            // Back to Editor button
+            RippleButton {
+                id: backBtn
+                Layout.preferredWidth: 52
+                Layout.preferredHeight: 52
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSurfaceContainerHighest
+                contentItem: Item {
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "arrow_back"
+                        iconSize: 24
+                        color: Appearance.colors.colOnSurface
+                    }
+                }
+                onClicked: root.backRequested()
+
+                Accessible.name: Translation.tr("Back to Editor")
+            }
+
+            // Clean Title (No redundant checkmark)
+            StyledText {
+                text: root.renderState === "done"
+                    ? Translation.tr("Export Complete")
+                    : (root.renderState === "error" ? Translation.tr("Export Failed") : Translation.tr("Export & Render"))
+                font.pixelSize: 24
+                font.weight: Font.Bold
+                color: Appearance.colors.colOnSurface
+            }
+
+            // Live State Pill Chip
+            Rectangle {
+                radius: Appearance.rounding.full
+                Layout.preferredHeight: 32
+                Layout.preferredWidth: stateChipLayout.implicitWidth + 24
+                color: {
+                    if (root.renderState === "error") return Appearance.colors.colErrorContainer;
+                    if (root.renderState === "done") return Appearance.colors.colPrimaryContainer;
+                    return Appearance.colors.colSecondaryContainer;
+                }
+
+                RowLayout {
+                    id: stateChipLayout
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    MaterialSymbol {
+                        text: {
+                            if (root.renderState === "error") return "error";
+                            if (root.renderState === "done") return "done_all";
+                            if (root.renderFormat === "mp3") return "music_note";
+                            if (root.renderFormat === "gif") return "gif";
+                            return "hourglass_top";
+                        }
+                        iconSize: 16
+                        color: {
+                            if (root.renderState === "error") return Appearance.colors.colOnErrorContainer;
+                            if (root.renderState === "done") return Appearance.colors.colOnPrimaryContainer;
+                            return Appearance.colors.colOnSecondaryContainer;
+                        }
+                    }
+
+                    StyledText {
+                        text: {
+                            if (root.renderState === "error") return Translation.tr("Failed");
+                            if (root.renderState === "done") return Translation.tr("Finished");
+                            return root.renderFormat === "mp3"
+                                ? Translation.tr("Audio MP3")
+                                : (root.renderFormat === "gif" ? Translation.tr("GIF") : Translation.tr("Video MP4"));
+                        }
+                        font.pixelSize: 13
+                        font.weight: Font.Bold
+                        color: {
+                            if (root.renderState === "error") return Appearance.colors.colOnErrorContainer;
+                            if (root.renderState === "done") return Appearance.colors.colOnPrimaryContainer;
+                            return Appearance.colors.colOnSecondaryContainer;
+                        }
+                    }
+                }
+            }
+
+            // Destination Path Pill in the Top Bar (Non-redundant, clean)
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 540
+                Layout.preferredHeight: 34
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSurfaceContainerHighest
+                clip: true
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    spacing: 8
+
+                    MaterialSymbol {
+                        text: "folder"
+                        iconSize: 16
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.displayDestination
+                        font.pixelSize: 12
+                        color: Appearance.colors.colOnSurfaceVariant
+                        elide: Text.ElideMiddle
+                    }
+                }
+            }
+
+            Item { Layout.fillWidth: true }
+
+            // Close Video Editor button
+            RippleButton {
+                id: closeBtn
+                Layout.preferredWidth: 52
+                Layout.preferredHeight: 52
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colSurfaceContainerHighest
+                contentItem: Item {
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "close"
+                        iconSize: 24
+                        color: Appearance.colors.colOnSurface
+                    }
+                }
+                onClicked: root.closeRequested()
+
+                Accessible.name: Translation.tr("Close video editor")
+            }
         }
     }
 
-    RowLayout {
-        anchors.fill: parent
-        spacing: 36
+    // ==========================================
+    // TWO-COLUMN MAIN CONTENT AREA
+    // ==========================================
+    Item {
+        id: contentArea
+        anchors.top: topHeader.bottom
+        anchors.topMargin: 20
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
 
         // ==========================================
-        // LEFT COLUMN: Centered Video Preview Card
+        // LEFT COLUMN: Video Preview & Source Info (46% width)
         // ==========================================
         Item {
-            Layout.preferredWidth: parent.width * 0.44
-            Layout.fillHeight: true
-            Layout.alignment: Qt.AlignVCenter
+            id: leftPane
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Math.round((parent.width - 24) * 0.46)
 
+            // 16:9 Media Preview Card (Rounded with OpacityMask, high quality)
             Rectangle {
                 id: previewCard
-                anchors.centerIn: parent
-                width: parent.width
-                height: Math.min(parent.height - 20, width * 0.72)
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: Math.round(width * 9 / 16)
                 radius: Appearance.rounding.large
-                color: Config.options.appearance.transparency.enable
-                    ? Appearance.colors.colLayer0
-                    : Appearance.m3colors.m3surfaceContainerHigh
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
-                clip: true
+                color: Appearance.colors.colSurfaceContainerLow
 
                 StyledRectangularShadow {
                     target: previewCard
                 }
 
-                // Video Thumbnail / Image Preview
-                Image {
-                    id: previewImg
+                // Masked container ensuring rounded corners on the thumbnail image
+                Item {
+                    id: maskedThumbnail
                     anchors.fill: parent
-                    anchors.margins: 4
-                    source: root.previewSource ? ("file://" + encodeURI(root.previewSource)) : ""
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: true
-                    smooth: true
-                    visible: source != ""
-                }
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: maskedThumbnail.width
+                            height: maskedThumbnail.height
+                            radius: Appearance.rounding.large
+                        }
+                    }
 
-                // Fallback when no thumbnail image exists
-                Rectangle {
-                    anchors.fill: parent
-                    visible: !previewImg.visible
-                    color: Appearance.colors.colSurfaceContainerLowest
+                    // MP3 Expressive Audio Presentation
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: root.renderFormat === "mp3"
+                        color: Appearance.colors.colSurfaceContainerLowest
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: root.renderFormat === "mp3" ? "audiotrack" : (root.renderFormat === "gif" ? "gif" : "movie")
-                        iconSize: 72
-                        color: Appearance.colors.colOutline
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 10
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 64
+                                height: 64
+                                radius: 32
+                                color: Appearance.colors.colPrimaryContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "music_note"
+                                    iconSize: 34
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: Translation.tr("Audio Track")
+                                font.pixelSize: 17
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: "192 kbps • Stereo MP3"
+                                font.pixelSize: 13
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+                    }
+
+                    // High Quality Video Thumbnail / Image Preview
+                    Image {
+                        id: previewImg
+                        anchors.fill: parent
+                        visible: root.renderFormat !== "mp3" && source != ""
+                        source: root.previewSource ? ("file://" + encodeURI(root.previewSource)) : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: false
+                        smooth: true
+                        mipmap: true
+                    }
+
+                    // Fallback placeholder when no thumbnail exists
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: root.renderFormat !== "mp3" && !previewImg.visible
+                        color: Appearance.colors.colSurfaceContainerLowest
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: root.renderFormat === "gif" ? "gif" : "movie"
+                            iconSize: 64
+                            color: Appearance.colors.colOutline
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
                 }
 
-                // Audio MP3 decorative overlay
-                Rectangle {
-                    anchors.fill: parent
-                    visible: root.renderFormat === "mp3"
-                    color: ColorUtils.transparentize(Appearance.colors.colSurface, 0.45)
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 12
-
-                        MaterialShapeWrappedMaterialSymbol {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: "music_note"
-                            iconSize: 44
-                            implicitSize: 84
-                            shape: MaterialShape.Shape.Cookie9Sided
-                            color: Appearance.colors.colPrimaryContainer
-                            colSymbol: Appearance.colors.colOnPrimaryContainer
-                        }
-
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: Translation.tr("Audio Track")
-                            font.pixelSize: 15
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurface
-                        }
-                    }
-                }
-
-                // Top-left format tag badge
+                // Top-Left Format Pill Badge
                 Rectangle {
                     anchors.top: parent.top
                     anchors.left: parent.left
-                    anchors.margins: 14
+                    anchors.margins: 12
                     radius: Appearance.rounding.full
                     height: 28
                     width: tagRow.implicitWidth + 20
@@ -196,117 +377,355 @@ Item {
 
                         MaterialSymbol {
                             text: root.renderFormat === "mp3" ? "music_note" : (root.renderFormat === "gif" ? "gif" : "movie")
-                            iconSize: 16
+                            iconSize: 15
                             color: Appearance.colors.colOnPrimaryContainer
                         }
 
                         StyledText {
                             text: root.renderFormat.toUpperCase()
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnPrimaryContainer
                         }
                     }
                 }
 
-                // Bottom resolution / duration badge
+                // Bottom-Right Duration Badge
                 Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.margins: 14
-                    visible: root.videoWidth > 0 && root.videoHeight > 0
-                    radius: Appearance.rounding.small
-                    height: 24
-                    width: dimText.implicitWidth + 16
-                    color: ColorUtils.transparentize(Appearance.colors.colSurface, 0.3)
+                    anchors.margins: 12
+                    radius: Appearance.rounding.full
+                    height: 26
+                    width: dimText.implicitWidth + 20
+                    color: ColorUtils.transparentize(Appearance.colors.colSurface, 0.25)
 
                     StyledText {
                         id: dimText
                         anchors.centerIn: parent
-                        text: `${root.videoWidth} × ${root.videoHeight}`
+                        text: root.formatTime(root.renderDuration)
                         font.pixelSize: 11
                         font.weight: Font.Medium
                         color: Appearance.colors.colOnSurface
                     }
                 }
             }
-        }
 
-        // ==========================================
-        // RIGHT COLUMN: Progress, Info & Action Bar
-        // ==========================================
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.alignment: Qt.AlignVCenter
-
-            ColumnLayout {
+            // Slim, non-redundant Source & Trim Strip (No repeated metadata)
+            Rectangle {
+                anchors.top: previewCard.bottom
+                anchors.topMargin: 14
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 24
+                height: 64
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colSurfaceContainerLow
 
-                // Target Filename and Path
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 16
 
+                    // Source Filename & Size
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 10
 
-                        MaterialSymbol {
-                            text: root.renderFormat === "mp3" ? "audio_file" : (root.renderFormat === "gif" ? "gif_box" : "video_file")
-                            iconSize: 28
-                            color: Appearance.colors.colPrimary
+                        Rectangle {
+                            width: 34
+                            height: 34
+                            radius: 17
+                            color: Appearance.colors.colSurfaceContainerHighest
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "video_file"
+                                iconSize: 18
+                                color: Appearance.colors.colPrimary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
 
-                        StyledText {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: root.displayTitle
-                            font.pixelSize: 22
-                            font.weight: Font.Bold
-                            color: Appearance.colors.colOnSurface
-                            elide: Text.ElideMiddle
+                            spacing: 1
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: FileUtils.fileNameForPath(root.videoPath) || "source_video"
+                                font.pixelSize: 13
+                                font.weight: Font.SemiBold
+                                color: Appearance.colors.colOnSurface
+                                elide: Text.ElideMiddle
+                            }
+
+                            StyledText {
+                                text: root.originalSize > 0 ? `${Translation.tr("Original Size:")} ${root.formatFileSize(root.originalSize)}` : ""
+                                font.pixelSize: 11
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
                         }
                     }
 
+                    // Trim Range Pill
                     Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 32
-                        radius: Appearance.rounding.small
-                        color: Appearance.colors.colSurfaceContainerLow
+                        radius: Appearance.rounding.full
+                        Layout.preferredHeight: 30
+                        Layout.preferredWidth: trimRow.implicitWidth + 20
+                        color: Appearance.colors.colSurfaceContainerHighest
 
                         RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 8
+                            id: trimRow
+                            anchors.centerIn: parent
+                            spacing: 6
 
                             MaterialSymbol {
-                                text: "folder"
-                                iconSize: 16
+                                text: "content_cut"
+                                iconSize: 14
                                 color: Appearance.colors.colOnSurfaceVariant
                             }
 
                             StyledText {
-                                Layout.fillWidth: true
-                                text: root.displayDestination
-                                font.pixelSize: 12
+                                text: `00:00 ➔ ${root.formatTime(root.renderDuration)}`
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
                                 color: Appearance.colors.colOnSurfaceVariant
-                                elide: Text.ElideMiddle
                             }
                         }
                     }
                 }
+            }
+        }
 
-                // ==============================
-                // STATE 1: RENDERING / LOADING
-                // ==============================
+        // ==========================================
+        // RIGHT COLUMN: Hero State & Compact Toggles (54% width)
+        // ==========================================
+        Item {
+            id: rightPane
+            anchors.left: leftPane.right
+            anchors.leftMargin: 24
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+
+            // ==============================
+            // DYNAMIC STATE HERO CARD
+            // ==============================
+            Rectangle {
+                id: stateCard
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: {
+                    if (root.renderState === "done") return doneCol.implicitHeight + 36;
+                    if (root.renderState === "error") return errorCol.implicitHeight + 36;
+                    return renderingCol.implicitHeight + 36;
+                }
+                radius: Appearance.rounding.large
+                color: root.renderState === "error" ? Appearance.colors.colErrorContainer : Appearance.colors.colSurfaceContainerHigh
+
+                StyledRectangularShadow { target: stateCard }
+
+                // --- FINISHED (DONE) HERO VIEW ---
                 ColumnLayout {
+                    id: doneCol
+                    visible: root.renderState === "done"
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 16
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 14
+
+                        Rectangle {
+                            width: 52
+                            height: 52
+                            radius: 26
+                            color: Appearance.colors.colPrimary
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "check"
+                                iconSize: 28
+                                color: Appearance.colors.colOnPrimary
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 3
+
+                            StyledText {
+                                text: Translation.tr("Export Complete!")
+                                font.pixelSize: 22
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                text: Translation.tr("Your media is ready to view and share.")
+                                font.pixelSize: 13
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+
+                        // Output Size Pill
+                        Rectangle {
+                            radius: Appearance.rounding.full
+                            Layout.preferredHeight: 30
+                            Layout.preferredWidth: sizeText.implicitWidth + 20
+                            color: Appearance.colors.colPrimaryContainer
+
+                            StyledText {
+                                id: sizeText
+                                anchors.centerIn: parent
+                                text: root.formatFileSize(root.renderOutputSize)
+                                font.pixelSize: 12
+                                font.weight: Font.Bold
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+                        }
+                    }
+
+                    // Action Buttons: 2x2 Grid of equal-sized buttons with centered icon & text
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        rowSpacing: 10
+                        columnSpacing: 12
+
+                        // Button 1: Open Video / Audio / GIF
+                        RippleButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colPrimary
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    MaterialSymbol {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.renderFormat === "mp3" ? "audiotrack" : (root.renderFormat === "gif" ? "visibility" : "play_arrow")
+                                        iconSize: 20
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.renderFormat === "mp3"
+                                            ? Translation.tr("Open Audio")
+                                            : (root.renderFormat === "gif" ? Translation.tr("Open GIF") : Translation.tr("Open Video"))
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                            onClicked: root.openFileRequested()
+                        }
+
+                        // Button 2: Open Folder
+                        RippleButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    MaterialSymbol {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "folder_open"
+                                        iconSize: 20
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: Translation.tr("Open Folder")
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+                            onClicked: root.openFolderRequested()
+                        }
+
+                        // Button 3: Copy File Path
+                        RippleButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: root.copiedFeedback ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    MaterialSymbol {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.copiedFeedback ? "check" : "content_copy"
+                                        iconSize: 18
+                                        color: root.copiedFeedback ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                    }
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.copiedFeedback ? Translation.tr("Copied!") : Translation.tr("Copy Path")
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: root.copiedFeedback ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+                            onClicked: {
+                                root.copiedFeedback = true;
+                                copiedTimer.restart();
+                                root.copyPathRequested();
+                            }
+                        }
+
+                        // Button 4: Back to Editor
+                        RippleButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    MaterialSymbol {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "edit"
+                                        iconSize: 18
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                    StyledText {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: Translation.tr("Back to Editor")
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+                            onClicked: root.backRequested()
+                        }
+                    }
+                }
+
+                // --- RENDERING (IN-PROGRESS) VIEW ---
+                ColumnLayout {
+                    id: renderingCol
                     visible: root.renderState === "rendering"
-                    Layout.fillWidth: true
-                    spacing: 20
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 16
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -315,24 +734,23 @@ Item {
                         StyledText {
                             Layout.fillWidth: true
                             text: root.statusText
-                            font.pixelSize: 17
-                            font.weight: Font.SemiBold
+                            font.pixelSize: 18
+                            font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface
                         }
 
                         StyledText {
                             visible: root.renderProgress > 0
                             text: `${Math.round(root.renderProgress * 100)}%`
-                            font.pixelSize: 28
+                            font.pixelSize: 30
                             font.weight: Font.Black
                             color: Appearance.colors.colPrimary
                         }
                     }
 
-                    // Progress Bar (when FFmpeg returns progress)
+                    // Progress Bar
                     ColumnLayout {
                         Layout.fillWidth: true
-                        visible: root.renderProgress > 0
                         spacing: 8
 
                         StyledProgressBar {
@@ -347,7 +765,9 @@ Item {
                             Layout.fillWidth: true
 
                             StyledText {
-                                text: root.renderElapsed > 0 ? `${Translation.tr("Elapsed:")} ${root.formatTime(root.renderElapsed)}` : ""
+                                text: root.renderElapsed > 0
+                                    ? `${Translation.tr("Elapsed:")} ${root.formatTime(root.renderElapsed)}`
+                                    : Translation.tr("Starting…")
                                 font.pixelSize: 12
                                 color: Appearance.colors.colOnSurfaceVariant
                             }
@@ -355,228 +775,85 @@ Item {
                             Item { Layout.fillWidth: true }
 
                             StyledText {
-                                text: root.renderDuration > 0 ? `${Translation.tr("Total:")} ${root.formatTime(root.renderDuration)}` : ""
+                                text: root.renderDuration > 0
+                                    ? `${Translation.tr("Total:")} ${root.formatTime(root.renderDuration)}`
+                                    : ""
                                 font.pixelSize: 12
                                 color: Appearance.colors.colOnSurfaceVariant
                             }
                         }
                     }
 
-                    // Material Loading Indicator Fallback (when progress is indeterminate / starting)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: root.renderProgress <= 0
-                        spacing: 16
-
-                        MaterialLoadingIndicator {
-                            implicitSize: 44
-                            loading: true
-                            color: Appearance.colors.colPrimaryContainer
-                            shapeColor: Appearance.colors.colOnPrimaryContainer
-                        }
-
-                        ColumnLayout {
-                            spacing: 2
-                            StyledText {
-                                text: Translation.tr("Encoding media…")
-                                font.pixelSize: 15
-                                font.weight: Font.Medium
-                                color: Appearance.colors.colOnSurface
-                            }
-                            StyledText {
-                                text: Translation.tr("Applying filters and optimizing output…")
-                                font.pixelSize: 12
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-                        }
-                    }
-
-                    // Cancel button
+                    // Cancel Button (Centered icon & text)
                     RippleButton {
-                        Layout.preferredHeight: 44
-                        Layout.preferredWidth: 130
-                        buttonRadius: 22
+                        Layout.preferredHeight: 42
+                        Layout.preferredWidth: 140
+                        buttonRadius: Appearance.rounding.full
                         colBackground: Appearance.colors.colSurfaceContainerHighest
-                        contentItem: RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-                            MaterialSymbol { text: "close"; iconSize: 18; color: Appearance.colors.colOnSurface }
-                            StyledText { text: Translation.tr("Cancel"); font.pixelSize: 14; font.weight: Font.Medium; color: Appearance.colors.colOnSurface }
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                MaterialSymbol {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "close"
+                                    iconSize: 18
+                                    color: Appearance.colors.colOnSurface
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Translation.tr("Cancel")
+                                    font.pixelSize: 14
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnSurface
+                                }
+                            }
                         }
                         onClicked: root.cancelRequested()
                     }
                 }
 
-                // ==============================
-                // STATE 2: DONE / COMPLETE
-                // ==============================
+                // --- ERROR STATE VIEW ---
                 ColumnLayout {
-                    visible: root.renderState === "done"
-                    Layout.fillWidth: true
-                    spacing: 24
-
-                    RowLayout {
-                        spacing: 20
-
-                        // Primary Checkmark with Material Shape in background
-                        MaterialShapeWrappedMaterialSymbol {
-                            text: "check"
-                            iconSize: 42
-                            implicitSize: 80
-                            shape: MaterialShape.Shape.Cookie4Sided
-                            color: Appearance.colors.colPrimary
-                            colSymbol: Appearance.colors.colOnPrimary
-                        }
-
-                        ColumnLayout {
-                            spacing: 4
-
-                            StyledText {
-                                text: Translation.tr("Export Complete!")
-                                font.pixelSize: 26
-                                font.weight: Font.Bold
-                                color: Appearance.colors.colOnSurface
-                            }
-
-                            StyledText {
-                                text: Translation.tr("Your media is ready to view and share.")
-                                font.pixelSize: 14
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-
-                            RowLayout {
-                                spacing: 8
-                                Rectangle {
-                                    radius: 12
-                                    height: 24
-                                    width: sizeText.implicitWidth + 16
-                                    color: Appearance.colors.colPrimaryContainer
-
-                                    StyledText {
-                                        id: sizeText
-                                        anchors.centerIn: parent
-                                        text: root.formatFileSize(root.renderOutputSize)
-                                        font.pixelSize: 12
-                                        font.weight: Font.Bold
-                                        color: Appearance.colors.colOnPrimaryContainer
-                                    }
-                                }
-
-                                Rectangle {
-                                    radius: 12
-                                    height: 24
-                                    width: fmtText.implicitWidth + 16
-                                    color: Appearance.colors.colSecondaryContainer
-
-                                    StyledText {
-                                        id: fmtText
-                                        anchors.centerIn: parent
-                                        text: root.renderFormat.toUpperCase()
-                                        font.pixelSize: 12
-                                        font.weight: Font.Bold
-                                        color: Appearance.colors.colOnSecondaryContainer
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Action buttons (Open video, Open folder, Copy path)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 12
-
-                        // 1. Open Video / Media Button
-                        RippleButton {
-                            Layout.preferredHeight: 52
-                            Layout.preferredWidth: 160
-                            buttonRadius: 26
-                            colBackground: Appearance.colors.colPrimary
-                            contentItem: RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-                                MaterialSymbol {
-                                    text: root.renderFormat === "mp3" ? "audiotrack" : (root.renderFormat === "gif" ? "visibility" : "play_arrow")
-                                    iconSize: 22
-                                    color: Appearance.colors.colOnPrimary
-                                }
-                                StyledText {
-                                    text: root.renderFormat === "mp3" ? Translation.tr("Open Audio") : (root.renderFormat === "gif" ? Translation.tr("Open GIF") : Translation.tr("Open Video"))
-                                    font.pixelSize: 15
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnPrimary
-                                }
-                            }
-                            onClicked: root.openFileRequested()
-                        }
-
-                        // 2. Open Folder Button
-                        RippleButton {
-                            Layout.preferredHeight: 52
-                            Layout.preferredWidth: 150
-                            buttonRadius: 26
-                            colBackground: Appearance.colors.colSurfaceContainerHighest
-                            contentItem: RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-                                MaterialSymbol { text: "folder_open"; iconSize: 22; color: Appearance.colors.colOnSurface }
-                                StyledText {
-                                    text: Translation.tr("Open folder")
-                                    font.pixelSize: 15
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurface
-                                }
-                            }
-                            onClicked: root.openFolderRequested()
-                        }
-
-                        // 3. Copy Path Button
-                        RippleButton {
-                            Layout.preferredHeight: 52
-                            Layout.preferredWidth: 140
-                            buttonRadius: 26
-                            colBackground: Appearance.colors.colSurfaceContainerHighest
-                            contentItem: RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 10
-                                MaterialSymbol { text: "content_copy"; iconSize: 20; color: Appearance.colors.colOnSurface }
-                                StyledText {
-                                    text: Translation.tr("Copy path")
-                                    font.pixelSize: 15
-                                    font.weight: Font.Bold
-                                    color: Appearance.colors.colOnSurface
-                                }
-                            }
-                            onClicked: root.copyPathRequested()
-                        }
-                    }
-                }
-
-                // ==============================
-                // STATE 3: ERROR
-                // ==============================
-                ColumnLayout {
+                    id: errorCol
                     visible: root.renderState === "error"
-                    Layout.fillWidth: true
+                    anchors.fill: parent
+                    anchors.margins: 18
                     spacing: 16
 
                     RowLayout {
-                        spacing: 16
-                        MaterialSymbol {
-                            text: "error"
-                            iconSize: 48
+                        spacing: 14
+
+                        Rectangle {
+                            width: 52
+                            height: 52
+                            radius: 26
                             color: Appearance.colors.colError
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "error"
+                                iconSize: 28
+                                color: Appearance.colors.colOnError
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
+
                         ColumnLayout {
+                            Layout.fillWidth: true
                             spacing: 4
+
                             StyledText {
                                 text: Translation.tr("Export Failed")
-                                font.pixelSize: 20
+                                font.pixelSize: 22
                                 font.weight: Font.Bold
                                 color: Appearance.colors.colError
                             }
+
                             StyledText {
-                                text: root.renderErrorMessage || Translation.tr("An error occurred during rendering.")
+                                Layout.fillWidth: true
+                                text: root.renderErrorMessage || Translation.tr("An unexpected error occurred during rendering.")
                                 font.pixelSize: 13
                                 color: Appearance.colors.colOnSurfaceVariant
                                 wrapMode: Text.Wrap
@@ -587,15 +864,234 @@ Item {
                     RippleButton {
                         Layout.preferredHeight: 44
                         Layout.preferredWidth: 160
-                        buttonRadius: 22
+                        buttonRadius: Appearance.rounding.full
                         colBackground: Appearance.colors.colPrimary
-                        contentItem: RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-                            MaterialSymbol { text: "arrow_back"; iconSize: 18; color: Appearance.colors.colOnPrimary }
-                            StyledText { text: Translation.tr("Back to Editor"); font.pixelSize: 14; font.weight: Font.Bold; color: Appearance.colors.colOnPrimary }
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                MaterialSymbol {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "arrow_back"
+                                    iconSize: 18
+                                    color: Appearance.colors.colOnPrimary
+                                }
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Translation.tr("Back to Editor")
+                                    font.pixelSize: 14
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnPrimary
+                                }
+                            }
                         }
-                        onClicked: root.cancelRequested()
+                        onClicked: root.backRequested()
+                    }
+                }
+            }
+
+            // ==============================
+            // COMPACT TOGGLE / STAT TILES (Centered Icons & Centered Text, Compact Sizing)
+            // ==============================
+            GridLayout {
+                id: bentoArea
+                anchors.top: stateCard.bottom
+                anchors.topMargin: 14
+                anchors.left: parent.left
+                anchors.right: parent.right
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 10
+
+                // Tile 1: Duration (Centered Icon & Centered Text)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 92
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colSurfaceContainerLow
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 36
+                            height: 36
+                            radius: 18
+                            color: Appearance.colors.colPrimaryContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "timer"
+                                iconSize: 20
+                                color: Appearance.colors.colOnPrimaryContainer
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("Duration")
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurfaceVariant
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.formatTime(root.renderDuration)
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+
+                // Tile 2: Resolution (Centered Icon & Centered Text)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 92
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colSurfaceContainerLow
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 36
+                            height: 36
+                            radius: 18
+                            color: Appearance.colors.colPrimaryContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "aspect_ratio"
+                                iconSize: 20
+                                color: Appearance.colors.colOnPrimaryContainer
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("Resolution")
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurfaceVariant
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.videoWidth > 0 && root.videoHeight > 0 ? `${root.videoWidth} × ${root.videoHeight}` : "—"
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+
+                // Tile 3: FPS (Centered Icon & Centered Text)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 92
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colSurfaceContainerLow
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 36
+                            height: 36
+                            radius: 18
+                            color: Appearance.colors.colPrimaryContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "speed"
+                                iconSize: 20
+                                color: Appearance.colors.colOnPrimaryContainer
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("FPS")
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurfaceVariant
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.videoFps || "—"
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+
+                // Tile 4: Audio Track (Centered Icon & Centered Text)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 92
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colSurfaceContainerLow
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 36
+                            height: 36
+                            radius: 18
+                            color: Appearance.colors.colPrimaryContainer
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "volume_up"
+                                iconSize: 20
+                                color: Appearance.colors.colOnPrimaryContainer
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("Audio")
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurfaceVariant
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.muteAudio ? Translation.tr("Muted") : (root.renderFormat === "mp3" ? "MP3 192k" : "AAC")
+                            font.pixelSize: 15
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            horizontalAlignment: Text.AlignHCenter
+                        }
                     }
                 }
             }
