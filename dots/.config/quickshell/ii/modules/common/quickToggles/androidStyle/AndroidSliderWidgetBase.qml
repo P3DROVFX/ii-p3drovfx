@@ -97,7 +97,7 @@ Item {
     // Effective sizes for live preview during resize
     readonly property int effectiveSizeW: root.catalogSize[0]
     readonly property int effectiveSizeH: root.catalogSize[1]
-    readonly property bool isVertical: root.effectiveSizeH > root.effectiveSizeW
+    readonly property bool isVertical: root.effectiveSizeH >= 3
 
     property bool hovered: hoverHandler.hovered || (root.editMode && editableItem.containsMouse)
 
@@ -115,10 +115,14 @@ Item {
     readonly property real compactHeight: QuickToggleMetrics.sliderWidgetHeight(root.baseCellHeight)
 
     readonly property real effectiveTrackThickness: {
-        var t = QuickToggleMetrics.sliderTrack(root.baseCellHeight);
-        if (!(t > 0))
-            t = 30; // StyledSlider.Configuration.M
-        return t;
+        var baseTrack = QuickToggleMetrics.sliderTrack(root.baseCellHeight);
+        if (!(baseTrack > 0))
+            baseTrack = 30; // StyledSlider.Configuration.M
+        if (root.effectiveSizeH > 1) {
+            var maxTrack = Math.max(baseTrack, root.baseHeight - root.horizontalMargin * 2);
+            return Math.round((baseTrack + maxTrack) / 2);
+        }
+        return baseTrack;
     }
 
     // Track corners follow the user's rounding preference (windowRounding is
@@ -128,12 +132,14 @@ Item {
     // StyledSlider default would.
     readonly property real trackCornerRadius: Config.options.appearance.sharpMode
         ? 0
-        : Math.min(effectiveTrackThickness / 2, Appearance.rounding.windowRounding * 0.3)
+        : (root.effectiveSizeH > 1
+            ? Appearance.rounding.large
+            : Math.min(effectiveTrackThickness / 2, Appearance.rounding.windowRounding * 0.3))
 
     readonly property real horizontalMargin: root.isVertical ? 0 : QuickToggleMetrics.sliderHorizontalMargin(root.baseCellHeight)
 
     implicitWidth: baseWidth
-    implicitHeight: root.isVertical ? baseHeight : Math.min(baseHeight, compactHeight)
+    implicitHeight: (root.isVertical || root.effectiveSizeH > 1) ? baseHeight : Math.min(baseHeight, compactHeight)
     
     Rectangle {
         anchors {
@@ -206,10 +212,10 @@ Item {
                 anchors.fill: parent
                 // Touch-sized cells get a track proportional to the cell; at the reference
                 // cell height sliderTrack() returns -1 and the fixed M preset stands.
-                readonly property real trackThickness: QuickToggleMetrics.sliderTrack(root.baseCellHeight)
+                readonly property real trackThickness: root.effectiveTrackThickness
                 configuration: trackThickness > 0 ? trackThickness : StyledSlider.Configuration.M
                 trackRadius: root.trackCornerRadius
-                unsharpenRadius: root.trackCornerRadius
+                unsharpenRadius: root.effectiveSizeH > 1 ? Appearance.rounding.unsharpen : root.trackCornerRadius
                 stopIndicatorValues: []
                 dividerValues: root.secondaryMaterialSymbol.length > 0 ? [secondaryIcon.iconLocation] : []
                 valueAnimationDuration: root._activeValueAnimDuration
@@ -235,9 +241,9 @@ Item {
                     anchors {
                         verticalCenter: parent.verticalCenter
                         right: nearFull ? quickSliderHorizontal.handle.right : parent.right
-                        rightMargin: nearFull ? 10 : 4
+                        rightMargin: root.effectiveSizeH > 1 ? (nearFull ? 14 : 12) : (nearFull ? 10 : 4)
                     }
-                    iconSize: root.scaled(20)
+                    iconSize: root.scaled(root.effectiveSizeH > 1 ? 22 : 20)
                     text: root.materialSymbol
 
                     color: {
@@ -265,7 +271,7 @@ Item {
                         right: nearIcon ? quickSliderHorizontal.handle.right : parent.right
                         rightMargin: nearIcon ? 14 : (1 - iconLocation) * quickSliderHorizontal.effectiveDraggingWidth + quickSliderHorizontal.rightPadding + 8
                     }
-                    iconSize: root.scaled(20)
+                    iconSize: root.scaled(root.effectiveSizeH > 1 ? 22 : 20)
                     color: quickSliderHorizontal.value >= iconLocation - 0.1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                     text: root.secondaryMaterialSymbol
 
@@ -284,7 +290,7 @@ Item {
                 anchors.fill: parent
                 configuration: 48
                 trackRadius: root.trackCornerRadius
-                unsharpenRadius: root.trackCornerRadius
+                unsharpenRadius: root.effectiveSizeH > 1 ? Appearance.rounding.unsharpen : root.trackCornerRadius
                 showValueLabel: false
                 stopIndicatorValues: []
                 valueAnimationDuration: root._activeValueAnimDuration
@@ -308,7 +314,7 @@ Item {
                     anchors {
                         horizontalCenter: parent.horizontalCenter
                         bottom: parent.bottom
-                        bottomMargin: 8
+                        bottomMargin: root.scaled(12)
                     }
                     iconSize: root.scaled(20)
                     text: root.materialSymbol

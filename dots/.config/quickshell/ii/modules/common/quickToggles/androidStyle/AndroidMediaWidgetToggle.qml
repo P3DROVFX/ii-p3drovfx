@@ -203,6 +203,8 @@ Item {
             MediaCtrl.AndroidMediaPopup {
                 player: MprisController.activePlayer
                 showShadow: false
+                showBottomControls: false
+                showPinButton: false
                 anchors.fill: parent
             }
         }

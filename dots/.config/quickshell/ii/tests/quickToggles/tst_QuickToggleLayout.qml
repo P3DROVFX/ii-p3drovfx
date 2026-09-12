@@ -324,4 +324,22 @@ TestCase {
         compare(positionedSliderOnly[0].layoutY, 0);
         compare(positionedSliderOnly[1].layoutY, 0);
     }
+
+    function test_slider_with_height_2_or_more_is_not_compact_and_spans_full_rows() {
+        var items = [
+            item("volumeSlider", 4, 2),
+            item("network", 2, 1)
+        ];
+        var packed = Layout.pack(items, 4);
+        var heights = Layout.rowPixelHeights(packed, 56, 6, 42, ["volumeSlider"]);
+        // Rows 0 and 1 occupied by 2-height slider must be 56px (full cell), not 42px
+        compare(heights[0], 56);
+        compare(heights[1], 56);
+        compare(heights[2], 56);
+
+        var positioned = Layout.positionedItems(items, packed, 80, 56, 6, 42, ["volumeSlider"]);
+        compare(positioned[0].layoutY, 0);
+        // Row 2 starts at 56 + 6 + 56 + 6 = 124
+        compare(positioned[1].layoutY, 124);
+    }
 }

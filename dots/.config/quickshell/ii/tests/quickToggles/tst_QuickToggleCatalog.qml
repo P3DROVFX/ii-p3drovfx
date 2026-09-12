@@ -32,8 +32,12 @@ TestCase {
         compare(Catalog.normalizeSize("volumeSlider", 1, 2, 4), [1, 2]);
         compare(Catalog.normalizeSize("volumeSlider", 1, 3, 4), [1, 3]);
         compare(Catalog.normalizeSize("volumeSlider", 4, 1, 4), [4, 1]);
+        compare(Catalog.normalizeSize("volumeSlider", 4, 2, 4), [4, 2]);
+        compare(Catalog.normalizeSize("volumeSlider", 4, 3, 4), [4, 3]);
         verify(Catalog.isSizeAllowed("volumeSlider", 1, 2, 4));
         verify(Catalog.isSizeAllowed("volumeSlider", 4, 1, 4));
+        verify(Catalog.isSizeAllowed("volumeSlider", 4, 2, 4));
+        verify(Catalog.isSizeAllowed("volumeSlider", 4, 3, 4));
     }
 
     function test_media_allowed_sizes_and_column_clamp() {

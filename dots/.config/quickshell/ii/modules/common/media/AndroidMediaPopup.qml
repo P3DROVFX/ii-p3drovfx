@@ -19,6 +19,8 @@ Item {
 
     required property MprisPlayer player
     property bool showShadow: true
+    property bool showBottomControls: true
+    property bool showPinButton: true
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
@@ -293,8 +295,8 @@ Item {
             anchors.leftMargin: 14
             anchors.rightMargin: 14
             anchors.topMargin: 12
-            anchors.bottomMargin: 10
-            spacing: 6
+            anchors.bottomMargin: root.showBottomControls ? 10 : 12
+            spacing: root.showBottomControls ? 6 : 8
 
             RowLayout {
                 Layout.fillWidth: true
@@ -334,8 +336,9 @@ Item {
                 }
 
                 RippleButton {
-                    implicitWidth: 22
-                    implicitHeight: 22
+                    visible: root.showPinButton
+                    implicitWidth: root.showPinButton ? 22 : 0
+                    implicitHeight: root.showPinButton ? 22 : 0
                     Layout.alignment: Qt.AlignTop
                     colBackground: "transparent"
                     colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
@@ -565,8 +568,9 @@ Item {
             }
 
             RowLayout {
+                visible: root.showBottomControls
                 Layout.fillWidth: true
-                Layout.preferredHeight: 24
+                Layout.preferredHeight: root.showBottomControls ? 24 : 0
                 spacing: 12
                 Layout.alignment: Qt.AlignBottom
 
