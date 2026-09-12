@@ -35,12 +35,14 @@ MouseArea {
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property real percentage: Battery.percentage
-    readonly property bool isFull: Battery.atChargeCeiling
+    // Same contract as the horizontal indicator: Battery.isFull honours
+    // Config.options.battery.full; atChargeCeiling ignores it (see ffae821a0 regression).
+    readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
     readonly property bool effectivelyCharging: root.isCharging || root.isPluggedIn
     readonly property bool chargeLimitReached: Battery.chargeLimitReached
-    readonly property bool showCheck: root.chargeLimitReached || root.isFull
+    readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
     property color colText: Appearance.colors.colOnSurface
 
     readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true

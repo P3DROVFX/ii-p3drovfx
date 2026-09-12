@@ -28,6 +28,7 @@ ListModel {
 ''')
 put('Quickshell/qmldir','module Quickshell\nScriptModel 1.0 ScriptModel.qml\n')
 put('qs/modules/common/animations/SidebarGroupAnimation.qml','import QtQuick\nNumberAnimation { property var animationSpec; duration: 1 }')
+put('qs/modules/common/animations/DeferredAnimationStarter.qml',(root/'modules/common/animations/DeferredAnimationStarter.qml').read_text())
 put('qs/modules/common/widgets/StyledText.qml','import QtQuick\nText { font.pixelSize: 16; color: "white" }')
 put('qs/modules/common/widgets/MaterialSymbol.qml','import QtQuick\nText { property real iconSize: 16; font.pixelSize: iconSize }')
 put('qs/modules/common/widgets/RippleButton.qml','''import QtQuick

@@ -18,12 +18,15 @@ MouseArea {
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property real percentage: Battery.percentage
-    readonly property bool isFull: Battery.atChargeCeiling
+    // Battery.isFull honours Config.options.battery.full; atChargeCeiling ignores it, which made
+    // a 100 %-plugged battery swap its bolt for a checkmark even when the user's full threshold
+    // says it never gets "full" (ffae821a0 regression).
+    readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
     readonly property bool effectivelyCharging: root.isCharging || root.isPluggedIn
     readonly property bool chargeLimitReached: Battery.chargeLimitReached
-    readonly property bool showCheck: root.chargeLimitReached || root.isFull
+    readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
 
     readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true
     readonly property bool isPowerSaving: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.PowerSaver)
