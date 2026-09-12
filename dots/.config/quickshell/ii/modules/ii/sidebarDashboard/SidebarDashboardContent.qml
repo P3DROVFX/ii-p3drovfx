@@ -826,7 +826,7 @@ Item {
                 anchors {
                     right: parent.right
                     rightMargin: 10
-                    verticalCenter: buttonArea.verticalCenter
+                    verticalCenter: parent.verticalCenter
                 }
                 color: Appearance.colors.colLayer1
                 padding: 4

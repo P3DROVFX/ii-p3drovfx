@@ -369,16 +369,17 @@ Item {
             radius: Appearance.rounding.normal
             color: "transparent"
 
-            SwipeView {
+            StackLayout {
                 id: swipeView
                 anchors.fill: parent
-                spacing: 10
-                
-                onCountChanged: {
-                    if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
-                        currentIndex = Persistent.states.sidebar.policies.tab;
-                    }
-                }
+                currentIndex: (root.tabCount > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < root.tabCount)
+                    ? Persistent.states.sidebar.policies.tab
+                    : 0
+
+                readonly property int count: root.tabCount
+                readonly property Item currentItem: (count > 0 && currentIndex >= 0 && tabRepeater)
+                    ? tabRepeater.itemAt(currentIndex)
+                    : null
                 
                 Connections {
                     target: Persistent.states.sidebar.policies
@@ -398,13 +399,6 @@ Item {
                     });
                     
                     if (currentIndex >= 0) {
-                        // Warm cache bounded to the current tab plus the one it
-                        // came from. `visitedTabs` used to only ever grow: with
-                        // keepLeftSidebarLoaded, a tour of AI + Translator +
-                        // Phone left three heavy trees resident forever (the
-                        // 2026-09-08 audit's top RAM priority, §2). The
-                        // previous-tab bound covers the common back-and-forth
-                        // without unbounded retention.
                         var visited = {};
                         visited[currentIndex] = true;
                         if (root._prevTabIndex >= 0 && root._prevTabIndex !== currentIndex)
@@ -421,9 +415,6 @@ Item {
                 }
 
                 Component.onCompleted: {
-                    if (contentItem) {
-                        contentItem.highlightMoveDuration = 0;
-                    }
                     if (count > 0 && Persistent.states.sidebar.policies.tab >= 0 && Persistent.states.sidebar.policies.tab < count) {
                         currentIndex = Persistent.states.sidebar.policies.tab;
                     }
@@ -435,13 +426,18 @@ Item {
                 clip: true
 
                 Repeater {
+                    id: tabRepeater
                     model: root.activeTabs
                     Loader {
                         id: tabDelegate
                         required property var modelData
                         required property int index
 
-                        active: (root.tabsWanted && (SwipeView.isCurrentItem || !!root.visitedTabs[index]))
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        readonly property bool isCurrent: swipeView.currentIndex === index
+                        active: (root.tabsWanted && (isCurrent || !!root.visitedTabs[index]))
                                 || (modelData.icon === "smartphone" && (GlobalStates.phoneMicRunning || GlobalStates.phoneCameraRunning))
                         sourceComponent: modelData.component
 
@@ -471,7 +467,6 @@ Item {
                             }
                         }
 
-                        readonly property bool isCurrent: swipeView.currentIndex === index
                         onIsCurrentChanged: {
                             if (isCurrent) {
                                 const diff = index - root._prevTabIndex;

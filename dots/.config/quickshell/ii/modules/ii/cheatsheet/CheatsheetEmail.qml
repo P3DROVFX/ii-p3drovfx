@@ -33,6 +33,18 @@ Item {
         value: root.isTabActive
     }
 
+    Component.onCompleted: {
+        if (EmailService.authenticated && EmailService.inboxMessages.count === 0) {
+            EmailService.syncLabel(root.activeTab);
+        }
+    }
+
+    onIsTabActiveChanged: {
+        if (isTabActive && EmailService.authenticated && EmailService.inboxMessages.count === 0) {
+            EmailService.syncLabel(root.activeTab);
+        }
+    }
+
     Component.onDestruction: {
         EmailService.cheatsheetTabActive = false;
     }
