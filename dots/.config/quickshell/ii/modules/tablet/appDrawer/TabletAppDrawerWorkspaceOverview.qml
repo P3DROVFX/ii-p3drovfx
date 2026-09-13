@@ -418,16 +418,15 @@ Item {
                         id: cardHover
                     }
 
-                    // Selection ring, outside the card so it never covers a window's edge.
+                    // Selection halo: a filled plate behind the card, not a border, reading as a
+                    // ring only where it shows past the card's edge.
                     Rectangle {
                         anchors {
                             fill: parent
-                            margins: -5
+                            margins: -4
                         }
-                        radius: root.cardRadius + 5
-                        color: "transparent"
-                        border.width: 3
-                        border.color: card.isDropTarget ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                        radius: root.cardRadius + 4
+                        color: card.isDropTarget ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
                         opacity: card.isActive || card.isDropTarget ? 1 : 0
 
                         Behavior on opacity {
@@ -620,16 +619,15 @@ Item {
                                     }
                                 }
 
-                                // Hover / swap ring.
+                                // Hover / swap halo, behind the thumbnail rather than a border on it.
                                 Rectangle {
                                     anchors {
                                         fill: parent
-                                        margins: -2
+                                        margins: -3
                                     }
-                                    radius: thumbBody.radius + 2
-                                    color: "transparent"
-                                    border.width: 2
-                                    border.color: winItem.isSwapTarget ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                                    z: -1
+                                    radius: thumbBody.radius + 3
+                                    color: winItem.isSwapTarget ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
                                     opacity: winItem.hovered || winItem.isSwapTarget ? 1 : 0
 
                                     Behavior on opacity {
@@ -782,8 +780,6 @@ Item {
                                     z: 5
                                     color: closeArea.pressed ? Appearance.colors.colErrorHover
                                         : (closeHover.hovered ? Appearance.colors.colError : Appearance.colors.colLayer3)
-                                    border.width: 1
-                                    border.color: ColorUtils.transparentize(Appearance.colors.colOutline, 0.5)
                                     opacity: closeButton.shown ? 1 : 0
                                     scale: closeButton.shown ? 1 : 0.6
                                     visible: opacity > 0
@@ -939,12 +935,15 @@ Item {
             }
         }
 
+        // Lifted halo behind the carried window.
         Rectangle {
-            anchors.fill: parent
-            radius: dragProxyBody.radius
-            color: "transparent"
-            border.width: 2
-            border.color: Appearance.colors.colPrimary
+            anchors {
+                fill: parent
+                margins: -3
+            }
+            z: -1
+            radius: dragProxyBody.radius + 3
+            color: Appearance.colors.colPrimary
         }
     }
 

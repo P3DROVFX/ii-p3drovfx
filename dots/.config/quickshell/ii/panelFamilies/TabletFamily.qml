@@ -324,6 +324,8 @@ Scope {
     // make a floating window arrangeable at all. Both are off unless the user asks.
     TabletWindowFloating {}
     PanelLoader { component: TabletFloatingWindowControls {} }
+    // And for tiled windows, the divider between them: drag to resize, tap for actions.
+    PanelLoader { component: TabletSplitHandles {} }
 
     // One control that is always where the user left it, including over a fullscreen app —
     // which is exactly when the edge gestures are least reachable. See the component.

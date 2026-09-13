@@ -46,6 +46,13 @@ Item {
     /// screen is a different module and the drawer must not reach into it.
     signal appHeld(string appId)
 
+    /// Hold an app, then drag it out of the drawer to open it where it is dropped. The
+    /// drawer window draws the preview; this only reports the finger.
+    property bool allowDragToLaunch: true
+    signal appDragStarted(var info, real x, real y)
+    signal appDragMoved(real x, real y)
+    signal appDragEnded(real x, real y)
+
     readonly property string query: searchField.text
     property string activeToolId: ""
 
@@ -1082,6 +1089,27 @@ Item {
                         systemName: appCell.isSystemApp ? appCell.modelData.name : ""
                         systemIcon: appCell.isSystemApp ? appCell.modelData.icon : ""
                         iconSize: root.appIconSize
+                        // A tool opens inside the drawer, so there is nowhere to drop it.
+                        dragEnabled: root.allowDragToLaunch && (root.drawerConfig?.dragToLaunch ?? true)
+                            && !(appCell.isSystemApp && String(appCell.modelData.systemAppId).startsWith("tool:"))
+                        onDragStarted: (sceneX, sceneY) => {
+                            // The hold opened the menu a moment ago; moving means "not the menu".
+                            inlineMenu.close();
+                            const cell = appCell.modelData;
+                            root.appDragStarted({
+                                name: appCell.isSystemApp ? Translation.tr(cell.name) : (cell.entry?.name ?? ""),
+                                appId: appCell.isSystemApp ? "" : (cell.entry?.id ?? ""),
+                                systemIcon: appCell.isSystemApp ? cell.icon : "",
+                                launch: () => {
+                                    if (appCell.isSystemApp)
+                                        TabletSystemApps.launch(String(cell.systemAppId));
+                                    else
+                                        cell.entry.execute();
+                                }
+                            }, sceneX, sceneY);
+                        }
+                        onDragMoved: (sceneX, sceneY) => root.appDragMoved(sceneX, sceneY)
+                        onDragEnded: (sceneX, sceneY) => root.appDragEnded(sceneX, sceneY)
                         onActivated: {
                             if (appCell.isSystemApp) {
                                 const id = String(appCell.modelData.systemAppId);

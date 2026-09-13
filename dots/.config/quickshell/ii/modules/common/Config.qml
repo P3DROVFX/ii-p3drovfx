@@ -2075,6 +2075,15 @@ Singleton {
                     /// fullscreen and close targets sized for a finger.
                     property bool touchControls: true
                     property int touchControlsHeight: 40
+                    /// Between two tiled windows, a handle that resizes them and opens quick
+                    /// actions, like the divider in Android's split screen. Hyprland keeps the
+                    /// gutter at least splitHandleWidth + 2 × splitHandleSpacing wide, so the
+                    /// pill never touches a window.
+                    property bool splitHandles: true
+                    /// The pill's width, px.
+                    property int splitHandleWidth: 12
+                    /// Air between the pill and the windows on either side of it, px.
+                    property int splitHandleSpacing: 4
                 }
 
                 /**
@@ -2243,6 +2252,12 @@ Singleton {
                     /// Long-press opens an Android-style menu on the tile. Off restores the
                     /// old behaviour, where a long-press dropped the app on the home screen.
                     property bool longPressMenu: true
+                    /// Hold an app and drag it out: the drawer steps aside and the app opens
+                    /// where it is dropped, with a preview of the layout it will make.
+                    property bool dragToLaunch: true
+                    /// How long the finger rests at a side edge during that drag before the
+                    /// neighbouring workspace comes in, in milliseconds.
+                    property int edgeSwitchDelay: 600
                     /// A predicted row above the grid, from the same launch history the
                     /// "Most used" sort reads. Hidden automatically when that sort is on.
                     property bool showSuggestions: true

@@ -146,6 +146,33 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "open_with"
+                text: Translation.tr("Drag an app out to open it")
+                checked: Config.options.tablet.appDrawer.dragToLaunch
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.appDrawer.dragToLaunch)
+                        Config.options.tablet.appDrawer.dragToLaunch = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Hold an app, then move it: the drawer steps aside and shows where the app will open. Rest at a side edge to move to the next workspace.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "timer"
+                text: Translation.tr("Edge hold before switching workspace (ms)")
+                visible: Config.options.tablet.appDrawer.dragToLaunch
+                value: Config.options.tablet.appDrawer.edgeSwitchDelay
+                from: 200
+                to: 2000
+                stepSize: 50
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.appDrawer.edgeSwitchDelay)
+                        Config.options.tablet.appDrawer.edgeSwitchDelay = value;
+                }
+            }
+
             ConfigSpinBox {
                 icon: "swipe_up"
                 text: Translation.tr("Bottom swipe edge height (px)")

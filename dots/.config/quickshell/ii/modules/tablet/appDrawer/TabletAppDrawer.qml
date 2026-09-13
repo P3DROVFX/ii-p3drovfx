@@ -22,6 +22,8 @@ Scope {
     /// Home-screen placement belongs to the Tablet Family. Borrowers keep the
     /// same long-press menu, minus actions they cannot fulfill.
     property bool allowHomeScreenPlacement: true
+    /// Dragging an app out of the grid to open it on the desktop. A Tablet Family gesture.
+    property bool allowDragToLaunch: true
 
     /// Long-pressed an app in the grid. The drawer does not know what a home screen is, so
     /// the composition root connects this to whatever should receive it.
@@ -50,6 +52,7 @@ Scope {
                     toolHostComponent: root.toolHostComponent
                     showTabletSystemApps: root.showTabletSystemApps
                     allowHomeScreenPlacement: root.allowHomeScreenPlacement
+                    allowDragToLaunch: root.allowDragToLaunch
                 }
             }
         }

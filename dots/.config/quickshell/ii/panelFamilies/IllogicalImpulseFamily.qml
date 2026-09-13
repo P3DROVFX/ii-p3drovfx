@@ -175,6 +175,7 @@ Scope {
             toolHostComponent: appDrawerToolHost
             showTabletSystemApps: false
             allowHomeScreenPlacement: false
+            allowDragToLaunch: false
         }
     }
     Component {

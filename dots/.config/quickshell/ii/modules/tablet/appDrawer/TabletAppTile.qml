@@ -32,6 +32,15 @@ Item {
     /// A pointer context click always requests the menu, independent of the touch preference.
     signal contextRequested
 
+    /// A held tile that then moves is picked up and dragged out of the drawer. Scene
+    /// coordinates, i.e. the drawer surface's own.
+    property bool dragEnabled: false
+    readonly property bool dragging: tapArea.dragging
+    signal dragStarted(real sceneX, real sceneY)
+    signal dragMoved(real sceneX, real sceneY)
+    /// (-1, -1) when the gesture was taken away rather than released.
+    signal dragEnded(real sceneX, real sceneY)
+
     /// Room for two lines whether or not the name needs them.
     ///
     /// The label used to size the tile's contents, so a two-line name pushed its own icon
@@ -59,7 +68,7 @@ Item {
         height: root.height
         radius: Appearance.rounding.large
         color: Appearance.colors.colLayer2
-        opacity: tapArea.pressed ? 1 : 0
+        opacity: tapArea.pressed && !tapArea.dragging ? 1 : 0
         scale: tapArea.pressed ? 1 : 0.9
 
         Behavior on opacity {
@@ -89,6 +98,11 @@ Item {
             // background; the plate behind is a softer version of the same idea. Scale
             // leaves the anchor geometry alone, so the label below does not move with it.
             scale: tapArea.pressed ? 0.92 : 1
+            // The icon has left with the finger; its place in the grid stays marked.
+            opacity: tapArea.dragging ? 0.3 : 1
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
             Behavior on scale {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
@@ -166,6 +180,15 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
+        // Once the hold has fired the finger owns the tile. Before it, a move is the grid's
+        // scroll; after it, letting the grid steal the move would end the drag as it began.
+        preventStealing: root.dragEnabled && holdTimer.fired
+
+        property bool dragging: false
+        property real pressX: 0
+        property real pressY: 0
+        readonly property real dragThreshold: 12
+
         onClicked: event => {
             if (event.button === Qt.RightButton) {
                 holdTimer.stop();
@@ -179,11 +202,39 @@ Item {
         }
         onPressed: event => {
             holdTimer.fired = false;
+            tapArea.dragging = false;
+            tapArea.pressX = event.x;
+            tapArea.pressY = event.y;
             if (event.button === Qt.LeftButton)
                 holdTimer.restart();
         }
-        onReleased: holdTimer.stop()
-        onCanceled: holdTimer.stop()
+        onPositionChanged: event => {
+            if (!root.dragEnabled || !holdTimer.fired || !(event.buttons & Qt.LeftButton))
+                return;
+            const scene = tapArea.mapToItem(null, event.x, event.y);
+            if (!tapArea.dragging) {
+                if (Math.hypot(event.x - tapArea.pressX, event.y - tapArea.pressY) < tapArea.dragThreshold)
+                    return;
+                tapArea.dragging = true;
+                root.dragStarted(scene.x, scene.y);
+            }
+            root.dragMoved(scene.x, scene.y);
+        }
+        onReleased: event => {
+            holdTimer.stop();
+            if (!tapArea.dragging)
+                return;
+            tapArea.dragging = false;
+            const scene = tapArea.mapToItem(null, event.x, event.y);
+            root.dragEnded(scene.x, scene.y);
+        }
+        onCanceled: {
+            holdTimer.stop();
+            if (!tapArea.dragging)
+                return;
+            tapArea.dragging = false;
+            root.dragEnded(-1, -1);
+        }
 
         Timer {
             id: holdTimer

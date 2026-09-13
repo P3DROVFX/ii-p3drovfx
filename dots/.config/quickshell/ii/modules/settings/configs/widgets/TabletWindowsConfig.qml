@@ -132,5 +132,51 @@ Item {
                 }
             }
         }
+
+        ContentSection {
+            title: Translation.tr("Split view")
+            icon: "splitscreen"
+
+            ConfigSwitch {
+                buttonIcon: "splitscreen"
+                text: Translation.tr("Show a handle between tiled windows")
+                checked: Config.options.tablet.windows.splitHandles
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.windows.splitHandles)
+                        Config.options.tablet.windows.splitHandles = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Drag it to resize the windows beside it, tap it to swap, even out, float or close them. The gap between tiled windows grows to fit it.")
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "width"
+                text: Translation.tr("Handle width (px)")
+                visible: Config.options.tablet.windows.splitHandles
+                value: Config.options.tablet.windows.splitHandleWidth
+                from: 8
+                to: 32
+                stepSize: 2
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.windows.splitHandleWidth)
+                        Config.options.tablet.windows.splitHandleWidth = value;
+                }
+            }
+
+            ConfigSpinBox {
+                icon: "space_bar"
+                text: Translation.tr("Space around the handle (px)")
+                visible: Config.options.tablet.windows.splitHandles
+                value: Config.options.tablet.windows.splitHandleSpacing
+                from: 0
+                to: 16
+                stepSize: 1
+                onValueChanged: {
+                    if (Config.ready && value !== Config.options.tablet.windows.splitHandleSpacing)
+                        Config.options.tablet.windows.splitHandleSpacing = value;
+                }
+            }
+        }
     }
 }

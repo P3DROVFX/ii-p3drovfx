@@ -494,7 +494,7 @@ Singleton {
         root.applyHyprlandBorder();
 
         if (Config.options.appearance.gapsIn !== undefined) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + root.effectiveGapsIn + "' } })"]);
         }
         if (Config.options.appearance.gapsOut !== undefined) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_out = '" + Config.options.appearance.gapsOut + "' } })"]);
@@ -527,9 +527,16 @@ Singleton {
     }
 
     property int gapsIn: Config.options.appearance.gapsIn ?? 4
-    onGapsInChanged: {
+    /// What Hyprland actually gets. The tablet family's split handle lives in the gutter
+    /// between tiled windows, so there the gutter is at least as wide as the handle —
+    /// otherwise Hyprland lays the windows out underneath it.
+    readonly property int effectiveGapsIn: (PanelFamily.isTablet && (Config.options?.tablet?.windows?.splitHandles ?? true))
+        ? Math.max(root.gapsIn, Math.ceil((Config.options?.tablet?.windows?.splitHandleWidth ?? 12) / 2)
+            + Math.max(0, Config.options?.tablet?.windows?.splitHandleSpacing ?? 4))
+        : root.gapsIn
+    onEffectiveGapsInChanged: {
         if (Config.ready) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + gapsIn + "' } })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + root.effectiveGapsIn + "' } })"]);
         }
     }
 
